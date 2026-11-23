@@ -379,15 +379,33 @@ class NeuroSymbolicChecker:
         html_title = getattr(hm, "citation_title", None) or getattr(hm, "page_title", None)
         if citation is not None and citation.title and html_title:
             from integrity_checker.retrieval.html_meta_verifier import (
+                _citation_plausibly_targets_api_shell,
                 _single_title_pair_similarity,
                 compute_url_title_match_score,
+                is_api_viewer_shell_title,
+                is_gatekeeper_or_generic_html_title,
             )
 
-            lex_sim = compute_url_title_match_score(citation.title, hm)
+            lex_sim = compute_url_title_match_score(
+                citation.title,
+                hm,
+                citation_url=cited_url or getattr(citation, "url", None),
+                citation_raw=getattr(citation, "raw_text", None),
+            )
             if lex_sim is None:
                 cit_t_clean = str(citation.title).strip()
+                is_shell_abstain = is_gatekeeper_or_generic_html_title(str(html_title)) or (
+                    getattr(hm, "citation_title", None) is None
+                    and is_api_viewer_shell_title(str(html_title))
+                    and _citation_plausibly_targets_api_shell(
+                        cit_t_clean,
+                        citation_url=cited_url or getattr(citation, "url", None),
+                        citation_raw=getattr(citation, "raw_text", None),
+                    )
+                )
                 if (
-                    len(cit_t_clean) >= 4
+                    not is_shell_abstain
+                    and len(cit_t_clean) >= 4
                     and "http://" not in cit_t_clean.lower()
                     and "https://" not in cit_t_clean.lower()
                 ):

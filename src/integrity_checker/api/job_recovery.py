@@ -59,10 +59,18 @@ def resolve_persisted_upload_path(
     return None
 
 
-def _as_utc_naive(dt: datetime | None) -> datetime | None:
-    """Normalize an aware or naive UTC timestamp to naive UTC for SQLite comparison."""
+def _as_utc_naive(dt: datetime | str | None) -> datetime | None:
+    """Normalize an aware, naive, or ISO-string UTC timestamp to naive UTC for SQLite comparison."""
     if dt is None:
         return None
+    if isinstance(dt, str):
+        raw_s = dt.strip()
+        if not raw_s:
+            return None
+        try:
+            dt = datetime.fromisoformat(raw_s.replace("Z", "+00:00"))
+        except ValueError:
+            return None
     if dt.tzinfo is not None:
         return dt.astimezone(UTC).replace(tzinfo=None)
     return dt
@@ -183,6 +191,7 @@ def recover_orphaned_essay_jobs(
     run_rescheduled: bool = True,
     include_queued: bool = True,
     stale_heartbeat_seconds: float | None = None,
+    started_before_utc: datetime | None = None,
 ) -> dict[str, int]:
     """Scan orphaned incomplete ``EssayRecord`` jobs on startup and reschedule or refund.
 
@@ -194,6 +203,8 @@ def recover_orphaned_essay_jobs(
     - When ``include_queued=False`` (standalone worker startup), freshly queued uploads are
       left untouched for ``claim_next_queued_essay`` pickup without burning recovery attempts,
       and ``stale_heartbeat_seconds`` skips active peer workers with fresh heartbeats.
+    - When ``started_before_utc`` is provided (inline server boot), skips jobs uploaded after
+      server startup as well as jobs currently active in this process's ``ProgressTracker``.
     """
     from integrity_checker.api.routes import essays as essays_routes
 
@@ -208,6 +219,13 @@ def recover_orphaned_essay_jobs(
         cutoff_utc = datetime.now(UTC).replace(tzinfo=None) - timedelta(
             seconds=max(0.0, float(stale_heartbeat_seconds))
         )
+    boot_cutoff_utc = (
+        _as_utc_naive(started_before_utc) if started_before_utc is not None else None
+    )
+    boot_cutoff_epoch = (
+        boot_cutoff_utc.replace(tzinfo=UTC).timestamp() if boot_cutoff_utc is not None else None
+    )
+    active_tracker = get_tracker() if boot_cutoff_utc is not None else None
 
     session = sess_factory()
     try:
@@ -222,6 +240,22 @@ def recover_orphaned_essay_jobs(
         )
         orphan_snapshots: list[tuple[int, str | None, int, int, str]] = []
         for e in orphans:
+            if boot_cutoff_utc is not None:
+                if active_tracker is not None and boot_cutoff_epoch is not None:
+                    active_st = active_tracker.get(int(e.id))
+                    if (
+                        active_st is not None
+                        and active_st.status in ("queued", "processing")
+                        and active_st.finished_at is None
+                        and active_st.started_at >= boot_cutoff_epoch - 1.0
+                    ):
+                        continue
+                up_naive = _as_utc_naive(e.uploaded_at)
+                if up_naive is not None and up_naive >= boot_cutoff_utc:
+                    continue
+                hb_boot_naive = _as_utc_naive(e.job_heartbeat_at)
+                if hb_boot_naive is not None and hb_boot_naive >= boot_cutoff_utc:
+                    continue
             if e.job_status == "processing" and cutoff_utc is not None:
                 hb_naive = _as_utc_naive(e.job_heartbeat_at)
                 if hb_naive is not None and hb_naive > cutoff_utc:
@@ -294,6 +328,19 @@ def recover_orphaned_essay_jobs(
         )
         restored_reanalysis_ids: list[int] = []
         for re_essay in reanalysis_orphans:
+            if boot_cutoff_utc is not None:
+                if active_tracker is not None and boot_cutoff_epoch is not None:
+                    re_active_st = active_tracker.get(int(re_essay.id))
+                    if (
+                        re_active_st is not None
+                        and re_active_st.status in ("queued", "processing")
+                        and re_active_st.finished_at is None
+                        and re_active_st.started_at >= boot_cutoff_epoch - 1.0
+                    ):
+                        continue
+                re_hb = _as_utc_naive(re_essay.job_heartbeat_at)
+                if re_hb is not None and re_hb >= boot_cutoff_utc:
+                    continue
             if cutoff_utc is not None:
                 hb_naive = _as_utc_naive(re_essay.job_heartbeat_at)
                 if hb_naive is not None and hb_naive > cutoff_utc:

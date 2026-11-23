@@ -31,6 +31,7 @@ import re
 
 from integrity_checker.extraction.patterns.base import CompiledPattern, PatternType
 from integrity_checker.extraction.patterns.registry import register_format
+from integrity_checker.extraction.patterns.utils import extract_doi
 from integrity_checker.matching.author_parser import Author, normalize_author, parse_authors
 from integrity_checker.models.citation import Citation, CitationStyle, CitationType
 
@@ -937,9 +938,9 @@ class ACSFormat:
         if pages:
             citation.pages = re.sub(r"\s+", "", pages.strip())
 
-        doi_match = re.search(r"10\.\d{4,9}/[^\s\]\)\,;]+", text)
-        if doi_match:
-            citation.doi = doi_match.group(0).rstrip(".")
+        extracted_doi = extract_doi(text)
+        if extracted_doi:
+            citation.doi = extracted_doi
 
         citation.confidence = self._estimate_confidence(citation)
         return citation
@@ -1019,9 +1020,9 @@ class ACSFormat:
                 citation.pages = pages
 
         # Extract DOI if present
-        doi_match = re.search(r'10\.\d{4,9}/[^\s\]\)\,;]+', text)
-        if doi_match:
-            citation.doi = doi_match.group(0).rstrip('.')
+        extracted_doi = extract_doi(text)
+        if extracted_doi:
+            citation.doi = extracted_doi
 
         citation.confidence = self._estimate_confidence(citation)
         return citation
@@ -1092,9 +1093,9 @@ class ACSFormat:
         if doi:
             citation.doi = doi.strip().rstrip('.')
         else:
-            doi_match = re.search(r'10\.\d{4,9}/[^\s\]\)\,;]+', text)
-            if doi_match:
-                citation.doi = doi_match.group(0).rstrip('.')
+            extracted_doi = extract_doi(text)
+            if extracted_doi:
+                citation.doi = extracted_doi
 
         citation.confidence = self._estimate_confidence(citation)
         return citation
@@ -1163,9 +1164,9 @@ class ACSFormat:
                 citation.pages = pages
 
         # Extract DOI if present
-        doi_match = re.search(r'10\.\d{4,9}/[^\s\]\)\,;]+', text)
-        if doi_match:
-            citation.doi = doi_match.group(0).rstrip('.')
+        extracted_doi = extract_doi(text)
+        if extracted_doi:
+            citation.doi = extracted_doi
 
         citation.confidence = self._estimate_confidence(citation)
         return citation
@@ -1212,9 +1213,9 @@ class ACSFormat:
             citation.year = year_str
 
         # Extract DOI if present
-        doi_match = re.search(r'10\.\d{4,9}/[^\s\]\)\,;]+', text)
-        if doi_match:
-            citation.doi = doi_match.group(0).rstrip('.')
+        extracted_doi = extract_doi(text)
+        if extracted_doi:
+            citation.doi = extracted_doi
 
         citation.confidence = self._estimate_confidence(citation)
         return citation
@@ -1268,9 +1269,9 @@ class ACSFormat:
             citation.pages = pages
 
         # Extract DOI if present
-        doi_match = re.search(r'10\.\d{4,9}/[^\s\]\)\,;]+', text)
-        if doi_match:
-            citation.doi = doi_match.group(0).rstrip('.')
+        extracted_doi = extract_doi(text)
+        if extracted_doi:
+            citation.doi = extracted_doi
 
         citation.confidence = self._estimate_confidence(citation)
         return citation
@@ -1311,9 +1312,9 @@ class ACSFormat:
             citation.venue = rest
 
         # Extract DOI if present
-        doi_match = re.search(r'10\.\d{4,9}/[^\s\]\)\,;]+', text)
-        if doi_match:
-            citation.doi = doi_match.group(0).rstrip('.')
+        extracted_doi = extract_doi(text)
+        if extracted_doi:
+            citation.doi = extracted_doi
 
         citation.confidence = self._estimate_confidence(citation)
         return citation
@@ -1350,9 +1351,9 @@ class ACSFormat:
                     break
 
         # Extract DOI
-        doi_m = re.search(r'10\.\d{4,9}/[^\s\]\)\,;]+', text)
-        if doi_m:
-            citation.doi = doi_m.group(0).rstrip('.')
+        extracted_doi = extract_doi(text)
+        if extracted_doi:
+            citation.doi = extracted_doi
 
         citation.confidence = self._estimate_confidence(citation)
         return citation if citation.title or citation.year else None

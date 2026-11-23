@@ -371,7 +371,11 @@ class HarvardFormat:
             r"[A-Za-z]?\d+(?:\s*\([^)]+\))?", title_clean
         ):
             return True
-        if re.match(r"^(?:URL\s+|https?://|doi:|arXiv:)", (title_str or "").strip(), re.IGNORECASE):
+        if re.match(
+            r"^(?:URL\s+|https?://|doi:|arXiv:|(?:\[?(?:Online|Internet|Trực\s+tuyến)\]?[.,:\s]*)?(?:Accessed|Retrieved|Visited|Available|Truy\s+cập|Địa\s+chỉ)\b)",
+            (title_str or "").strip(),
+            re.IGNORECASE,
+        ):
             return True
         return False
 
@@ -412,9 +416,11 @@ class HarvardFormat:
         self._parse_venue(citation, venue)
 
         # Extract DOI if present
-        doi_match = re.search(r'10\.\d{4,9}/[^\s\]\)\,;]+', text)
-        if doi_match:
-            citation.doi = doi_match.group(0).rstrip('.')
+        from integrity_checker.extraction.patterns.utils import extract_doi
+
+        extracted_doi = extract_doi(text)
+        if extracted_doi:
+            citation.doi = extracted_doi
 
         citation.confidence = self._estimate_confidence(citation)
         return citation
@@ -462,9 +468,11 @@ class HarvardFormat:
                 citation.venue = place_pub
 
         # Extract DOI if present
-        doi_match = re.search(r'10\.\d{4,9}/[^\s\]\)\,;]+', text)
-        if doi_match:
-            citation.doi = doi_match.group(0).rstrip('.')
+        from integrity_checker.extraction.patterns.utils import extract_doi
+
+        extracted_doi = extract_doi(text)
+        if extracted_doi:
+            citation.doi = extracted_doi
 
         citation.confidence = self._estimate_confidence(citation)
         return citation
@@ -513,9 +521,11 @@ class HarvardFormat:
             citation.pages = pages
 
         # Extract DOI if present
-        doi_match = re.search(r'10\.\d{4,9}/[^\s\]\)\,;]+', text)
-        if doi_match:
-            citation.doi = doi_match.group(0).rstrip('.')
+        from integrity_checker.extraction.patterns.utils import extract_doi
+
+        extracted_doi = extract_doi(text)
+        if extracted_doi:
+            citation.doi = extracted_doi
 
         citation.confidence = self._estimate_confidence(citation)
         return citation
@@ -552,9 +562,11 @@ class HarvardFormat:
         citation.title_normalized = self._normalize_title(title)
 
         # Extract DOI if present
-        doi_match = re.search(r'10\.\d{4,9}/[^\s\]\)\,;]+', text)
-        if doi_match:
-            citation.doi = doi_match.group(0).rstrip('.')
+        from integrity_checker.extraction.patterns.utils import extract_doi
+
+        extracted_doi = extract_doi(text)
+        if extracted_doi:
+            citation.doi = extracted_doi
 
         citation.confidence = self._estimate_confidence(citation)
         return citation
@@ -600,9 +612,11 @@ class HarvardFormat:
                     citation.title_normalized = self._normalize_title(title)
 
         # Extract DOI
-        doi_m = re.search(r'10\.\d{4,9}/[^\s\]\)\,;]+', text)
-        if doi_m:
-            citation.doi = doi_m.group(0).rstrip('.')
+        from integrity_checker.extraction.patterns.utils import extract_doi
+
+        extracted_doi = extract_doi(text)
+        if extracted_doi:
+            citation.doi = extracted_doi
 
         citation.confidence = self._estimate_confidence(citation)
         return citation if citation.title or citation.year else None

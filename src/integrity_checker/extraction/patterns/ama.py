@@ -31,6 +31,7 @@ import re
 
 from integrity_checker.extraction.patterns.base import CompiledPattern, PatternType
 from integrity_checker.extraction.patterns.registry import register_format
+from integrity_checker.extraction.patterns.utils import extract_doi
 from integrity_checker.matching.author_parser import Author, parse_authors
 from integrity_checker.models.citation import Citation, CitationStyle, CitationType
 
@@ -379,9 +380,9 @@ class AMAFormat:
                 citation.pages = pages
 
         # Extract DOI if present
-        doi_match = re.search(r'10\.\d{4,9}/[^\s\]\)\,;]+', text)
-        if doi_match:
-            citation.doi = doi_match.group(0).rstrip('.')
+        extracted_doi = extract_doi(text)
+        if extracted_doi:
+            citation.doi = extracted_doi
         url_match = re.search(r'https?://[^\s\]\)\,;]+', text)
         if url_match:
             citation.url = url_match.group(0).rstrip('.')
@@ -449,9 +450,9 @@ class AMAFormat:
                 citation.pages = pages
 
         # Extract DOI if present
-        doi_match = re.search(r'10\.\d{4,9}/[^\s\]\)\,;]+', text)
-        if doi_match:
-            citation.doi = doi_match.group(0).rstrip('.')
+        extracted_doi = extract_doi(text)
+        if extracted_doi:
+            citation.doi = extracted_doi
         url_match = re.search(r'https?://[^\s\]\)\,;]+', text)
         if url_match:
             citation.url = url_match.group(0).rstrip('.')
@@ -500,9 +501,9 @@ class AMAFormat:
                 citation.venue = place_pub
 
         # Extract DOI if present
-        doi_match = re.search(r'10\.\d{4,9}/[^\s\]\)\,;]+', text)
-        if doi_match:
-            citation.doi = doi_match.group(0).rstrip('.')
+        extracted_doi = extract_doi(text)
+        if extracted_doi:
+            citation.doi = extracted_doi
         url_match = re.search(r'https?://[^\s\]\)\,;]+', text)
         if url_match:
             citation.url = url_match.group(0).rstrip('.')
@@ -550,9 +551,9 @@ class AMAFormat:
             citation.year = year_str
 
         # Extract DOI if present
-        doi_match = re.search(r'10\.\d{4,9}/[^\s\]\)\,;]+', text)
-        if doi_match:
-            citation.doi = doi_match.group(0).rstrip('.')
+        extracted_doi = extract_doi(text)
+        if extracted_doi:
+            citation.doi = extracted_doi
         url_match = re.search(r'https?://[^\s\]\)\,;]+', text)
         if url_match:
             citation.url = url_match.group(0).rstrip('.')
@@ -598,9 +599,9 @@ class AMAFormat:
                     break
 
         # Extract DOI
-        doi_m = re.search(r'10\.\d{4,9}/[^\s\]\)\,;]+', text)
-        if doi_m:
-            citation.doi = doi_m.group(0).rstrip('.')
+        extracted_doi = extract_doi(text)
+        if extracted_doi:
+            citation.doi = extracted_doi
 
         citation.confidence = self._estimate_confidence(citation)
         return citation if citation.title or citation.year else None

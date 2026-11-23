@@ -465,6 +465,126 @@ def is_soft_404_title(
     return False
 
 
+_API_VIEWER_SHELL_TITLES = frozenset({
+    "swagger ui",
+    "redoc",
+    "redocly",
+    "scalar",
+    "scalar api reference",
+    "stoplight",
+    "stoplight elements",
+    "graphql playground",
+    "graphiql",
+    "api documentation",
+    "api reference",
+    "api docs",
+    "openapi",
+    "openapi documentation",
+})
+
+_API_OR_SOFTWARE_CONTEXT_RE = re.compile(
+    r"\b(?:apis?|rest(?:ful)?|graphql|openapi|swagger|redoc|stoplight|endpoints?|webhooks?|sdks?)\b",
+    re.IGNORECASE,
+)
+
+_URL_GENERIC_OR_STOPWORD_TOKENS = frozenset({
+    "www",
+    "com",
+    "org",
+    "net",
+    "edu",
+    "gov",
+    "mil",
+    "int",
+    "io",
+    "dev",
+    "app",
+    "ai",
+    "co",
+    "uk",
+    "vn",
+    "ac",
+    "api",
+    "apis",
+    "doc",
+    "docs",
+    "documentation",
+    "reference",
+    "manual",
+    "guide",
+    "handbook",
+    "portal",
+    "support",
+    "help",
+    "swagger",
+    "redoc",
+    "stoplight",
+    "graphql",
+    "openapi",
+    "html",
+    "htm",
+    "php",
+    "asp",
+    "aspx",
+    "jsp",
+    "json",
+    "yaml",
+    "yml",
+    "xml",
+    "pdf",
+    "index",
+    "home",
+    "main",
+    "default",
+    "page",
+    "site",
+    "web",
+    "online",
+    "available",
+    "http",
+    "https",
+    "the",
+    "and",
+    "for",
+    "with",
+    "from",
+    "into",
+    "over",
+    "under",
+    "about",
+})
+
+
+def is_api_viewer_shell_title(title: str | None) -> bool:
+    """Return True if ``title`` is a generic interactive OpenAPI/GraphQL viewer shell label."""
+    cleaned = _clean_meta_text(title)
+    return bool(cleaned and cleaned.lower() in _API_VIEWER_SHELL_TITLES)
+
+
+def _citation_plausibly_targets_api_shell(
+    citation_title: str | None,
+    *,
+    citation_url: str | None = None,
+    citation_raw: str | None = None,
+) -> bool:
+    raw_without_urls = re.sub(r"https?://\S+|\bwww\.\S+", " ", citation_raw or "", flags=re.IGNORECASE)
+    title_without_urls = re.sub(r"https?://\S+|\bwww\.\S+", " ", citation_title or "", flags=re.IGNORECASE)
+    combined = f"{title_without_urls} {raw_without_urls}"
+    if _API_OR_SOFTWARE_CONTEXT_RE.search(combined):
+        return True
+    if citation_url:
+        host_and_path = re.sub(r"^https?://", "", citation_url.strip(), flags=re.IGNORECASE)
+        url_toks = {
+            t
+            for t in re.findall(r"[a-z]{3,}", host_and_path.lower())
+            if t not in _URL_GENERIC_OR_STOPWORD_TOKENS
+        }
+        cit_toks = {t for t in re.findall(r"[a-z]{3,}", combined.lower())}
+        if url_toks & cit_toks:
+            return True
+    return False
+
+
 def is_gatekeeper_or_generic_html_title(title: str | None) -> bool:
     """Return True if ``title`` is empty, generic login/WAF/Cloudflare challenge, or non-informative."""
     cleaned = _clean_meta_text(title)
@@ -521,6 +641,9 @@ def _single_title_pair_similarity(citation_title: str, candidate_html_title: str
 def _extract_usable_html_titles(
     citation_title: str | None,
     html_meta: HtmlPageMeta | None,
+    *,
+    citation_url: str | None = None,
+    citation_raw: str | None = None,
 ) -> tuple[str | None, list[str]]:
     """Validate ``citation_title`` and return ``(cleaned_citation_title, usable_html_titles)``."""
     if not citation_title or html_meta is None or html_meta.is_soft_404:
@@ -534,10 +657,20 @@ def _extract_usable_html_titles(
     if "http://" in cit_clean.lower() or "https://" in cit_clean.lower():
         return None, []
 
+    allow_api_shell_abstain = (
+        html_meta.citation_title is None
+        and _citation_plausibly_targets_api_shell(
+            cit_clean,
+            citation_url=citation_url or html_meta.canonical_url,
+            citation_raw=citation_raw,
+        )
+    )
     raw_candidates = [
         t
         for t in (html_meta.citation_title, html_meta.page_title)
-        if t and not is_gatekeeper_or_generic_html_title(t)
+        if t
+        and not is_gatekeeper_or_generic_html_title(t)
+        and not (allow_api_shell_abstain and is_api_viewer_shell_title(t))
     ]
     if not raw_candidates:
         return cit_clean, []
@@ -563,10 +696,18 @@ def _extract_usable_html_titles(
 def compute_url_title_match_score(
     citation_title: str | None,
     html_meta: HtmlPageMeta | None,
+    *,
+    citation_url: str | None = None,
+    citation_raw: str | None = None,
 ) -> float | None:
     """Return best ``[0, 1]`` similarity between ``citation_title`` and ``html_meta`` titles,
     or ``None`` when ``html_meta`` lacks a usable non-gatekeeper title (or is soft-404)."""
-    cit_clean, expanded_candidates = _extract_usable_html_titles(citation_title, html_meta)
+    cit_clean, expanded_candidates = _extract_usable_html_titles(
+        citation_title,
+        html_meta,
+        citation_url=citation_url,
+        citation_raw=citation_raw,
+    )
     if not cit_clean or not expanded_candidates:
         return None
 

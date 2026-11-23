@@ -27,6 +27,7 @@ import json
 import os
 import re
 import unicodedata
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -1295,18 +1296,34 @@ class TechStandardClient(BaseScholarClient):
         if not authors:
             authors = [owner_login or "GitHub Contributors"]
 
-        # Active repository years from created_at, updated_at, pushed_at, and CITATION.cff date-released
+        # Active repository years from created_at, pushed_at (preferring pushed_at over updated_at
+        # since starring a dead repo updates updated_at), and CITATION.cff date-released.
+        current_utc_year = datetime.now(UTC).year
         active_years: set[str] = set()
-        for dt_field in ("created_at", "updated_at", "pushed_at"):
+        dt_fields = ("created_at", "pushed_at") if data.get("pushed_at") else ("created_at", "updated_at")
+        for dt_field in dt_fields:
             dt_val = str(data.get(dt_field) or "")
             if len(dt_val) >= 4 and dt_val[:4].isdigit():
-                active_years.add(dt_val[:4])
+                yr_int = min(int(dt_val[:4]), current_utc_year)
+                active_years.add(str(yr_int))
         if cff_meta and cff_meta.get("year"):
-            active_years.add(str(cff_meta["year"])[:4])
+            cff_yr_str = str(cff_meta["year"])[:4]
+            if cff_yr_str.isdigit() and int(cff_yr_str) <= current_utc_year:
+                active_years.add(cff_yr_str)
+        created_raw = str(data.get("created_at") or "")
+        pushed_raw = str(data.get("pushed_at") or data.get("updated_at") or "")
+        min_repo_yr: int | None = None
+        max_repo_yr: int | None = None
+        if len(created_raw) >= 4 and created_raw[:4].isdigit() and len(pushed_raw) >= 4 and pushed_raw[:4].isdigit():
+            min_repo_yr = int(created_raw[:4])
+            max_repo_yr = min(int(pushed_raw[:4]), current_utc_year)
+            if 1990 <= min_repo_yr <= max_repo_yr and (max_repo_yr - min_repo_yr) <= 40:
+                active_years.update(str(y) for y in range(min_repo_yr, max_repo_yr + 1))
 
         default_gh_year = (cff_meta.get("year") if cff_meta else None) or (
             max(active_years) if active_years else None
         )
+        cited_yr_raw = str(citation.year).strip()[:4] if (citation and citation.year) else ""
         year = self._resolve_verified_year(
             citation.year if citation else None,
             active_years,
@@ -1315,6 +1332,13 @@ class TechStandardClient(BaseScholarClient):
 
         doi = normalize_doi(cff_meta.get("doi")) if (cff_meta and cff_meta.get("doi")) else None
         ext_ids: dict[str, str] = {"github_repo": full_name}
+        if min_repo_yr is not None and max_repo_yr is not None:
+            ext_ids["github_min_year"] = str(min_repo_yr)
+            ext_ids["github_max_year"] = str(max_repo_yr)
+            if cited_yr_raw.isdigit() and len(cited_yr_raw) == 4:
+                ext_ids["github_year_in_lifespan"] = (
+                    "true" if str(cited_yr_raw) in active_years else "false"
+                )
         if doi:
             ext_ids["doi"] = doi
         if data.get("stargazers_count") is not None:

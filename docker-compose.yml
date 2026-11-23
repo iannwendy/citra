@@ -20,8 +20,8 @@ services:
     ports:
       - "8070:8070"  # GROBID API
     environment:
-      - JAVA_OPTS=-Xmx2g -XX:-UseContainerSupport
-      - JDK_JAVA_OPTIONS=-Xmx2g -XX:-UseContainerSupport
+      - JAVA_OPTS=-Xmx1280m -XX:-UseContainerSupport -XX:ActiveProcessorCount=4
+      - JDK_JAVA_OPTIONS=-Xmx1280m -XX:-UseContainerSupport -XX:ActiveProcessorCount=4
     restart: unless-stopped
     deploy:
       resources:

@@ -2234,13 +2234,30 @@ class DocumentParser:
             )
         )
         if is_vietnamese_bib:
+            _vn_boilerplate_title_re = re.compile(
+                r"^(?:\[?(?:trực\s+tuyến|online|internet)\]?[.,:\s]*)?(?:truy\s+cập|accessed|retrieved|visited|địa\s+chỉ|available|nguồn|xem\s+tại|https?://)",
+                re.IGNORECASE,
+            )
             for r in regex_refs:
-                if r.title and r.authors and r.year:
+                if r.title and r.authors and r.year and (r.doi or r.url):
                     continue
-                r_raw_low = (r.raw_text or "").lower()
+                r_raw_fold = re.sub(r"[–—−-]+", "-", (r.raw_text or "").lower())
+                r_raw_fold = re.sub(r"\s*-\s*", "-", r_raw_fold)
                 for g in grobid_refs:
                     g_title = (g.title or "").strip()
-                    if g_title and len(g_title) >= 8 and g_title.lower() in r_raw_low:
+                    g_title_fold = re.sub(r"\s*-\s*", "-", re.sub(r"[–—−-]+", "-", g_title.lower()))
+                    if (
+                        g_title
+                        and len(g_title) >= 12
+                        and not _vn_boilerplate_title_re.match(g_title)
+                        and g_title_fold in r_raw_fold
+                    ):
+                        same_id = bool(
+                            (r.doi and g.doi and r.doi.lower() == g.doi.lower())
+                            or (r.url and g.url and r.url.rstrip("/").lower() == g.url.rstrip("/").lower())
+                        )
+                        if (r.url and g.url and not same_id):
+                            continue
                         if (
                             not r.title
                             or r.title.startswith(",")
@@ -2508,10 +2525,13 @@ class DocumentParser:
             if target.title and donor.title and len(donor.title.strip()) >= 5:
                 t_clean = target.title.strip()
                 d_clean = donor.title.strip()
+                t_cmp = re.sub(r"[,\s]+(?:18|19|20)\d{2}[a-z]?\.?$", "", t_clean).rstrip(".,; ")
+                d_cmp = re.sub(r"[,\s]+(?:18|19|20)\d{2}[a-z]?\.?$", "", d_clean).rstrip(".,; ")
                 is_colon_prefix_drop = (
-                    ":" in d_clean
-                    and d_clean.lower().endswith(t_clean.lower())
-                    and len(d_clean) > len(t_clean) + 2
+                    ":" in d_cmp
+                    and bool(t_cmp)
+                    and d_cmp.lower().endswith(t_cmp.lower())
+                    and len(d_cmp) > len(t_cmp) + 2
                 )
                 is_bio_bleed_title = bool(
                     re.search(
@@ -2692,12 +2712,16 @@ class DocumentParser:
                 )
 
             def _clean_doi_value(raw_doi: str) -> str:
-                d_val = re.sub(r"[\u200b\u200c\u200d\ufeff]", "", raw_doi).strip()
+                from integrity_checker.extraction.patterns.utils import (
+                    extract_doi as _util_extract_doi,
+                )
+
+                d_val = re.sub(r"[\u200b\u200c\u200d\ufeff]", "", raw_doi).replace("\u037e", ";").strip()
                 if re.match(r"^(?:https?://|(?:dx\.)?doi\.org/)", d_val, re.IGNORECASE):
-                    m_doi = re.search(r"10\.\d{4,9}/(?:[^\s\]\)\,;()<>]|\([^\s\]\)\,;()<>]*\))+", d_val)
-                    if not m_doi:
+                    extracted_d = _util_extract_doi(d_val)
+                    if not extracted_d:
                         return ""
-                    d_val = m_doi.group(0)
+                    d_val = extracted_d
                 d_val = re.sub(r"[?#].*$", "", d_val)
                 d_val = re.sub(r"&[A-Za-z_][A-Za-z0-9_]*=.*$", "", d_val)
                 d_val = re.sub(
@@ -2708,7 +2732,13 @@ class DocumentParser:
                 )
                 d_val = re.sub(r"\.pdf$", "", d_val, flags=re.IGNORECASE)
                 d_val = re.sub(r"(?<=\d)[A-Z][a-z]{2,}.*$", "", d_val)
-                return d_val.rstrip(".,;:>)")
+                d_val = d_val.rstrip(".,;:")
+                while d_val and (
+                    (d_val.endswith(">") and d_val.count(">") > d_val.count("<"))
+                    or (d_val.endswith(")") and d_val.count(")") > d_val.count("("))
+                ):
+                    d_val = d_val[:-1].rstrip(".,;:")
+                return d_val
 
             if donor.doi and not donor_is_multi_chunk:
                 clean_donor_doi = _clean_doi_value(donor.doi)
@@ -2734,6 +2764,25 @@ class DocumentParser:
                     and len(donor.url) > len(target.url)
                 ):
                     target.url = donor.url
+                elif (
+                    target.url
+                    and re.fullmatch(r"https?://[^/\s]+/", donor.url, re.IGNORECASE)
+                    and (donor.raw_text or "").rstrip(".,; )").endswith(donor.url)
+                    and target.url.lower().startswith(donor.url.lower())
+                    and len(target.url) > len(donor.url)
+                    and (
+                        re.fullmatch(r"\d{1,4}", target.url[len(donor.url):])
+                        or (
+                            ":" in target.url[len(donor.url):]
+                            and "/" not in target.url[len(donor.url):]
+                            and not target.url[len(donor.url):].lower().startswith(("http://", "https://"))
+                        )
+                    )
+                ):
+                    old_u = target.url
+                    target.url = donor.url
+                    if old_u in (target.raw_text or ""):
+                        target.raw_text = (target.raw_text or "").replace(old_u, donor.url)
             if not target.venue and donor.venue:
                 target.venue = donor.venue
             if not target.year and donor.year:
@@ -2943,11 +2992,16 @@ class DocumentParser:
                     if (
                         cur_has_title
                         and len(nxt.authors or []) == 1
-                        and nxt_first_auth.lower().rstrip(".:,") in {"accessed", "retrieved", "visited", "online"}
+                        and re.match(
+                            r"^(?:accessed|retrieved|visited|online|truy\s+cập|địa\s+chỉ)\b",
+                            nxt_first_auth.strip().rstrip(".:,"),
+                            re.IGNORECASE,
+                        )
                         and not nxt.doi
                     ):
-                        if cur.url and cur.url.endswith("/") and nxt.title and " " not in nxt.title.strip():
+                        if cur.url and cur.url.endswith("/") and nxt.title and " " not in nxt.title.strip() and not nxt.title.startswith("["):
                             cur.url = f"{cur.url}{nxt.title.strip()}"
+                        cur.url = cur.url or nxt.url
                         cur.year = cur.year or nxt.year
                         cur.raw_text = f"{(cur.raw_text or '').rstrip('. ')} {nxt_raw_s}".strip()
                         coalesced_grobid.append(cur)

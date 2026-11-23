@@ -43,7 +43,7 @@ MIN_TITLE_SIMILARITY = 0.60
 
 _STANDARD_CODE_RE = re.compile(
     r"\b(?:"
-    r"ISO(?:/IEC)?\s*\d{3,5}(?:-\d+)?(?::\d{4})?"
+    r"ISO(?:/IEC)?(?:/IEEE)?\s*\d{3,5}(?:-\d+)?(?::\d{4})?"
     r"|NIST\s+(?:SP|Special\s+Publication|FIPS)\s*\d{2,4}(?:-\d+[A-Za-z]?)?"
     r"|IEEE\s+(?:Std\s+)?802\.\d+(?:[a-z]{1,2})?"
     r"|DSM-(?:IV(?:-TR)?|5(?:-TR)?|V)"

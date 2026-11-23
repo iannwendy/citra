@@ -40,16 +40,25 @@ _ALPHA_LATIN_VN = r"[A-Za-zÀ-ÖØ-öø-ÿĀ-žƠơƯưẠ-ỹ]"
 # - 10.1038/nature12345
 # - 10.1145/3442188.3445922
 
+_SICI_DOI_REGEX_STR = (
+    r"10\.\d{4,9}/"
+    r"(?:"
+    r"(?:[^\s\]\)\,;()<>]|\([^\s\]\)\,;()<>]*\))+<[^<>\"\s]{1,64}>[^\s\]\)\,;<>]*(?:[;\u037e][0-9A-Za-z\-]{1,6})?"
+    r"|(?:[^\s\]\)\,;()<>]|\([^\s\]\)\,;()<>]*\))+(?:\.[Cc][Oo][;\u037e][0-9A-Za-z\-]{1,6})?"
+    r")"
+)
+
 DOI_PATTERN = CompiledPattern.create(
     name="doi",
-    pattern=r"10\.\d{4,9}/(?:[^\s\]\)\,;()<>]|\([^\s\]\)\,;()<>]*\))+",
+    pattern=_SICI_DOI_REGEX_STR,
     pattern_type=PatternType.UTILITY,
-    description="DOI: Matches 10.xxxx/yyyy format (Digital Object Identifier)",
+    description="DOI: Matches 10.xxxx/yyyy format (including SICI <...> and ;N suffixes)",
 )
 
 # Pre-compiled regex for direct use
-_DOI_REGEX = re.compile(r"10\.\d{4,9}/(?:[^\s\]\)\,;()<>]|\([^\s\]\)\,;()<>]*\))+")
+_DOI_REGEX = re.compile(_SICI_DOI_REGEX_STR)
 _ZERO_WIDTH_RE = re.compile(r"[\u200b\u200c\u200d\ufeff]")
+_WRAPPED_DOI_HYPHEN_RE = re.compile(r"(10\.\d{4,9}/[^\s\"<>]*-)\s+(\d)")
 
 
 def extract_doi(text: str) -> str | None:
@@ -71,14 +80,21 @@ def extract_doi(text: str) -> str | None:
     """
     if not text:
         return None
-    cleaned = _ZERO_WIDTH_RE.sub("", text)
+    cleaned = _ZERO_WIDTH_RE.sub("", text).replace("\u037e", ";")
+    cleaned = _WRAPPED_DOI_HYPHEN_RE.sub(r"\1\2", cleaned)
     match = _DOI_REGEX.search(cleaned)
     if match:
         doi = match.group(0)
         doi = re.sub(r"[?#].*$", "", doi)
         doi = re.sub(r"&[A-Za-z_][A-Za-z0-9_]*=.*$", "", doi)
-        # Clean trailing punctuation
-        return doi.rstrip(".,;:>")
+        # Strip trailing punctuation while preserving balanced SICI '>' and ')'
+        doi = doi.rstrip(".,;:")
+        while doi and (
+            (doi.endswith(">") and doi.count(">") > doi.count("<"))
+            or (doi.endswith(")") and doi.count(")") > doi.count("("))
+        ):
+            doi = doi[:-1].rstrip(".,;:")
+        return doi or None
     return None
 
 

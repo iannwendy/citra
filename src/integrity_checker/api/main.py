@@ -8,6 +8,7 @@ import threading
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -161,8 +162,15 @@ class SecurityHeadersMiddleware:
         await self.app(scope, receive, _send_with_headers)
 
 
-def _startup_background_maintenance(stop_event: threading.Event) -> None:
+_LAST_LIFESPAN_BOOT_UTC: datetime | None = None
+
+
+def _startup_background_maintenance(
+    stop_event: threading.Event,
+    boot_started_utc: datetime | None = None,
+) -> None:
     """Cooperatively warm local caches & recover orphaned jobs when server lifespan starts."""
+    effective_boot_utc = boot_started_utc if boot_started_utc is not None else _LAST_LIFESPAN_BOOT_UTC
     if stop_event.is_set():
         return
     try:
@@ -192,7 +200,16 @@ def _startup_background_maintenance(stop_event: threading.Event) -> None:
         from integrity_checker.api.deps import get_pipeline
         from integrity_checker.api.job_recovery import recover_orphaned_essay_jobs
 
-        recovery_summary = recover_orphaned_essay_jobs(get_pipeline)
+        if effective_boot_utc is not None:
+            try:
+                recovery_summary = recover_orphaned_essay_jobs(
+                    get_pipeline,
+                    started_before_utc=effective_boot_utc,
+                )
+            except TypeError:
+                recovery_summary = recover_orphaned_essay_jobs(get_pipeline)
+        else:
+            recovery_summary = recover_orphaned_essay_jobs(get_pipeline)
         if any(recovery_summary.values()):
             logger.info(f"Startup orphan job recovery summary: {recovery_summary}")
     except Exception as exc:
@@ -221,6 +238,8 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     maint_thread: threading.Thread | None = None
     worker_mode = os.getenv("CITRA_WORKER_MODE", "inline").strip().lower() or "inline"
     if not is_test_runtime() and worker_mode == "inline":
+        global _LAST_LIFESPAN_BOOT_UTC
+        _LAST_LIFESPAN_BOOT_UTC = datetime.now(UTC).replace(tzinfo=None)
         maint_thread = threading.Thread(
             target=_startup_background_maintenance,
             args=(stop_event,),

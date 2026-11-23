@@ -31,7 +31,11 @@ import re
 
 from integrity_checker.extraction.patterns.base import CompiledPattern, PatternType
 from integrity_checker.extraction.patterns.registry import register_format
-from integrity_checker.extraction.patterns.utils import _ALPHA_LATIN_VN, _UPPER_LATIN_VN
+from integrity_checker.extraction.patterns.utils import (
+    _ALPHA_LATIN_VN,
+    _UPPER_LATIN_VN,
+    extract_doi,
+)
 from integrity_checker.matching.author_parser import Author, parse_authors
 from integrity_checker.models.citation import Citation, CitationStyle, CitationType
 
@@ -464,9 +468,9 @@ class NatureFormat:
                 citation.year_suffix = year_str[4:]
 
         # Extract DOI if present
-        doi_match = re.search(r'10\.\d{4,9}/[^\s\]\)\,;]+', text)
-        if doi_match:
-            citation.doi = doi_match.group(0).rstrip('.')
+        extracted_doi = extract_doi(text)
+        if extracted_doi:
+            citation.doi = extracted_doi
 
         citation.confidence = self._estimate_confidence(citation)
         return citation
@@ -512,9 +516,9 @@ class NatureFormat:
                 citation.year_suffix = year_str[4:]
 
         # Extract DOI if present
-        doi_match = re.search(r'10\.\d{4,9}/[^\s\]\)\,;]+', text)
-        if doi_match:
-            citation.doi = doi_match.group(0).rstrip('.')
+        extracted_doi = extract_doi(text)
+        if extracted_doi:
+            citation.doi = extracted_doi
 
         citation.confidence = self._estimate_confidence(citation)
         return citation
@@ -550,9 +554,9 @@ class NatureFormat:
             citation.year = year_str
 
         # Extract DOI if present
-        doi_match = re.search(r'10\.\d{4,9}/[^\s\]\)\,;]+', text)
-        if doi_match:
-            citation.doi = doi_match.group(0).rstrip('.')
+        extracted_doi = extract_doi(text)
+        if extracted_doi:
+            citation.doi = extracted_doi
 
         citation.confidence = self._estimate_confidence(citation)
         return citation
@@ -593,9 +597,9 @@ class NatureFormat:
             citation.year = year_str
 
         # Extract DOI if present
-        doi_match = re.search(r'10\.\d{4,9}/[^\s\]\)\,;]+', text)
-        if doi_match:
-            citation.doi = doi_match.group(0).rstrip('.')
+        extracted_doi = extract_doi(text)
+        if extracted_doi:
+            citation.doi = extracted_doi
 
         citation.confidence = self._estimate_confidence(citation)
         return citation
@@ -632,9 +636,9 @@ class NatureFormat:
             citation.year = year_str
 
         # Extract DOI if present
-        doi_match = re.search(r'10\.\d{4,9}/[^\s\]\)\,;]+', text)
-        if doi_match:
-            citation.doi = doi_match.group(0).rstrip('.')
+        extracted_doi = extract_doi(text)
+        if extracted_doi:
+            citation.doi = extracted_doi
 
         citation.confidence = self._estimate_confidence(citation)
         return citation
@@ -754,9 +758,9 @@ class NatureFormat:
             citation.matched_pattern = "nature_comma_separated"
 
         # Extract DOI & URL
-        doi_m = re.search(r'10\.\d{4,9}/[^\s\]\)\,;]+', text)
-        if doi_m:
-            citation.doi = doi_m.group(0).rstrip('.')
+        extracted_doi = extract_doi(text)
+        if extracted_doi:
+            citation.doi = extracted_doi
         url_m = re.search(r'https?://[^\s\]\)\,;]+', text)
         if url_m:
             citation.url = url_m.group(0).rstrip('.,;)')

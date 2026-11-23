@@ -610,17 +610,10 @@ class SemanticMatcher:
                         f"ONNX backend unavailable ({exc}); checking local PyTorch multilingual cache only."
                     )
                 else:
-                    try:
-                        return SentenceTransformer(
-                            self.multilingual_model_name,
-                            backend="onnx",
-                            model_kwargs=onnx_kwargs,
-                        )
-                    except Exception as retry_exc:  # noqa: BLE001
-                        logger.info(
-                            f"Quantized ONNX file '{onnx_file}' unavailable ({exc} / {retry_exc}); "
-                            f"checking local PyTorch multilingual cache only."
-                        )
+                    logger.info(
+                        f"Local quantized ONNX file '{onnx_file}' not cached ({exc}); "
+                        f"checking local PyTorch multilingual cache only."
+                    )
 
             try:
                 return SentenceTransformer(

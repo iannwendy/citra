@@ -29,7 +29,7 @@ import re
 
 from integrity_checker.extraction.patterns.base import CompiledPattern, PatternType
 from integrity_checker.extraction.patterns.registry import register_format
-from integrity_checker.extraction.patterns.utils import extract_publication_year
+from integrity_checker.extraction.patterns.utils import extract_doi, extract_publication_year
 from integrity_checker.matching.author_parser import Author, parse_authors
 from integrity_checker.models.citation import Citation, CitationStyle, CitationType
 
@@ -379,9 +379,9 @@ class VancouverFormat:
             rest_str = (m2.group('rest') or '').strip()
             if rest_str:
                 self._parse_venue(citation, rest_str)
-            doi_m = re.search(r'10\.\d{4,9}/[^\s\]\)\,;]+', s)
-            if doi_m:
-                citation.doi = doi_m.group(0).rstrip('.')
+            extracted_doi = extract_doi(s)
+            if extracted_doi:
+                citation.doi = extracted_doi
             url_m = re.search(r'https?://[^\s\]\)\,;]+', s)
             if url_m:
                 citation.url = url_m.group(0).rstrip('.')
@@ -425,9 +425,9 @@ class VancouverFormat:
             year_suffix=yr_suf,
         )
         self._parse_venue(citation, venue_rest)
-        doi_m = re.search(r'10\.\d{4,9}/[^\s\]\)\,;]+', s)
-        if doi_m:
-            citation.doi = doi_m.group(0).rstrip('.')
+        extracted_doi = extract_doi(s)
+        if extracted_doi:
+            citation.doi = extracted_doi
         url_m = re.search(r'https?://[^\s\]\)\,;]+', s)
         if url_m:
             citation.url = url_m.group(0).rstrip('.')
@@ -511,9 +511,9 @@ class VancouverFormat:
             self._parse_venue(citation, venue)
 
         # Extract DOI if present
-        doi_match = re.search(r'10\.\d{4,9}/[^\s\]\)\,;]+', text)
-        if doi_match:
-            citation.doi = doi_match.group(0).rstrip('.')
+        extracted_doi = extract_doi(text)
+        if extracted_doi:
+            citation.doi = extracted_doi
         url_match = re.search(r'https?://[^\s\]\)\,;]+', text)
         if url_match:
             citation.url = url_match.group(0).rstrip('.')
@@ -571,9 +571,9 @@ class VancouverFormat:
                 citation.pages = pages
 
         # Extract DOI if present
-        doi_match = re.search(r'10\.\d{4,9}/[^\s\]\)\,;]+', text)
-        if doi_match:
-            citation.doi = doi_match.group(0).rstrip('.')
+        extracted_doi = extract_doi(text)
+        if extracted_doi:
+            citation.doi = extracted_doi
         url_match = re.search(r'https?://[^\s\]\)\,;]+', text)
         if url_match:
             citation.url = url_match.group(0).rstrip('.')
@@ -629,9 +629,9 @@ class VancouverFormat:
                 citation.pages = pages
 
         # Extract DOI if present
-        doi_match = re.search(r'10\.\d{4,9}/[^\s\]\)\,;]+', text)
-        if doi_match:
-            citation.doi = doi_match.group(0).rstrip('.')
+        extracted_doi = extract_doi(text)
+        if extracted_doi:
+            citation.doi = extracted_doi
         url_match = re.search(r'https?://[^\s\]\)\,;]+', text)
         if url_match:
             citation.url = url_match.group(0).rstrip('.')
@@ -703,9 +703,9 @@ class VancouverFormat:
                 citation.authors = self._parse_authors(first_part)
 
         # Extract DOI
-        doi_match = re.search(r'10\.\d{4,9}/[^\s\]\)\,;]+', text)
-        if doi_match:
-            citation.doi = doi_match.group(0).rstrip('.')
+        extracted_doi = extract_doi(text)
+        if extracted_doi:
+            citation.doi = extracted_doi
 
         citation.confidence = self._estimate_confidence(citation)
         # Only return if we have meaningful data

@@ -232,12 +232,20 @@ def _grobid_bib_to_citation(bib: GrobidBibEntry, order_index: int) -> Citation:
 
     doi_val: str | None = bib.doi
     if doi_val:
-        doi_val = re.sub(r"[\u200b\u200c\u200d\ufeff]", "", doi_val).strip()
-        if re.match(r"^(?:https?://|(?:dx\.)?doi\.org/)", doi_val, re.IGNORECASE):
-            doi_val = extract_doi(doi_val)
-        elif doi_val:
+        doi_val = re.sub(r"[\u200b\u200c\u200d\ufeff]", "", doi_val).replace("\u037e", ";").strip()
+        cleaned_bib_doi = extract_doi(doi_val)
+        if cleaned_bib_doi:
+            doi_val = cleaned_bib_doi
+        elif re.match(r"^(?:https?://|(?:dx\.)?doi\.org/)", doi_val, re.IGNORECASE):
+            doi_val = None
+        else:
             doi_val = re.sub(r"[?#].*$", "", doi_val)
-            doi_val = re.sub(r"&[A-Za-z_][A-Za-z0-9_]*=.*$", "", doi_val).rstrip(".,;:>")
+            doi_val = re.sub(r"&[A-Za-z_][A-Za-z0-9_]*=.*$", "", doi_val).rstrip(".,;:")
+            while doi_val and (
+                (doi_val.endswith(">") and doi_val.count(">") > doi_val.count("<"))
+                or (doi_val.endswith(")") and doi_val.count(")") > doi_val.count("("))
+            ):
+                doi_val = doi_val[:-1].rstrip(".,;:")
     if doi_val:
         full_doi = extract_doi(url or "") or extract_doi(raw_ref_str or "")
         if (

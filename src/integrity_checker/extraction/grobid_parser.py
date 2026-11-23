@@ -45,6 +45,7 @@ from integrity_checker.extraction.patterns.utils import (
     _ALPHA_LATIN_VN,
     _LOWER_LATIN_VN,
     _UPPER_LATIN_VN,
+    extract_doi,
 )
 
 if TYPE_CHECKING:
@@ -548,11 +549,42 @@ def _normalize_raw_ref_text(raw_ref_text: str) -> str:
         text,
         flags=re.IGNORECASE,
     )
+    # Normalize Unicode Greek question mark (U+037E ';') inside DOIs to ASCII ';'
+    text = re.sub(r"(10\.\d{4,9}/\S*?)\u037e", r"\1;", text)
+    # Strip page-number + lowercase YAML/compose listing bleed after '[Online]. Available: https://...'
+    # (without erasing a merged capitalized bibliography entry)
+    text = re.sub(
+        r"(\b(?:Available|Địa\s+chỉ)\s*:\s*https?://[^\s]+)\s+\d{1,3}\s+[a-z_][a-z0-9_-]*\s*:\s+(?:\d+\s+)?-\s+[a-z0-9_-]+.*$",
+        r"\1",
+        text,
+        flags=re.IGNORECASE,
+    ).strip()
+
+    def _join_wrapped_url_segment(m: re.Match[str]) -> str:
+        left, right = m.group(1), m.group(2)
+        # Allow Wayback Machine archived target URLs broken after '/web/<timestamp>/'
+        if re.search(r"/web/\d+\*?/$", left, re.IGNORECASE) and re.match(r"^https?://", right, re.IGNORECASE):
+            return f"{left}{right}"
+        # Never join bare page numbers ('85') onto a bare host-root URL ('https://host/')
+        is_root_left = bool(re.fullmatch(r"(?:https?://|www\.)[^/\s]+/", left, re.IGNORECASE))
+        if is_root_left and (re.match(r"^\d+$", right) or ":" in right):
+            return m.group(0)
+        # Never join prose labels ending in ':' ('Available:', 'networks:') or port-like 'word:digits' on non-wiki paths
+        if right.endswith(":") or (
+            ":" in right
+            and not re.search(r"/(?:wiki|articles?|standards?)/$", left, re.IGNORECASE)
+        ):
+            return m.group(0)
+        # If right starts with uppercase, only join when it clearly looks like a URL path/file/slug
+        if right[0].isupper() and not re.search(r"[/_\-~%]|\.(?:html?|pdf|php|aspx?|jsp|xml|json)\b", right, re.IGNORECASE):
+            return m.group(0)
+        return f"{left}{right}"
+
     # Join URL paths broken after '/' or '-' or '=' before a slug/path or broken .pdf suffix (run up to 3 passes)
     for _ in range(3):
         text = re.sub(
-            r"((?:https?://|www\.)[^\s]+[/\-=])\s+([a-z0-9_~%#][^\s]*)",
-            r"\1\2",
+            r"((?:https?://|www\.)[^\s]+[/\-=])\s+([A-Za-z0-9_~%#][^\s]*)",
+            _join_wrapped_url_segment,
             text,
         )
         text = re.sub(
@@ -561,9 +593,9 @@ def _normalize_raw_ref_text(raw_ref_text: str) -> str:
             text,
             flags=re.IGNORECASE,
         )
-    # Join DOIs broken after '-' or '/' before digits
+    # Join DOIs broken after '-' or '/' before digits (including SICI '<0001:VOFEIT>' suffixes)
     text = re.sub(
-        r"\b(10\.\d{4,9}/[A-Za-z0-9._;()/-]+[-/])\s+(\d+[A-Za-z0-9._;()/-]*)",
+        r"\b(10\.\d{4,9}/[A-Za-z0-9._:;()<>/-]+[-/])\s+(\d+[A-Za-z0-9._:;()<>/-]*)",
         r"\1\2",
         text,
     )
@@ -580,22 +612,21 @@ def _extract_url_and_doi_from_raw(
     if bibl is not None:
         doi_el = bibl.find(f".//{_TEI}idno[@type='DOI']")
         if doi_el is not None and doi_el.text:
-            doi = doi_el.text.strip().rstrip(".,;")
+            doi = extract_doi(doi_el.text) or doi_el.text.replace("\u037e", ";").strip().rstrip(".,;")
         for ptr_el in bibl.findall(f".//{_TEI}ptr"):
             target = (ptr_el.get("target") or "").strip()
             if target and not target.startswith("#"):
                 if "doi.org/" in target.lower():
-                    m_doi = re.search(r"10\.\d{4,9}/[^\s\"<>]+", target)
-                    if m_doi and not doi:
-                        doi = m_doi.group(0).rstrip(".,;")
+                    ptr_doi = extract_doi(target)
+                    if ptr_doi and not doi:
+                        doi = ptr_doi
                 else:
                     url = target.rstrip(".,;")
 
     if raw_ref_text:
-        m_doi = re.search(r"\b(10\.\d{4,9}/[^\s\"<>]+)", raw_ref_text)
-        if m_doi:
-            raw_doi = m_doi.group(1).rstrip(".,;)")
-            if not doi or doi.endswith("-") or (raw_doi.startswith(doi) and len(raw_doi) > len(doi)):
+        raw_doi = extract_doi(raw_ref_text)
+        if raw_doi:
+            if not doi or doi.endswith("-") or (raw_doi.lower().startswith(doi.lower()) and len(raw_doi) > len(doi)):
                 doi = raw_doi
 
         if not url:
@@ -610,6 +641,8 @@ def _extract_url_and_doi_from_raw(
                 break
         else:
             # If GROBID truncated the URL at a line wrap, prefer the longer normalized URL from raw_ref_text
+            # (unless url is a clean host-root URL and cand only adds bare page-number or colon prose bleed).
+            is_root_ptr = bool(re.fullmatch(r"https?://[^/\s]+/", url, re.IGNORECASE))
             for m_url in re.finditer(r"(?:https?://|www\.)[^\s\"<>]+", raw_ref_text):
                 cand = m_url.group(0).rstrip(".,;)")
                 if "doi.org/" in cand.lower():
@@ -617,6 +650,13 @@ def _extract_url_and_doi_from_raw(
                 if cand.lower().startswith("www."):
                     cand = "https://" + cand
                 if cand.startswith(url) and len(cand) > len(url):
+                    extra_tail = cand[len(url):]
+                    if (
+                        is_root_ptr
+                        and not extra_tail.lower().startswith(("http://", "https://"))
+                        and (":" in extra_tail or re.fullmatch(r"\d+", extra_tail))
+                    ):
+                        continue
                     url = cand
                     break
 
@@ -649,6 +689,12 @@ def _extract_url_and_doi_from_raw(
             url = None
 
     return url, doi
+
+
+_ACCESS_OR_ONLINE_TAIL_RE = re.compile(
+    r"^(?:\[?(?:Online|Internet|Trực\s+tuyến)\]?[.,:\s]*)?(?:Accessed|Retrieved|Visited|Available|Truy\s+cập|Địa\s+chỉ|Nguồn|Xem\s+tại|URL)\b",
+    re.IGNORECASE,
+)
 
 
 def _split_single_merged_raw_reference(text: str) -> list[str]:
@@ -686,8 +732,15 @@ def _split_single_merged_raw_reference(text: str) -> list[str]:
         rem = text[after_pos:].strip()
         if not rem or len(rem) < 20:
             continue
-        # Do not split before trailing access date or "[St.]" surname prefix
-        if re.match(r"^(?:[\(\[]?(?:Accessed|Retrieved)\b|\(\s*\d{1,2}\.?\s*[./-]\s*\d{1,2}\.?\s*[./-]\s*(?:19|20)\d{2}\s*\)|(?:St\.|De|Van|Von)\s*$)", rem, re.I):
+        # Do not split before trailing access date / '[Online]. Available:' or '[St.]' surname prefix
+        if (
+            _ACCESS_OR_ONLINE_TAIL_RE.match(rem)
+            or re.match(
+                r"^(?:[\(\[]?(?:Accessed|Retrieved)\b|\(\s*\d{1,2}\.?\s*[./-]\s*\d{1,2}\.?\s*[./-]\s*(?:19|20)\d{2}\s*\)|(?:St\.|De|Van|Von)\s*$)",
+                rem,
+                re.I,
+            )
+        ):
             continue
         # Subcase 4a: Remainder starts with a new entry containing an APA parenthetical year/(n.d.) or Chicago/Harvard author-year within 165 chars
         if (
@@ -719,7 +772,7 @@ def _split_single_merged_raw_reference(text: str) -> list[str]:
         split_at = m5.end(1)
         left = text[:split_at].strip()
         right = text[split_at:].strip()
-        if len(left) >= 25 and len(right) >= 25:
+        if len(left) >= 25 and len(right) >= 25 and not _ACCESS_OR_ONLINE_TAIL_RE.match(right):
             return [left, right]
 
     # Case 6: Glued APA / Harvard entries where a new Personal or Corporate Author + Year starts mid-string
@@ -1350,6 +1403,20 @@ def _extract_bibliography(root: ET.Element) -> list[GrobidBibEntry]:
             fn_tok = fn.lower().strip(".,; ")
             if (not sn_tok or sn_tok in _DEGREE_TOKENS) and (not fn_tok or fn_tok in _DEGREE_TOKENS):
                 continue
+            # Skip standard-body codes misparsed by GROBID as <persName><surname>Iso/Iec</surname></persName>
+            # (preserve real mononym surnames like "Din" or "Cen" unless raw_ref_text cites a CEN/DIN/BS standard)
+            if not fn_tok and (
+                re.fullmatch(
+                    r"(?:iso|iec|ieee|iso/iec(?:/ieee)?|itu(?:-t|-r)?|ansi|astm|nist|ietf|etsi|w3c|tcvn|qcvn)",
+                    sn_tok,
+                    re.IGNORECASE,
+                )
+                or (
+                    sn_tok in {"cen", "din", "bs"}
+                    and bool(re.search(r"\b(?:CEN|DIN|BS)\s*(?:EN\b|ISO\b|\d)", raw_ref_text or ""))
+                )
+            ):
+                continue
             if sn_tok in ("iii", "ii", "iv", "jr", "sr") and " " in fn:
                 parts_fn = fn.split()
                 sn = parts_fn[-1]
@@ -1409,7 +1476,11 @@ def _extract_bibliography(root: ET.Element) -> list[GrobidBibEntry]:
                 if auth.last_name and ("http://" in auth.last_name or "https://" in auth.last_name):
                     auth.last_name = cleaned_auth
 
-        # Title (article-level first, then monograph-level, skipping empty <title/> tags)
+        # Title (article-level first, then monograph-level, skipping empty <title/> and access-date/URL boilerplate tags)
+        _bogus_title_re = re.compile(
+            r"^(?:#|https?://|www\.|%[0-9A-Fa-f]{2}|(?:\[?(?:Online|Internet|Trực\s+tuyến)\]?[.,:\s]*)?(?:Accessed|Retrieved|Visited|Available(?:\s+at)?|Truy\s+cập(?:\s+ngày|\s+tại)?|Địa\s+chỉ|Nguồn)\s*(?:[:\d]|http))",
+            re.IGNORECASE,
+        )
         title: str | None = None
         for xpath in (
             f".//{_TEI}title[@level='a']",
@@ -1418,14 +1489,14 @@ def _extract_bibliography(root: ET.Element) -> list[GrobidBibEntry]:
         ):
             for cand_el in bibl.findall(xpath):
                 cand_text = "".join(cand_el.itertext()).strip()
-                if cand_text:
+                if cand_text and not _bogus_title_re.match(cand_text):
                     title = cand_text
                     break
             if title:
                 break
 
         # Discard bogus URL fragment / anchor placed into <title> by GROBID
-        if title and re.match(r"^(?:#|https?://|www\.|%[0-9A-Fa-f]{2})", title, re.I):
+        if title and _bogus_title_re.match(title):
             title = None
 
         # Fallback: check <note> (excluding raw_reference) when <title/> is empty
@@ -1438,10 +1509,66 @@ def _extract_bibliography(root: ET.Element) -> list[GrobidBibEntry]:
                 if (
                     len(note_text) > 5
                     and not re.match(r"^(?:\d+(?:st|nd|rd|th)|th)\s+ed", note_text, re.I)
-                    and not re.match(r"^(?:#|https?://|www\.)", note_text, re.I)
+                    and not _bogus_title_re.match(note_text)
                 ):
                     title = note_text
                     break
+
+        # Fallback for authorless international standards (e.g. ISO/IEC/IEEE 29148:2018) where GROBID
+        # leaves <title/> empty and puts the standard title inside <respStmt>/<orgName>
+        if not title:
+            for resp_org in bibl.findall(f".//{_TEI}respStmt/{_TEI}orgName"):
+                resp_txt = "".join(resp_org.itertext()).strip()
+                if len(resp_txt) >= 15 and not _bogus_title_re.match(resp_txt):
+                    if raw_ref_text:
+                        std_raw_m = re.match(
+                            r"^(?:\[\s*\d+\s*\]\s*)?((?:ISO|IEC|IEEE|ITU|ANSI|ASTM|NIST|ETSI|W3C)[^,]{15,240})",
+                            raw_ref_text,
+                            re.IGNORECASE,
+                        )
+                        if std_raw_m:
+                            title = std_raw_m.group(1).strip().rstrip(".,;")
+                            break
+                    title = resp_txt
+                    break
+
+        # Preserve non-DOI technical standard <idno> codes (e.g. <idno>ISO/IEC 25010:2023</idno>)
+        for idno_el in bibl.findall(f".//{_TEI}idno"):
+            if (idno_el.get("type") or "").strip().upper() == "DOI":
+                continue
+            idno_txt = "".join(idno_el.itertext()).strip().rstrip(".,;")
+            if idno_txt and re.match(
+                r"^(?:ISO|IEC|IEEE|ISO/IEC(?:/IEEE)?|ITU(?:-T|-R)?|ANSI|ASTM|NIST|IETF|RFC|ETSI|W3C|CEN|DIN|BS|TCVN|QCVN)\b.*\d",
+                idno_txt,
+                re.IGNORECASE,
+            ):
+                if title and idno_txt.lower() not in title.lower():
+                    title = f"{title}, {idno_txt}"
+                elif not title:
+                    title = idno_txt
+
+        # Restore colon-prefixed package/dataset name dropped by GROBID before <title level="m">
+        # (e.g. "J. Singer-Vine, pdfplumber: Plumb a PDF..." -> GROBID <title>="Plumb a PDF...")
+        if title and ":" not in title and raw_ref_text and len(title) >= 12:
+            colon_pref_m = re.search(
+                rf"(?:^|,\s*)([A-Za-z0-9_.\-]+)\s*:\s*{re.escape(title[:28])}",
+                raw_ref_text,
+                re.IGNORECASE,
+            )
+            if colon_pref_m:
+                pref_tok = colon_pref_m.group(1).strip()
+                if (
+                    len(pref_tok) >= 2
+                    and not pref_tok[0].isdigit()
+                    and not pref_tok.endswith(".")
+                    and pref_tok.lower()
+                    not in {
+                        "in", "ed", "eds", "vol", "no", "pp", "ch", "chap", "part",
+                        "see", "xem", "source", "nguon", "title", "note", "http",
+                        "https", "doi", "url", "available", "accessed", "retrieved",
+                    }
+                ):
+                    title = f"{pref_tok}: {title}"
 
         # Year
         year_el = bibl.find(f".//{_TEI}date[@type='published']")

@@ -362,9 +362,11 @@ class IEEEFormat:
         )
 
         # Extract DOI if present
-        doi_m = re.search(r'10\.\d{4,9}/[^\s\]\)\,;]+', text)
-        if doi_m:
-            citation.doi = doi_m.group(0).rstrip('.')
+        from integrity_checker.extraction.patterns.utils import extract_doi
+
+        extracted_doi = extract_doi(text)
+        if extracted_doi:
+            citation.doi = extracted_doi
 
         # Parse venue components
         self._parse_venue(citation, venue_year)
@@ -407,9 +409,11 @@ class IEEEFormat:
         citation.year, citation.year_suffix = extract_publication_year(venue_tail, prefer_last=True)
 
         # Extract DOI
-        doi_m = re.search(r'10\.\d{4,9}/[^\s\]\)\,;]+', text)
-        if doi_m:
-            citation.doi = doi_m.group(0).rstrip('.')
+        from integrity_checker.extraction.patterns.utils import extract_doi
+
+        extracted_doi = extract_doi(text)
+        if extracted_doi:
+            citation.doi = extracted_doi
 
         citation.confidence = self._estimate_confidence(citation)
         return citation
@@ -453,9 +457,11 @@ class IEEEFormat:
                 citation.year_suffix = year_m.group(2) if year_m.group(2) else None
 
         # Extract DOI
-        doi_m = re.search(r'10\.\d{4,9}/[^\s\]\)\,;]+', text)
-        if doi_m:
-            citation.doi = doi_m.group(0).rstrip('.')
+        from integrity_checker.extraction.patterns.utils import extract_doi
+
+        extracted_doi = extract_doi(text)
+        if extracted_doi:
+            citation.doi = extracted_doi
 
         citation.confidence = self._estimate_confidence(citation)
         return citation
@@ -500,9 +506,11 @@ class IEEEFormat:
                 citation.year_suffix = year_m.group(2) if year_m.group(2) else None
 
         # Extract DOI
-        doi_m = re.search(r'10\.\d{4,9}/[^\s\]\)\,;]+', text)
-        if doi_m:
-            citation.doi = doi_m.group(0).rstrip('.')
+        from integrity_checker.extraction.patterns.utils import extract_doi
+
+        extracted_doi = extract_doi(text)
+        if extracted_doi:
+            citation.doi = extracted_doi
 
         citation.confidence = self._estimate_confidence(citation)
         return citation
@@ -549,9 +557,11 @@ class IEEEFormat:
                 citation.year_suffix = year_m.group(2) if year_m.group(2) else None
 
         # Extract DOI
-        doi_m = re.search(r'10\.\d{4,9}/[^\s\]\)\,;]+', text)
-        if doi_m:
-            citation.doi = doi_m.group(0).rstrip('.')
+        from integrity_checker.extraction.patterns.utils import extract_doi
+
+        extracted_doi = extract_doi(text)
+        if extracted_doi:
+            citation.doi = extracted_doi
 
         citation.confidence = self._estimate_confidence(citation)
         return citation
@@ -598,9 +608,11 @@ class IEEEFormat:
                 citation.year_suffix = year_m.group(2) if year_m.group(2) else None
 
         # Extract DOI
-        doi_m = re.search(r'10\.\d{4,9}/[^\s\]\)\,;]+', text)
-        if doi_m:
-            citation.doi = doi_m.group(0).rstrip('.')
+        from integrity_checker.extraction.patterns.utils import extract_doi
+
+        extracted_doi = extract_doi(text)
+        if extracted_doi:
+            citation.doi = extracted_doi
 
         citation.confidence = self._estimate_confidence(citation)
         return citation
@@ -658,13 +670,51 @@ class IEEEFormat:
                     if len(parts) > 1:
                         citation.venue = ', '.join(parts[1:])
             else:
-                # Unquoted book/article references: [N] B. Settles, Active Learning. Synthesis...
-                # or [N] J. Han, M. Kamber, and J. Pei, Data Mining: Concepts and Techniques, 3rd ed., Morgan Kaufmann, 2012.
-                book_m = re.match(
-                    r'^\[\s*\d+\s*\]\s*(?P<authors>(?:[A-Z](?:-[A-Z])?\.\s*)+[^,.]+(?:\s*(?:,\s*(?:and\s+|&\s*|và\s+)?|\s+(?:and|&|và)\s+)(?:[A-Z](?:-[A-Z])?\.\s*)+[^,.]+)*),\s+(?P<title>(?!and\b|&\b)[A-ZÀ-Ý][^.,]{5,})(?:[.,]\s+)(?P<venue>.*)$',
+                # IEEE unquoted online manual / API / software repository entries:
+                # e.g. "[20] OpenAlex, OpenAlex: An Open Catalogue..., 2024. Accessed: Nov. 1, 2026. [Online]. Available: https://..."
+                # or "[8] J. Singer-Vine, pdfplumber: Plumb a PDF..., 2024. Accessed: ..."
+                # Uses Python 3.11+ atomic groups (?>...) so long co-author lists run in O(n) without ReDoS.
+                _pers_init_tok = r"(?>(?:[A-ZÀ-Ý]\.?(?:-[A-ZÀ-Ý])?\.)(?:\s+[A-ZÀ-Ý]\.?(?:-[A-ZÀ-Ý])?\.)*)"
+                _pers_surname_tok = r"(?>[A-ZÀ-Ýa-zà-ỹ][^\s,.]*(?:\s+(?!(?i:et\s+al|and|và)\b)[A-ZÀ-Ýa-zà-ỹ][^\s,.]*){0,2})"
+                _pers_author_unit = (
+                    rf"(?>{_pers_init_tok}\s+{_pers_surname_tok}"
+                    rf"|{_pers_surname_tok},\s*{_pers_init_tok})"
+                )
+                _pers_author_list = (
+                    rf"(?>{_pers_author_unit}"
+                    rf"(?>(?:\s*,\s*(?:(?i:and|và)\s+|&\s*)?|\s+(?:(?i:and|và)|&)\s+){_pers_author_unit})*"
+                    rf"(?:\s*,?\s*(?i:et\s+al\.))?)"
+                )
+                web_manual_m = re.match(
+                    r'^\[\s*\d+\s*\]\s*'
+                    rf'(?P<authors>(?:{_pers_author_list}|[^\s,][^,]{{1,84}}?)),\s+'
+                    r'(?P<title>(?!(?:(?i:and|và)|&)\s+[A-ZÀ-Ý]\.?(?:-[A-ZÀ-Ý])?\.|[A-ZÀ-Ý]\.?(?:-[A-ZÀ-Ý])?\.(?:\s|,)|[A-ZÀ-Ý][a-zà-ỹ\'-]+,\s*[A-ZÀ-Ý]\.)(?:[A-ZÀ-Ý]|[a-z][a-z0-9_-]{2,}:)[^"\u201c\u201d]{5,260}?),\s*'
+                    r'(?:(?i:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s+)?'
+                    r'(?P<year>(?:19|20)\d{2}[a-z]?)\.\s*'
+                    r'(?P<tail>(?i:(?:\[?(?:Online|Internet|Trực\s+tuyến)\]?[.,:\s]*)?(?:Accessed|Retrieved|Visited|Available|Truy\s+cập|Địa\s+chỉ|https?://)\b).*)$',
                     text,
                 )
-                if book_m:
+                # Unquoted book/article references: [N] B. Settles, Active Learning. Synthesis...
+                # or [N] J. Han, M. Kamber, and J. Pei, Data Mining: Concepts and Techniques, 3rd ed., Morgan Kaufmann, 2012.
+                book_m = (
+                    None
+                    if web_manual_m
+                    else re.match(
+                        rf'^\[\s*\d+\s*\]\s*(?P<authors>{_pers_author_list}),\s+(?P<title>(?!(?i:and|và)\b|&\b)[A-ZÀ-Ý][^.,]{{5,}})(?:[.,]\s+)(?P<venue>.*)$',
+                        text,
+                    )
+                )
+                if web_manual_m:
+                    citation.title = web_manual_m.group('title').strip().rstrip('.,;')
+                    citation.title_normalized = self._normalize_title(citation.title)
+                    yr_raw = web_manual_m.group('year').strip()
+                    citation.year = yr_raw[:4]
+                    citation.year_suffix = yr_raw[4:] if len(yr_raw) > 4 else None
+                    authors_str = web_manual_m.group('authors').strip()
+                    if authors_str:
+                        parsed_a = self._parse_authors(authors_str)
+                        citation.authors = parsed_a if parsed_a else [authors_str]
+                elif book_m:
                     citation.title = book_m.group('title').strip()
                     citation.title_normalized = self._normalize_title(citation.title)
                     authors_str = book_m.group('authors').strip()
@@ -703,7 +753,7 @@ class IEEEFormat:
                         after_yr = ''
                     _is_bib_tail = bool(
                         re.match(
-                            r'^(?:pp?\.?\s*\d|vol\.?\s*\d|no\.?\s*\d|iss(?:ue)?\.?\s*\d|doi\s*:|10\.\d{4,9}/|isbn\b|issn\b|art(?:icle)?\.?\s*(?:no\.?|id)?\s*\d)',
+                            r'^(?:pp?\.?\s*\d|vol\.?\s*\d|no\.?\s*\d|iss(?:ue)?\.?\s*\d|doi\s*:|10\.\d{4,9}/|isbn\b|issn\b|art(?:icle)?\.?\s*(?:no\.?|id)?\s*\d|(?:\[?(?:online|internet|trực\s+tuyến)\]?[.,:\s]*)?(?:accessed|retrieved|visited|available|truy\s+cập|địa\s+chỉ)\b)',
                             after_yr,
                             re.IGNORECASE,
                         )
@@ -760,9 +810,11 @@ class IEEEFormat:
             citation.url = url_m.group(0).rstrip('.,;)')
 
         # Extract DOI
-        doi_m = re.search(r'10\.\d{4,9}/[^\s\]\)\,;]+', text)
-        if doi_m:
-            citation.doi = doi_m.group(0).rstrip('.')
+        from integrity_checker.extraction.patterns.utils import extract_doi
+
+        extracted_doi = extract_doi(text)
+        if extracted_doi:
+            citation.doi = extracted_doi
 
         citation.confidence = self._estimate_confidence(citation)
         # Only return if we have meaningful data

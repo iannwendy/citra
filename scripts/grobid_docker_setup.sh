@@ -24,7 +24,7 @@
 #     GROBID_IMAGE    Docker image to use (default: grobid/grobid:0.9.1-crf)
 #     GROBID_HOST_PORT   Host port for GROBID server (default: 8070)
 #     GROBID_CONTAINER_NAME  Container name (default: essay-check-grobid)
-#     GROBID_MEMORY    JVM heap limit (default: 2g)
+#     GROBID_MEMORY    JVM heap limit (default: 1280m)
 # =====================================================================
 
 set -euo pipefail
@@ -33,7 +33,7 @@ set -euo pipefail
 GROBID_IMAGE="${GROBID_IMAGE:-grobid/grobid:0.9.1-crf}"
 GROBID_HOST_PORT="${GROBID_HOST_PORT:-8070}"
 GROBID_CONTAINER_NAME="${GROBID_CONTAINER_NAME:-essay-check-grobid}"
-GROBID_MEMORY="${GROBID_MEMORY:-2g}"
+GROBID_MEMORY="${GROBID_MEMORY:-1280m}"
 GROBID_HEALTH_TIMEOUT="${GROBID_HEALTH_TIMEOUT:-120}"  # seconds
 
 # --- Colors (only if stdout is a tty) ---

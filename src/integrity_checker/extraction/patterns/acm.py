@@ -445,9 +445,11 @@ class ACMFormat:
         )
         venue = match.group('venue').strip()
         self._parse_venue(citation, venue)
-        doi_m = re.search(r'10\.\d{4,9}/[^\s\]\)\,;]+', text)
-        if doi_m:
-            citation.doi = doi_m.group(0).rstrip('.')
+        from integrity_checker.extraction.patterns.utils import extract_doi
+
+        extracted_doi = extract_doi(text)
+        if extracted_doi:
+            citation.doi = extracted_doi
         citation.confidence = self._estimate_confidence(citation)
         return citation
 
@@ -512,9 +514,11 @@ class ACMFormat:
         )
 
         # Extract DOI if present
-        doi_m = re.search(r'10\.\d{4,9}/[^\s\]\)\,;]+', text)
-        if doi_m:
-            citation.doi = doi_m.group(0).rstrip('.')
+        from integrity_checker.extraction.patterns.utils import extract_doi
+
+        extracted_doi = extract_doi(text)
+        if extracted_doi:
+            citation.doi = extracted_doi
 
         # Parse venue components
         self._parse_venue(citation, venue_year)
@@ -647,9 +651,11 @@ class ACMFormat:
             citation.pages = pages
 
         # Extract DOI if present
-        doi_m = re.search(r'10\.\d{4,9}/[^\s\]\)\,;]+', text)
-        if doi_m:
-            citation.doi = doi_m.group(0).rstrip('.')
+        from integrity_checker.extraction.patterns.utils import extract_doi
+
+        extracted_doi = extract_doi(text)
+        if extracted_doi:
+            citation.doi = extracted_doi
 
         citation.confidence = self._estimate_confidence(citation)
         return citation
@@ -677,9 +683,9 @@ class ACMFormat:
             return None
         if re.search(r'\b(?:vol|no|pp)\b', authors_str or '', re.IGNORECASE):
             return None
-        # Reject when unquoted book title followed by ". Publisher, Year" caused `title` to become bare publisher/copyright/edition
+        # Reject when unquoted book/web entry caused `title` to become bare publisher/copyright/edition or 'Accessed: ...'
         if re.match(
-            r'^(?:MIT\s+Press|Springer(?:-Verlag)?|Elsevier|Wiley|Pearson(?:\s+Education)?|McGraw-Hill|Addison-Wesley|Prentice\s+Hall|O[\'\u2019]Reilly(?:\s+Media)?|Academic\s+Press|CRC\s+Press|Morgan\s+Kaufmann|(?:Cambridge|Oxford|Harvard|Princeton|Stanford)\s+University\s+Press|Copyright\b.*|(?:\d+(?:st|nd|rd|th)|first|second|third|revised)\s+ed(?:ition|\.)?)$',
+            r'^(?:MIT\s+Press|Springer(?:-Verlag)?|Elsevier|Wiley|Pearson(?:\s+Education)?|McGraw-Hill|Addison-Wesley|Prentice\s+Hall|O[\'\u2019]Reilly(?:\s+Media)?|Academic\s+Press|CRC\s+Press|Morgan\s+Kaufmann|(?:Cambridge|Oxford|Harvard|Princeton|Stanford)\s+University\s+Press|Copyright\b.*|(?:\d+(?:st|nd|rd|th)|first|second|third|revised)\s+ed(?:ition|\.)?|(?:\[?(?:Online|Internet|Trực\s+tuyến)\]?[.,:\s]*)?(?:Accessed|Retrieved|Visited|Available|Truy\s+cập|Địa\s+chỉ)\b.*)$',
             title.rstrip('.'),
             re.IGNORECASE,
         ):
@@ -725,14 +731,22 @@ class ACMFormat:
             if len(year_str) > 4:
                 citation.year_suffix = year_str[4:]
         elif venue:
-            venue_yr_m = re.search(r'\b((?:19|20)\d{2})\b', re.sub(r'https?://\S+', '', venue))
+            venue_clean_yr = re.sub(
+                r'(?:https?://\S+|\b(?:Accessed|Retrieved|Visited|Truy\s+cập)\b.*$)',
+                '',
+                venue,
+                flags=re.IGNORECASE,
+            )
+            venue_yr_m = re.search(r'\b((?:19|20)\d{2})\b', venue_clean_yr)
             if venue_yr_m:
                 citation.year = venue_yr_m.group(1)
 
         # Extract DOI if present
-        doi_m = re.search(r'10\.\d{4,9}/[^\s\]\)\,;]+', text)
-        if doi_m:
-            citation.doi = doi_m.group(0).rstrip('.')
+        from integrity_checker.extraction.patterns.utils import extract_doi
+
+        extracted_doi = extract_doi(text)
+        if extracted_doi:
+            citation.doi = extracted_doi
         url_m = re.search(r'https?://[^\s\]\)\,;]+', text)
         if url_m:
             citation.url = url_m.group(0).rstrip('.,;)')
@@ -763,9 +777,9 @@ class ACMFormat:
             return None
         if re.search(r'\b(?:vol|no|pp)\b', authors_str or '', re.IGNORECASE):
             return None
-        # Reject when unquoted book title followed by ". Publisher, Year" caused `title` to become bare publisher/copyright/edition
+        # Reject when unquoted book/web entry caused `title` to become bare publisher/copyright/edition or 'Accessed: ...'
         if re.match(
-            r'^(?:MIT\s+Press|Springer(?:-Verlag)?|Elsevier|Wiley|Pearson(?:\s+Education)?|McGraw-Hill|Addison-Wesley|Prentice\s+Hall|O[\'\u2019]Reilly(?:\s+Media)?|Academic\s+Press|CRC\s+Press|Morgan\s+Kaufmann|(?:Cambridge|Oxford|Harvard|Princeton|Stanford)\s+University\s+Press|Copyright\b.*|(?:\d+(?:st|nd|rd|th)|first|second|third|revised)\s+ed(?:ition|\.)?)$',
+            r'^(?:MIT\s+Press|Springer(?:-Verlag)?|Elsevier|Wiley|Pearson(?:\s+Education)?|McGraw-Hill|Addison-Wesley|Prentice\s+Hall|O[\'\u2019]Reilly(?:\s+Media)?|Academic\s+Press|CRC\s+Press|Morgan\s+Kaufmann|(?:Cambridge|Oxford|Harvard|Princeton|Stanford)\s+University\s+Press|Copyright\b.*|(?:\d+(?:st|nd|rd|th)|first|second|third|revised)\s+ed(?:ition|\.)?|(?:\[?(?:Online|Internet|Trực\s+tuyến)\]?[.,:\s]*)?(?:Accessed|Retrieved|Visited|Available|Truy\s+cập|Địa\s+chỉ)\b.*)$',
             title.rstrip('.'),
             re.IGNORECASE,
         ):
@@ -812,9 +826,11 @@ class ACMFormat:
                 citation.year_suffix = year_str[4:]
 
         # Extract DOI if present
-        doi_m = re.search(r'10\.\d{4,9}/[^\s\]\)\,;]+', text)
-        if doi_m:
-            citation.doi = doi_m.group(0).rstrip('.')
+        from integrity_checker.extraction.patterns.utils import extract_doi
+
+        extracted_doi = extract_doi(text)
+        if extracted_doi:
+            citation.doi = extracted_doi
         url_m = re.search(r'https?://[^\s\]\)\,;]+', text)
         if url_m:
             citation.url = url_m.group(0).rstrip('.,;)')
@@ -899,9 +915,11 @@ class ACMFormat:
             citation.year = year_str
 
         # Extract DOI if present
-        doi_m = re.search(r'10\.\d{4,9}/[^\s\]\)\,;]+', text)
-        if doi_m:
-            citation.doi = doi_m.group(0).rstrip('.')
+        from integrity_checker.extraction.patterns.utils import extract_doi
+
+        extracted_doi = extract_doi(text)
+        if extracted_doi:
+            citation.doi = extracted_doi
 
         citation.confidence = self._estimate_confidence(citation)
         return citation
@@ -949,9 +967,11 @@ class ACMFormat:
             citation.pages = pages
 
         # Extract DOI if present
-        doi_m = re.search(r'10\.\d{4,9}/[^\s\]\)\,;]+', text)
-        if doi_m:
-            citation.doi = doi_m.group(0).rstrip('.')
+        from integrity_checker.extraction.patterns.utils import extract_doi
+
+        extracted_doi = extract_doi(text)
+        if extracted_doi:
+            citation.doi = extracted_doi
 
         citation.confidence = self._estimate_confidence(citation)
         return citation
@@ -1035,9 +1055,11 @@ class ACMFormat:
             citation.year = year_str
 
         # Extract DOI if present
-        doi_m = re.search(r'10\.\d{4,9}/[^\s\]\)\,;]+', text)
-        if doi_m:
-            citation.doi = doi_m.group(0).rstrip('.')
+        from integrity_checker.extraction.patterns.utils import extract_doi
+
+        extracted_doi = extract_doi(text)
+        if extracted_doi:
+            citation.doi = extracted_doi
 
         citation.confidence = self._estimate_confidence(citation)
         return citation
@@ -1114,9 +1136,11 @@ class ACMFormat:
         self._parse_venue(citation, rest_venue)
         if not citation.venue:
             citation.venue = rest_venue
-        doi_m = re.search(r"10\.\d{4,9}/[^\s\]\)\,;]+", text)
-        if doi_m:
-            citation.doi = doi_m.group(0).rstrip(".")
+        from integrity_checker.extraction.patterns.utils import extract_doi
+
+        extracted_doi = extract_doi(text)
+        if extracted_doi:
+            citation.doi = extracted_doi
         citation.confidence = self._estimate_confidence(citation)
         return citation
 
@@ -1145,9 +1169,11 @@ class ACMFormat:
             citation.title_normalized = self._normalize_title(title)
 
         # Extract DOI
-        doi_m = re.search(r'10\.\d{4,9}/[^\s\]\)\,;]+', text)
-        if doi_m:
-            citation.doi = doi_m.group(0).rstrip('.')
+        from integrity_checker.extraction.patterns.utils import extract_doi
+
+        extracted_doi = extract_doi(text)
+        if extracted_doi:
+            citation.doi = extracted_doi
 
         citation.confidence = self._estimate_confidence(citation)
         return citation if citation.title or citation.year else None

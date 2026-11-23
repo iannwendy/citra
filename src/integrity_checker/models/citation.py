@@ -40,7 +40,12 @@ class CitationStyle(str, Enum):
 
 
 _YEAR_RE = re.compile(r"\b(19|20)\d{2}[a-z]?\b")
-_DOI_RE = re.compile(r"10\.\d{4,9}/(?:[^\s\]\)\,;()]|\([^\s\]\)\,;()]*\))+")
+_DOI_RE = re.compile(
+    r"10\.\d{4,9}/(?:"
+    r"(?:[^\s\]\)\,;()<>]|\([^\s\]\)\,;()<>]*\))+<[^<>\"\s]{1,64}>[^\s\]\)\,;<>]*(?:[;\u037e][0-9A-Za-z\-]{1,6})?"
+    r"|(?:[^\s\]\)\,;()<>]|\([^\s\]\)\,;()<>]*\))+(?:\.[Cc][Oo][;\u037e][0-9A-Za-z\-]{1,6})?"
+    r")"
+)
 _URL_RE = re.compile(r"https?://[^\s\]\)\,;]+")
 
 
@@ -182,7 +187,16 @@ class Citation:
         c = cls(raw_text=raw.strip())
         doi_m = _DOI_RE.search(raw)
         url_m = _URL_RE.search(raw)
-        c.doi = doi_m.group(0) if doi_m else None
+        if doi_m:
+            doi_str = doi_m.group(0).replace("\u037e", ";").rstrip(".,;:")
+            while doi_str and (
+                (doi_str.endswith(">") and doi_str.count(">") > doi_str.count("<"))
+                or (doi_str.endswith(")") and doi_str.count(")") > doi_str.count("("))
+            ):
+                doi_str = doi_str[:-1].rstrip(".,;:")
+            c.doi = doi_str or None
+        else:
+            c.doi = None
         c.url = url_m.group(0) if url_m else None
         c.year = parse_year_safe(raw)
 

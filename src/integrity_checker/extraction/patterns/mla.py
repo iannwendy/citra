@@ -28,7 +28,7 @@ import re
 
 from integrity_checker.extraction.patterns.base import CompiledPattern, PatternType
 from integrity_checker.extraction.patterns.registry import register_format
-from integrity_checker.extraction.patterns.utils import extract_publication_year
+from integrity_checker.extraction.patterns.utils import extract_doi, extract_publication_year
 from integrity_checker.matching.author_parser import Author, parse_authors
 from integrity_checker.models.citation import Citation, CitationStyle, CitationType
 
@@ -45,7 +45,7 @@ _MLA_INTEXT_PARENTHETICAL_PAGE = CompiledPattern.create(
     name="mla_intext_parenthetical_page",
     pattern=(
         r"\((?!(?:Table|Figure|Fig|Section|Chapter|Part|Page|Eq|Equation|Appendix|"
-        r"Stage|Step|Phase|Round|Cycle|Iteration|Pass|Tier|Split|Cluster|Topic|Task|"
+        r"Stage|Step|Phase|Round|Cycle|Iteration|Pass|Tier|Order|Split|Cluster|Topic|Task|"
         r"Level|Grade|Group|Type|Class|Model|Case|Test|Rule|Item|Itemset|Optimization|Site|Point|Edge|Head|"
         r"Prompt|Query|Sample|User|Comment|Label|Draft|Scheme|Chart|Compound|Reaction|"
         r"Participant|Respondent|Interviewee|Informant|Subject|Patient|Client|Customer|Employee|Manager|"
@@ -53,7 +53,7 @@ _MLA_INTEXT_PARENTHETICAL_PAGE = CompiledPattern.create(
         r"Dimension|Category|Criterion|Annex|Exhibit|Schedule|Form|Protocol|Condition|Treatment|Control|Cohort|Subgroup|Segment|"
         r"Pathway|Experiment|Theorem|Lemma|Proposition|Corollary|Definition|Example|"
         r"Algorithm|Listing|Supplement|Note|Clause|Scope|VLAN|VTP|OSPF|DHCP|LLaMA|VNER|VLSP|XML|"
-        r"Trang|Hình|Ảnh|Bảng|Mục|Chương|Phần|Bước|Nhóm|Loại|Câu|Bài|Đoạn|Dòng|Cột|Top|STT|MSSV|JavaScript|TypeScript|"
+        r"Trang|Hình|Ảnh|Bảng|Mục|Chương|Phần|Bước|Bậc|Tầng|Nhóm|Loại|Câu|Bài|Đoạn|Dòng|Cột|Top|STT|MSSV|JavaScript|TypeScript|"
         r"Line|Row|Col|Column|Version|Ver|Vol|No|Issue|Series|Set|Run|Trial|Block|"
         r"Layer|Node|Fold|Epoch|Batch|Seed|Score|Rank|Rate|Ratio|Index|Value|Limit|"
         r"Code|Error|Port|Pin|LED|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec|"
@@ -62,7 +62,7 @@ _MLA_INTEXT_PARENTHETICAL_PAGE = CompiledPattern.create(
         r"([A-ZÀ-Ý][a-zA-Zà-ÿ'\u2019]{2,}(?:\s+(?:III|II|IV|Jr\.?|Sr\.?))?"
         r"(?:\s+(?:and|&|và)\s+[A-ZÀ-Ý][a-zA-Zà-ÿ'\u2019]{2,}|\s+et\s+al\.)?)"
         r"(?:\s*,\s*pp?\.\s*|\s+)"
-        r"(?!(?:19|20)\d{2}\b)(\d{1,4}(?:[-–]\d{1,4})?(?:,\s*\d{1,4}(?:[-–]\d{1,4})?)*|(?!(?:LM|ML|DL|CV|ID|IC|VM|VL|IL|LC|DM|LD)\b)(?:[IVXLCDM]{2,7}|I))"
+        r"(?!(?:19|20)\d{2}\b)([1-9]\d{0,3}(?:[-–][1-9]\d{0,3})?(?:,\s*[1-9]\d{0,3}(?:[-–][1-9]\d{0,3})?)*|(?!(?:LM|ML|DL|CV|ID|IC|VM|VL|IL|LC|DM|LD)\b)(?:[IVXLCDM]{2,7}|I))"
         r"|[A-ZÀ-Ý][a-zA-Zà-ÿ'\u2019]{2,}\s+et\s+al\.(?:\s*;\s*[A-ZÀ-Ý][a-zA-Zà-ÿ'\u2019]{2,}\s+et\s+al\.)*"
         r")\)"
     ),
@@ -341,9 +341,9 @@ class MLAFormat:
         self._parse_venue(citation, venue)
 
         # Extract DOI if present
-        doi_match = re.search(r'10\.\d{4,9}/[^\s\]\)\,;]+', text)
-        if doi_match:
-            citation.doi = doi_match.group(0).rstrip('.')
+        extracted_doi = extract_doi(text)
+        if extracted_doi:
+            citation.doi = extracted_doi
 
         citation.confidence = self._estimate_confidence(citation)
         return citation
@@ -389,9 +389,9 @@ class MLAFormat:
             citation.pages = pages_m.group(1)
 
         # Extract DOI if present
-        doi_match = re.search(r'10\.\d{4,9}/[^\s\]\)\,;]+', text)
-        if doi_match:
-            citation.doi = doi_match.group(0).rstrip('.')
+        extracted_doi = extract_doi(text)
+        if extracted_doi:
+            citation.doi = extracted_doi
 
         citation.confidence = self._estimate_confidence(citation)
         return citation
@@ -449,9 +449,9 @@ class MLAFormat:
                 citation.year = year_m.group(1)
 
         # Extract DOI if present
-        doi_match = re.search(r'10\.\d{4,9}/[^\s\]\)\,;]+', text)
-        if doi_match:
-            citation.doi = doi_match.group(0).rstrip('.')
+        extracted_doi = extract_doi(text)
+        if extracted_doi:
+            citation.doi = extracted_doi
 
         citation.confidence = self._estimate_confidence(citation)
         return citation
@@ -503,9 +503,9 @@ class MLAFormat:
                 citation.year = year_m.group(1)
 
         # Extract DOI if present
-        doi_match = re.search(r'10\.\d{4,9}/[^\s\]\)\,;]+', text)
-        if doi_match:
-            citation.doi = doi_match.group(0).rstrip('.')
+        extracted_doi = extract_doi(text)
+        if extracted_doi:
+            citation.doi = extracted_doi
 
         citation.confidence = self._estimate_confidence(citation)
         return citation
@@ -541,9 +541,9 @@ class MLAFormat:
             citation.title_normalized = self._normalize_title(title)
 
         # Extract DOI
-        doi_m = re.search(r'10\.\d{4,9}/[^\s\]\)\,;]+', text)
-        if doi_m:
-            citation.doi = doi_m.group(0).rstrip('.')
+        extracted_doi = extract_doi(text)
+        if extracted_doi:
+            citation.doi = extracted_doi
 
         # Extract URL
         url_m = re.search(r'https?://[^\s\]\)\,;]+', text)

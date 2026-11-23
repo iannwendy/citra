@@ -119,7 +119,13 @@ _YEAR_PAREN_SEARCH = re.compile(r"\((?:19|20)\d{2}[a-z]?\)")
 _INITIALS_FULLMATCH = re.compile(r"[A-ZÀ-Ý](?:\.?-?[A-ZÀ-Ý])*\.?")
 
 # DOI regex (tách riêng vì có thể xuất hiện ở cuối nhiều style)
-_DOI_RE = re.compile(r"10\.\d{4,9}/(?:[^\s\]\)\,;()]|\([^\s\]\)\,;()]*\))+")
+_DOI_RE = re.compile(
+    r"10\.\d{4,9}/"
+    r"(?:"
+    r"(?:[^\s\]\)\,;()<>]|\([^\s\]\)\,;()<>]*\))+<[^<>\"\s]{1,64}>[^\s\]\)\,;<>]*(?:[;\u037e][0-9A-Za-z\-]{1,6})?"
+    r"|(?:[^\s\]\)\,;()<>]|\([^\s\]\)\,;()<>]*\))+(?:\.[Cc][Oo][;\u037e][0-9A-Za-z\-]{1,6})?"
+    r")"
+)
 _URL_RE = re.compile(r"https?://(?:[^\s\]\)\,;()]|\([^\s\]\)\,;()]*\))+")
 _YEAR_RE = re.compile(r"\b((?:19|20)\d{2})([a-z]?)\b")
 
@@ -204,7 +210,7 @@ _LEGAL_HEAD_R = (
     r"|(?:Nghị\s+định|Thông\s+tư(?:\s+liên\s+tịch)?|Quyết\s+định|Nghị\s+quyết(?:\s+liên\s+tịch)?|Chỉ\s+thị|Bản\s+án|Án\s+lệ|Công\s+văn|Kết\s+luận|Văn\s+bản\s+hợp\s+nhất)\s+(?:số\s*:?\s*)?\d+\s*[/\-–])"
 )
 _MLA_BOOK_AUTHOR_HEAD_R = (
-    rf"(?:{_UPPER_VN_R}[a-zA-ZÀ-ỹ'\u2019\-]+,\s+{_UPPER_VN_R}[A-Za-zÀ-ỹ.\s'\u2019\-]{{1,35}}?(?:,\s*et\s+al\.|\.)"
+    rf"(?:{_UPPER_VN_R}[a-zA-ZÀ-ỹ'\u2019\-]+,\s+{_UPPER_VN_R}[A-Za-zÀ-ỹ.\s'\u2019\-]{{1,35}}?(?:,\s+and\s+{_UPPER_VN_R}[A-Za-zÀ-ỹ.\s'\u2019\-]{{1,35}}?)?(?:,\s*et\s+al\.|\.)"
     r"|(?:Homer|Aeschylus|Euripides|Herodotus|Sophocles|Plato|Aristotle|Virgil|Ovid|Seneca|Epictetus|Augustine|Aquinas|Cicero|Plutarch|Thucydides|Tacitus|Dante|Boethius)\."
     r"|(?:The\s+)?(?:English\s+Standard\s+Version|ESV(?:\s+Study)?|King\s+James|New\s+International\s+Version|NIV|NKJV|NASB|Holy)\s+Bible[.,]"
     r"|[\-\u2013\u2014_]{3,}\.)\s+(?=[A-Z0-9\"\u201c\u2018'])"
@@ -304,6 +310,11 @@ _FAKE_ENTRY_PATTERNS = [
     re.compile(r'^\s*:'),
     re.compile(
         r'^(?:CHAPTER\s+\d+\s*[.:]?\s*[A-ZÀ-Ý\s]{0,40}$|SECTION\b|TABLE\s+OF\s+CONTENTS|LIST\s+OF\s+(?:FIGURES|TABLES))\b',
+        re.IGNORECASE,
+    ),
+    # Style-guide / template placeholder rows (e.g. 'A. Author, "Title," Venue...', 'Author, A. (2020) Title. Place: Publisher.')
+    re.compile(
+        r'^(?:[A-Z]{2,10}\s+\d{1,3}\s+\[1\].*\[Author\b|(?:Authors?,\s*[A-Z]{1,3}\.?|[A-Z]\.\s*Authors?\b|Authors?\s+[A-Z]{1,3}\.?|\bAuthor\s+Name\b).*(?:["\u201c.]\s*Title\s*[.,"\u201d]|\b(?:Venue|Place:\s*Publisher|In\s+Proc\.\s+ACM,\s*1[-–]10)\b))',
         re.IGNORECASE,
     ),
 ]
@@ -1440,12 +1451,12 @@ class ReferenceListParser:
                 flat,
             )
         flat = re.sub(
-            r"\b(10\.\d{4,9}/[A-Za-z0-9._;()/-]+[-/])\s+(\d+[A-Za-z0-9._;()/-]*)",
+            r"\b(10\.\d{4,9}/[A-Za-z0-9._:;()<>/-]+[-/])\s+(\d+[A-Za-z0-9._:;()<>/-]*)",
             r"\1\2",
             flat,
         )
         flat = re.sub(
-            r"\b(10\.\d{4,9}/[A-Za-z0-9._;()/-]+\.)\s+(\d+[A-Za-z0-9._;()/-]*)",
+            r"\b(10\.\d{4,9}/[A-Za-z0-9._:;()<>/-]+\.)\s+(\d+[A-Za-z0-9._:;()<>/-]*)",
             r"\1\2",
             flat,
         )
@@ -2118,12 +2129,17 @@ class ReferenceListParser:
                     # Set numeric_index if found and not already set
                     if numeric_index and citation.numeric_index is None:
                         citation.numeric_index = numeric_index
-                    if not citation.doi:
-                        from integrity_checker.extraction.patterns.utils import extract_doi
+                    from integrity_checker.extraction.patterns.utils import extract_doi
 
-                        extracted_d = extract_doi(entry)
-                        if extracted_d:
-                            citation.doi = extracted_d
+                    extracted_d = extract_doi(entry)
+                    if extracted_d and (
+                        not citation.doi
+                        or (
+                            extracted_d.lower().startswith(citation.doi.lower())
+                            and len(extracted_d) > len(citation.doi)
+                        )
+                    ):
+                        citation.doi = extracted_d
                     if not citation.url:
                         from integrity_checker.extraction.patterns.utils import extract_url
 
@@ -2141,12 +2157,17 @@ class ReferenceListParser:
             if citation:
                 if numeric_index and citation.numeric_index is None:
                     citation.numeric_index = numeric_index
-                if not citation.doi:
-                    from integrity_checker.extraction.patterns.utils import extract_doi
+                from integrity_checker.extraction.patterns.utils import extract_doi
 
-                    extracted_d = extract_doi(entry)
-                    if extracted_d:
-                        citation.doi = extracted_d
+                extracted_d = extract_doi(entry)
+                if extracted_d and (
+                    not citation.doi
+                    or (
+                        extracted_d.lower().startswith(citation.doi.lower())
+                        and len(extracted_d) > len(citation.doi)
+                    )
+                ):
+                    citation.doi = extracted_d
                 if not citation.url:
                     from integrity_checker.extraction.patterns.utils import extract_url
 
@@ -2163,12 +2184,17 @@ class ReferenceListParser:
                 citation.raw_text = original_entry_raw
             if numeric_index and citation.numeric_index is None:
                 citation.numeric_index = numeric_index
-            if not citation.doi:
-                from integrity_checker.extraction.patterns.utils import extract_doi
+            from integrity_checker.extraction.patterns.utils import extract_doi
 
-                extracted_d = extract_doi(entry)
-                if extracted_d:
-                    citation.doi = extracted_d
+            extracted_d = extract_doi(entry)
+            if extracted_d and (
+                not citation.doi
+                or (
+                    extracted_d.lower().startswith(citation.doi.lower())
+                    and len(extracted_d) > len(citation.doi)
+                )
+            ):
+                citation.doi = extracted_d
             if not citation.url:
                 from integrity_checker.extraction.patterns.utils import extract_url
 
@@ -2257,11 +2283,26 @@ class ReferenceListParser:
             return None
 
         style = CitationStyle.IEEE if re.match(r"^\s*\[\s*\d+\s*\]", entry) else CitationStyle.APA
-        doi_m = _DOI_RE.search(cleaned)
-        doi = doi_m.group(0).rstrip(".,;") if doi_m else None
+        from integrity_checker.extraction.patterns.utils import extract_doi as _extract_util_doi
+
+        doi = _extract_util_doi(cleaned)
+        if not doi:
+            arxiv_vn_m = re.search(
+                r"(?:arxiv[:\s]+|arxiv\.org/(?:abs|pdf)/)(\d{4}\.\d{4,5})(?:v\d+)?(?:\.pdf)?",
+                cleaned,
+                re.IGNORECASE,
+            )
+            if arxiv_vn_m:
+                doi = f"10.48550/arXiv.{arxiv_vn_m.group(1)}"
         url_m = re.search(r"(https?://[^\s,;)\]]+)", cleaned, re.IGNORECASE)
         url = url_m.group(1).rstrip(".,;") if url_m else None
-        year, _ = extract_publication_year(cleaned, prefer_last=True, allow_1800s=True)
+        cleaned_for_year = re.sub(
+            r"(?:[.,;]\s*)?(?:(?:truy\s+cập|accessed|retrieved|visited)\b.*$|https?://\S+.*$)",
+            "",
+            cleaned,
+            flags=re.IGNORECASE,
+        ).strip()
+        year, _ = extract_publication_year(cleaned_for_year or cleaned, prefer_last=True, allow_1800s=True)
 
         # Subcase A: Quoted title (e.g. '[3] Trương Đắc Linh và Nguyễn Mạnh Hùng, “Giới thiệu Hiến pháp mới”, Tạp chí...')
         q_m = re.match(
@@ -2273,7 +2314,13 @@ class ReferenceListParser:
             raw_auth = re.sub(r"^(?:Bài\s+viết|Bài)\s*$", "", raw_auth, flags=re.IGNORECASE).strip()
             raw_auth = re.sub(r"\s*\(chủ\s+biên\)", "", raw_auth, flags=re.IGNORECASE).strip()
             title = q_m.group("title").strip().rstrip(".,;")
-            venue = (q_m.group("venue") or "").strip().rstrip(".,;")
+            venue = (q_m.group("venue") or "").strip()
+            venue = re.sub(
+                r"(?:[.,;]\s*)?(?:(?:18|19|20)\d{2}[a-z]?[.,;\s]*)?(?:\[\s*(?:trực\s+tuyến|online|internet)\s*\]|(?:truy\s+cập|địa\s+chỉ|available|retrieved)\b|https?://).*$",
+                "",
+                venue,
+                flags=re.IGNORECASE,
+            ).strip().rstrip(".,;")
             # Check if author is at the very end after ' - ' (e.g. 'Bài “Title” - Banking Magazine số 7, tháng 4/2025 - Lê Thị Giang')
             if not raw_auth and " - " in venue:
                 v_parts = [vp.strip() for vp in venue.rsplit(" - ", 1)]
@@ -2342,19 +2389,47 @@ class ReferenceListParser:
         if url_m:
             before_url = cleaned[: url_m.start()].strip()
             before_url = re.sub(
-                r"[,;.]?\s*(?:xem\s+tại|truy\s+cập\s+(?:tại|từ)|nguồn|available\s+at|retrieved\s+from)\s*:?\s*$",
+                r"(?:[,;.]\s*)?(?:(?:truy\s+cập|accessed|retrieved|visited)\b(?:(?!https?://).){0,120}?)?(?:\[\s*(?:trực\s+tuyến|online|internet)\s*\][.,;:\s]*)?(?:xem\s+tại|truy\s+cập(?:\s+tại|\s+từ)?|địa\s+chỉ|nguồn|available(?:\s+at)?|retrieved\s+from|url)?\s*:?\s*$",
                 "",
                 before_url,
                 flags=re.IGNORECASE,
             ).strip().rstrip(".,;:")
-            if len(before_url) >= 8:
+            before_url = re.sub(
+                r",\s*(?:18|19|20)\d{2}[a-z]?$",
+                "",
+                before_url,
+            ).strip().rstrip(".,;:")
+            if len(before_url) >= 6:
                 raw_auth = ""
                 title = before_url
                 if "," in before_url:
                     first_seg, rest_seg = before_url.split(",", 1)
-                    if 2 <= len(first_seg.strip().split()) <= 4 and not re.search(r"\b(?:pháp\s+luật|giáo\s+dục|nghiên\s+cứu|thông\s+báo|báo\s+cáo|quy\s+định)\b", first_seg, re.I):
-                        raw_auth = first_seg.strip()
-                        title = rest_seg.strip()
+                    first_seg_s = first_seg.strip()
+                    rest_seg_s = rest_seg.strip()
+                    first_words = first_seg_s.split()
+                    if (
+                        len(rest_seg_s) >= 8
+                        and (
+                            2 <= len(first_words) <= 6
+                            or (
+                                len(first_words) == 1
+                                and len(first_seg_s) >= 2
+                                and first_seg_s[0].isupper()
+                            )
+                        )
+                        and not re.search(
+                            r"\b(?:pháp\s+luật|giáo\s+dục|nghiên\s+cứu|thông\s+báo|báo\s+cáo|quy\s+định|hệ\s+thống|phân\s+tích|ứng\s+dụng|xây\s+dựng|giải\s+pháp)\b",
+                            first_seg_s,
+                            re.I,
+                        )
+                    ):
+                        raw_auth = first_seg_s
+                        title = rest_seg_s
+                parsed_auths: list[Author | str] = (
+                    list(parse_authors(raw_auth)) if raw_auth else []
+                )
+                if raw_auth and not parsed_auths:
+                    parsed_auths = [raw_auth]
                 return Citation(
                     raw_text=entry.strip(),
                     citation_type=CitationType.REFERENCE_LIST,
@@ -2363,7 +2438,7 @@ class ReferenceListParser:
                     order_index=order_index,
                     numeric_index=numeric_index,
                     matched_pattern="vn_traditional_entry",
-                    authors=list(parse_authors(raw_auth)) if raw_auth else [],
+                    authors=parsed_auths,
                     title=title,
                     title_normalized=_normalize_title(title),
                     year=year,
@@ -2687,8 +2762,20 @@ class ReferenceListParser:
                 confidence=0.8,
             )
 
-        # Strip URL before extracting year so numbers inside URL paths (e.g. /2017/01/12/) don't become fake years
+        # Strip URL and trailing access/online clauses before extracting publication year
         text_without_url = re.sub(r"https?://\S+|\bwww\.\S+", "", after_index).strip()
+        text_without_url = re.sub(
+            r"(?:[.,;]\s*)?(?:\[\s*(?:Online|Internet|Trực\s+tuyến)\s*\][.,;:\s]*)?(?:Accessed|Retrieved|Visited|Truy\s+cập)\b.*$",
+            "",
+            text_without_url,
+            flags=re.IGNORECASE,
+        ).strip()
+        text_without_url = re.sub(
+            r"(?:[.,;]\s*)?\[\s*(?:Online|Internet|Trực\s+tuyến)\s*\].*$",
+            "",
+            text_without_url,
+            flags=re.IGNORECASE,
+        ).strip()
         year, year_suffix = extract_publication_year(text_without_url or text, prefer_last=True)
         year_m = (
             re.search(rf"\b{re.escape(year + (year_suffix or ''))}\b", text_without_url)
@@ -2709,7 +2796,7 @@ class ReferenceListParser:
             r',?\s*chapters?\s+\d+',                   # chapter 3
             r',?\s*edition',                           # edition marker
             r',?\s*technical\s+report[^,]*',          # technical report
-            r'\s+\d{4}[a-z]?\s*$',                    # trailing year at end
+            r',?\s*(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s+)?\d{4}[a-z]?\s*$',  # optional month + trailing year at end
         ]:
             clean_text = re.sub(pattern, "", clean_text, flags=re.IGNORECASE).strip()
 
@@ -2748,19 +2835,31 @@ class ReferenceListParser:
                         if authors_candidate and authors_candidate != remaining:
                             authors_part = authors_candidate
 
-            # STRATEGY 2: Authors end with comma followed by capitalized word
+            # STRATEGY 2: Authors end with comma followed by capitalized word/acronym or lowercase package prefix ("pdfplumber: ...")
             if not title_raw:
                 author_end = re.search(
-                    r",\s*(?=[A-Z][a-z])", remaining
+                    r",\s*(?=[A-Z][a-z]|[A-Z]{2,}\b|[a-z][a-z0-9_-]{2,}:)", remaining
                 )
                 if author_end:
                     prefix_cand = remaining[:author_end.start()].strip()
                     candidate = remaining[author_end.end():].strip()
                     # Guard against splitting a title with a colon or multi-word clause before comma
-                    # (e.g. "Visual Question Answering: Datasets, Algorithms, and Future Challenges")
+                    # (e.g. "Visual Question Answering: Datasets, Algorithms, and Future Challenges"),
+                    # while allowing institutional authors ("Directory of Open Access Journals").
+                    is_org_author = bool(
+                        re.search(
+                            r"\b(?:Directory|Foundation|Association|Institute|Organization|Organisation|Society|Committee|Commission|Ministry|Department|University|Council|Agency|Center|Centre|Group)\b",
+                            prefix_cand,
+                            re.IGNORECASE,
+                        )
+                    )
                     prefix_looks_like_title = (
                         ":" in prefix_cand
-                        or (len(prefix_cand.split()) > 4 and not re.search(r"\b(?:and|et\s+al)\b|&|\b[A-Z]\.", prefix_cand))
+                        or (
+                            not is_org_author
+                            and len(prefix_cand.split()) > 4
+                            and not re.search(r"\b(?:and|et\s+al)\b|&|\b[A-Z]\.", prefix_cand)
+                        )
                     )
                     if candidate and len(candidate) > 10 and not prefix_looks_like_title:
                         title_raw = candidate.rstrip(".,").strip()

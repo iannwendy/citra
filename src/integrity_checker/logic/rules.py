@@ -1162,11 +1162,12 @@ class SymbolicRules:
 
         # Perfect match: fuzzy title >= 0.90, title >= 0.95 AND author >= 0.8 AND year match
         is_authorless_doi_match = (
-            not citation_authors
-            and author_sim == 0.0
-            and bool(citation_doi)
+            author_sim == 0.0
             and features.doi_exact_match
-            and features.title_sim_fuzzy >= 0.95
+            and features.title_sim_fuzzy >= 0.92
+            and self._is_standard_or_authorless_doi_match(
+                citation_authors, citation_doi, None, best
+            )
         )
         if (
             features.title_sim_fuzzy >= 0.90
@@ -1325,11 +1326,12 @@ class SymbolicRules:
         if title_sim_fuzzy < 0.90:
             mismatched.append("title")
         is_authorless_doi_match = (
-            not citation_authors
-            and author_sim == 0.0
-            and bool(citation_doi)
+            author_sim == 0.0
             and doi_match
-            and title_sim_fuzzy >= 0.95
+            and title_sim_fuzzy >= 0.92
+            and self._is_standard_or_authorless_doi_match(
+                citation_authors, citation_doi, None, best
+            )
         )
         if author_sim < 0.50 and not is_authorless_doi_match:
             mismatched.append("author")
@@ -1476,6 +1478,67 @@ class SymbolicRules:
         first_seg = candidate.split(".")[0].strip(" \"'“”.,;:")
         return first_seg if len(first_seg) >= 20 else None
 
+    _CORP_STD_AUTHOR_RE = re.compile(
+        r"^(?:ISO|IEC|IEEE(?:\s+(?:Standards?|Computer|Communications|Signal\s+Processing)(?:\s+(?:Association|Society|Board))?)?|ISO/IEC(?:/IEEE)?|"
+        r"ITU(?:-T|-R)?|W3C|NIST|IETF|ANSI|ASTM|ETSI|CEN|DIN|BSI|TCVN|QCVN)$"
+        r"|\b(?:working\s+group|standards?\s+(?:association|committee|board|institute|organization|body)|task\s+force|technical\s+committee)\b",
+        re.IGNORECASE,
+    )
+
+    @classmethod
+    def _is_standard_or_authorless_doi_match(
+        cls,
+        citation_authors: list[Any] | None,
+        citation_doi: str | None,
+        citation_title: str | None,
+        best: Any,
+        *,
+        title_sim: float | None = None,
+    ) -> bool:
+        """Return True when ``citation_authors`` is empty OR holds only technical-standard body codes
+        for a genuine technical standard / corporate record (never on human-authored papers!)."""
+        if not citation_doi:
+            return False
+        doi_low = citation_doi.strip().lower()
+        is_std_doi = bool(
+            re.match(r"^10\.(?:1109/ieeestd\.|3403/|6028/nist\.|17487/rfc)", doi_low)
+        )
+        combined_t = f"{citation_title or ''} {getattr(best, 'title', '') or ''}"
+        is_std_title = bool(
+            re.search(
+                r"\b(?:ISO(?:/IEC)?(?:/IEEE)?|IEEE\s+(?:Std|International\s+Standard)|ITU-[TR]|NIST\s+(?:SP|FIPS)|IETF\s+RFC|TCVN|QCVN)\b",
+                combined_t,
+                re.IGNORECASE,
+            )
+        )
+        if not citation_authors:
+            if is_std_doi or is_std_title:
+                return True
+            return title_sim is None or title_sim >= 0.95
+        author_tokens = [
+            str(getattr(a, "raw", None) or getattr(a, "last_name", None) or str(a)).strip(" .,;")
+            for a in citation_authors
+        ]
+        if not all(
+            re.fullmatch(
+                r"(?:ISO|IEC|IEEE|ISO/IEC(?:/IEEE)?|ITU(?:-T|-R)?|W3C|NIST|IETF|ANSI|ASTM|ETSI|CEN|DIN|BS|TCVN|QCVN)",
+                tok,
+                re.IGNORECASE,
+            )
+            for tok in author_tokens
+            if tok
+        ):
+            return False
+        if is_std_doi:
+            return True
+        best_authors = list(getattr(best, "authors", None) or []) if best is not None else []
+        if not best_authors:
+            return is_std_title
+        return all(
+            bool(cls._CORP_STD_AUTHOR_RE.search(str(ba).strip()))
+            for ba in best_authors
+        )
+
     @classmethod
     def check_url_content_mismatch(
         cls,
@@ -1505,7 +1568,12 @@ class SymbolicRules:
             citation_title,
             citation_raw or getattr(source, "citation_raw", None),
         )
-        raw_score = compute_url_title_match_score(eff_title, html_meta)
+        raw_score = compute_url_title_match_score(
+            eff_title,
+            html_meta,
+            citation_url=citation_url,
+            citation_raw=citation_raw or getattr(source, "citation_raw", None),
+        )
         if raw_score is None:
             return False, 1.0, ""
 
@@ -2320,10 +2388,15 @@ class SymbolicRules:
                     and (
                         author_sim >= self.author_jaccard_verified
                         or (
-                            not citation_authors
-                            and author_sim == 0.0
-                            and bool(citation_doi)
-                            and title_sim >= 0.95
+                            author_sim == 0.0
+                            and title_sim >= 0.92
+                            and self._is_standard_or_authorless_doi_match(
+                                citation_authors,
+                                citation_doi,
+                                citation_title,
+                                best,
+                                title_sim=title_sim,
+                            )
                         )
                     )
                 )
@@ -2513,7 +2586,8 @@ class SymbolicRules:
                 triggered_rules.append("R-GITHUB-VERIFIED")
             elif "npm_package" in ext_ids or "pypi_package" in ext_ids:
                 triggered_rules.append("R-PACKAGE-VERIFIED")
-            if year_dist <= self.year_tolerance or year_dist >= 900:
+            gh_lifespan_ok = ext_ids.get("github_year_in_lifespan") != "false"
+            if gh_lifespan_ok and (year_dist <= self.year_tolerance or year_dist >= 900):
                 return RuleOutcome(
                     label=ValidationLabel.VERIFIED,
                     confidence=max(0.0, 0.92 - style_penalty - provenance_penalty),

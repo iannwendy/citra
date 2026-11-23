@@ -643,6 +643,19 @@ class CitationExtractor:
                     line_suffix_b = search_text[m.end() : line_end_b]
                     full_line_b = search_text[line_start_b:line_end_b]
                     context_prefix_b = re.sub(r"\s+", " ", search_text[max(0, raw_start - 60) : raw_start])
+                    # Reject parenthesized bracket syntax examples such as "composite sub-reference splitting ([14a, 14b])"
+                    # without dropping real student citations like "được Breiman đề xuất năm 2001([8])" or "( [86] )".
+                    if (
+                        re.search(r"\(\s*$", line_prefix_b)
+                        and re.match(r"^\s*\)", line_suffix_b)
+                        and re.search(
+                            r"(?:\b(?:splitting|sub-?references?|markers?|citations?|syntax|formats?|labels?|indexing|examples?|e\.g\.|i\.e\.|tách)|"
+                            r"tham\s*chiếu(?:\s*con)?|tổ\s*hợp|nhãn\s*gộp|ký\s*hiệu|trích\s*dẫn|cú\s*pháp|định\s*dạng|ví\s*dụ)\s*\(\s*$",
+                            context_prefix_b,
+                            re.IGNORECASE,
+                        )
+                    ):
+                        continue
                     # Reject code array indexing, XPath predicates (/KetQua[1]/KyNang[1]), Word exported comments (Commented [1]:), and R console vector lines (## [1] 0.84)
                     if (
                         re.search(
@@ -752,6 +765,24 @@ class CitationExtractor:
 
                 # Filter out template placeholder citations like "(Author et al., 2020)", "Author (2020)"
                 if re.match(r"^\(?\s*authors?\b", raw, re.IGNORECASE):
+                    continue
+
+                # Filter out explicit meta-linguistic citation-marker syntax examples in prose
+                # e.g. "An in-text citation marker such as (Vaswani et al., 2017)" or
+                # "Ký hiệu trích dẫn trong thân bài như (Vaswani et al., 2017)"
+                meta_ctx_prefix = re.sub(
+                    r"\s+",
+                    " ",
+                    search_text[max(0, raw_start - 95) : raw_start],
+                )
+                if re.search(
+                    r"\b(?:citation\s+markers?|in-text\s+(?:citation\s+)?markers?|compound\s+markers?|reference\s+markers?|"
+                    r"ký\s+hiệu\s+trích\s+dẫn(?:\s+trong\s+thân\s+bài)?|cụm\s+trích\s+dẫn(?:\s+ghép)?)\s+"
+                    r"(?:such\s+as|e\.g\.,?|for\s+example,?|like|như|ví\s+dụ|chẳng\s+hạn)"
+                    r"(?:\s+\[[^\]]+\]\s+(?:or|and|hoặc|và))?\s*$",
+                    meta_ctx_prefix,
+                    re.IGNORECASE,
+                ):
                     continue
 
                 # Filter out bullet-point timeline/mandate headings like "● Nhiệm vụ của Jeff Bezos (2002):"
