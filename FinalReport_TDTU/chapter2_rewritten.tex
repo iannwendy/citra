@@ -39,7 +39,7 @@ Existing academic integrity platforms, reference managers, and research benchmar
 \textbf{System Category} & \textbf{Multi\-Style PDF} & \textbf{Bipar\-tite Linker} & \textbf{15+ Live APIs} & \textbf{Claim Align.} & \textbf{Safe Abstain} & \textbf{Calib.\ Prob.} & \textbf{VN Legal} \\
 \hline
 \endfirsthead
-\multicolumn{8}{l}{\itshape Table \thetable\ (continued from previous page)}\\
+\multicolumn{8}{c}{\itshape Table \thetable\ (continued from previous page)}\\
 \hline
 \textbf{System Category} & \textbf{Multi\-Style PDF} & \textbf{Bipar\-tite Linker} & \textbf{15+ Live APIs} & \textbf{Claim Align.} & \textbf{Safe Abstain} & \textbf{Calib.\ Prob.} & \textbf{VN Legal} \\
 \hline
@@ -76,7 +76,7 @@ Large-scale bibliometric studies show substantial coverage gaps between individu
 \textbf{Source / Validator} & \textbf{Primary Coverage} & \textbf{Role in Pipeline} \\
 \hline
 \endfirsthead
-\multicolumn{3}{l}{\itshape Table \thetable\ (continued from previous page)}\\
+\multicolumn{3}{c}{\itshape Table \thetable\ (continued from previous page)}\\
 \hline
 \textbf{Source / Validator} & \textbf{Primary Coverage} & \textbf{Role in Pipeline} \\
 \hline
@@ -86,29 +86,29 @@ Large-scale bibliometric studies show substantial coverage gaps between individu
 \endfoot
 \hline
 \endlastfoot
-Local Corpus (\texttt{local\_papers.db}) & 129,125 records (128,105 unique papers; 82,877 abstracts) from ACL Anthology~\cite{acl-anthology} and arXiv & Tier 0 sub-100\,ms offline SQLite FTS5 BM25 lookup \\
+\textbf{Local Corpus} (\texttt{local\_papers.db}) & \textbf{129,125 records} (128,105 unique papers; 82,877 abstracts) from ACL Anthology~\cite{acl-anthology} and arXiv & \textbf{Tier 0} sub-100\,ms offline SQLite FTS5 BM25 lookup \\
 \hline
-Seminal Whitelist (\texttt{\_KNOWN\_PAPERS}) & 101 foundational CS, AI, NLP, and deep learning publications & Tier 0 instant lookup for heavily cited canonical papers \\
+\textbf{Seminal Whitelist} (\texttt{\_KNOWN\_PAPERS}) & \textbf{101} foundational CS, AI, NLP, and deep learning publications & \textbf{Tier 0} instant lookup for heavily cited canonical papers \\
 \hline
-Crossref~\cite{crossref-tdm} \& Retraction Watch & Peer-reviewed journals, proceedings, book chapters, and retraction notices & Tier 1 DOI resolution, Journal Article Tag Suite (JATS) abstract parsing, and \texttt{is\_retracted} screening \\
+\textbf{Crossref}~\cite{crossref-tdm} \& \textbf{Retraction Watch} & Peer-reviewed journals, proceedings, book chapters, and retraction notices & \textbf{Tier 1} DOI resolution, Journal Article Tag Suite (JATS) abstract parsing, and \texttt{is\_retracted} screening \\
 \hline
-OpenAlex~\cite{openalex} & Global open scholarly graph spanning journals, preprints, and repositories & Tier 1 broad metadata lookup and inverted-index abstract reconstruction \\
+\textbf{OpenAlex}~\cite{openalex} & Global open scholarly graph spanning journals, preprints, and repositories & \textbf{Tier 1} broad metadata lookup and inverted-index abstract reconstruction \\
 \hline
-DataCite~\cite{datacite} \& Global DOI RA~\cite{doi-handbook} & Zenodo/Figshare/OSF datasets and regional DOI agencies (JaLC, CNKI, KISTI, mEDRA) & Tier 1 non-Crossref DOI resolution and \texttt{R-DOI-RA-NO-CSL} safe abstention \\
+\textbf{DataCite}~\cite{datacite} \& \textbf{Global DOI RA}~\cite{doi-handbook} & Zenodo/Figshare/OSF datasets and regional DOI agencies (JaLC, CNKI, KISTI, mEDRA) & \textbf{Tier 1} non-Crossref DOI resolution and \texttt{R-DOI-RA-NO-CSL} safe abstention \\
 \hline
-DOAJ~\cite{doaj} \& OpenAIRE / HAL & Open-access journals (including regional Asian venues), institutional repositories, and preprints & Tier 1 open-access journal and institutional repository verification \\
+\textbf{DOAJ}~\cite{doaj} \& \textbf{OpenAIRE / HAL} & Open-access journals (including regional Asian venues), institutional repositories, and preprints & \textbf{Tier 1} open-access journal and institutional repository verification \\
 \hline
-DBLP~\cite{dblp} \& arXiv API~\cite{arxiv-api} & Computer science conferences/workshops and STEM preprints & Tier 1 domain-routed CS/AI bibliography and exact \texttt{arXiv} ID lookup \\
+\textbf{DBLP}~\cite{dblp} \& \textbf{arXiv API}~\cite{arxiv-api} & Computer science conferences/workshops and STEM preprints & \textbf{Tier 1} domain-routed CS/AI bibliography and exact \texttt{arXiv} ID lookup \\
 \hline
-Europe PMC~\cite{europepmc} \& NCBI / bioRxiv & PubMed/MEDLINE biomedical, clinical, psychology, and life-science preprints & Tier 1 domain-routed life-science lookup and abstract enrichment \\
+\textbf{Europe PMC}~\cite{europepmc} \& \textbf{NCBI / bioRxiv} & PubMed/MEDLINE biomedical, clinical, psychology, and life-science preprints & \textbf{Tier 1} domain-routed life-science lookup and abstract enrichment \\
 \hline
-OpenLibrary~\cite{openlibrary} \& Google Books & Textbooks, monographs, ISBN metadata, and multi-edition printings & Tier 1 book verification and cross-edition year tolerance \\
+\textbf{OpenLibrary}~\cite{openlibrary} \& \textbf{Google Books} & Textbooks, monographs, ISBN metadata, and multi-edition printings & \textbf{Tier 1} book verification and cross-edition year tolerance \\
 \hline
-Hugging Face, IETF RFC, PyPI \& Wikidata & ML models/datasets, RFC internet standards, Python packages, and OpenCitations & Tier 1 software, technical standard, and open citation verification \\
+\textbf{Hugging Face, IETF RFC, PyPI \& Wikidata} & ML models/datasets, RFC internet standards, Python packages, and OpenCitations & \textbf{Tier 1} software, technical standard, and open citation verification \\
 \hline
-Serper / SerpAPI Router & Academic web index fallback & Tier 2 optional fallback when Tier 0 and Tier 1 return zero candidates \\
+\textbf{Serper / SerpAPI Router} & Academic web index fallback & \textbf{Tier 2} optional fallback when Tier 0 and Tier 1 return zero candidates \\
 \hline
-HTTP + Wayback \texttt{Link\allowbreak Validator}~\cite{openlibrary} & Live HTTP/HTTPS targets and Internet Archive CDX snapshots & Parallel URL liveness, Soft-404 HTML metadata, and archive check \\
+\textbf{HTTP + Wayback} \texttt{Link\allowbreak Validator}~\cite{openlibrary} & Live HTTP/HTTPS targets and Internet Archive CDX snapshots & \textbf{Parallel} URL liveness, Soft-404 HTML metadata, and archive check \\
 \hline
 \end{longtable}
 

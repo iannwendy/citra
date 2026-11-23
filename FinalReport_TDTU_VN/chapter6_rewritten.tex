@@ -7,12 +7,12 @@
 
 {\setlength{\tabcolsep}{3.5pt}
 \begin{longtable}{|C{0.14}|L{0.32}|L{0.54}|}
-\caption{Tổng hợp kết quả đạt được của đồ án tốt nghiệp đối chiếu với các mục tiêu tại Chương 1.}\label{tab:obj-summary}\\
+\caption{Tổng hợp kết quả đạt được của đồ án tốt nghiệp đối chiếu với các mục tiêu nghiên cứu của đề tài.}\label{tab:obj-summary}\\
 \hline
 \textbf{Mục tiêu} & \textbf{Năng lực mục tiêu} & \textbf{Kết quả kỹ thuật và thực nghiệm đạt được} \\
 \hline
 \endfirsthead
-\multicolumn{3}{l}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
+\multicolumn{3}{c}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
 \hline
 \textbf{Mục tiêu} & \textbf{Năng lực mục tiêu} & \textbf{Kết quả kỹ thuật và thực nghiệm đạt được} \\
 \hline
@@ -22,17 +22,17 @@
 \endfoot
 \hline
 \endlastfoot
-\textbf{OBJ-1} & Trích xuất đa định dạng và liên kết hai chiều & Kết hợp lai GROBID \texttt{0.9.1-crf} TEI-XML + PyMuPDF + \texttt{python-docx} hỗ trợ 12 chuẩn trích dẫn (gồm cả văn bản pháp luật VN) và bộ liên kết 7 phương pháp (phát hiện mục tài liệu tham khảo đạt $97.7\%$--$100\%$ trên 310 tệp PDF). \\
+\textbf{OBJ-1} & \textbf{Trích xuất đa định dạng và liên kết hai chiều} & Kết hợp lai GROBID \texttt{0.9.1-crf} TEI-XML + PyMuPDF + \texttt{python-docx} hỗ trợ \textbf{12 chuẩn trích dẫn} (gồm cả văn bản pháp luật VN) và bộ liên kết 7 phương pháp (phát hiện mục tài liệu tham khảo đạt \textbf{$97.7\%$--$100\%$} trên 310 tệp PDF). \\
 \hline
-\textbf{OBJ-2} & Truy xuất liên hợp nhận biết miền tri thức & Kho dữ liệu cục bộ SQLite FTS5 gồm 129,125 bản ghi (độ phủ $99.80\%$, độ trễ $87.6\text{\,ms}$) kết hợp hơn 15 API trực tuyến, Retraction Watch, bộ nhớ đệm gộp truy vấn singleflight và bộ kiểm tra URL/HTML ghim địa chỉ IP. \\
+\textbf{OBJ-2} & \textbf{Truy xuất liên hợp nhận biết miền tri thức} & Kho dữ liệu cục bộ SQLite FTS5 gồm \textbf{129,125 bản ghi} (độ phủ \textbf{$99.80\%$}, độ trễ $87.6\text{\,ms}$) kết hợp \textbf{hơn 15 API trực tuyến}, Retraction Watch, bộ nhớ đệm gộp truy vấn singleflight và bộ kiểm tra URL/HTML ghim địa chỉ IP. \\
 \hline
-\textbf{OBJ-3} & Xác minh nơ-ron -- ký hiệu và hiệu chỉnh xác suất & Bộ mã hóa kép SBERT + ONNX INT8 \texttt{VI}$\leftrightarrow$\texttt{EN} tích hợp cùng 68 luật ký hiệu, mô hình hồi quy logistic đa thức 16 chiều ($C=2.0$) và hiệu chỉnh Platt ($\text{ECE} = 0.0395$, $\text{Brier} = 0.0125$). \\
+\textbf{OBJ-3} & \textbf{Xác minh nơ-ron -- ký hiệu và hiệu chỉnh xác suất} & Bộ mã hóa kép SBERT + ONNX INT8 \texttt{VI}$\leftrightarrow$\texttt{EN} tích hợp cùng \textbf{68 luật ký hiệu}, mô hình hồi quy logistic đa thức 16 chiều ($C=2.0$) và hiệu chỉnh Platt (\textbf{$\text{ECE} = 0.0395$}, \textbf{$\text{Brier} = 0.0125$}). \\
 \hline
-\textbf{OBJ-4} & Chấm điểm CIS minh bạch và sửa lỗi tự động & Thang chấm CIS năm thành phần (độ ổn định thứ hạng $\rho = 0.9987$) đi kèm tính năng tự động chuẩn hóa và sửa lỗi tài liệu tham khảo theo chuẩn APA, IEEE, TDTU, BibTeX, RIS và tệp \texttt{.docx}. \\
+\textbf{OBJ-4} & \textbf{Chấm điểm CIS minh bạch và sửa lỗi tự động} & Thang chấm CIS năm thành phần (độ ổn định thứ hạng \textbf{$\rho = 0.9987$}) đi kèm tính năng tự động chuẩn hóa và sửa lỗi tài liệu tham khảo theo chuẩn APA, IEEE, TDTU, BibTeX, RIS và tệp \texttt{.docx}. \\
 \hline
-\textbf{OBJ-5} & Nền tảng web phân quyền bảo mật & Hệ thống FastAPI đóng gói bằng container (15 bảng ORM, 13 bản di trú lược đồ (\texttt{0001}--\texttt{0013}), SSE, bảo vệ RBAC/IDOR, chống SSRF bằng ghim IP) và ứng dụng đơn trang React 18.3 (gói khởi tạo $228.42\text{\,kB}$). \\
+\textbf{OBJ-5} & \textbf{Nền tảng web phân quyền bảo mật} & Hệ thống FastAPI đóng gói bằng container (\textbf{15 bảng ORM}, 13 bản di trú lược đồ (\texttt{0001}--\texttt{0013}), SSE, bảo vệ RBAC/IDOR, chống SSRF bằng ghim IP) và ứng dụng đơn trang React 18.3 (gói khởi tạo \textbf{$228.42\text{\,kB}$}). \\
 \hline
-\textbf{OBJ-6} & Đánh giá thực nghiệm quy mô lớn chống rò rỉ dữ liệu & Độ chính xác trong phân phối (ID) đạt $99.02\%$ ($N=18\text{K}$), ngoài phân phối (OOD) đạt $99.75\%$ ($N=2.4\text{K}$), đánh giá đầu-cuối (E2E) trên 6 lĩnh vực đạt $100\%$ ($120/120$) và chịu tải đồng thời $50/50$ phiên. \\
+\textbf{OBJ-6} & \textbf{Đánh giá thực nghiệm quy mô lớn chống rò rỉ dữ liệu} & Độ chính xác trong phân phối (ID) đạt \textbf{$99.02\%$} ($N=18\text{K}$), ngoài phân phối (OOD) đạt \textbf{$99.75\%$} ($N=2.4\text{K}$), đánh giá đầu-cuối (E2E) trên 6 lĩnh vực đạt \textbf{$100\%$} ($120/120$) và chịu tải đồng thời \textbf{$50/50$} phiên. \\
 \hline
 \end{longtable}
 }

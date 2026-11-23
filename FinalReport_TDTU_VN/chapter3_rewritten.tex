@@ -16,7 +16,7 @@ Mỗi Yêu cầu chức năng (FR) được đặc tả dưới dạng một ngh
 \textbf{Mã} & \textbf{Tác nhân} & \textbf{Đặc tả yêu cầu} & \textbf{Ưu tiên} & \textbf{Tiêu chí nghiệm thu} \\
 \hline
 \endfirsthead
-\multicolumn{5}{l}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
+\multicolumn{5}{c}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
 \hline
 \textbf{Mã} & \textbf{Tác nhân} & \textbf{Đặc tả yêu cầu} & \textbf{Ưu tiên} & \textbf{Tiêu chí nghiệm thu} \\
 \hline
@@ -28,45 +28,45 @@ Mỗi Yêu cầu chức năng (FR) được đặc tả dưới dạng một ngh
 \endlastfoot
 \multicolumn{5}{|l|}{\textbf{Phân hệ 1: Định danh, Quản lý phiên đăng nhập và Kiểm soát truy cập}} \\
 \hline
-\texttt{FR-01} & Khách / Sinh viên & Hệ thống cho phép đăng ký tài khoản, xác thực mã kích hoạt email và mã đặt lại mật khẩu dùng một lần, đồng thời xác thực phiên làm việc qua thông tin đăng nhập nội bộ hoặc Google OAuth2. & Bắt buộc & Từ chối token sai/hết hạn; JWT đã thu hồi trả về HTTP 401. \\
+\textbf{\texttt{FR-01}} & Khách / Sinh viên & Hệ thống cho phép đăng ký tài khoản, xác thực mã kích hoạt email và mã đặt lại mật khẩu dùng một lần, đồng thời xác thực phiên làm việc qua thông tin đăng nhập nội bộ hoặc Google OAuth2. & \textbf{Bắt buộc} & Từ chối token sai/hết hạn; JWT đã thu hồi trả về \textbf{HTTP 401}. \\
 \hline
-\texttt{FR-02} & Mọi vai trò & Hệ thống thực thi kiểm soát truy cập dựa trên vai trò (\texttt{user}, \texttt{teacher}, \texttt{admin}), khóa API cá nhân và kiểm tra quyền sở hữu chéo giữa người dùng trên mọi tài nguyên. & Bắt buộc & Truy cập chéo bài nộp/kết luận của người khác trả về HTTP 403 (0 lỗi IDOR). \\
+\textbf{\texttt{FR-02}} & Mọi vai trò & Hệ thống thực thi kiểm soát truy cập dựa trên vai trò (\texttt{user}, \texttt{teacher}, \texttt{admin}), khóa API cá nhân và kiểm tra quyền sở hữu chéo giữa người dùng trên mọi tài nguyên. & \textbf{Bắt buộc} & Truy cập chéo bài nộp/kết luận của người khác trả về \textbf{HTTP 403} (0 lỗi IDOR). \\
 \hline
 \multicolumn{5}{|l|}{\textbf{Phân hệ 2: Tiếp nhận tài liệu, Phân tích cú pháp và Liên kết hai chiều}} \\
 \hline
-\texttt{FR-03} & Sinh viên / Giảng viên & Hệ thống tiếp nhận tải lên từng bản thảo hoặc theo lô ở định dạng PDF, DOCX, BibTeX và RIS sau khi kiểm tra byte định danh (magic bytes), dung lượng tệp, số trang và hạn mức tháng. & Bắt buộc & Từ chối gọn các tệp giả mạo PDF/DOCX hoặc vượt hạn mức tải lên. \\
+\textbf{\texttt{FR-03}} & Sinh viên / Giảng viên & Hệ thống tiếp nhận tải lên từng bản thảo hoặc theo lô ở định dạng PDF, DOCX, BibTeX và RIS sau khi kiểm tra byte định danh (magic bytes), dung lượng tệp, số trang và hạn mức tháng. & \textbf{Bắt buộc} & Từ chối gọn các tệp giả mạo PDF/DOCX hoặc vượt hạn mức tải lên. \\
 \hline
-\texttt{FR-04} & Sinh viên / Giảng viên & Hệ thống phát trực tiếp tiến độ thời gian thực qua tám giai đoạn xử lý và tự động hoàn lại hạn mức tải lên nếu tác vụ bất đồng bộ thất bại vĩnh viễn. & Bắt buộc & SSE phát đủ các bước 0--7; tác vụ lỗi hoàn hạn mức nguyên tử. \\
+\textbf{\texttt{FR-04}} & Sinh viên / Giảng viên & Hệ thống phát trực tiếp tiến độ thời gian thực qua tám giai đoạn xử lý và tự động hoàn lại hạn mức tải lên nếu tác vụ bất đồng bộ thất bại vĩnh viễn. & \textbf{Bắt buộc} & SSE phát đủ các bước 0--7; tác vụ lỗi hoàn hạn mức nguyên tử. \\
 \hline
-\texttt{FR-05} & Pipeline & Hệ thống phân tách bản thảo tải lên thành văn bản chính, các dấu trích dẫn trong bài kèm ngữ cảnh xung quanh và danh mục tài liệu tham khảo trên 12 chuẩn trích dẫn (bao gồm văn bản pháp luật Việt Nam). & Bắt buộc & Phát hiện danh mục tài liệu đạt $\ge 97\%$ trên bộ kiểm thử 310 PDF đa chuẩn. \\
+\textbf{\texttt{FR-05}} & Pipeline & Hệ thống phân tách bản thảo tải lên thành văn bản chính, các dấu trích dẫn trong bài kèm ngữ cảnh xung quanh và danh mục tài liệu tham khảo trên 12 chuẩn trích dẫn (bao gồm văn bản pháp luật Việt Nam). & \textbf{Bắt buộc} & Phát hiện danh mục tài liệu đạt \textbf{$\ge 97\%$} trên bộ kiểm thử 310 PDF đa chuẩn. \\
 \hline
-\texttt{FR-06} & Pipeline & Hệ thống phát hiện tệp PDF bản quét (scan) hoặc PDF tiếng Việt dùng bảng mã cũ để kích hoạt nhận dạng ký tự quang học (OCR) có chọn lọc hoặc chuẩn hóa bảng mã. & Nên có & Các trang quét được ghi nhận đầy đủ trong siêu dữ liệu chẩn đoán tài liệu. \\
+\textbf{\texttt{FR-06}} & Pipeline & Hệ thống phát hiện tệp PDF bản quét (scan) hoặc PDF tiếng Việt dùng bảng mã cũ để kích hoạt nhận dạng ký tự quang học (OCR) có chọn lọc hoặc chuẩn hóa bảng mã. & Nên có & Các trang quét được ghi nhận đầy đủ trong siêu dữ liệu chẩn đoán tài liệu. \\
 \hline
-\texttt{FR-07} & Pipeline & Hệ thống liên kết từng dấu trích dẫn trong bài tới mục tài liệu tham khảo đích và phân loại mỗi cạnh liên kết vào một trong tám trạng thái ánh xạ cấu trúc. & Bắt buộc & Cô lập chính xác trích dẫn mồ côi, tài liệu không được trích dẫn và lệch năm. \\
+\textbf{\texttt{FR-07}} & Pipeline & Hệ thống liên kết từng dấu trích dẫn trong bài tới mục tài liệu tham khảo đích và phân loại mỗi cạnh liên kết vào một trong tám trạng thái ánh xạ cấu trúc. & \textbf{Bắt buộc} & Cô lập chính xác trích dẫn mồ côi, tài liệu không được trích dẫn và lệch năm. \\
 \hline
 \multicolumn{5}{|l|}{\textbf{Phân hệ 3: Truy xuất liên hợp và Xác thực định danh}} \\
 \hline
-\texttt{FR-08} & Pipeline & Hệ thống truy vấn kho học thuật ngoại tuyến và các cơ sở dữ liệu trực tuyến theo lĩnh vực, đồng thời ghi nhận nguồn gốc thành công, thất bại và giới hạn tần suất (rate limit) của từng nguồn. & Bắt buộc & Độ phủ ngoại tuyến $\ge 99\%$; phân biệt rõ lỗi HTTP 429 với 0 kết quả. \\
+\textbf{\texttt{FR-08}} & Pipeline & Hệ thống truy vấn kho học thuật ngoại tuyến và các cơ sở dữ liệu trực tuyến theo lĩnh vực, đồng thời ghi nhận nguồn gốc thành công, thất bại và giới hạn tần suất (rate limit) của từng nguồn. & \textbf{Bắt buộc} & Độ phủ ngoại tuyến \textbf{$\ge 99\%$}; phân biệt rõ lỗi \textbf{HTTP 429} với 0 kết quả. \\
 \hline
-\texttt{FR-09} & Pipeline & Hệ thống xác thực các URL và DOI được trích dẫn thông qua truy vấn HTTP chống SSRF, siêu dữ liệu Retraction Watch và bản lưu Internet Archive. & Bắt buộc & Chặn các địa chỉ IP nội bộ; gắn cờ $100\%$ công trình đã bị rút bài. \\
+\textbf{\texttt{FR-09}} & Pipeline & Hệ thống xác thực các URL và DOI được trích dẫn thông qua truy vấn HTTP chống SSRF, siêu dữ liệu Retraction Watch và bản lưu Internet Archive. & \textbf{Bắt buộc} & Chặn các địa chỉ IP nội bộ; gắn cờ \textbf{$100\%$} công trình đã bị rút bài. \\
 \hline
 \multicolumn{5}{|l|}{\textbf{Phân hệ 4: Kiểm chứng thần kinh -- biểu trưng, Chấm điểm và Khắc phục lỗi}} \\
 \hline
-\texttt{FR-10} & Pipeline & Hệ thống tính toán độ tương đồng từ vựng, ngữ nghĩa và xuyên ngôn ngữ (\texttt{VI}$\leftrightarrow$\texttt{EN}) giữa nhận định trong bài với tiêu đề/tóm tắt của tài liệu nguồn truy xuất được. & Bắt buộc & Nhận định mâu thuẫn và khớp xuyên ngôn ngữ được chấm điểm trong $[0,1]$. \\
+\textbf{\texttt{FR-10}} & Pipeline & Hệ thống tính toán độ tương đồng từ vựng, ngữ nghĩa và xuyên ngôn ngữ (\texttt{VI}$\leftrightarrow$\texttt{EN}) giữa nhận định trong bài với tiêu đề/tóm tắt của tài liệu nguồn truy xuất được. & \textbf{Bắt buộc} & Nhận định mâu thuẫn và khớp xuyên ngôn ngữ được chấm điểm trong $[0,1]$. \\
 \hline
-\texttt{FR-11} & Pipeline & Hệ thống gán một trong năm nhãn kết luận, xác suất đã hiệu chuẩn Platt và danh sách có thứ tự các mã luật biểu trưng được kích hoạt cho từng tài liệu tham khảo. & Bắt buộc & Độ chính xác kiểm thử $\ge 98.5\%$, $\text{ECE} \le 0.05$, $100\%$ vết luật. \\
+\textbf{\texttt{FR-11}} & Pipeline & Hệ thống gán một trong năm nhãn kết luận, xác suất đã hiệu chuẩn Platt và danh sách có thứ tự các mã luật biểu trưng được kích hoạt cho từng tài liệu tham khảo. & \textbf{Bắt buộc} & Độ chính xác kiểm thử \textbf{$\ge 98.5\%$}, \textbf{$\text{ECE} \le 0.05$}, \textbf{$100\%$} vết luật. \\
 \hline
-\texttt{FR-12} & Pipeline & Hệ thống tính toán Điểm toàn vẹn trích dẫn (CIS) gồm năm thành phần trong đoạn $[0, 100]$ và sinh lời giải thích song ngữ (\texttt{EN}/\texttt{VI}). & Bắt buộc & Tổng trọng số thành phần bằng $1.00$; lời giải thích hiển thị cả EN \& VI. \\
+\textbf{\texttt{FR-12}} & Pipeline & Hệ thống tính toán Điểm toàn vẹn trích dẫn (CIS) gồm năm thành phần trong đoạn $[0, 100]$ và sinh lời giải thích song ngữ (\texttt{EN}/\texttt{VI}). & \textbf{Bắt buộc} & Tổng trọng số thành phần bằng $1.00$; lời giải thích hiển thị cả EN \& VI. \\
 \hline
-\texttt{FR-13} & Sinh viên / Giảng viên & Hệ thống xuất báo cáo đã làm sạch an toàn (PDF, DOCX, CSV, JSON) và sinh danh mục tài liệu tham khảo đã sửa lỗi theo chuẩn APA, IEEE, TDTU, BibTeX, RIS và DOCX. & Nên có & Mục tài liệu sau sửa phản ánh đúng siêu dữ liệu chuẩn, không chứa macro. \\
+\textbf{\texttt{FR-13}} & Sinh viên / Giảng viên & Hệ thống xuất báo cáo đã làm sạch an toàn (PDF, DOCX, CSV, JSON) và sinh danh mục tài liệu tham khảo đã sửa lỗi theo chuẩn APA, IEEE, TDTU, BibTeX, RIS và DOCX. & Nên có & Mục tài liệu sau sửa phản ánh đúng siêu dữ liệu chuẩn, không chứa macro. \\
 \hline
-\texttt{FR-14} & Sinh viên / Công khai & Hệ thống cấp liên kết chia sẻ ký mật mã có thời hạn kèm mã QR biên nhận xác thực để bên thứ ba tra cứu ở chế độ chỉ đọc. & Nên có & Token chia sẻ hết hạn hoặc bị chỉnh sửa trả về HTTP 404/403. \\
+\textbf{\texttt{FR-14}} & Sinh viên / Công khai & Hệ thống cấp liên kết chia sẻ ký mật mã có thời hạn kèm mã QR biên nhận xác thực để bên thứ ba tra cứu ở chế độ chỉ đọc. & Nên có & Token chia sẻ hết hạn hoặc bị chỉnh sửa trả về \textbf{HTTP 404/403}. \\
 \hline
 \multicolumn{5}{|l|}{\textbf{Phân hệ 5: Giám sát lớp học phần và Quản trị nền tảng}} \\
 \hline
-\texttt{FR-15} & Giảng viên & Hệ thống cho phép giảng viên quản lý lớp học qua mã tham gia, theo dõi thống kê toàn lớp cùng các trích dẫn ảo trùng lặp và ghi đè kết luận khi được cấp quyền. & Bắt buộc & Ghi đè cập nhật kết luận, tính lại CIS và ghi nhật ký kiểm toán. \\
+\textbf{\texttt{FR-15}} & Giảng viên & Hệ thống cho phép giảng viên quản lý lớp học qua mã tham gia, theo dõi thống kê toàn lớp cùng các trích dẫn ảo trùng lặp và ghi đè kết luận khi được cấp quyền. & \textbf{Bắt buộc} & Ghi đè cập nhật kết luận, tính lại CIS và ghi nhật ký kiểm toán. \\
 \hline
-\texttt{FR-16} & Quản trị viên & Hệ thống cho phép quản trị viên quản lý tài khoản, mã khuyến mãi, trạng thái bộ nhớ đệm, bộ ngắt mạch (circuit breaker) của nguồn ngoài và nhật ký kiểm toán. & Bắt buộc & Đặt lại bộ ngắt mạch và xóa bộ nhớ đệm có hiệu lực ngay lập tức. \\
+\textbf{\texttt{FR-16}} & Quản trị viên & Hệ thống cho phép quản trị viên quản lý tài khoản, mã khuyến mãi, trạng thái bộ nhớ đệm, bộ ngắt mạch (circuit breaker) của nguồn ngoài và nhật ký kiểm toán. & \textbf{Bắt buộc} & Đặt lại bộ ngắt mạch và xóa bộ nhớ đệm có hiệu lực ngay lập tức. \\
 \hline
 \end{longtable}
 }
@@ -82,7 +82,7 @@ Nhằm đảm bảo khả năng vận hành thực tế trên hạ tầng phần
 \textbf{Mã} & \textbf{Thuộc tính ISO/IEC 25010} & \textbf{Yêu cầu chất lượng} & \textbf{Chỉ số mục tiêu / SLA} \\
 \hline
 \endfirsthead
-\multicolumn{4}{l}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
+\multicolumn{4}{c}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
 \hline
 \textbf{Mã} & \textbf{Thuộc tính ISO/IEC 25010} & \textbf{Yêu cầu chất lượng} & \textbf{Chỉ số mục tiêu / SLA} \\
 \hline
@@ -92,25 +92,25 @@ Nhằm đảm bảo khả năng vận hành thực tế trên hạ tầng phần
 \endfoot
 \hline
 \endlastfoot
-\texttt{NFR-01} & Hiệu quả hiệu năng (Đặc tính thời gian) & Độ trễ kiểm chứng khi ấm bộ nhớ đệm (warm cache) đối với báo cáo đồ án 50 trang ($\sim$32 tài liệu tham khảo) trên phần cứng CPU. & $P_{90} \le 2.5\text{\,s}$ (mạng diện rộng [WAN] lạnh $\le 15\text{\,s}$). \\
+\textbf{\texttt{NFR-01}} & \textbf{Hiệu quả hiệu năng} (Đặc tính thời gian) & Độ trễ kiểm chứng khi ấm bộ nhớ đệm (warm cache) đối với báo cáo đồ án 50 trang ($\sim$32 tài liệu tham khảo) trên phần cứng CPU. & \textbf{$P_{90} \le 2.5\text{\,s}$} (mạng diện rộng [WAN] lạnh $\le 15\text{\,s}$). \\
 \hline
-\texttt{NFR-02} & Hiệu quả hiệu năng (Sử dụng tài nguyên) & Mức chiếm dụng bộ nhớ thực (RSS) cực đại của tiến trình Python phía máy chủ khi phân tích chuyên khảo dài 150 trang. & $\text{RSS} \le 1.5\text{\,GB}$; độ tăng heap $\Delta \le 25\text{\,MB}$. \\
+\textbf{\texttt{NFR-02}} & \textbf{Hiệu quả hiệu năng} (Sử dụng tài nguyên) & Mức chiếm dụng bộ nhớ thực (RSS) cực đại của tiến trình Python phía máy chủ khi phân tích chuyên khảo dài 150 trang. & \textbf{$\text{RSS} \le 1.5\text{\,GB}$}; độ tăng heap $\Delta \le 25\text{\,MB}$. \\
 \hline
-\texttt{NFR-03} & Hiệu quả hiệu năng (Dung lượng tải) & Xử lý các lượt tải lên đồng thời vào sát hạn nộp bài của lớp học mà không phát sinh lỗi khóa SQLite hoặc phản hồi HTTP 5xx. & $50$ lượt tải lên đồng thời, $0\%$ lỗi. \\
+\textbf{\texttt{NFR-03}} & \textbf{Hiệu quả hiệu năng} (Dung lượng tải) & Xử lý các lượt tải lên đồng thời vào sát hạn nộp bài của lớp học mà không phát sinh lỗi khóa SQLite hoặc phản hồi HTTP 5xx. & \textbf{$50$ lượt tải lên đồng thời, $0\%$ lỗi}. \\
 \hline
-\texttt{NFR-04} & Độ tin cậy (Khả năng chịu lỗi) & Suy giảm nhẹ nhàng (graceful degradation) khi GROBID hoặc các API học thuật bên ngoài quá thời gian chờ hoặc trả về lỗi HTTP 429. & Tự động chuyển sang PyMuPDF dự phòng; $100\%$ tạm hoãn an toàn khi gặp 429. \\
+\textbf{\texttt{NFR-04}} & \textbf{Độ tin cậy} (Khả năng chịu lỗi) & Suy giảm nhẹ nhàng (graceful degradation) khi GROBID hoặc các API học thuật bên ngoài quá thời gian chờ hoặc trả về lỗi HTTP 429. & Tự động chuyển sang PyMuPDF dự phòng; \textbf{$100\%$ tạm hoãn an toàn} khi gặp 429. \\
 \hline
-\texttt{NFR-05} & Tính phù hợp chức năng & Không kết luận nhầm công trình hợp lệ là trích dẫn ảo và đảm bảo xác suất độ tin cậy được hiệu chuẩn tốt. & Báo nhầm trích dẫn ảo $\le 0.1\%$; $\text{ECE} \le 0.05$. \\
+\textbf{\texttt{NFR-05}} & \textbf{Tính phù hợp chức năng} & Không kết luận nhầm công trình hợp lệ là trích dẫn ảo và đảm bảo xác suất độ tin cậy được hiệu chuẩn tốt. & Báo nhầm trích dẫn ảo \textbf{$\le 0.1\%$}; \textbf{$\text{ECE} \le 0.05$}. \\
 \hline
-\texttt{NFR-06} & Tính bảo mật (Tính bí mật \& Toàn vẹn) & Bảo vệ chống tấn công SSRF, IDOR, chèn mã kịch bản chéo trang (XSS), chèn công thức CSV và dò mật khẩu vét cạn (brute-force). & Chặn SSRF ghim IP; băm \texttt{bcrypt} kèm muối + token SHA-256/\allowbreak HMAC. \\
+\textbf{\texttt{NFR-06}} & \textbf{Tính bảo mật} (Tính bí mật \& Toàn vẹn) & Bảo vệ chống tấn công SSRF, IDOR, chèn mã kịch bản chéo trang (XSS), chèn công thức CSV và dò mật khẩu vét cạn (brute-force). & \textbf{Chặn SSRF ghim IP}; băm \texttt{bcrypt} kèm muối + token SHA-256/\allowbreak HMAC. \\
 \hline
-\texttt{NFR-07} & Khả năng tương tác (Tính khả dụng) & Giao diện biên tập hỗ trợ chế độ Sáng và Tối dễ tiếp cận, hiển thị thông tin theo tầng (progressive disclosure) và bản địa hóa song ngữ. & Chuẩn WCAG 2.1 AA (tương phản $\ge 4.5:1$); $0\text{\,px}$ tràn lề. \\
+\textbf{\texttt{NFR-07}} & \textbf{Khả năng tương tác} (Tính khả dụng) & Giao diện biên tập hỗ trợ chế độ Sáng và Tối dễ tiếp cận, hiển thị thông tin theo tầng (progressive disclosure) và bản địa hóa song ngữ. & Chuẩn \textbf{WCAG 2.1 AA} (tương phản $\ge 4.5:1$); $0\text{\,px}$ tràn lề. \\
 \hline
-\texttt{NFR-08} & Hiệu quả hiệu năng (Thời gian \& Tài nguyên) & Phân tách mã nguồn (code-splitting) JavaScript phía giao diện giúp tải trang lần đầu nhanh trên mạng nội bộ trường học. & Gói mã khởi tạo $\le 250\text{\,kB}$ ($\le 80\text{\,kB}$ sau nén gzip). \\
+\textbf{\texttt{NFR-08}} & \textbf{Hiệu quả hiệu năng} (Thời gian \& Tài nguyên) & Phân tách mã nguồn (code-splitting) JavaScript phía giao diện giúp tải trang lần đầu nhanh trên mạng nội bộ trường học. & Gói mã khởi tạo \textbf{$\le 250\text{\,kB}$} ($\le 80\text{\,kB}$ sau nén gzip). \\
 \hline
-\texttt{NFR-09} & Khả năng bảo trì (Tính mô-đun \& Kiểm thử) & Kiến trúc Python 8 tầng phi chu trình cùng bộ kiểm thử hồi quy tự động cho backend, frontend và trình duyệt. & $\ge 2{,}500$ ca kiểm thử tự động, $0$ ca thất bại. \\
+\textbf{\texttt{NFR-09}} & \textbf{Khả năng bảo trì} (Tính mô-đun \& Kiểm thử) & Kiến trúc Python 8 tầng phi chu trình cùng bộ kiểm thử hồi quy tự động cho backend, frontend và trình duyệt. & \textbf{$\ge 2{,}500$} ca kiểm thử tự động, $0$ ca thất bại. \\
 \hline
-\texttt{NFR-10} & Tính khả chuyển (Khả năng cài đặt \& Thay thế) & Triển khai đóng gói bằng container tái lập được trên máy chủ CPU chạy Linux và macOS mà không cần GPU chuyên dụng. & 3 container sẵn sàng hoạt động $\le 60\text{\,s}$; $0$ phụ thuộc GPU. \\
+\textbf{\texttt{NFR-10}} & \textbf{Tính khả chuyển} (Khả năng cài đặt \& Thay thế) & Triển khai đóng gói bằng container tái lập được trên máy chủ CPU chạy Linux và macOS mà không cần GPU chuyên dụng. & 3 container sẵn sàng hoạt động \textbf{$\le 60\text{\,s}$}; $0$ phụ thuộc GPU. \\
 \hline
 \end{longtable}
 }
@@ -140,7 +140,7 @@ Bảng~\ref{tab:uc01}, Bảng~\ref{tab:uc02}, Bảng~\ref{tab:uc03}, Bảng~\ref
 \textbf{Mục đặc tả} & \textbf{Nội dung chi tiết} \\
 \hline
 \endfirsthead
-\multicolumn{2}{l}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
+\multicolumn{2}{c}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
 \hline
 \textbf{Mục đặc tả} & \textbf{Nội dung chi tiết} \\
 \hline
@@ -150,17 +150,17 @@ Bảng~\ref{tab:uc01}, Bảng~\ref{tab:uc02}, Bảng~\ref{tab:uc03}, Bảng~\ref
 \endfoot
 \hline
 \endlastfoot
-Mã \& Tên Ca sử dụng (Use Case) & \textbf{UC-01:} Tải lên bản thảo và theo dõi tiến độ kiểm chứng thời gian thực (\texttt{FR-03}--\texttt{FR-12}) \\
+\textbf{Mã \& Tên Ca sử dụng (Use Case)} & \textbf{UC-01:} Tải lên bản thảo và theo dõi tiến độ kiểm chứng thời gian thực (\texttt{FR-03}--\texttt{FR-12}) \\
 \hline
-Tác nhân chính & Sinh viên (\texttt{user}) hoặc Giảng viên (\texttt{teacher}) \\
+\textbf{Tác nhân chính} & Sinh viên (\texttt{user}) hoặc Giảng viên (\texttt{teacher}) \\
 \hline
-Tiền điều kiện & Tác nhân đã đăng nhập với phiên làm việc hợp lệ và hạn mức tải lên trong tháng còn lại $\ge 1$. \\
+\textbf{Tiền điều kiện} & Tác nhân đã đăng nhập với phiên làm việc hợp lệ và hạn mức tải lên trong tháng còn lại $\ge 1$. \\
 \hline
-Hậu điều kiện & Các bản ghi trong bảng \texttt{essays}, \texttt{citations} và \texttt{verdicts} được lưu bền vững; điểm CIS và hồ sơ chuẩn trích dẫn được lưu trữ. \\
+\textbf{Hậu điều kiện} & Các bản ghi trong bảng \texttt{essays}, \texttt{citations} và \texttt{verdicts} được lưu bền vững; điểm CIS và hồ sơ chuẩn trích dẫn được lưu trữ. \\
 \hline
-Luồng sự kiện chính & 1. Tác nhân chọn tệp \texttt{.pdf}, \texttt{.docx}, \texttt{.bib} hoặc \texttt{.ris} (tùy chọn đính kèm vào một lớp học đã ghi danh). \newline 2. Backend kiểm tra byte định danh (magic bytes), dung lượng, giới hạn số trang và trừ hạn mức một cách nguyên tử qua cơ chế So sánh -- Hoán đổi (Compare-And-Swap -- CAS). \newline 3. Backend lưu \texttt{EssayRecord(job\_status='queued')} và đưa tác vụ vào hàng đợi của \texttt{PipelineAdmissionController}. \newline 4. Trình khách đăng ký luồng \texttt{GET /api/\allowbreak essays/\allowbreak\{id\}/\allowbreak events} (SSE) và hiển thị trực tiếp các giai đoạn 0--7 theo thời gian thực. \newline 5. Tiến trình nền (worker) hoàn tất trích xuất, liên kết, truy xuất, đối sánh, kiểm tra biểu trưng/học máy và chấm điểm CIS, sau đó cập nhật \texttt{job\_status='completed'}. \newline 6. Trình khách chuyển hướng sang trang \texttt{/verification/\allowbreak report/\allowbreak\{id\}}. \\
+\textbf{Luồng sự kiện chính} & \textbf{1.} Tác nhân chọn tệp \texttt{.pdf}, \texttt{.docx}, \texttt{.bib} hoặc \texttt{.ris} (tùy chọn đính kèm vào một lớp học đã ghi danh). \newline \textbf{2.} Backend kiểm tra byte định danh (magic bytes), dung lượng, giới hạn số trang và trừ hạn mức một cách nguyên tử qua cơ chế So sánh -- Hoán đổi (Compare-And-Swap -- CAS). \newline \textbf{3.} Backend lưu \texttt{EssayRecord(job\_status='queued')} và đưa tác vụ vào hàng đợi của \texttt{PipelineAdmissionController}. \newline \textbf{4.} Trình khách đăng ký luồng \texttt{GET /api/\allowbreak essays/\allowbreak\{id\}/\allowbreak events} (SSE) và hiển thị trực tiếp các giai đoạn 0--7 theo thời gian thực. \newline \textbf{5.} Tiến trình nền (worker) hoàn tất trích xuất, liên kết, truy xuất, đối sánh, kiểm tra biểu trưng/học máy và chấm điểm CIS, sau đó cập nhật \texttt{job\_status='completed'}. \newline \textbf{6.} Trình khách chuyển hướng sang trang \texttt{/verification/\allowbreak report/\allowbreak\{id\}}. \\
 \hline
-Luồng rẽ nhánh / Ngoại lệ & \textbf{2a. Sai kiểu MIME hoặc byte định danh:} Backend trả về HTTP 400; hạn mức được giữ nguyên. \newline \textbf{2b. Hết hạn mức tải lên:} Backend trả về HTTP 402/429; giao diện mở hộp thoại nâng cấp gói dịch vụ. \newline \textbf{5a. GROBID hoặc API ngoài quá thời gian chờ:} Pipeline tự động chuyển sang PyMuPDF dự phòng hoặc phát luật \texttt{R-RATE-LIMITED-ABSTAIN} (\texttt{unresolved}) mà không làm hỏng toàn bộ tác vụ. \newline \textbf{5b. Tiến trình worker gặp sự cố không thể phục hồi:} Bộ phục hồi tác vụ treo đánh dấu trạng thái \texttt{failed} và hoàn trả 1 đơn vị hạn mức qua CAS. \\
+\textbf{Luồng rẽ nhánh / Ngoại lệ} & \textbf{2a. Sai kiểu MIME hoặc byte định danh:} Backend trả về HTTP 400; hạn mức được giữ nguyên. \newline \textbf{2b. Hết hạn mức tải lên:} Backend trả về HTTP 402/429; giao diện mở hộp thoại nâng cấp gói dịch vụ. \newline \textbf{5a. GROBID hoặc API ngoài quá thời gian chờ:} Pipeline tự động chuyển sang PyMuPDF dự phòng hoặc phát luật \texttt{R-RATE-LIMITED-ABSTAIN} (\texttt{unresolved}) mà không làm hỏng toàn bộ tác vụ. \newline \textbf{5b. Tiến trình worker gặp sự cố không thể phục hồi:} Bộ phục hồi tác vụ treo đánh dấu trạng thái \texttt{failed} và hoàn trả 1 đơn vị hạn mức qua CAS. \\
 \hline
 \end{longtable}
 
@@ -170,7 +170,7 @@ Luồng rẽ nhánh / Ngoại lệ & \textbf{2a. Sai kiểu MIME hoặc byte đ�
 \textbf{Mục đặc tả} & \textbf{Nội dung chi tiết} \\
 \hline
 \endfirsthead
-\multicolumn{2}{l}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
+\multicolumn{2}{c}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
 \hline
 \textbf{Mục đặc tả} & \textbf{Nội dung chi tiết} \\
 \hline
@@ -180,17 +180,17 @@ Luồng rẽ nhánh / Ngoại lệ & \textbf{2a. Sai kiểu MIME hoặc byte đ�
 \endfoot
 \hline
 \endlastfoot
-Mã \& Tên Ca sử dụng (Use Case) & \textbf{UC-02:} Sửa lỗi danh mục tài liệu tham khảo và xuất bản thảo (\texttt{FR-13}) \\
+\textbf{Mã \& Tên Ca sử dụng (Use Case)} & \textbf{UC-02:} Sửa lỗi danh mục tài liệu tham khảo và xuất bản thảo (\texttt{FR-13}) \\
 \hline
-Tác nhân chính & Sinh viên (\texttt{user}) hoặc Giảng viên (\texttt{teacher}) \\
+\textbf{Tác nhân chính} & Sinh viên (\texttt{user}) hoặc Giảng viên (\texttt{teacher}) \\
 \hline
-Tiền điều kiện & Bản thảo đích thuộc quyền sở hữu của Tác nhân (hoặc thuộc lớp học do Tác nhân phụ trách) và có trạng thái \texttt{job\_status='completed'}. \\
+\textbf{Tiền điều kiện} & Bản thảo đích thuộc quyền sở hữu của Tác nhân (hoặc thuộc lớp học do Tác nhân phụ trách) và có trạng thái \texttt{job\_status='completed'}. \\
 \hline
-Hậu điều kiện & Chuỗi danh mục tài liệu tham khảo đã định dạng chuẩn hoặc tệp \texttt{.docx} đã sửa lỗi / tệp báo cáo được tải về thành công. \\
+\textbf{Hậu điều kiện} & Chuỗi danh mục tài liệu tham khảo đã định dạng chuẩn hoặc tệp \texttt{.docx} đã sửa lỗi / tệp báo cáo được tải về thành công. \\
 \hline
-Luồng sự kiện chính & 1. Tác nhân nhấn nút \textit{Fix \& Format Citations} trên thanh tiêu đề báo cáo. \newline 2. Backend (\texttt{GET /api/\allowbreak essays/\allowbreak\{id\}/\allowbreak remediate}) ánh xạ các trích dẫn hợp lệ và trích dẫn sai siêu dữ liệu sang các trường chuẩn từ cơ sở dữ liệu học thuật, đồng thời cô lập các mục \texttt{suspected\_hallucination} để tác giả tự xóa thủ công. \newline 3. Tác nhân chọn chuẩn đích (\texttt{APA 7th}, \texttt{IEEE}, \texttt{TDTU}, \texttt{BibTeX} hoặc \texttt{RIS}) và xem trước bảng so sánh thay đổi từng trường. \newline 4. Tác nhân tải xuống bản thảo \texttt{.docx} đã sửa lỗi hoặc báo cáo kiểm toán định dạng PDF/CSV/JSON đã làm sạch an toàn. \\
+\textbf{Luồng sự kiện chính} & \textbf{1.} Tác nhân nhấn nút \textit{Fix \& Format Citations} trên thanh tiêu đề báo cáo. \newline \textbf{2.} Backend (\texttt{GET /api/\allowbreak essays/\allowbreak\{id\}/\allowbreak remediate}) ánh xạ các trích dẫn hợp lệ và trích dẫn sai siêu dữ liệu sang các trường chuẩn từ cơ sở dữ liệu học thuật, đồng thời cô lập các mục \texttt{suspected\_hallucination} để tác giả tự xóa thủ công. \newline \textbf{3.} Tác nhân chọn chuẩn đích (\texttt{APA 7th}, \texttt{IEEE}, \texttt{TDTU}, \texttt{BibTeX} hoặc \texttt{RIS}) và xem trước bảng so sánh thay đổi từng trường. \newline \textbf{4.} Tác nhân tải xuống bản thảo \texttt{.docx} đã sửa lỗi hoặc báo cáo kiểm toán định dạng PDF/CSV/JSON đã làm sạch an toàn. \\
 \hline
-Luồng rẽ nhánh / Ngoại lệ & \textbf{2a. Trích dẫn bị nghi ngờ là trích dẫn ảo:} Hệ thống từ chối tự bịa siêu dữ liệu thay thế và gắn nhãn \texttt{hallucination} để tác giả chủ động loại bỏ. \\
+\textbf{Luồng rẽ nhánh / Ngoại lệ} & \textbf{2a. Trích dẫn bị nghi ngờ là trích dẫn ảo:} Hệ thống từ chối tự bịa siêu dữ liệu thay thế và gắn nhãn \texttt{hallucination} để tác giả chủ động loại bỏ. \\
 \hline
 \end{longtable}
 
@@ -200,7 +200,7 @@ Luồng rẽ nhánh / Ngoại lệ & \textbf{2a. Trích dẫn bị nghi ngờ l�
 \textbf{Mục đặc tả} & \textbf{Nội dung chi tiết} \\
 \hline
 \endfirsthead
-\multicolumn{2}{l}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
+\multicolumn{2}{c}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
 \hline
 \textbf{Mục đặc tả} & \textbf{Nội dung chi tiết} \\
 \hline
@@ -210,17 +210,17 @@ Luồng rẽ nhánh / Ngoại lệ & \textbf{2a. Trích dẫn bị nghi ngờ l�
 \endfoot
 \hline
 \endlastfoot
-Mã \& Tên Ca sử dụng (Use Case) & \textbf{UC-03:} Thẩm định và ghi đè kết luận trích dẫn (\texttt{FR-15}) \\
+\textbf{Mã \& Tên Ca sử dụng (Use Case)} & \textbf{UC-03:} Thẩm định và ghi đè kết luận trích dẫn (\texttt{FR-15}) \\
 \hline
-Tác nhân chính & Giảng viên (\texttt{teacher}) hoặc Quản trị viên (\texttt{admin}) có cờ \texttt{can\_override\_verdicts = True} \\
+\textbf{Tác nhân chính} & Giảng viên (\texttt{teacher}) hoặc Quản trị viên (\texttt{admin}) có cờ \texttt{can\_override\_verdicts = True} \\
 \hline
-Tiền điều kiện & Bài nộp thuộc lớp học do Giảng viên sở hữu (hoặc Tác nhân là Quản trị viên); kết luận đích thuộc đúng bài nộp đó. \\
+\textbf{Tiền điều kiện} & Bài nộp thuộc lớp học do Giảng viên sở hữu (hoặc Tác nhân là Quản trị viên); kết luận đích thuộc đúng bài nộp đó. \\
 \hline
-Hậu điều kiện & Nhãn kết luận được cập nhật, Điểm toàn vẹn trích dẫn (CIS) của bài nộp được tính lại và một dòng \texttt{audit\_logs} mới được chèn trong cùng một giao dịch (transaction). \\
+\textbf{Hậu điều kiện} & Nhãn kết luận được cập nhật, Điểm toàn vẹn trích dẫn (CIS) của bài nộp được tính lại và một dòng \texttt{audit\_logs} mới được chèn trong cùng một giao dịch (transaction). \\
 \hline
-Luồng sự kiện chính & 1. Giảng viên kiểm tra một trích dẫn bị gắn cờ trong khung Chi tiết tài liệu tham khảo (Reference Inspector) hoặc hàng đợi Chờ duyệt (Pending Reviews). \newline 2. Giảng viên chọn nhãn kết luận mới (ví dụ: \texttt{verified}) và nhập ghi chú giải trình bằng văn bản. \newline 3. Backend (\texttt{POST /api/\allowbreak essays/\allowbreak\{id\}/\allowbreak verdicts/\allowbreak\{vid\}/\allowbreak override}) kiểm tra vai trò RBAC, cờ quyền hạn và quan hệ sở hữu giữa bài nộp với kết luận. \newline 4. Bên trong một giao dịch cơ sở dữ liệu duy nhất, backend cập nhật \texttt{VerdictRecord}, chạy lại \texttt{CISCalculator.compute()}, cập nhật \texttt{EssayRecord.cis\_json} và chèn bản ghi \texttt{AuditLog}. \newline 5. Giao diện làm mới vòng điểm CIS và hiển thị huy hiệu đã ghi đè. \\
+\textbf{Luồng sự kiện chính} & \textbf{1.} Giảng viên kiểm tra một trích dẫn bị gắn cờ trong khung Chi tiết tài liệu tham khảo (Reference Inspector) hoặc hàng đợi Chờ duyệt (Pending Reviews). \newline \textbf{2.} Giảng viên chọn nhãn kết luận mới (ví dụ: \texttt{verified}) và nhập ghi chú giải trình bằng văn bản. \newline \textbf{3.} Backend (\texttt{POST /api/\allowbreak essays/\allowbreak\{id\}/\allowbreak verdicts/\allowbreak\{vid\}/\allowbreak override}) kiểm tra vai trò RBAC, cờ quyền hạn và quan hệ sở hữu giữa bài nộp với kết luận. \newline \textbf{4.} Bên trong một giao dịch cơ sở dữ liệu duy nhất, backend cập nhật \texttt{VerdictRecord}, chạy lại \texttt{CISCalculator.compute()}, cập nhật \texttt{EssayRecord.cis\_json} và chèn bản ghi \texttt{AuditLog}. \newline \textbf{5.} Giao diện làm mới vòng điểm CIS và hiển thị huy hiệu đã ghi đè. \\
 \hline
-Luồng rẽ nhánh / Ngoại lệ & \textbf{3a. Cờ quyền hạn nhận giá trị False:} Backend hủy thao tác và trả về HTTP 403 Forbidden. \newline \textbf{3b. Mã kết luận thuộc về bài nộp khác (nỗ lực tấn công IDOR):} Backend hủy thao tác và trả về HTTP 404/403. \\
+\textbf{Luồng rẽ nhánh / Ngoại lệ} & \textbf{3a. Cờ quyền hạn nhận giá trị False:} Backend hủy thao tác và trả về HTTP 403 Forbidden. \newline \textbf{3b. Mã kết luận thuộc về bài nộp khác (nỗ lực tấn công IDOR):} Backend hủy thao tác và trả về HTTP 404/403. \\
 \hline
 \end{longtable}
 
@@ -230,7 +230,7 @@ Luồng rẽ nhánh / Ngoại lệ & \textbf{3a. Cờ quyền hạn nhận giá 
 \textbf{Mục đặc tả} & \textbf{Nội dung chi tiết} \\
 \hline
 \endfirsthead
-\multicolumn{2}{l}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
+\multicolumn{2}{c}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
 \hline
 \textbf{Mục đặc tả} & \textbf{Nội dung chi tiết} \\
 \hline
@@ -240,17 +240,17 @@ Luồng rẽ nhánh / Ngoại lệ & \textbf{3a. Cờ quyền hạn nhận giá 
 \endfoot
 \hline
 \endlastfoot
-Mã \& Tên Ca sử dụng (Use Case) & \textbf{UC-04:} Giám sát lớp học phần và phát hiện bất thường chung (\texttt{FR-15}) \\
+\textbf{Mã \& Tên Ca sử dụng (Use Case)} & \textbf{UC-04:} Giám sát lớp học phần và phát hiện bất thường chung (\texttt{FR-15}) \\
 \hline
-Tác nhân chính & Giảng viên (\texttt{teacher}) \\
+\textbf{Tác nhân chính} & Giảng viên (\texttt{teacher}) \\
 \hline
-Tiền điều kiện & Giảng viên đã đăng nhập xác thực và sở hữu ít nhất một lớp học phần. \\
+\textbf{Tiền điều kiện} & Giảng viên đã đăng nhập xác thực và sở hữu ít nhất một lớp học phần. \\
 \hline
-Hậu điều kiện & Số liệu phân tích toàn lớp, các cụm trích dẫn ảo trùng lặp và bảng điểm tổng hợp định dạng ZIP/CSV được khởi tạo. \\
+\textbf{Hậu điều kiện} & Số liệu phân tích toàn lớp, các cụm trích dẫn ảo trùng lặp và bảng điểm tổng hợp định dạng ZIP/CSV được khởi tạo. \\
 \hline
-Luồng sự kiện chính & 1. Giảng viên tạo lớp học mới và chia sẻ mã tham gia \texttt{join\_code} (định dạng mặc định \texttt{CITRA-XXXX}) cho sinh viên. \newline 2. Sinh viên ghi danh qua \texttt{POST /api/\allowbreak teacher/\allowbreak classes/\allowbreak join} và gắn các lượt tải lên báo cáo đồ án vào lớp học. \newline 3. Giảng viên mở trang \texttt{/teacher/\allowbreak classes/\allowbreak\{classId\}}; backend tổng hợp phân bố dải điểm CIS toàn lớp, tỷ lệ tài liệu mới trong 5 năm gần nhất, các luật bị kích hoạt nhiều nhất và những trích dẫn bịa đặt giống hệt nhau xuất hiện ở nhiều bài nộp của sinh viên. \newline 4. Giảng viên xuất tệp tổng hợp CSV đã làm sạch hoặc gói nén ZIP chứa toàn bộ báo cáo của lớp. \\
+\textbf{Luồng sự kiện chính} & \textbf{1.} Giảng viên tạo lớp học mới và chia sẻ mã tham gia \texttt{join\_code} (định dạng mặc định \texttt{CITRA-XXXX}) cho sinh viên. \newline \textbf{2.} Sinh viên ghi danh qua \texttt{POST /api/\allowbreak teacher/\allowbreak classes/\allowbreak join} và gắn các lượt tải lên báo cáo đồ án vào lớp học. \newline \textbf{3.} Giảng viên mở trang \texttt{/teacher/\allowbreak classes/\allowbreak\{classId\}}; backend tổng hợp phân bố dải điểm CIS toàn lớp, tỷ lệ tài liệu mới trong 5 năm gần nhất, các luật bị kích hoạt nhiều nhất và những trích dẫn bịa đặt giống hệt nhau xuất hiện ở nhiều bài nộp của sinh viên. \newline \textbf{4.} Giảng viên xuất tệp tổng hợp CSV đã làm sạch hoặc gói nén ZIP chứa toàn bộ báo cáo của lớp. \\
 \hline
-Luồng rẽ nhánh / Ngoại lệ & \textbf{2a. Lộ mã tham gia lớp học:} Giảng viên tạo lại \texttt{join\_code} mới mà không làm mất danh sách sinh viên đã ghi danh trước đó. \\
+\textbf{Luồng rẽ nhánh / Ngoại lệ} & \textbf{2a. Lộ mã tham gia lớp học:} Giảng viên tạo lại \texttt{join\_code} mới mà không làm mất danh sách sinh viên đã ghi danh trước đó. \\
 \hline
 \end{longtable}
 
@@ -260,7 +260,7 @@ Luồng rẽ nhánh / Ngoại lệ & \textbf{2a. Lộ mã tham gia lớp học:}
 \textbf{Mục đặc tả} & \textbf{Nội dung chi tiết} \\
 \hline
 \endfirsthead
-\multicolumn{2}{l}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
+\multicolumn{2}{c}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
 \hline
 \textbf{Mục đặc tả} & \textbf{Nội dung chi tiết} \\
 \hline
@@ -270,17 +270,17 @@ Luồng rẽ nhánh / Ngoại lệ & \textbf{2a. Lộ mã tham gia lớp học:}
 \endfoot
 \hline
 \endlastfoot
-Mã \& Tên Ca sử dụng (Use Case) & \textbf{UC-05:} Giám sát viễn trắc hệ thống và đặt lại bộ ngắt mạch (\texttt{FR-16}) \\
+\textbf{Mã \& Tên Ca sử dụng (Use Case)} & \textbf{UC-05:} Giám sát viễn trắc hệ thống và đặt lại bộ ngắt mạch (\texttt{FR-16}) \\
 \hline
-Tác nhân chính & Quản trị viên (\texttt{admin}) \\
+\textbf{Tác nhân chính} & Quản trị viên (\texttt{admin}) \\
 \hline
-Tiền điều kiện & Tác nhân đã đăng nhập xác thực với vai trò \texttt{role = 'admin'}. \\
+\textbf{Tiền điều kiện} & Tác nhân đã đăng nhập xác thực với vai trò \texttt{role = 'admin'}. \\
 \hline
-Hậu điều kiện & Các bộ ngắt mạch (circuit breaker) của nhà cung cấp dữ liệu ngoài hoặc các mục bộ nhớ đệm hết hạn được đặt lại an toàn; số liệu viễn trắc được làm mới. \\
+\textbf{Hậu điều kiện} & Các bộ ngắt mạch (circuit breaker) của nhà cung cấp dữ liệu ngoài hoặc các mục bộ nhớ đệm hết hạn được đặt lại an toàn; số liệu viễn trắc được làm mới. \\
 \hline
-Luồng sự kiện chính & 1. Quản trị viên truy cập trang \texttt{/admin/system}. \newline 2. Backend (\texttt{GET /api/\allowbreak system/\allowbreak health}) báo cáo trạng thái sẵn sàng của GROBID, thống kê chế độ WAL của SQLite, tỷ lệ trúng bộ nhớ đệm (cache hit rate), phân bố nhãn kết luận và trạng thái bộ ngắt mạch của từng nguồn ngoài (\texttt{closed}, \texttt{half\_open}, \texttt{open}). \newline 3. Sau khi sự cố gián đoạn của API bên ngoài đã khắc phục, Quản trị viên kích hoạt \texttt{POST /api/\allowbreak system/\allowbreak circuit-breakers/\allowbreak reset} để khôi phục lưu lượng truy vấn trực tiếp ngay lập tức. \\
+\textbf{Luồng sự kiện chính} & \textbf{1.} Quản trị viên truy cập trang \texttt{/admin/system}. \newline \textbf{2.} Backend (\texttt{GET /api/\allowbreak system/\allowbreak health}) báo cáo trạng thái sẵn sàng của GROBID, thống kê chế độ WAL của SQLite, tỷ lệ trúng bộ nhớ đệm (cache hit rate), phân bố nhãn kết luận và trạng thái bộ ngắt mạch của từng nguồn ngoài (\texttt{closed}, \texttt{half\_open}, \texttt{open}). \newline \textbf{3.} Sau khi sự cố gián đoạn của API bên ngoài đã khắc phục, Quản trị viên kích hoạt \texttt{POST /api/\allowbreak system/\allowbreak circuit-breakers/\allowbreak reset} để khôi phục lưu lượng truy vấn trực tiếp ngay lập tức. \\
 \hline
-Luồng rẽ nhánh / Ngoại lệ & \textbf{2a. Không thể kết nối container GROBID:} Bộ giám sát sức khỏe đánh dấu bộ phân tích ở trạng thái \texttt{degraded (regex fallback)} trong khi vẫn duy trì chức năng tải lên hoạt động bình thường. \\
+\textbf{Luồng rẽ nhánh / Ngoại lệ} & \textbf{2a. Không thể kết nối container GROBID:} Bộ giám sát sức khỏe đánh dấu bộ phân tích ở trạng thái \texttt{degraded (regex fallback)} trong khi vẫn duy trì chức năng tải lên hoạt động bình thường. \\
 \hline
 \end{longtable}
 
@@ -316,7 +316,7 @@ Tầng lưu trữ bền vững bao gồm \textbf{mười lăm bảng SQLAlchemy 
 \textbf{Tên bảng} & \textbf{Các cột chính và trách nhiệm} & \textbf{Quan hệ \& Khóa} \\
 \hline
 \endfirsthead
-\multicolumn{3}{l}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
+\multicolumn{3}{c}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
 \hline
 \textbf{Tên bảng} & \textbf{Các cột chính và trách nhiệm} & \textbf{Quan hệ \& Khóa} \\
 \hline
@@ -326,35 +326,35 @@ Tầng lưu trữ bền vững bao gồm \textbf{mười lăm bảng SQLAlchemy 
 \endfoot
 \hline
 \endlastfoot
-\texttt{users} & Thông tin xác thực, liên kết OAuth, \texttt{role}, \texttt{can\_override\_verdicts}, \texttt{plan\_tier}, bộ đếm hạn mức, \texttt{created\_at}, \texttt{last\_login\_at} & Quan hệ 1-N với bài nộp, phiên, token, lớp học, ghi danh, khóa API \\
+\textbf{\texttt{users}} & Thông tin xác thực, liên kết OAuth, \texttt{role}, \texttt{can\_override\_verdicts}, \texttt{plan\_tier}, bộ đếm hạn mức, \texttt{created\_at}, \texttt{last\_login\_at} & \textbf{Quan hệ 1-N} với bài nộp, phiên, token, lớp học, ghi danh, khóa API \\
 \hline
-\texttt{sessions} & Chuỗi bearer \texttt{token} đang hoạt động, \texttt{created\_at}, \texttt{expires\_at} & N-1 với \texttt{users}; bị thu hồi khi đăng xuất hoặc đổi mật khẩu \\
+\textbf{\texttt{sessions}} & Chuỗi bearer \texttt{token} đang hoạt động, \texttt{created\_at}, \texttt{expires\_at} & \textbf{N-1} với \texttt{users}; bị thu hồi khi đăng xuất hoặc đổi mật khẩu \\
 \hline
-\texttt{auth\_tokens} & Mã băm SHA-256 dùng một lần (\texttt{token\_hash}) cho kích hoạt email và đặt lại mật khẩu & N-1 với \texttt{users}; đánh chỉ mục trên cột \texttt{token\_hash} \\
+\textbf{\texttt{auth\_tokens}} & Mã băm SHA-256 dùng một lần (\texttt{token\_hash}) cho kích hoạt email và đặt lại mật khẩu & \textbf{N-1} với \texttt{users}; đánh chỉ mục trên cột \texttt{token\_hash} \\
 \hline
-\texttt{api\_keys} & \texttt{name}, \texttt{key\_prefix}, mã băm SHA-256 \texttt{key\_hash}, \texttt{created\_at}, \texttt{last\_used\_at}, \texttt{is\_active} & N-1 với \texttt{users}; phục vụ truy cập tự động qua CLI/API \\
+\textbf{\texttt{api\_keys}} & \texttt{name}, \texttt{key\_prefix}, mã băm SHA-256 \texttt{key\_hash}, \texttt{created\_at}, \texttt{last\_used\_at}, \texttt{is\_active} & \textbf{N-1} với \texttt{users}; phục vụ truy cập tự động qua CLI/API \\
 \hline
-\texttt{essays} & \texttt{filename}, \texttt{num\_pages}, \texttt{job\_status}, \texttt{job\_attempt\_count}, \texttt{job\_heartbeat\_at}, \texttt{quota\_charged}, \texttt{style\_profile\_json}, \texttt{cis\_json} & N-1 với \texttt{users} \& \texttt{classes} (tùy chọn); 1-N với trích dẫn, kết luận \\
+\textbf{\texttt{essays}} & \texttt{filename}, \texttt{num\_pages}, \texttt{job\_status}, \texttt{job\_attempt\_count}, \texttt{job\_heartbeat\_at}, \texttt{quota\_charged}, \texttt{style\_profile\_json}, \texttt{cis\_json} & \textbf{N-1} với \texttt{users} \& \texttt{classes} (tùy chọn); \textbf{1-N} với trích dẫn, kết luận \\
 \hline
-\texttt{citations} & Văn bản trích xuất (\texttt{in\_text} / \texttt{reference\_list}), các trường đã phân tích, ngữ cảnh \texttt{context}, \texttt{mapping\_status}, \texttt{citation\_link\_json} & N-1 với \texttt{essays} (xóa dây chuyền -- cascade delete) \\
+\textbf{\texttt{citations}} & Văn bản trích xuất (\texttt{in\_text} / \texttt{reference\_list}), các trường đã phân tích, ngữ cảnh \texttt{context}, \texttt{mapping\_status}, \texttt{citation\_link\_json} & \textbf{N-1} với \texttt{essays} (xóa dây chuyền -- cascade delete) \\
 \hline
-\texttt{verdicts} & Nhãn 5 lớp \texttt{label}, độ tin cậy đã hiệu chuẩn \texttt{confidence}, \texttt{triggered\_rules}, \texttt{mismatched\_fields}, JSON \texttt{features}, các trường ghi đè & N-1 với \texttt{essays} (xóa dây chuyền); 1-N với \texttt{audit\_logs} \\
+\textbf{\texttt{verdicts}} & Nhãn 5 lớp \texttt{label}, độ tin cậy đã hiệu chuẩn \texttt{confidence}, \texttt{triggered\_rules}, \texttt{mismatched\_fields}, JSON \texttt{features}, các trường ghi đè & \textbf{N-1} với \texttt{essays} (xóa dây chuyền); \textbf{1-N} với \texttt{audit\_logs} \\
 \hline
-\texttt{citation\_cache} & Khóa truy vấn đã chuẩn hóa, dữ liệu ứng viên đa nguồn đã tuần tự hóa, \texttt{hit\_count}, \texttt{created\_at}, \texttt{last\_hit\_at} & Bộ nhớ đệm toàn cục xuyên suốt các bài nộp giúp giảm gọi API lặp lại \\
+\textbf{\texttt{citation\_cache}} & Khóa truy vấn đã chuẩn hóa, dữ liệu ứng viên đa nguồn đã tuần tự hóa, \texttt{hit\_count}, \texttt{created\_at}, \texttt{last\_hit\_at} & Bộ nhớ đệm toàn cục xuyên suốt các bài nộp giúp giảm gọi API lặp lại \\
 \hline
-\texttt{classes} & Tên lớp học phần, mô tả, mã tham gia duy nhất \texttt{join\_code} (\texttt{CITRA-XXXX}), \texttt{teacher\_id} & N-1 với \texttt{users} (giảng viên); 1-N với ghi danh \& bài nộp \\
+\textbf{\texttt{classes}} & Tên lớp học phần, mô tả, mã tham gia duy nhất \texttt{join\_code} (\texttt{CITRA-XXXX}), \texttt{teacher\_id} & \textbf{N-1} với \texttt{users} (giảng viên); \textbf{1-N} với ghi danh \& bài nộp \\
 \hline
-\texttt{class\_memberships} & Bản ghi ghi danh sinh viên liên kết \texttt{student\_id} với \texttt{class\_id} & Khóa tổ hợp duy nhất \texttt{(class\_id, student\_id)} \\
+\textbf{\texttt{class\_memberships}} & Bản ghi ghi danh sinh viên liên kết \texttt{student\_id} với \texttt{class\_id} & \textbf{Khóa tổ hợp duy nhất} \texttt{(class\_id, student\_id)} \\
 \hline
-\texttt{audit\_logs} & \texttt{verdict\_id}, tên người dùng thực hiện, \texttt{original\_label}, \texttt{new\_label}, ghi chú giải trình \texttt{note}, \texttt{logged\_at} & N-1 với \texttt{verdicts}; không mở điểm cuối cập nhật \\
+\textbf{\texttt{audit\_logs}} & \texttt{verdict\_id}, tên người dùng thực hiện, \texttt{original\_label}, \texttt{new\_label}, ghi chú giải trình \texttt{note}, \texttt{logged\_at} & \textbf{N-1} với \texttt{verdicts}; không mở điểm cuối cập nhật \\
 \hline
-\texttt{billing\_transactions} & Mã phiên thanh toán, \texttt{plan\_tier}, \texttt{billing\_cycle}, số tiền USD/VND, siêu dữ liệu Stripe / VNPay, \texttt{status} & N-1 với \texttt{users}; sổ cái đối soát giao dịch thanh toán \\
+\textbf{\texttt{billing\_transactions}} & Mã phiên thanh toán, \texttt{plan\_tier}, \texttt{billing\_cycle}, số tiền USD/VND, siêu dữ liệu Stripe / VNPay, \texttt{status} & \textbf{N-1} với \texttt{users}; sổ cái đối soát giao dịch thanh toán \\
 \hline
-\texttt{promo\_codes} & Chuỗi mã giảm giá, mức giảm theo phần trăm/cố định, bộ lọc gói/chu kỳ, \texttt{max\_uses}, \texttt{used\_count}, \texttt{expires\_at} & 1-N với \texttt{promo\_redemptions} \\
+\textbf{\texttt{promo\_codes}} & Chuỗi mã giảm giá, mức giảm theo phần trăm/cố định, bộ lọc gói/chu kỳ, \texttt{max\_uses}, \texttt{used\_count}, \texttt{expires\_at} & \textbf{1-N} với \texttt{promo\_redemptions} \\
 \hline
-\texttt{promo\_redemptions} & Số tiền giảm giá đã áp dụng, \texttt{promo\_code\_id}, \texttt{user\_id}, \texttt{transaction\_id} & Bảng nối giữa \texttt{promo\_codes}, \texttt{users} và \texttt{billing\_transactions} \\
+\textbf{\texttt{promo\_redemptions}} & Số tiền giảm giá đã áp dụng, \texttt{promo\_code\_id}, \texttt{user\_id}, \texttt{transaction\_id} & Bảng nối giữa \texttt{promo\_codes}, \texttt{users} và \texttt{billing\_transactions} \\
 \hline
-\texttt{schema\_migrations} & Khóa chính phiên bản \texttt{version} (\texttt{0001}--\texttt{0013}), \texttt{name}, mã kiểm tổng SHA-256 \texttt{checksum}, \texttt{execution\_ms}, \texttt{applied\_at} & Sổ cái kiểm tra tính toàn vẹn lược đồ khi khởi động \\
+\textbf{\texttt{schema\_migrations}} & Khóa chính phiên bản \texttt{version} (\texttt{0001}--\texttt{0013}), \texttt{name}, mã kiểm tổng SHA-256 \texttt{checksum}, \texttt{execution\_ms}, \texttt{applied\_at} & Sổ cái kiểm tra tính toàn vẹn lược đồ khi khởi động \\
 \hline
 \end{longtable}
 }
@@ -385,7 +385,7 @@ Toàn bộ điểm cuối (endpoint) phía máy chủ được gắn dưới ti�
 \textbf{Tiền tố đường dẫn} & \textbf{Các điểm cuối và thao tác chính} \\
 \hline
 \endfirsthead
-\multicolumn{2}{l}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
+\multicolumn{2}{c}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
 \hline
 \textbf{Tiền tố đường dẫn} & \textbf{Các điểm cuối và thao tác chính} \\
 \hline
@@ -395,19 +395,19 @@ Toàn bộ điểm cuối (endpoint) phía máy chủ được gắn dưới ti�
 \endfoot
 \hline
 \endlastfoot
-\texttt{/api/auth/*} & \texttt{POST /register}, \texttt{/login}, \texttt{/google} (OAuth2), \texttt{/logout}, \texttt{/activate}, \texttt{/forgot-password}, \texttt{/reset-password}, \texttt{GET /me}. \\
+\textbf{\texttt{/api/auth/*}} & \texttt{POST /register}, \texttt{/login}, \texttt{/google} \textbf{(OAuth2)}, \texttt{/logout}, \texttt{/activate}, \texttt{/forgot-password}, \texttt{/reset-password}, \texttt{GET /me}. \\
 \hline
-\texttt{/api/essays/*} & \texttt{POST /essays} (tải lên), \texttt{GET /essays}, \texttt{/essays/stats}, \texttt{/essays/\allowbreak\{id\}/\allowbreak status}, \texttt{/essays/\allowbreak\{id\}/\allowbreak events} (SSE), \texttt{/essays/\allowbreak\{id\}/\allowbreak report} (\texttt{json|csv|pdf|docx}), \texttt{/essays/\allowbreak\{id\}/\allowbreak remediate}, \texttt{/essays/\allowbreak\{id\}/\allowbreak export-healed-docx}, \texttt{/essays/\allowbreak\{id\}/\allowbreak revision-diff}, \texttt{/essays/\allowbreak\{id\}/\allowbreak page-preview/\allowbreak\{p\}}, \texttt{POST /essays/\allowbreak\{id\}/\allowbreak share}, \texttt{GET /essays/\allowbreak shared/\allowbreak\{token\}}, \texttt{/essays/\allowbreak sandbox/*}. \\
+\textbf{\texttt{/api/essays/*}} & \texttt{POST /essays} (tải lên), \texttt{GET /essays}, \texttt{/essays/stats}, \texttt{/essays/\allowbreak\{id\}/\allowbreak status}, \texttt{/essays/\allowbreak\{id\}/\allowbreak events} \textbf{(SSE)}, \texttt{/essays/\allowbreak\{id\}/\allowbreak report} (\texttt{json|csv|pdf|docx}), \texttt{/essays/\allowbreak\{id\}/\allowbreak remediate}, \texttt{/essays/\allowbreak\{id\}/\allowbreak export-healed-docx}, \texttt{/essays/\allowbreak\{id\}/\allowbreak revision-diff}, \texttt{/essays/\allowbreak\{id\}/\allowbreak page-preview/\allowbreak\{p\}}, \texttt{POST /essays/\allowbreak\{id\}/\allowbreak share}, \texttt{GET /essays/\allowbreak shared/\allowbreak\{token\}}, \texttt{/essays/\allowbreak sandbox/*}. \\
 \hline
 \texttt{/api/essays/\allowbreak\{id\}/\allowbreak verdicts/*} & \texttt{POST /api/essays/\allowbreak\{id\}/\allowbreak verdicts/\allowbreak\{vid\}/override} (ghi đè kết luận của giảng viên có kiểm tra cờ quyền hạn + tính lại điểm CIS theo giao dịch). \\
 \hline
-\texttt{/api/teacher/*} & \texttt{GET /dashboard}, \texttt{/classes}, \texttt{POST /classes/join}, \texttt{/classes/\allowbreak\{id\}/\allowbreak regenerate-code}, \texttt{GET /classes/\allowbreak\{id\}/\allowbreak analytics}, \texttt{/classes/\allowbreak\{id\}/\allowbreak pending-reviews}, \texttt{/classes/\allowbreak\{id\}/\allowbreak export.csv}, \texttt{/classes/\allowbreak\{id\}/\allowbreak export.zip}. \\
+\textbf{\texttt{/api/teacher/*}} & \texttt{GET /dashboard}, \texttt{/classes}, \texttt{POST /classes/join}, \texttt{/classes/\allowbreak\{id\}/\allowbreak regenerate-code}, \texttt{GET /classes/\allowbreak\{id\}/\allowbreak analytics}, \texttt{/classes/\allowbreak\{id\}/\allowbreak pending-reviews}, \texttt{/classes/\allowbreak\{id\}/\allowbreak export.csv}, \texttt{/classes/\allowbreak\{id\}/\allowbreak export.zip}. \\
 \hline
-\texttt{/api/users/*} & Quản trị người dùng \texttt{/users}; tự phục vụ cá nhân \texttt{PATCH/DELETE /users/me}, \texttt{/users/\allowbreak me/\allowbreak password}, \texttt{/users/\allowbreak me/\allowbreak avatar} và \texttt{/users/\allowbreak me/\allowbreak api-keys}. \\
+\textbf{\texttt{/api/users/*}} & Quản trị người dùng \texttt{/users}; tự phục vụ cá nhân \texttt{PATCH/DELETE /users/me}, \texttt{/users/\allowbreak me/\allowbreak password}, \texttt{/users/\allowbreak me/\allowbreak avatar} và \texttt{/users/\allowbreak me/\allowbreak api-keys}. \\
 \hline
-\texttt{/api/billing/*} & \texttt{GET /plans}, \texttt{/subscription}, \texttt{POST /create-checkout-session}, xác thực chữ ký HMAC-SHA512 cho Stripe \& VNPay, \texttt{/cancel} và quản trị mã giảm giá \texttt{/admin/promos}. \\
+\textbf{\texttt{/api/billing/*}} & \texttt{GET /plans}, \texttt{/subscription}, \texttt{POST /create-checkout-session}, xác thực chữ ký \textbf{HMAC-SHA512} cho Stripe \& VNPay, \texttt{/cancel} và quản trị mã giảm giá \texttt{/admin/promos}. \\
 \hline
-\texttt{/api/system/*}, \texttt{/api/audit/*}, \texttt{/api/cache}, \texttt{/api/export/*} & \texttt{GET /api/health}, \texttt{GET /api/\allowbreak system/\allowbreak health}, \texttt{POST /api/\allowbreak system/\allowbreak circuit-breakers/\allowbreak reset}, \texttt{DELETE /api/cache}, \texttt{GET /api/\allowbreak audit/\allowbreak log}, \texttt{GET /api/\allowbreak export/\allowbreak report} (báo cáo tổng hợp hệ thống cho quản trị viên). \\
+\textbf{\texttt{/api/system/*}}, \textbf{\texttt{/api/audit/*}}, \textbf{\texttt{/api/cache}}, \textbf{\texttt{/api/export/*}} & \texttt{GET /api/health}, \texttt{GET /api/\allowbreak system/\allowbreak health}, \texttt{POST /api/\allowbreak system/\allowbreak circuit-breakers/\allowbreak reset}, \texttt{DELETE /api/cache}, \texttt{GET /api/\allowbreak audit/\allowbreak log}, \texttt{GET /api/\allowbreak export/\allowbreak report} (báo cáo tổng hợp hệ thống cho quản trị viên). \\
 \hline
 \end{longtable}
 }

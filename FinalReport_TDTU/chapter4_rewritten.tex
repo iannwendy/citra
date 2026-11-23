@@ -14,7 +14,7 @@
 \textbf{Layer} & \textbf{Principal Modules} & \textbf{Core Responsibility} \\
 \hline
 \endfirsthead
-\multicolumn{3}{l}{\itshape Table \thetable\ (continued from previous page)}\\
+\multicolumn{3}{c}{\itshape Table \thetable\ (continued from previous page)}\\
 \hline
 \textbf{Layer} & \textbf{Principal Modules} & \textbf{Core Responsibility} \\
 \hline
@@ -24,21 +24,21 @@
 \endfoot
 \hline
 \endlastfoot
-1. Extraction & \texttt{document\_parser}, \texttt{grobid\_parser}, \texttt{grobid\_adapter}, \texttt{docx\_parser}, \texttt{patterns/*}, \texttt{style\_detector} & Parse PDF, DOCX, BibTeX, and RIS inputs into body text, contextual in-text markers, and bibliography entries across 12 styles. \\
+\textbf{1. Extraction} & \texttt{document\_parser}, \texttt{grobid\_parser}, \texttt{grobid\_adapter}, \texttt{docx\_parser}, \texttt{patterns/*}, \texttt{style\_detector} & Parse PDF, DOCX, BibTeX, and RIS inputs into body text, contextual in-text markers, and bibliography entries across \textbf{12 styles}. \\
 \hline
-2. Merging & \texttt{integrity\_pipeline.\_merge\_citations} & Deduplicate in-text, bibliography, and appendix citations into unique referenced works while keeping all inline occurrences. \\
+\textbf{2. Merging} & \texttt{integrity\_pipeline.\_merge\_citations} & Deduplicate in-text, bibliography, and appendix citations into unique referenced works while keeping all inline occurrences. \\
 \hline
-3. Linking & \texttt{citation\_linker}, \texttt{duplicate\_detector}, \texttt{statuses} & Reconstruct the bipartite graph between inline markers and bibliography entries across 7 resolution methods and 8 statuses. \\
+\textbf{3. Linking} & \texttt{citation\_linker}, \texttt{duplicate\_detector}, \texttt{statuses} & Reconstruct the bipartite graph between inline markers and bibliography entries across \textbf{7 resolution methods} and \textbf{8 statuses}. \\
 \hline
-4. Retrieval & \texttt{retrieval\_orchestrator}, \texttt{local\_db}, \texttt{link\_validator}, \texttt{html\_meta\_verifier}, 15+ clients & Route queries across offline SQLite FTS5, 15+ live APIs, Retraction Watch, and SSRF-safe HTTP/Wayback/HTML checks. \\
+\textbf{4. Retrieval} & \texttt{retrieval\_orchestrator}, \texttt{local\_db}, \texttt{link\_validator}, \texttt{html\_meta\_verifier}, 15+ clients & Route queries across offline SQLite FTS5, \textbf{15+ live APIs}, Retraction Watch, and SSRF-safe HTTP/Wayback/HTML checks. \\
 \hline
-5. Matching & \texttt{features}, \texttt{fuzzy}, \texttt{semantic}, \texttt{author\_matcher}, \texttt{venue\_normalizer} & Compute lexical similarity, metadata distances, SBERT sentence-pooled alignment, stance, and ONNX INT8 \texttt{VI}$\leftrightarrow$\texttt{EN} scores. \\
+\textbf{5. Matching} & \texttt{features}, \texttt{fuzzy}, \texttt{semantic}, \texttt{author\_matcher}, \texttt{venue\_normalizer} & Compute lexical similarity, metadata distances, SBERT sentence-pooled alignment, stance, and ONNX INT8 \texttt{VI}$\leftrightarrow$\texttt{EN} scores. \\
 \hline
-6. Verification & \texttt{neuro\_symbolic\_checker}, \texttt{rules}, \texttt{vn\_legal\_verifier}, \texttt{calibration} & Evaluate Order 0 + 16 symbolic rule groups (68 rule IDs) blended with 16D Logistic Regression and Platt calibration. \\
+\textbf{6. Verification} & \texttt{neuro\_symbolic\_checker}, \texttt{rules}, \texttt{vn\_legal\_verifier}, \texttt{calibration} & Evaluate Order 0 + 16 symbolic rule groups (\textbf{68 rule IDs}) blended with 16D Logistic Regression and Platt calibration. \\
 \hline
-7. Scoring \& Export & \texttt{cis}, \texttt{explanation}, \texttt{bibliography\_formatter}, \texttt{docx\_exporter} & Compute the five-component CIS, render bilingual explanations, and export sanitized reports and repaired \texttt{.docx} files. \\
+\textbf{7. Scoring \& Export} & \texttt{cis}, \texttt{explanation}, \texttt{bibliography\_formatter}, \texttt{docx\_exporter} & Compute the \textbf{five-component CIS}, render bilingual explanations, and export sanitized reports and repaired \texttt{.docx} files. \\
 \hline
-8. Presentation & FastAPI \texttt{api/*}, React/TypeScript \texttt{web/src/*} & Serve SSE progress, six diagnostic report views, classroom analytics, inline teacher overrides, and admin health controls. \\
+\textbf{8. Presentation} & FastAPI \texttt{api/*}, React/TypeScript \texttt{web/src/*} & Serve SSE progress, six diagnostic report views, classroom analytics, inline teacher overrides, and admin health controls. \\
 \hline
 \end{longtable}
 }
@@ -82,7 +82,7 @@ Bibliography entries and inline markers are matched against twelve modular conve
 \textbf{Style} & \textbf{Priority} & \textbf{In-Text Marker Pattern} & \textbf{Bibliography Entry Pattern} \\
 \hline
 \endfirsthead
-\multicolumn{4}{l}{\itshape Table \thetable\ (continued from previous page)}\\
+\multicolumn{4}{c}{\itshape Table \thetable\ (continued from previous page)}\\
 \hline
 \textbf{Style} & \textbf{Priority} & \textbf{In-Text Marker Pattern} & \textbf{Bibliography Entry Pattern} \\
 \hline
@@ -92,29 +92,29 @@ Bibliography entries and inline markers are matched against twelve modular conve
 \endfoot
 \hline
 \endlastfoot
-APA (7th) & 100 & \textit{(Author et al., 2020)}, \textit{Author (2020a)} & Author, A. B. (2020). Title of work. \textit{Venue, 12}(3), 45--67. \\
+\textbf{APA (7th)} & \textbf{100} & \textit{(Author et al., 2020)}, \textit{Author (2020a)} & Author, A. B. (2020). Title of work. \textit{Venue, 12}(3), 45--67. \\
 \hline
-IEEE & 90 & \textit{[1]}, \textit{[1, 2]}, \textit{[1]--[3]} & [1] A. Author, ``Title,'' \textit{Venue}, vol.\ 1, pp.\ 1--10, 2020. \\
+\textbf{IEEE} & \textbf{90} & \textit{[1]}, \textit{[1, 2]}, \textit{[1]--[3]} & [1] A. Author, ``Title,'' \textit{Venue}, vol.\ 1, pp.\ 1--10, 2020. \\
 \hline
-ACM & 88 & \textit{[1]}, \textit{[Author 2020]} & [1] Author Name. 2020. Title. In \textit{Proc.\ ACM}, 1--10. \\
+\textbf{ACM} & 88 & \textit{[1]}, \textit{[Author 2020]} & [1] Author Name. 2020. Title. In \textit{Proc.\ ACM}, 1--10. \\
 \hline
-Harvard & 85 & \textit{(Author, 2020)}, \textit{(Author 2020: 15)} & Author, A. (2020) \textit{Title}. Place: Publisher. \\
+\textbf{Harvard} & 85 & \textit{(Author, 2020)}, \textit{(Author 2020: 15)} & Author, A. (2020) \textit{Title}. Place: Publisher. \\
 \hline
-Vancouver & 80 & \textit{[1]}, \textit{(1--3)} & 1. Author AB. Title. \textit{Venue}. 2020;12(1):10--20. \\
+\textbf{Vancouver} & 80 & \textit{[1]}, \textit{(1--3)} & 1. Author AB. Title. \textit{Venue}. 2020;12(1):10--20. \\
 \hline
-Nature & 78 & Superscript / \textit{[1]} & 1. Author, A. Title. \textit{Nature} \textbf{580}, 100--105 (2020). \\
+\textbf{Nature} & 78 & Superscript / \textit{[1]} & 1. Author, A. Title. \textit{Nature} \textbf{580}, 100--105 (2020). \\
 \hline
-CSE & 77 & \textit{(Author 2020)}, superscript & Author AB. 2020. Title. \textit{Venue}. 12(1):10--20. \\
+\textbf{CSE} & 77 & \textit{(Author 2020)}, superscript & Author AB. 2020. Title. \textit{Venue}. 12(1):10--20. \\
 \hline
-ACS & 76 & \textit{(1)}, superscript & (1) Author, A. B. Title. \textit{J.\ Am.\ Chem.\ Soc.} \textbf{2020}, \textit{142}, 1--5. \\
+\textbf{ACS} & 76 & \textit{(1)}, superscript & (1) Author, A. B. Title. \textit{J.\ Am.\ Chem.\ Soc.} \textbf{2020}, \textit{142}, 1--5. \\
 \hline
-AMA & 75 & Superscript / \textit{[1]} & 1. Author AB. Title. \textit{JAMA}. 2020;323(1):1--10. \\
+\textbf{AMA} & 75 & Superscript / \textit{[1]} & 1. Author AB. Title. \textit{JAMA}. 2020;323(1):1--10. \\
 \hline
-Chicago & 70 & \textit{(Author 2020, 45)}, footnote & Author, First. 2020. \textit{Title}. Place: Publisher. \\
+\textbf{Chicago} & 70 & \textit{(Author 2020, 45)}, footnote & Author, First. 2020. \textit{Title}. Place: Publisher. \\
 \hline
-MLA (9th) & 70 & \textit{(Author 45)}, \textit{(Author and Coauthor 12)} & Author, First. ``Title.'' \textit{Venue}, vol.\ 1, no.\ 2, 2020, pp.\ 1--15. \\
+\textbf{MLA (9th)} & 70 & \textit{(Author 45)}, \textit{(Author and Coauthor 12)} & Author, First. ``Title.'' \textit{Venue}, vol.\ 1, no.\ 2, 2020, pp.\ 1--15. \\
 \hline
-VN Legal & Rule & \begin{vietnamese}\textit{(Luật số 20/2023/QH15)}\end{vietnamese} & \begin{vietnamese}Quốc hội / Chính phủ. (2023). \textit{Luật / Nghị định / Thông tư}.\end{vietnamese} \\
+\textbf{VN Legal} & \textbf{Rule} & \begin{vietnamese}\textit{(Luật số 20/2023/QH15)}\end{vietnamese} & \begin{vietnamese}Quốc hội / Chính phủ. (2023). \textit{Luật / Nghị định / Thông tư}.\end{vietnamese} \\
 \hline
 \end{longtable}
 }
@@ -150,7 +150,7 @@ Internal structural integrity requires a coherent bipartite graph between inline
 \textbf{Method} & \textbf{Default Conf.} & \textbf{Matching Criterion} \\
 \hline
 \endfirsthead
-\multicolumn{3}{l}{\itshape Table \thetable\ (continued from previous page)}\\
+\multicolumn{3}{c}{\itshape Table \thetable\ (continued from previous page)}\\
 \hline
 \textbf{Method} & \textbf{Default Conf.} & \textbf{Matching Criterion} \\
 \hline
@@ -160,21 +160,21 @@ Internal structural integrity requires a coherent bipartite graph between inline
 \endfoot
 \hline
 \endlastfoot
-\texttt{tei\_link} & 0.98 & Direct GROBID TEI-XML \texttt{xml:id} pointer from inline \texttt{<ref>} to \texttt{<biblStruct>}. \\
+\textbf{\texttt{tei\_link}} & \textbf{0.98} & Direct GROBID TEI-XML \texttt{xml:id} pointer from inline \texttt{<ref>} to \texttt{<biblStruct>}. \\
 \hline
-\texttt{doi\_exact} & 0.95 & Identical normalized DOI present in both inline marker and reference entry. \\
+\textbf{\texttt{doi\_exact}} & \textbf{0.95} & Identical normalized DOI present in both inline marker and reference entry. \\
 \hline
-\texttt{arxiv\_exact} & 0.95 & Identical canonical \texttt{arXiv} identifier present on both sides. \\
+\textbf{\texttt{arxiv\_exact}} & \textbf{0.95} & Identical canonical \texttt{arXiv} identifier present on both sides. \\
 \hline
-\texttt{author\_year} & 0.90 & Normalized surname(s), year, and optional suffix (\texttt{a}--\texttt{f}) agree (including MLA author--page inference). \\
+\textbf{\texttt{author\_year}} & 0.90 & Normalized surname(s), year, and optional suffix (\texttt{a}--\texttt{f}) agree (including MLA author--page inference). \\
 \hline
-\texttt{numeric\_index} & 0.90 & Bracketed or superscript ordinal (or expanded range \texttt{[1]--[3]}) matches bibliography index. \\
+\textbf{\texttt{numeric\_index}} & 0.90 & Bracketed or superscript ordinal (or expanded range \texttt{[1]--[3]}) matches bibliography index. \\
 \hline
-\texttt{fuzzy} & 0.65 & Partial title or author token overlap above fallback threshold when exact keys are missing. \\
+\textbf{\texttt{fuzzy}} & 0.65 & Partial title or author token overlap above fallback threshold when exact keys are missing. \\
 \hline
-\texttt{no\_keys} & 0.30 & Insufficient disambiguating keys or tie across multiple entries (\texttt{ambiguous\_mapping}). \\
+\textbf{\texttt{no\_keys}} & 0.30 & Insufficient disambiguating keys or tie across multiple entries (\texttt{ambiguous\_mapping}). \\
 \hline
-\texttt{manual\_review} & 1.00 & Link explicitly adjudicated by an authorized instructor. \\
+\textbf{\texttt{manual\_review}} & \textbf{1.00} & Link explicitly adjudicated by an authorized instructor. \\
 \hline
 \end{longtable}
 }
@@ -186,7 +186,7 @@ Internal structural integrity requires a coherent bipartite graph between inline
 \textbf{Mapping Status} & \textbf{Integrity Issue} & \textbf{CIS Penalty} & \textbf{Structural Meaning} \\
 \hline
 \endfirsthead
-\multicolumn{4}{l}{\itshape Table \thetable\ (continued from previous page)}\\
+\multicolumn{4}{c}{\itshape Table \thetable\ (continued from previous page)}\\
 \hline
 \textbf{Mapping Status} & \textbf{Integrity Issue} & \textbf{CIS Penalty} & \textbf{Structural Meaning} \\
 \hline
@@ -196,21 +196,21 @@ Internal structural integrity requires a coherent bipartite graph between inline
 \endfoot
 \hline
 \endlastfoot
-\texttt{matched} & No & 0.00 & Unique one-to-one link with consistent author/year metadata. \\
+\textbf{\texttt{matched}} & No & 0.00 & Unique one-to-one link with consistent author/year metadata. \\
 \hline
-\texttt{missing\_reference} & Yes & 0.20 & Inline marker cites a source absent from the bibliography (orphan citation). \\
+\textbf{\texttt{missing\_reference}} & \textbf{Yes} & \textbf{0.20} & Inline marker cites a source absent from the bibliography (orphan citation). \\
 \hline
-\texttt{in\_text\_mismatch} & Yes & 0.15 & Linked pair disagrees on publication year, surname, or title tokens. \\
+\textbf{\texttt{in\_text\_mismatch}} & \textbf{Yes} & \textbf{0.15} & Linked pair disagrees on publication year, surname, or title tokens. \\
 \hline
-\texttt{uncited\_reference} & Yes & 0.10 & Bibliography entry is never cited anywhere in the manuscript body. \\
+\textbf{\texttt{uncited\_reference}} & \textbf{Yes} & \textbf{0.10} & Bibliography entry is never cited anywhere in the manuscript body. \\
 \hline
-\texttt{duplicate\_reference} & Yes & 0.10 & Two or more bibliography entries refer to the same publication. \\
+\textbf{\texttt{duplicate\_reference}} & \textbf{Yes} & \textbf{0.10} & Two or more bibliography entries refer to the same publication. \\
 \hline
-\texttt{ambiguous\_mapping} & Yes & 0.05 & Inline marker collides equally with multiple bibliography entries. \\
+\textbf{\texttt{ambiguous\_mapping}} & \textbf{Yes} & 0.05 & Inline marker collides equally with multiple bibliography entries. \\
 \hline
-\texttt{style\_inconsistent} & Yes & 0.02 & Entry or marker deviates from the manuscript's dominant style profile. \\
+\textbf{\texttt{style\_inconsistent}} & \textbf{Yes} & 0.02 & Entry or marker deviates from the manuscript's dominant style profile. \\
 \hline
-\texttt{unresolved} & No & 0.00 & Insufficient structural tokens to classify link state. \\
+\textbf{\texttt{unresolved}} & No & 0.00 & Insufficient structural tokens to classify link state. \\
 \hline
 \end{longtable}
 }
@@ -252,7 +252,7 @@ Given the top candidate from retrieval, \texttt{FeatureCalculator} computes the 
 \textbf{Feature Name} & \textbf{Type} & \textbf{Computation} \\
 \hline
 \endfirsthead
-\multicolumn{3}{l}{\itshape Table \thetable\ (continued from previous page)}\\
+\multicolumn{3}{c}{\itshape Table \thetable\ (continued from previous page)}\\
 \hline
 \textbf{Feature Name} & \textbf{Type} & \textbf{Computation} \\
 \hline
@@ -262,27 +262,27 @@ Given the top candidate from retrieval, \texttt{FeatureCalculator} computes the 
 \endfoot
 \hline
 \endlastfoot
-\texttt{title\_sim\_fuzzy} & \texttt{float} & Max of normalized exact match, subtitle-prefix match ($0.95$), guarded substring ($0.90$), and RapidFuzz \texttt{token\_set\_ratio}. \\
+\textbf{\texttt{title\_sim\_fuzzy}} & \texttt{float} & Max of normalized exact match, subtitle-prefix match ($0.95$), guarded substring ($0.90$), and RapidFuzz \texttt{token\_set\_ratio}. \\
 \hline
-\texttt{title\_sim\_semantic} & \texttt{float} & Cosine similarity between \texttt{all-MiniLM-L6-v2} embeddings of cited and candidate titles. \\
+\textbf{\texttt{title\_sim\_semantic}} & \texttt{float} & Cosine similarity between \texttt{all-MiniLM-L6-v2} embeddings of cited and candidate titles. \\
 \hline
-\texttt{title\_sim\_max} & \texttt{float} & Maximum of \texttt{title\_sim\_fuzzy} and \texttt{title\_sim\_semantic}. \\
+\textbf{\texttt{title\_sim\_max}} & \texttt{float} & Maximum of \texttt{title\_sim\_fuzzy} and \texttt{title\_sim\_semantic}. \\
 \hline
-\texttt{author\_jaccard} & \texttt{float} & Diacritic-folded surname overlap preserving short Vietnamese surnames (\textit{Le}, \textit{Vo}, \textit{Do}). \\
+\textbf{\texttt{author\_jaccard}} & \texttt{float} & Diacritic-folded surname overlap preserving short Vietnamese surnames (\textit{Le}, \textit{Vo}, \textit{Do}). \\
 \hline
-\texttt{year\_distance} & \texttt{int} & Minimum $|y_{\text{cited}} - y_{\text{cand}}|$ across matching preprint/edition records ($999$ if missing). \\
+\textbf{\texttt{year\_distance}} & \texttt{int} & Minimum $|y_{\text{cited}} - y_{\text{cand}}|$ across matching preprint/edition records ($999$ if missing). \\
 \hline
-\texttt{venue\_sim} & \texttt{float} & Alias-expanded venue token similarity in $[0, 1]$ from \texttt{VenueNormalizer}. \\
+\textbf{\texttt{venue\_sim}} & \texttt{float} & Alias-expanded venue token similarity in $[0, 1]$ from \texttt{VenueNormalizer}. \\
 \hline
-\texttt{doi\_exact\_match} & \texttt{bool} & Exact normalized DOI match or canonical arXiv-to-publisher DOI equivalence. \\
+\textbf{\texttt{doi\_exact\_match}} & \texttt{bool} & Exact normalized DOI match or canonical arXiv-to-publisher DOI equivalence. \\
 \hline
-\texttt{source\_consensus} & \texttt{int} & Count of independent registries returning a corroborating candidate record. \\
+\textbf{\texttt{source\_consensus}} & \texttt{int} & Count of independent registries returning a corroborating candidate record. \\
 \hline
-\texttt{content\_alignment\_score} & \texttt{float} & Sentence-pooled neural alignment between inline claim context and candidate title/abstract (Equation~\eqref{eq:abs-pooling}). \\
+\textbf{\texttt{content\_alignment\_score}} & \texttt{float} & Sentence-pooled neural alignment between inline claim context and candidate title/abstract (Equation~\eqref{eq:abs-pooling}). \\
 \hline
-\texttt{stance\_label} & \texttt{str} & Claim support state (\texttt{supported}, \texttt{partially\_supported}, \texttt{neutral}, \texttt{contradiction\_risk}) via stem-specificity gating. \\
+\textbf{\texttt{stance\_label}} & \texttt{str} & Claim support state (\texttt{supported}, \texttt{partially\_supported}, \texttt{neutral}, \texttt{contradiction\_risk}) via stem-specificity gating. \\
 \hline
-\texttt{url\_status} & \texttt{enum} & Six-state URL liveness (\texttt{alive}, \texttt{restricted\_alive}, \texttt{archived\_alive}, \texttt{dead\_link}, \texttt{fake\_domain}, \texttt{unchecked}). \\
+\textbf{\texttt{url\_status}} & \texttt{enum} & Six-state URL liveness (\texttt{alive}, \texttt{restricted\_alive}, \texttt{archived\_alive}, \texttt{dead\_link}, \texttt{fake\_domain}, \texttt{unchecked}). \\
 \hline
 \end{longtable}
 }
@@ -318,7 +318,7 @@ Figure~\ref{fig:matching} illustrates the dual-encoder neural matching pipeline 
 \textbf{Group} & \textbf{Representative Rule ID(s)} & \textbf{Trigger Condition and Verdict Outcome} \\
 \hline
 \endfirsthead
-\multicolumn{3}{l}{\itshape Table \thetable\ (continued from previous page)}\\
+\multicolumn{3}{c}{\itshape Table \thetable\ (continued from previous page)}\\
 \hline
 \textbf{Group} & \textbf{Representative Rule ID(s)} & \textbf{Trigger Condition and Verdict Outcome} \\
 \hline
@@ -328,39 +328,39 @@ Figure~\ref{fig:matching} illustrates the dual-encoder neural matching pipeline 
 \endfoot
 \hline
 \endlastfoot
-Pre-0 & \texttt{R-URL-RESOURCE}, \texttt{R-WEB-RESOURCE}, \texttt{R-VN-LEGAL-VERIFIED}, \texttt{R-VN-LEGAL-\allowbreak MISMATCH} & Pure web documentation, software/RFC/HF artifact, or Vietnamese statute checked by \texttt{VNLegalVerifier} $\rightarrow$ \texttt{resource} (or \texttt{metadata\_error} if statutory authority/code conflicts). \\
+\textbf{Pre-0} & \texttt{R-URL-RESOURCE}, \texttt{R-WEB-RESOURCE}, \texttt{R-VN-LEGAL-VERIFIED}, \texttt{R-VN-LEGAL-\allowbreak MISMATCH} & Pure web documentation, software/RFC/HF artifact, or Vietnamese statute checked by \texttt{VNLegalVerifier} $\rightarrow$ \textbf{\texttt{resource}} (or \texttt{metadata\_error} if statutory authority/code conflicts). \\
 \hline
-1 & \texttt{R-FAKE-URL}, \texttt{R-FABRICATED-DOI}, \texttt{R-CHIMERIC-DOI-\allowbreak MISMATCH}, \texttt{R-RETRACTED-PAPER} & RFC 2606 fake domain, unregistered DOI prefix, or real DOI resolving to an unrelated title $\rightarrow$ \texttt{suspected\_hallucination}; Retraction Watch flag (\texttt{is\_retracted}) $\rightarrow$ \texttt{metadata\_error}. \\
+\textbf{1} & \texttt{R-FAKE-URL}, \texttt{R-FABRICATED-DOI}, \texttt{R-CHIMERIC-DOI-\allowbreak MISMATCH}, \texttt{R-RETRACTED-PAPER} & RFC 2606 fake domain, unregistered DOI prefix, or real DOI resolving to an unrelated title $\rightarrow$ \textbf{\texttt{suspected\_hallucination}}; Retraction Watch flag (\texttt{is\_retracted}) $\rightarrow$ \textbf{\texttt{metadata\_error}}. \\
 \hline
-2 & \texttt{R-FUTURE-YEAR}, \texttt{R-FUTURE-YEAR-\allowbreak KNOWN-AUTHOR} & Cited year exceeds current calendar year: unknown work $\rightarrow$ \texttt{suspected\_hallucination}; known work/author $\rightarrow$ \texttt{metadata\_error}. \\
+\textbf{2} & \texttt{R-FUTURE-YEAR}, \texttt{R-FUTURE-YEAR-\allowbreak KNOWN-AUTHOR} & Cited year exceeds current calendar year: unknown work $\rightarrow$ \textbf{\texttt{suspected\_hallucination}}; known work/author $\rightarrow$ \textbf{\texttt{metadata\_error}}. \\
 \hline
-3 & \texttt{R-KNOWN-PAPER}, \texttt{R-TITLE-MISMATCH} & Matches 101-paper whitelist: full metadata \& stance agreement $\rightarrow$ \texttt{verified}; altered year/author/claim $\rightarrow$ \texttt{metadata\_error}. \\
+\textbf{3} & \texttt{R-KNOWN-PAPER}, \texttt{R-TITLE-MISMATCH} & Matches 101-paper whitelist: full metadata \& stance agreement $\rightarrow$ \textbf{\texttt{verified}}; altered year/author/claim $\rightarrow$ \textbf{\texttt{metadata\_error}}. \\
 \hline
-4 & \texttt{R-DEAD-URL}, \texttt{R-NONEXISTENT-DOI}, \texttt{R-NO-SCHOLARLY-\allowbreak RECORD} & Zero candidates while $\ge 2$ live registries returned clean HTTP 200 responses (or confirmed unarchived dead URL) $\rightarrow$ \texttt{suspected\_hallucination} (pure absence capped at $\le 0.88$). \\
+\textbf{4} & \texttt{R-DEAD-URL}, \texttt{R-NONEXISTENT-DOI}, \texttt{R-NO-SCHOLARLY-\allowbreak RECORD} & Zero candidates while $\ge 2$ live registries returned clean HTTP 200 responses (or confirmed unarchived dead URL) $\rightarrow$ \textbf{\texttt{suspected\_hallucination}} (pure absence capped at $\le 0.88$). \\
 \hline
-5 & \texttt{R-FAIL-ALL}, \texttt{R-RATE-LIMITED-\allowbreak ABSTAIN}, \texttt{R-DOI-RA-NO-CSL} & Zero candidates caused by HTTP 429 exhaustion, network outage, or valid regional DOI lacking public CSL metadata $\rightarrow$ \texttt{unresolved}. \\
+\textbf{5} & \texttt{R-FAIL-ALL}, \texttt{R-RATE-LIMITED-\allowbreak ABSTAIN}, \texttt{R-DOI-RA-NO-CSL} & Zero candidates caused by HTTP 429 exhaustion, network outage, or valid regional DOI lacking public CSL metadata $\rightarrow$ \textbf{\texttt{unresolved}}. \\
 \hline
-6 & \texttt{R-DOI-TITLE-AUTHOR} & Exact live DOI match with $\texttt{title\_sim} \ge 0.90$ and $\texttt{author\_jaccard} \ge 0.50$ $\rightarrow$ \texttt{verified}. \\
+\textbf{6} & \texttt{R-DOI-TITLE-AUTHOR} & Exact live DOI match with $\texttt{title\_sim} \ge 0.90$ and $\texttt{author\_jaccard} \ge 0.50$ $\rightarrow$ \textbf{\texttt{verified}}. \\
 \hline
-7 & \texttt{R-LOCAL\_DB\_VERIFIED}, \texttt{R-LOCAL\_DB\_GOOD\_MATCH} & Offline FTS5 match ($\texttt{title\_sim\_fuzzy} \ge 0.95$, $\texttt{author\_jaccard} \ge 0.80$, $|\Delta y| = 0$) with no DOI conflict $\rightarrow$ \texttt{verified}. \\
+\textbf{7} & \texttt{R-LOCAL\_DB\_VERIFIED}, \texttt{R-LOCAL\_DB\_GOOD\_MATCH} & Offline FTS5 match ($\texttt{title\_sim\_fuzzy} \ge 0.95$, $\texttt{author\_jaccard} \ge 0.80$, $|\Delta y| = 0$) with no DOI conflict $\rightarrow$ \textbf{\texttt{verified}}. \\
 \hline
-8 & \texttt{R-WELL-LINKED}, \texttt{R-WELL-LINKED-\allowbreak MODERATE} & Linked citation ($\texttt{matched}$) with strong title/author/year agreement and zero identifier contradiction $\rightarrow$ \texttt{verified}. \\
+\textbf{8} & \texttt{R-WELL-LINKED}, \texttt{R-WELL-LINKED-\allowbreak MODERATE} & Linked citation ($\texttt{matched}$) with strong title/author/year agreement and zero identifier contradiction $\rightarrow$ \textbf{\texttt{verified}}. \\
 \hline
-9 & \texttt{R-DOI-TITLE-\allowbreak MISMATCH} & Live DOI resolves, but title similarity falls in $[0.60, 0.90)$ $\rightarrow$ \texttt{metadata\_error} with mismatched fields isolated. \\
+\textbf{9} & \texttt{R-DOI-TITLE-\allowbreak MISMATCH} & Live DOI resolves, but title similarity falls in $[0.60, 0.90)$ $\rightarrow$ \textbf{\texttt{metadata\_error}} with mismatched fields isolated. \\
 \hline
-10 & \texttt{R-CONSENSUS-FULL}, \texttt{R-CONSENSUS-\allowbreak PARTIAL} & $\ge 2$ registries agree on title ($\ge 0.90$): matching author/year $\rightarrow$ \texttt{verified}; drifted author/year $\rightarrow$ \texttt{metadata\_error}. \\
+\textbf{10} & \texttt{R-CONSENSUS-FULL}, \texttt{R-CONSENSUS-\allowbreak PARTIAL} & $\ge 2$ registries agree on title ($\ge 0.90$): matching author/year $\rightarrow$ \textbf{\texttt{verified}}; drifted author/year $\rightarrow$ \textbf{\texttt{metadata\_error}}. \\
 \hline
-11 & \texttt{R-SINGLE-SOURCE-\allowbreak VERIFIED}, \texttt{R-BOOK-EDITION-\allowbreak VERIFIED}, \texttt{R-SINGLE-SOURCE-\allowbreak PARTIAL} & Single live registry match ($\ge 0.90$ title, $\ge 0.80$ author, $|\Delta y| \le 1$, or $\le 15\text{\,yr}$ across OpenLibrary book editions) $\rightarrow$ \texttt{verified}; field drift $\rightarrow$ \texttt{metadata\_error}. \\
+\textbf{11} & \texttt{R-SINGLE-SOURCE-\allowbreak VERIFIED}, \texttt{R-BOOK-EDITION-\allowbreak VERIFIED}, \texttt{R-SINGLE-SOURCE-\allowbreak PARTIAL} & Single live registry match ($\ge 0.90$ title, $\ge 0.80$ author, $|\Delta y| \le 1$, or $\le 15\text{\,yr}$ across OpenLibrary book editions) $\rightarrow$ \textbf{\texttt{verified}}; field drift $\rightarrow$ \textbf{\texttt{metadata\_error}}. \\
 \hline
-12 & \texttt{R-AMBIGUOUS-\allowbreak MAPPING} & Bipartite linker flagged \texttt{ambiguous\_mapping} $\rightarrow$ \texttt{unresolved} with confidence capped at $0.50$. \\
+\textbf{12} & \texttt{R-AMBIGUOUS-\allowbreak MAPPING} & Bipartite linker flagged \texttt{ambiguous\_mapping} $\rightarrow$ \textbf{\texttt{unresolved}} with confidence capped at $0.50$. \\
 \hline
-13 & \texttt{R-CONTENT-\allowbreak ALIGNMENT}, \texttt{R-CONTENT-MISMATCH} & Strong context-to-abstract alignment rescues abbreviated titles ($\rightarrow$ \texttt{verified}); contradicted body claim on matched paper $\rightarrow$ \texttt{metadata\_error}. \\
+\textbf{13} & \texttt{R-CONTENT-\allowbreak ALIGNMENT}, \texttt{R-CONTENT-MISMATCH} & Strong context-to-abstract alignment rescues abbreviated titles ($\rightarrow$ \textbf{\texttt{verified}}); contradicted body claim on matched paper $\rightarrow$ \textbf{\texttt{metadata\_error}}. \\
 \hline
-14 & \texttt{R-KNOWN-AUTHOR-\allowbreak TITLE-MISMATCH} & Known scholar combined with mismatched title in $[0.30, 0.90)$ $\rightarrow$ \texttt{metadata\_error}. \\
+\textbf{14} & \texttt{R-KNOWN-AUTHOR-\allowbreak TITLE-MISMATCH} & Known scholar combined with mismatched title in $[0.30, 0.90)$ $\rightarrow$ \textbf{\texttt{metadata\_error}}. \\
 \hline
-15 & \texttt{R-ABSTENTION-\allowbreak BORDER}, \texttt{R-DOMAIN-EXCEPTION} & Borderline title similarity in $[0.40, 0.60)$ $\rightarrow$ \texttt{unresolved}; verified paper with dead external URL sets \texttt{domain\_exception = True}. \\
+\textbf{15} & \texttt{R-ABSTENTION-\allowbreak BORDER}, \texttt{R-DOMAIN-EXCEPTION} & Borderline title similarity in $[0.40, 0.60)$ $\rightarrow$ \textbf{\texttt{unresolved}}; verified paper with dead external URL sets \texttt{domain\_exception = True}. \\
 \hline
-16 & \texttt{R-WEAK-EVIDENCE}, \texttt{R-HALLUCINATED-\allowbreak SOURCE} & Terminal fallback ($\texttt{title\_sim} < 0.40$): $\ge 2$ clean live APIs + low author overlap $\rightarrow$ \texttt{suspected\_hallucination}; otherwise $\rightarrow$ \texttt{unresolved}. \\
+\textbf{16} & \texttt{R-WEAK-EVIDENCE}, \texttt{R-HALLUCINATED-\allowbreak SOURCE} & Terminal fallback ($\texttt{title\_sim} < 0.40$): $\ge 2$ clean live APIs + low author overlap $\rightarrow$ \textbf{\texttt{suspected\_hallucination}}; otherwise $\rightarrow$ \textbf{\texttt{unresolved}}. \\
 \hline
 \end{longtable}
 }
@@ -393,7 +393,7 @@ Combining all five components in Table~\ref{tab:cis} produces the final Citation
 \textbf{Component} & \textbf{Weight} & \textbf{Exact Definition in \texttt{CISCalculator.compute()}} \\
 \hline
 \endfirsthead
-\multicolumn{3}{l}{\itshape Table \thetable\ (continued from previous page)}\\
+\multicolumn{3}{c}{\itshape Table \thetable\ (continued from previous page)}\\
 \hline
 \textbf{Component} & \textbf{Weight} & \textbf{Exact Definition in \texttt{CISCalculator.compute()}} \\
 \hline
@@ -403,15 +403,15 @@ Combining all five components in Table~\ref{tab:cis} produces the final Citation
 \endfoot
 \hline
 \endlastfoot
-\texttt{verified\_ratio} ($s_{\text{ver}}$) & 0.35 & $N_{\text{verified}} / N_{\text{acad}}$, measuring corroborated scholarly references. \\
+\textbf{\texttt{verified\_ratio}} ($s_{\text{ver}}$) & \textbf{0.35} & $N_{\text{verified}} / N_{\text{acad}}$, measuring corroborated scholarly references. \\
 \hline
-\texttt{metadata\_accuracy} ($s_{\text{meta}}$) & 0.25 & Tiered bibliographic fidelity score defined in Equation~\eqref{eq:cis-meta}. \\
+\textbf{\texttt{metadata\_accuracy}} ($s_{\text{meta}}$) & \textbf{0.25} & Tiered bibliographic fidelity score defined in Equation~\eqref{eq:cis-meta}. \\
 \hline
-\texttt{in\_text\_bib\_consistency} ($s_{\text{link}}$) & 0.25 & One minus the weighted linking penalties (Table~\ref{tab:mapping-statuses}) across inline links, uncited entries, and duplicates. \\
+\textbf{\texttt{in\_text\_bib\_consistency}} ($s_{\text{link}}$) & \textbf{0.25} & One minus the weighted linking penalties (Table~\ref{tab:mapping-statuses}) across inline links, uncited entries, and duplicates. \\
 \hline
-\texttt{format\_consistency} ($s_{\text{fmt}}$) & 0.10 & Document style consistency derived from \texttt{StyleProfile} and per-entry style deviations. \\
+\textbf{\texttt{format\_consistency}} ($s_{\text{fmt}}$) & \textbf{0.10} & Document style consistency derived from \texttt{StyleProfile} and per-entry style deviations. \\
 \hline
-\texttt{identifier\_validity} ($s_{\text{id}}$) & 0.05 & Share of DOI/URL-bearing citations whose identifiers resolve cleanly without \texttt{dead\_link}, \texttt{fake\_domain}, or \texttt{domain\_exception}. \\
+\textbf{\texttt{identifier\_validity}} ($s_{\text{id}}$) & \textbf{0.05} & Share of DOI/URL-bearing citations whose identifiers resolve cleanly without \texttt{dead\_link}, \texttt{fake\_domain}, or \texttt{domain\_exception}. \\
 \hline
 \end{longtable}
 }

@@ -34,7 +34,6 @@ import zipfile
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
-
 W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 REL = "http://schemas.openxmlformats.org/package/2006/relationships"
@@ -58,9 +57,18 @@ for prefix, namespace in (
 
 FONT = "Times New Roman"
 BODY_HALF_POINTS = "26"  # 13 pt * 2
+TABLE_HALF_POINTS = "24"  # 12 pt * 2 (TDTU FIT table & caption spec)
 CHAPTER_HALF_POINTS = "32"  # 16 pt * 2
 LINE_TWIPS = "360"  # 1.5 lines = 1.5 * 240
 FIRST_LINE_TWIPS = "720"  # one Word tab = 0.5 in = 1.27 cm
+
+CAPTION_STYLE_IDS = {
+    "Caption",
+    "ImageCaption",
+    "TableCaption",
+    "Figure",
+    "CaptionedFigure",
+}
 
 # A4 dimensions in twips.
 A4_WIDTH = "11906"  # 21 cm
@@ -182,13 +190,26 @@ def patch_styles(styles: ET.Element) -> None:
             set_spacing(style_ppr)
             if sid in BODY_STYLE_IDS:
                 set_first_line(style_ppr, FIRST_LINE_TWIPS)
-            elif sid in NO_INDENT_STYLE_IDS:
+            elif sid in NO_INDENT_STYLE_IDS or sid in CAPTION_STYLE_IDS:
                 set_first_line(style_ppr, None)
+            if sid in CAPTION_STYLE_IDS:
+                child(style_ppr, "jc").set(qn("val"), "center")
 
         # Patch every character style too.  This catches linked character
         # styles used by Pandoc for emphasis, captions, and hyperlinks.
         style_rpr = child(style, "rPr")
-        set_font(style_rpr, CHAPTER_HALF_POINTS if sid == "Heading1" else BODY_HALF_POINTS)
+        if sid == "Heading1":
+            style_size = CHAPTER_HALF_POINTS
+        elif sid in CAPTION_STYLE_IDS:
+            style_size = TABLE_HALF_POINTS
+            for btag in ("b", "bCs"):
+                for bnode in style_rpr.findall(qn(btag)):
+                    style_rpr.remove(bnode)
+            child(style_rpr, "i")
+            child(style_rpr, "iCs")
+        else:
+            style_size = BODY_HALF_POINTS
+        set_font(style_rpr, style_size)
 
         if sid in {"Heading1", "Heading2", "Heading3"}:
             color = child(style_rpr, "color")
@@ -200,13 +221,13 @@ def patch_styles(styles: ET.Element) -> None:
 
 
 def cover_run_size(paragraph_index: int, run: ET.Element) -> str:
-    """Restore the intended hierarchy on the two cover pages."""
+    """Restore the intended hierarchy on the two cover pages (Mau 1 vs Mau 2)."""
 
     text = "".join(node.text or "" for node in run.findall(".//" + qn("t"))).strip()
     if "HỆ THỐNG CHẤM ĐIỂM" in text or "AUTOMATED ESSAY GRADING" in text:
-        return "44"  # 22 pt
+        return "48" if paragraph_index == 0 else "44"  # 24 pt on Cover 1, 22 pt on Cover 2
     if text in ("ĐỒ ÁN TỐT NGHIỆP", "NGÀNH: KỸ THUẬT PHẦN MỀM", "GRADUATION PROJECT", "MAJOR: SOFTWARE ENGINEERING"):
-        return "40"  # 20 pt
+        return "44" if paragraph_index == 0 else "40"  # 22 pt on Cover 1, 20 pt on Cover 2
     return "28"  # 14 pt
 
 
@@ -217,9 +238,10 @@ def patch_paragraph(
     ppr = child(paragraph, "pPr")
     set_spacing(ppr)
     table_paragraph = in_table(paragraph, document)
+    is_caption = sid in CAPTION_STYLE_IDS
     is_cover = paragraph_index in (0, 1)
 
-    if is_cover:
+    if is_cover or is_caption:
         set_first_line(ppr, None)
         child(ppr, "jc").set(qn("val"), "center")
     elif table_paragraph:
@@ -233,16 +255,31 @@ def patch_paragraph(
         # style-level first-line indent for headings, lists, and table cells.
         set_first_line(ppr, None)
 
-    size = CHAPTER_HALF_POINTS if sid == "Heading1" else BODY_HALF_POINTS
+    if sid == "Heading1":
+        size = CHAPTER_HALF_POINTS
+    elif table_paragraph or is_caption:
+        size = TABLE_HALF_POINTS
+    else:
+        size = BODY_HALF_POINTS
     for run in paragraph.findall(".//" + qn("r")):
         if is_cover:
             size = cover_run_size(paragraph_index, run)
         run_rpr = child(run, "rPr")
+        if is_caption:
+            for btag in ("b", "bCs"):
+                for bnode in run_rpr.findall(qn(btag)):
+                    run_rpr.remove(bnode)
+            child(run_rpr, "i")
+            child(run_rpr, "iCs")
         set_font(run_rpr, size)
 
 
 def patch_document(document: ET.Element) -> None:
-    """Patch all paragraphs/runs and add section geometry/header references."""
+    """Patch all paragraphs/runs, center table cells vertically, and add geometry."""
+
+    for tc in document.findall(".//" + qn("tc")):
+        tc_pr = child(tc, "tcPr")
+        child(tc_pr, "vAlign").set(qn("val"), "center")
 
     for paragraph_index, paragraph in enumerate(document.findall(".//" + qn("p"))):
         patch_paragraph(paragraph, document, paragraph_index)

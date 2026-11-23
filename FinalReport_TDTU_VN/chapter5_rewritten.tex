@@ -26,7 +26,7 @@ Quy trình kiểm định phần mềm bao phủ ba tầng kiểm thử tự đ�
 \textbf{Tầng kiểm định} & \textbf{Kết quả thực thi} & \textbf{Phạm vi phân hệ được kiểm định} \\
 \hline
 \endfirsthead
-\multicolumn{3}{l}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
+\multicolumn{3}{c}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
 \hline
 \textbf{Tầng kiểm định} & \textbf{Kết quả thực thi} & \textbf{Phạm vi phân hệ được kiểm định} \\
 \hline
@@ -36,23 +36,23 @@ Quy trình kiểm định phần mềm bao phủ ba tầng kiểm thử tự đ�
 \endfoot
 \hline
 \endlastfoot
-Backend (\texttt{pytest}) & 2,320+ đạt (0 lỗi) & Trích xuất đa định dạng, 12 chuẩn trích dẫn, \texttt{VNLegal\allowbreak Verifier}, bộ liên kết 7 phương pháp, FTS5 + 15 API, kiểm tra URL/HTML chống SSRF, 68 luật ký hiệu, hiệu chỉnh Platt, điểm CIS, RBAC/IDOR, di trú CSDL \texttt{0001}--\texttt{0013} và phục hồi sau sự cố. \\
+\textbf{Backend (\texttt{pytest})} & \textbf{2,320+ đạt (0 lỗi)} & Trích xuất đa định dạng, 12 chuẩn trích dẫn, \texttt{VNLegal\allowbreak Verifier}, bộ liên kết 7 phương pháp, FTS5 + 15 API, kiểm tra URL/HTML chống SSRF, 68 luật ký hiệu, hiệu chỉnh Platt, điểm CIS, RBAC/IDOR, di trú CSDL \texttt{0001}--\texttt{0013} và phục hồi sau sự cố. \\
 \hline
-Frontend (\texttt{Vitest}) & 487+ đạt (63 bộ, 0 lỗi) & Luồng xác thực Auth/OAuth, ngăn kéo hiển thị phân lớp, 6 chế độ xem báo cáo chẩn đoán, đồ thị DAG mạng trích dẫn, hộp thoại khắc phục lỗi, giám sát Lớp học/Quản trị và giới hạn gói mã $<251\text{\,kB}$. \\
+\textbf{Frontend (\texttt{Vitest})} & \textbf{487+ đạt (63 bộ, 0 lỗi)} & Luồng xác thực Auth/OAuth, ngăn kéo hiển thị phân lớp, 6 chế độ xem báo cáo chẩn đoán, đồ thị DAG mạng trích dẫn, hộp thoại khắc phục lỗi, giám sát Lớp học/Quản trị và giới hạn gói mã $<251\text{\,kB}$. \\
 \hline
-Trình duyệt E2E (\texttt{Play\allowbreak wright}) & 20 bộ đặc tả (132+ kịch bản) & Không tràn ngang trên 5 khung nhìn $\times$ Sáng/Tối $\times$ EN/VI, tải tệp qua SSE, kiểm tra chia đôi màn hình, giảng viên ghi đè kết quả và phục hồi lỗi 404/ngoại lệ. \\
+\textbf{Trình duyệt E2E (\texttt{Play\allowbreak wright})} & \textbf{20 bộ đặc tả (132+ kịch bản)} & Không tràn ngang trên 5 khung nhìn $\times$ Sáng/Tối $\times$ EN/VI, tải tệp qua SSE, kiểm tra chia đôi màn hình, giảng viên ghi đè kết quả và phục hồi lỗi 404/ngoại lệ. \\
 \hline
 \end{longtable}
 }
 
 {\setlength{\tabcolsep}{3.5pt}
 \begin{longtable}{|L{0.18}|L{0.34}|L{0.34}|C{0.14}|}
-\caption{Ma trận truy vết yêu cầu (RTM) ánh xạ các đặc tả ở Chương 3 sang mã nguồn và bộ kiểm định.}\label{tab:rtm}\\
+\caption{Ma trận truy vết yêu cầu (RTM) ánh xạ các đặc tả yêu cầu chức năng và phi chức năng sang mã nguồn và bộ kiểm định.}\label{tab:rtm}\\
 \hline
 \textbf{Mã yêu cầu} & \textbf{Mô-đun hiện thực} & \textbf{Bộ kiểm định / Đo kiểm} & \textbf{Trạng thái} \\
 \hline
 \endfirsthead
-\multicolumn{4}{l}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
+\multicolumn{4}{c}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
 \hline
 \textbf{Mã yêu cầu} & \textbf{Mô-đun hiện thực} & \textbf{Bộ kiểm định / Đo kiểm} & \textbf{Trạng thái} \\
 \hline
@@ -78,7 +78,7 @@ Trình duyệt E2E (\texttt{Play\allowbreak wright}) & 20 bộ đặc tả (132+
 \hline
 \texttt{FR-15}, \texttt{FR-16} & \texttt{api/\allowbreak routes/\allowbreak teacher.py}, \texttt{routes/\allowbreak system.py}, \texttt{Class\allowbreak Detail\allowbreak Page.tsx}, \texttt{System\allowbreak Health\allowbreak Page.tsx} & Kiểm thử ghi đè giao dịch, thống kê lớp học \& cầu dao ngắt mạch (circuit-breaker) & Đạt ($100\%$) \\
 \hline
-\texttt{NFR-01}, \texttt{NFR-02}, \texttt{NFR-07}--\texttt{10} & Toàn bộ đường ống 8 tầng, Docker Compose \& bản dựng Vite (\texttt{web/}) & Độ trễ/RSS ($P_{90}=1.33\text{\,s}$, $1.03\text{\,GB}$), E2E chuẩn WCAG, $2{,}689+$ ca kiểm thử, kiểm tra gói mã \& sức khỏe container & Đạt ($100\%$) \\
+\texttt{NFR-01}, \texttt{NFR-02}, \texttt{NFR-07}--\texttt{10} & Toàn bộ đường ống 8 tầng, Docker Compose \& bản dựng Vite (\texttt{web/}) & Độ trễ/RSS ($P_{90}=1.33\text{\,s}$, $1.03\text{\,GB}$), E2E chuẩn WCAG, $2{,}827+$ ca kiểm thử, kiểm tra gói mã \& sức khỏe container & Đạt ($100\%$) \\
 \hline
 \end{longtable}
 }
@@ -106,7 +106,7 @@ Bảng~\ref{tab:dataset} tóm tắt các tập dữ liệu đánh giá được 
 \textbf{Tập dữ liệu / Kho ngữ liệu} & \textbf{Quy mô / Phân chia} & \textbf{Mục đích đánh giá} \\
 \hline
 \endfirsthead
-\multicolumn{3}{l}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
+\multicolumn{3}{c}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
 \hline
 \textbf{Tập dữ liệu / Kho ngữ liệu} & \textbf{Quy mô / Phân chia} & \textbf{Mục đích đánh giá} \\
 \hline
@@ -116,15 +116,15 @@ Bảng~\ref{tab:dataset} tóm tắt các tập dữ liệu đánh giá được 
 \endfoot
 \hline
 \endlastfoot
-Tập đo kiểm tách biệt theo bài báo & 120,000 trích dẫn & 43.2K \texttt{ver.}, 36.0K \texttt{hall.}, 26.4K \texttt{meta.}, 14.4K \texttt{unr.} trên 15 phân nhóm (\texttt{V1}--\texttt{U2}). \\
+\textbf{Tập đo kiểm tách biệt theo bài báo} & \textbf{120,000 trích dẫn} & 43.2K \texttt{ver.}, 36.0K \texttt{hall.}, 26.4K \texttt{meta.}, 14.4K \texttt{unr.} trên 15 phân nhóm (\texttt{V1}--\texttt{U2}). \\
 \hline
-\quad Tập Train / Val / Test & 84K / 18K / 18K & Không trùng bài báo hay tiêu đề; huấn luyện LR ($C=2.0$), khớp Platt ($a,b$) và đánh giá \textbf{RQ1} \& \textbf{RQ3}. \\
+\quad Tập Train / Val / Test & \textbf{84K / 18K / 18K} & Không trùng bài báo hay tiêu đề; huấn luyện LR ($C=2.0$), khớp Platt ($a,b$) và đánh giá \textbf{RQ1} \& \textbf{RQ3}. \\
 \hline
-Bộ kiểm thử rào chắn OOD & 2,400 trích dẫn & $6 \times 400$ ca rào chắn ký hiệu rời rạc sinh hoàn toàn từ \texttt{test\_papers} (\textbf{RQ2}). \\
+\textbf{Bộ kiểm thử rào chắn OOD} & \textbf{2,400 trích dẫn} & $6 \times 400$ ca rào chắn ký hiệu rời rạc sinh hoàn toàn từ \texttt{test\_papers} (\textbf{RQ2}). \\
 \hline
-Bộ chuẩn vàng tham khảo thô đa ngành & 120 + 15 TLTK & 6 lĩnh vực $\times$ 7 chuẩn trích dẫn + 15 ca đối kháng, không dùng siêu dữ liệu cho trước (\textbf{RQ4}). \\
+\textbf{Bộ chuẩn vàng tham khảo thô đa ngành} & \textbf{120 + 15 TLTK} & 6 lĩnh vực $\times$ 7 chuẩn trích dẫn + 15 ca đối kháng, không dùng siêu dữ liệu cho trước (\textbf{RQ4}). \\
 \hline
-Kho PDF đa chuẩn \& hồi quy & 310 + 841 PDF & 30 PDF pháp luật VN, 60 PDF ca khó, 220 PDF 11 chuẩn, cùng 841 PDF kiểm thử độ ổn định bộ phân tích (\textbf{RQ4}). \\
+\textbf{Kho PDF đa chuẩn \& hồi quy} & \textbf{310 + 841 PDF} & 30 PDF pháp luật VN, 60 PDF ca khó, 220 PDF 11 chuẩn, cùng 841 PDF kiểm thử độ ổn định bộ phân tích (\textbf{RQ4}). \\
 \hline
 \end{longtable}
 }
@@ -160,7 +160,7 @@ Hình~\ref{fig:benchmark-charts} tổng hợp các kết quả thực nghiệm �
 \textbf{Phương pháp} & \textbf{Cơ chế cốt lõi} & \textbf{Acc.\ (\%)} & \textbf{P (\%)} & \textbf{R (\%)} & \textbf{F1 (\%)} & \textbf{McNemar $p$ hiệu chỉnh} \\
 \hline
 \endfirsthead
-\multicolumn{7}{l}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
+\multicolumn{7}{c}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
 \hline
 \textbf{Phương pháp} & \textbf{Cơ chế cốt lõi} & \textbf{Acc.\ (\%)} & \textbf{P (\%)} & \textbf{R (\%)} & \textbf{F1 (\%)} & \textbf{McNemar $p$ hiệu chỉnh} \\
 \hline
@@ -194,7 +194,7 @@ Hình~\ref{fig:benchmark-charts} tổng hợp các kết quả thực nghiệm �
 \textbf{Nhãn phán quyết} & \textbf{Số mẫu} & \textbf{Prec.\ (\%)} & \textbf{Rec.\ (\%)} & \textbf{F1 (\%)} & \textbf{Nhầm lẫn (\texttt{ver / meta / hal / unr})} \\
 \hline
 \endfirsthead
-\multicolumn{6}{l}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
+\multicolumn{6}{c}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
 \hline
 \textbf{Nhãn phán quyết} & \textbf{Số mẫu} & \textbf{Prec.\ (\%)} & \textbf{Rec.\ (\%)} & \textbf{F1 (\%)} & \textbf{Nhầm lẫn (\texttt{ver / meta / hal / unr})} \\
 \hline
@@ -204,13 +204,13 @@ Hình~\ref{fig:benchmark-charts} tổng hợp các kết quả thực nghiệm �
 \endfoot
 \hline
 \endlastfoot
-\texttt{verified} & 6,480 & 98.46 & \textbf{99.80} & 99.13 & \texttt{6,467 / 11 / 0 / 2} \\
+\textbf{\texttt{verified}} & 6,480 & 98.46 & \textbf{99.80} & 99.13 & \texttt{6,467 / 11 / 0 / 2} \\
 \hline
-\texttt{suspected\_hallucination} & 5,400 & \textbf{99.93} & 99.69 & \textbf{99.81} & \texttt{0 / 0 / 5,383 / 17} \\
+\textbf{\texttt{suspected\_hallucination}} & 5,400 & \textbf{99.93} & 99.69 & \textbf{99.81} & \texttt{0 / 0 / 5,383 / 17} \\
 \hline
-\texttt{metadata\_error} & 3,960 & 99.15 & 96.84 & 97.98 & \texttt{101 / 3,835 / 4 / 20} \\
+\textbf{\texttt{metadata\_error}} & 3,960 & 99.15 & 96.84 & 97.98 & \texttt{101 / 3,835 / 4 / 20} \\
 \hline
-\texttt{unresolved} & 2,160 & 98.21 & 98.98 & 98.59 & \texttt{0 / 22 / 0 / 2,138} \\
+\textbf{\texttt{unresolved}} & 2,160 & 98.21 & 98.98 & 98.59 & \texttt{0 / 22 / 0 / 2,138} \\
 \hline
 \textbf{Trung bình vĩ mô / Tổng} & \textbf{18,000} & \textbf{98.94} & \textbf{98.83} & \textbf{98.88} & \textbf{Acc.: 99.02\%} (95\% CI $[98.87, 99.16]$) \\
 \hline
@@ -232,7 +232,7 @@ Bảng~\ref{tab:ood-stress} đánh giá các phương pháp \texttt{B4}, \texttt
 \textbf{Nhóm OOD (mỗi nhóm $N = 400$)} & \textbf{Rào chắn chính} & \textbf{\texttt{B4} (\%)} & \textbf{\texttt{B5} (\%)} & \textbf{\texttt{Proposed} (\%)} \\
 \hline
 \endfirsthead
-\multicolumn{5}{l}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
+\multicolumn{5}{c}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
 \hline
 \textbf{Nhóm OOD (mỗi nhóm $N = 400$)} & \textbf{Rào chắn chính} & \textbf{\texttt{B4} (\%)} & \textbf{\texttt{B5} (\%)} & \textbf{\texttt{Proposed} (\%)} \\
 \hline
@@ -242,19 +242,19 @@ Bảng~\ref{tab:ood-stress} đánh giá các phương pháp \texttt{B4}, \texttt
 \endfoot
 \hline
 \endlastfoot
-1. Bài báo bị rút lại (\texttt{is\_retracted}) & \texttt{R-RETRACTED-\allowbreak PAPER} & 0.00 & 0.00 & \textbf{100.00} \\
+\textbf{1. Bài báo bị rút lại} (\texttt{is\_retracted}) & \texttt{R-RETRACTED-\allowbreak PAPER} & 0.00 & 0.00 & \textbf{100.00} \\
 \hline
-2. DOI thật ghép tiêu đề bịa đặt & \texttt{R-CHIMERIC-DOI-\allowbreak MISMATCH} & 0.00 & 64.25 & \textbf{98.50} \\
+\textbf{2. DOI thật ghép tiêu đề bịa đặt} & \texttt{R-CHIMERIC-DOI-\allowbreak MISMATCH} & 0.00 & 64.25 & \textbf{98.50} \\
 \hline
-3. URL giả/giữ chỗ chuẩn RFC 2606 & \texttt{R-FAKE-URL} & 0.00 & 0.00 & \textbf{100.00} \\
+\textbf{3. URL giả/giữ chỗ chuẩn RFC 2606} & \texttt{R-FAKE-URL} & 0.00 & 0.00 & \textbf{100.00} \\
 \hline
-4. DOI khu vực thiếu siêu dữ liệu CSL & \texttt{R-DOI-RA-NO-\allowbreak CSL} & 0.00 & 100.00 & \textbf{100.00} \\
+\textbf{4. DOI khu vực thiếu siêu dữ liệu CSL} & \texttt{R-DOI-RA-NO-\allowbreak CSL} & 0.00 & 100.00 & \textbf{100.00} \\
 \hline
-5. Cạn kiệt hạn mức HTTP 429 thượng nguồn & \texttt{R-RATE-LIMITED-\allowbreak ABSTAIN} & 0.00 & 100.00 & \textbf{100.00} \\
+\textbf{5. Cạn kiệt hạn mức HTTP 429 thượng nguồn} & \texttt{R-RATE-LIMITED-\allowbreak ABSTAIN} & 0.00 & 100.00 & \textbf{100.00} \\
 \hline
-6. Sai lệch thẩm quyền văn bản luật VN & \texttt{VNLegal\allowbreak Verifier} & 20.00 & 35.00 & \textbf{100.00} \\
+\textbf{6. Sai lệch thẩm quyền văn bản luật VN} & \texttt{VNLegal\allowbreak Verifier} & 20.00 & 35.00 & \textbf{100.00} \\
 \hline
-\textbf{Tổng toàn bộ tập OOD ($N = 2{,}400$)} & McNemar $p = 1.47 \times 10^{-260}$ & 3.33 & 49.88 & \textbf{99.75} \\
+\textbf{Tổng toàn bộ tập OOD ($N = 2{,}400$)} & \textbf{McNemar $p = 1.47 \times 10^{-260}$} & 3.33 & 49.88 & \textbf{99.75} \\
 \hline
 \end{longtable}
 }
@@ -271,7 +271,7 @@ Bảng~\ref{tab:calibration-results} đối chiếu độ tin cậy ký hiệu c
 \textbf{Độ đo hiệu chỉnh / Độ bao phủ} & \textbf{Ký hiệu chưa hiệu chỉnh} & \textbf{Neuro-Symbolic có Platt} & \textbf{Mức thay đổi} \\
 \hline
 \endfirsthead
-\multicolumn{4}{l}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
+\multicolumn{4}{c}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
 \hline
 \textbf{Độ đo hiệu chỉnh / Độ bao phủ} & \textbf{Ký hiệu chưa hiệu chỉnh} & \textbf{Neuro-Symbolic có Platt} & \textbf{Mức thay đổi} \\
 \hline
@@ -315,7 +315,7 @@ Tỷ lệ độ tin cậy cao ($\hat{p} \ge 0.50$) & 91.22\% & \textbf{99.89\%} 
 \textbf{Kho ngữ liệu PDF} & \textbf{Số PDF} & \textbf{Nhận diện TLTK} & \textbf{TLTK trích xuất} & \textbf{Liên kết khớp} \\
 \hline
 \endfirsthead
-\multicolumn{5}{l}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
+\multicolumn{5}{c}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
 \hline
 \textbf{Kho ngữ liệu PDF} & \textbf{Số PDF} & \textbf{Nhận diện TLTK} & \textbf{TLTK trích xuất} & \textbf{Liên kết khớp} \\
 \hline
@@ -327,11 +327,11 @@ Tỷ lệ độ tin cậy cao ($\hat{p} \ge 0.50$) & 91.22\% & \textbf{99.89\%} 
 \endlastfoot
 Kho PDF pháp luật VN (Cơ sở trước v3.80) & 30 & 27 / 30 (90.0\%) & 164 (15 Luật) & 109 / 235 (46.4\%) \\
 \hline
-Kho PDF pháp luật VN (\textbf{CITRA v3.90.5}) & \textbf{30} & \textbf{30 / 30 (100.0\%)} & \textbf{258 (91 Luật)} & \textbf{403 / 416 (96.9\%)} \\
+\textbf{Kho PDF pháp luật VN} (\textbf{CITRA v3.90.5}) & \textbf{30} & \textbf{30 / 30 (100.0\%)} & \textbf{258 (91 Luật)} & \textbf{403 / 416 (96.9\%)} \\
 \hline
-Bộ chẩn đoán 12 chuẩn ($12 \times 5$) & \textbf{60} & \textbf{60 / 60 (100.0\%)} & \textbf{397 / 397 (100.0\%)} & \textbf{60 / 60 PDF (100\%)} \\
+\textbf{Bộ chẩn đoán 12 chuẩn ($12 \times 5$)} & \textbf{60} & \textbf{60 / 60 (100.0\%)} & \textbf{397 / 397 (100.0\%)} & \textbf{60 / 60 PDF (100\%)} \\
 \hline
-Bài báo mở 11 chuẩn ($11 \times 20$) & \textbf{220} & \textbf{215 / 220 (97.7\%)} & \textbf{8,126 TLTK} & \textbf{8,954 / 12,770 (70.1\%)} \\
+\textbf{Bài báo mở 11 chuẩn ($11 \times 20$)} & \textbf{220} & \textbf{215 / 220 (97.7\%)} & \textbf{8,126 TLTK} & \textbf{8,954 / 12,770 (70.1\%)} \\
 \hline
 \end{longtable}
 }
@@ -343,7 +343,7 @@ Bài báo mở 11 chuẩn ($11 \times 20$) & \textbf{220} & \textbf{215 / 220 (9
 \textbf{Bản thảo} & \textbf{Chuẩn} & \textbf{TLTK} & \textbf{CIS} & \textbf{Ver.} & \textbf{Meta.} & \textbf{Hall.} & \textbf{Res./Unr.} \\
 \hline
 \endfirsthead
-\multicolumn{8}{l}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
+\multicolumn{8}{c}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
 \hline
 \textbf{Bản thảo} & \textbf{Chuẩn} & \textbf{TLTK} & \textbf{CIS} & \textbf{Ver.} & \textbf{Meta.} & \textbf{Hall.} & \textbf{Res./Unr.} \\
 \hline
@@ -353,19 +353,19 @@ Bài báo mở 11 chuẩn ($11 \times 20$) & \textbf{220} & \textbf{215 / 220 (9
 \endfoot
 \hline
 \endlastfoot
-BERT (\textit{NAACL 2019}) & APA & 101 & 97.43 & 94 & 7 & 0 & 0 / 0 \\
+\textbf{BERT} (\textit{NAACL 2019}) & APA & 101 & \textbf{97.43} & 94 & 7 & 0 & 0 / 0 \\
 \hline
-Attention Is All You Need (\textit{NeurIPS}) & Đánh số & 71 & 92.99 & 70 & 1 & 0 & 0 / 0 \\
+\textbf{Attention Is All You Need} (\textit{NeurIPS}) & Đánh số & 71 & \textbf{92.99} & 70 & 1 & 0 & 0 / 0 \\
 \hline
-Nghiên cứu lâm sàng VietDepression (19\,tr.) & IEEE & 20 & 100.00 & 18 & 0 & 0 & 2 / 0 \\
+\textbf{Nghiên cứu lâm sàng VietDepression} (19\,tr.) & IEEE & 20 & \textbf{100.00} & 18 & 0 & 0 & 2 / 0 \\
 \hline
-Báo cáo đồ án tốt nghiệp CNPM A (98\,tr.) & IEEE & 27 & 99.30 & 24 & 0 & 0 & 3 / 0 \\
+\textbf{Báo cáo đồ án tốt nghiệp CNPM A} (98\,tr.) & IEEE & 27 & \textbf{99.30} & 24 & 0 & 0 & 3 / 0 \\
 \hline
-Báo cáo đồ án tốt nghiệp CNPM B (53\,tr.) & IEEE & 5 & 77.50 & 5 & 0 & 0 & 0 / 0 \\
+\textbf{Báo cáo đồ án tốt nghiệp CNPM B} (53\,tr.) & IEEE & 5 & \textbf{77.50} & 5 & 0 & 0 & 0 / 0 \\
 \hline
-Tổng quan tài liệu KHMT (51\,tr.) & APA & 66 & 95.73 & 62 & 3 & 0 & 0 / 1 \\
+\textbf{Tổng quan tài liệu KHMT} (51\,tr.) & APA & 66 & \textbf{95.73} & 62 & 3 & 0 & 0 / 1 \\
 \hline
-Báo cáo đồ án cài lỗi kiểm thử (42\,tr.) & APA & 6 & 91.40 & 3 & 1 & 1 & 1 / 0 \\
+\textbf{Báo cáo đồ án cài lỗi kiểm thử} (42\,tr.) & APA & 6 & \textbf{91.40} & 3 & \textbf{1} & \textbf{1} & 1 / 0 \\
 \hline
 \end{longtable}
 }
@@ -416,7 +416,7 @@ Hình~\ref{fig:nfr-scalability} và các Bảng~\ref{tab:nfr-step-latency}--\ref
 \textbf{Quy mô bản thảo} & \textbf{Chặng xử lý} & \textbf{$P_{50}$ (ms)} & \textbf{$P_{90}$ (ms)} & \textbf{$P_{99}$ (ms)} & \textbf{Heap $\Delta$ (MB)} & \textbf{RSS (MB)} \\
 \hline
 \endfirsthead
-\multicolumn{7}{l}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
+\multicolumn{7}{c}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
 \hline
 \textbf{Quy mô bản thảo} & \textbf{Chặng xử lý} & \textbf{$P_{50}$ (ms)} & \textbf{$P_{90}$ (ms)} & \textbf{$P_{99}$ (ms)} & \textbf{Heap $\Delta$ (MB)} & \textbf{RSS (MB)} \\
 \hline
@@ -426,17 +426,17 @@ Hình~\ref{fig:nfr-scalability} và các Bảng~\ref{tab:nfr-step-latency}--\ref
 \endfoot
 \hline
 \endlastfoot
-Bài báo (12\,tr., 24\,TLTK) & \texttt{parsing} + \texttt{extract} & 182.8 & 263.7 & 309.7 & 2.36 & 835.7 \\
+\textbf{Bài báo} (12\,tr., 24\,TLTK) & \texttt{parsing} + \texttt{extract} & 182.8 & 263.7 & 309.7 & 2.36 & 835.7 \\
  & \texttt{link} + \texttt{retrieve} & 39.6 & 48.0 & 52.5 & 0.18 & 835.7 \\
  & \texttt{compare} + \texttt{check} & 268.3 & 274.5 & 276.4 & 0.22 & 835.7 \\
  & \textbf{Tổng (Cả 8 bước)} & \textbf{494.1} & \textbf{583.4} & \textbf{635.5} & \textbf{1.61} & \textbf{835.7} \\
 \hline
-Báo cáo đồ án (50\,tr., 32\,TLTK) & \texttt{parsing} + \texttt{extract} & 693.1 & 702.9 & 705.3 & 6.93 & 843.1 \\
+\textbf{Báo cáo đồ án} (50\,tr., 32\,TLTK) & \texttt{parsing} + \texttt{extract} & 693.1 & 702.9 & 705.3 & 6.93 & 843.1 \\
  & \texttt{link} + \texttt{retrieve} & 98.9 & 100.4 & 101.0 & 0.32 & 843.2 \\
  & \texttt{compare} + \texttt{check} & 506.2 & 530.6 & 536.1 & 0.37 & 843.2 \\
  & \textbf{Tổng (Cả 8 bước)} & \textbf{1306.9} & \textbf{1325.1} & \textbf{1333.0} & \textbf{4.39} & \textbf{843.4} \\
 \hline
-Chuyên khảo (156\,tr., 87\,TLTK) & \texttt{parsing} + \texttt{extract} & 1257.4 & 1273.1 & 1276.2 & 16.78 & 1029.8 \\
+\textbf{Chuyên khảo} (156\,tr., 87\,TLTK) & \texttt{parsing} + \texttt{extract} & 1257.4 & 1273.1 & 1276.2 & 16.78 & 1029.8 \\
  & \texttt{link} + \texttt{retrieve} & 317.0 & 320.8 & 322.2 & 0.38 & 1029.8 \\
  & \texttt{compare} + \texttt{check} & 2593.0 & 2633.8 & 2642.7 & 1.37 & 1029.9 \\
  & \textbf{Tổng (Cả 8 bước)} & \textbf{4159.7} & \textbf{4215.3} & \textbf{4215.6} & \textbf{11.10} & \textbf{1030.8} \\
@@ -451,7 +451,7 @@ Chuyên khảo (156\,tr., 87\,TLTK) & \texttt{parsing} + \texttt{extract} & 1257
 \textbf{Chế độ bộ nhớ đệm} & \textbf{Phân tích (ms)} & \textbf{Trích xuất (ms)} & \textbf{Truy hồi (ms)} & \textbf{Tổng (ms)} & \textbf{Tăng tốc truy hồi} & \textbf{Tăng tốc E2E} \\
 \hline
 \endfirsthead
-\multicolumn{7}{l}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
+\multicolumn{7}{c}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
 \hline
 \textbf{Chế độ bộ nhớ đệm} & \textbf{Phân tích (ms)} & \textbf{Trích xuất (ms)} & \textbf{Truy hồi (ms)} & \textbf{Tổng (ms)} & \textbf{Tăng tốc truy hồi} & \textbf{Tăng tốc E2E} \\
 \hline
@@ -463,7 +463,7 @@ Chuyên khảo (156\,tr., 87\,TLTK) & \texttt{parsing} + \texttt{extract} & 1257
 \endlastfoot
 Đệm lạnh (WAN trực tiếp) & 76.2 & 243.1 & 8635.8 & 9407.6 & $1.00\times$ & $1.00\times$ \\
 \hline
-Đệm ấm (TEI + FTS5) & 96.0 & 87.1 & \textbf{12.5} & \textbf{484.8} & \textbf{$688.72\times$} & \textbf{$19.41\times$} \\
+\textbf{Đệm ấm (TEI + FTS5)} & 96.0 & \textbf{87.1} & \textbf{12.5} & \textbf{484.8} & \textbf{$688.72\times$} & \textbf{$19.41\times$} \\
 \hline
 \end{longtable}
 }
@@ -475,7 +475,7 @@ Chuyên khảo (156\,tr., 87\,TLTK) & \texttt{parsing} + \texttt{extract} & 1257
 \textbf{Kịch bản chịu tải} & \textbf{$N$} & \textbf{Hoàn tất} & \textbf{Tải lên / Hàng đợi $P_{50}/P_{90}$ (ms)} & \textbf{Thông lượng} & \textbf{Khóa CSDL / 5xx} \\
 \hline
 \endfirsthead
-\multicolumn{6}{l}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
+\multicolumn{6}{c}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
 \hline
 \textbf{Kịch bản chịu tải} & \textbf{$N$} & \textbf{Hoàn tất} & \textbf{Tải lên / Hàng đợi $P_{50}/P_{90}$ (ms)} & \textbf{Thông lượng} & \textbf{Khóa CSDL / 5xx} \\
 \hline
@@ -485,13 +485,13 @@ Chuyên khảo (156\,tr., 87\,TLTK) & \texttt{parsing} + \texttt{extract} & 1257
 \endfoot
 \hline
 \endlastfoot
-Hàng đợi tiếp nhận & 20 & \textbf{20 / 20} & 315.5 / 520.7 & 30.07 bài/s & \textbf{0 / 0} \\
+Hàng đợi tiếp nhận & 20 & \textbf{20 / 20} & 315.5 / 520.7 & \textbf{30.07 bài/s} & \textbf{0 / 0} \\
 \hline
-Hàng đợi tiếp nhận & 50 & \textbf{50 / 50} & 3361.1 / 4079.2 & 11.57 bài/s & \textbf{0 / 0} \\
+Hàng đợi tiếp nhận & \textbf{50} & \textbf{50 / 50} & 3361.1 / 4079.2 & 11.57 bài/s & \textbf{0 / 0} \\
 \hline
-HTTP \texttt{POST /\allowbreak api/\allowbreak essays} & 20 & \textbf{20 / 20} & 514.2 / 659.4 & 28.68 req/s & \textbf{0 / 0} \\
+HTTP \texttt{POST /\allowbreak api/\allowbreak essays} & 20 & \textbf{20 / 20} & 514.2 / 659.4 & \textbf{28.68 req/s} & \textbf{0 / 0} \\
 \hline
-HTTP \texttt{POST /\allowbreak api/\allowbreak essays} & 50 & \textbf{50 / 50} & 1530.2 / 1948.0 & 24.49 req/s & \textbf{0 / 0} \\
+HTTP \texttt{POST /\allowbreak api/\allowbreak essays} & \textbf{50} & \textbf{50 / 50} & 1530.2 / 1948.0 & 24.49 req/s & \textbf{0 / 0} \\
 \hline
 \end{longtable}
 }

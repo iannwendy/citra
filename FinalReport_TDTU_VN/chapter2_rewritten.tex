@@ -39,7 +39,7 @@ Các nền tảng kiểm tra liêm chính học thuật, trình quản lý tài 
 \textbf{Nhóm hệ thống} & \textbf{PDF đa chuẩn} & \textbf{Liên kết 2 phía} & \textbf{15+ API trực tuyến} & \textbf{Đối sánh nhận định} & \textbf{Từ chối an toàn} & \textbf{Xác suất hiệu chỉnh} & \textbf{Pháp luật VN} \\
 \hline
 \endfirsthead
-\multicolumn{8}{l}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
+\multicolumn{8}{c}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
 \hline
 \textbf{Nhóm hệ thống} & \textbf{PDF đa chuẩn} & \textbf{Liên kết 2 phía} & \textbf{15+ API trực tuyến} & \textbf{Đối sánh nhận định} & \textbf{Từ chối an toàn} & \textbf{Xác suất hiệu chỉnh} & \textbf{Pháp luật VN} \\
 \hline
@@ -76,7 +76,7 @@ Các nghiên cứu trắc lượng thư mục quy mô lớn cho thấy sự chê
 \textbf{Nguồn dữ liệu / Bộ kiểm tra} & \textbf{Phạm vi bao phủ chính} & \textbf{Vai trò trong đường ống xử lý} \\
 \hline
 \endfirsthead
-\multicolumn{3}{l}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
+\multicolumn{3}{c}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
 \hline
 \textbf{Nguồn dữ liệu / Bộ kiểm tra} & \textbf{Phạm vi bao phủ chính} & \textbf{Vai trò trong đường ống xử lý} \\
 \hline
@@ -86,29 +86,29 @@ Các nghiên cứu trắc lượng thư mục quy mô lớn cho thấy sự chê
 \endfoot
 \hline
 \endlastfoot
-Kho cục bộ (\texttt{local\_papers.db}) & 129,125 bản ghi (128,105 bài báo duy nhất; 82,877 bản tóm tắt) từ ACL Anthology~\cite{acl-anthology} và arXiv & Tra cứu ngoại tuyến Tầng 0 dưới 100\,ms bằng SQLite FTS5 BM25 \\
+\textbf{Kho cục bộ} (\texttt{local\_papers.db}) & \textbf{129,125 bản ghi} (128,105 bài báo duy nhất; 82,877 bản tóm tắt) từ ACL Anthology~\cite{acl-anthology} và arXiv & Tra cứu ngoại tuyến \textbf{Tầng 0} dưới 100\,ms bằng SQLite FTS5 BM25 \\
 \hline
-Danh sách kinh điển (\texttt{\_KNOWN\_PAPERS}) & 101 công trình nền tảng thuộc lĩnh vực KHMT, AI, NLP và học sâu & Tra cứu tức thời Tầng 0 cho các bài báo kinh điển có tần suất trích dẫn cao \\
+\textbf{Danh sách kinh điển} (\texttt{\_KNOWN\_PAPERS}) & \textbf{101} công trình nền tảng thuộc lĩnh vực KHMT, AI, NLP và học sâu & Tra cứu tức thời \textbf{Tầng 0} cho các bài báo kinh điển có tần suất trích dẫn cao \\
 \hline
-Crossref~\cite{crossref-tdm} \& Retraction Watch & Tạp chí bình duyệt, kỷ yếu hội nghị, chương sách và thông báo rút bài & Phân giải DOI Tầng 1, phân tích tóm tắt chuẩn JATS (Journal Article Tag Suite) và sàng lọc cờ \texttt{is\_retracted} \\
+\textbf{Crossref}~\cite{crossref-tdm} \& \textbf{Retraction Watch} & Tạp chí bình duyệt, kỷ yếu hội nghị, chương sách và thông báo rút bài & Phân giải DOI \textbf{Tầng 1}, phân tích tóm tắt chuẩn JATS (Journal Article Tag Suite) và sàng lọc cờ \texttt{is\_retracted} \\
 \hline
-OpenAlex~\cite{openalex} & Đồ thị học thuật mở toàn cầu bao phủ tạp chí, bản tiền ấn phẩm và kho lưu trữ & Tra cứu siêu dữ liệu diện rộng Tầng 1 và tái tạo tóm tắt từ chỉ mục ngược \\
+\textbf{OpenAlex}~\cite{openalex} & Đồ thị học thuật mở toàn cầu bao phủ tạp chí, bản tiền ấn phẩm và kho lưu trữ & Tra cứu siêu dữ liệu diện rộng \textbf{Tầng 1} và tái tạo tóm tắt từ chỉ mục ngược \\
 \hline
-DataCite~\cite{datacite} \& Global DOI RA~\cite{doi-handbook} & Tập dữ liệu Zenodo/\allowbreak Figshare/\allowbreak OSF và các cơ quan cấp phát DOI khu vực (JaLC, CNKI, KISTI, mEDRA) & Phân giải DOI ngoài Crossref ở Tầng 1 và kích hoạt cơ chế từ chối an toàn \texttt{R-DOI-\allowbreak RA-\allowbreak NO-\allowbreak CSL} \\
+\textbf{DataCite}~\cite{datacite} \& \textbf{Global DOI RA}~\cite{doi-handbook} & Tập dữ liệu Zenodo/\allowbreak Figshare/\allowbreak OSF và các cơ quan cấp phát DOI khu vực (JaLC, CNKI, KISTI, mEDRA) & Phân giải DOI ngoài Crossref ở \textbf{Tầng 1} và kích hoạt cơ chế từ chối an toàn \texttt{R-DOI-\allowbreak RA-\allowbreak NO-\allowbreak CSL} \\
 \hline
-DOAJ~\cite{doaj} \& OpenAIRE / HAL & Tạp chí truy cập mở (bao gồm các tạp chí khu vực châu Á), kho lưu trữ trường viện và bản tiền ấn phẩm & Kiểm chứng tạp chí truy cập mở và kho lưu trữ học thuật cấp cơ sở ở Tầng 1 \\
+\textbf{DOAJ}~\cite{doaj} \& \textbf{OpenAIRE / HAL} & Tạp chí truy cập mở (bao gồm các tạp chí khu vực châu Á), kho lưu trữ trường viện và bản tiền ấn phẩm & Kiểm chứng tạp chí truy cập mở và kho lưu trữ học thuật cấp cơ sở ở \textbf{Tầng 1} \\
 \hline
-DBLP~\cite{dblp} \& arXiv API~\cite{arxiv-api} & Hội nghị/hội thảo chuyên đề khoa học máy tính và bản tiền ấn phẩm khối STEM & Định tuyến thư mục chuyên ngành KHMT/AI và tra cứu chính xác mã \texttt{arXiv} ở Tầng 1 \\
+\textbf{DBLP}~\cite{dblp} \& \textbf{arXiv API}~\cite{arxiv-api} & Hội nghị/hội thảo chuyên đề khoa học máy tính và bản tiền ấn phẩm khối STEM & Định tuyến thư mục chuyên ngành KHMT/AI và tra cứu chính xác mã \texttt{arXiv} ở \textbf{Tầng 1} \\
 \hline
-Europe PMC~\cite{europepmc} \& NCBI / bioRxiv & Cơ sở dữ liệu PubMed/\allowbreak MEDLINE ngành y sinh, lâm sàng, tâm lý học và bản tiền ấn phẩm khoa học sự sống & Tra cứu chuyên ngành khoa học sự sống và làm giàu bản tóm tắt ở Tầng 1 \\
+\textbf{Europe PMC}~\cite{europepmc} \& \textbf{NCBI / bioRxiv} & Cơ sở dữ liệu PubMed/\allowbreak MEDLINE ngành y sinh, lâm sàng, tâm lý học và bản tiền ấn phẩm khoa học sự sống & Tra cứu chuyên ngành khoa học sự sống và làm giàu bản tóm tắt ở \textbf{Tầng 1} \\
 \hline
-OpenLibrary~\cite{openlibrary} \& Google Books & Giáo trình, sách chuyên khảo, siêu dữ liệu ISBN và các lần tái bản đa ấn bản & Kiểm chứng sách ở Tầng 1 và dung sai năm xuất bản giữa các lần tái bản \\
+\textbf{OpenLibrary}~\cite{openlibrary} \& \textbf{Google Books} & Giáo trình, sách chuyên khảo, siêu dữ liệu ISBN và các lần tái bản đa ấn bản & Kiểm chứng sách ở \textbf{Tầng 1} và dung sai năm xuất bản giữa các lần tái bản \\
 \hline
-Hugging Face, IETF RFC, PyPI \& Wikidata & Mô hình/tập dữ liệu học máy, chuẩn Internet RFC, gói thư viện Python và OpenCitations & Kiểm chứng phần mềm, tiêu chuẩn kỹ thuật và dữ liệu trích dẫn mở ở Tầng 1 \\
+\textbf{Hugging Face, IETF RFC, PyPI \& Wikidata} & Mô hình/tập dữ liệu học máy, chuẩn Internet RFC, gói thư viện Python và OpenCitations & Kiểm chứng phần mềm, tiêu chuẩn kỹ thuật và dữ liệu trích dẫn mở ở \textbf{Tầng 1} \\
 \hline
-Bộ định tuyến Serper / SerpAPI & Chỉ mục tìm kiếm học thuật trên web dự phòng & Tầng 2 dự phòng tùy chọn khi cả Tầng 0 và Tầng 1 đều không trả về ứng viên nào \\
+\textbf{Bộ định tuyến Serper / SerpAPI} & Chỉ mục tìm kiếm học thuật trên web dự phòng & \textbf{Tầng 2} dự phòng tùy chọn khi cả Tầng 0 và Tầng 1 đều không trả về ứng viên nào \\
 \hline
-HTTP + Wayback \texttt{Link\allowbreak Validator}~\cite{openlibrary} & Đích truy cập HTTP/HTTPS trực tiếp và các bản chụp lưu trữ CDX của Internet Archive & Kiểm tra song song tính khả dụng của URL, phát hiện trang lỗi Soft-404 qua siêu dữ liệu HTML và tra cứu bản lưu trữ \\
+\textbf{HTTP + Wayback} \texttt{Link\allowbreak Validator}~\cite{openlibrary} & Đích truy cập HTTP/HTTPS trực tiếp và các bản chụp lưu trữ CDX của Internet Archive & Kiểm tra \textbf{song song} tính khả dụng của URL, phát hiện trang lỗi Soft-404 qua siêu dữ liệu HTML và tra cứu bản lưu trữ \\
 \hline
 \end{longtable}
 

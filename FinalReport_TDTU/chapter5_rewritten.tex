@@ -26,7 +26,7 @@ Software verification spans three automated test layers summarized in Table~\ref
 \textbf{Verification Layer} & \textbf{Execution Result} & \textbf{Verified Subsystem Scope} \\
 \hline
 \endfirsthead
-\multicolumn{3}{l}{\itshape Table \thetable\ (continued from previous page)}\\
+\multicolumn{3}{c}{\itshape Table \thetable\ (continued from previous page)}\\
 \hline
 \textbf{Verification Layer} & \textbf{Execution Result} & \textbf{Verified Subsystem Scope} \\
 \hline
@@ -36,23 +36,23 @@ Software verification spans three automated test layers summarized in Table~\ref
 \endfoot
 \hline
 \endlastfoot
-Backend (\texttt{pytest}) & 2,320+ passed (0 failed) & Multi-format extraction, 12 styles, \texttt{VNLegalVerifier}, 7-method linker, FTS5 + 15 APIs, SSRF-safe URL/HTML checks, 68 symbolic rules, Platt calibration, CIS, RBAC/IDOR, migrations \texttt{0001}--\texttt{0013}, and crash recovery. \\
+\textbf{Backend (\texttt{pytest})} & \textbf{2,320+ passed (0 failed)} & Multi-format extraction, 12 styles, \texttt{VNLegalVerifier}, 7-method linker, FTS5 + 15 APIs, SSRF-safe URL/HTML checks, 68 symbolic rules, Platt calibration, CIS, RBAC/IDOR, migrations \texttt{0001}--\texttt{0013}, and crash recovery. \\
 \hline
-Frontend (\texttt{Vitest}) & 487+ passed (63 suites, 0 failed) & Auth/OAuth flows, progressive-disclosure drawers, 6 diagnostic report views, Citation Network DAG, Remediation modal, Classroom/Admin telemetry, and $<251\text{\,kB}$ chunk guards. \\
+\textbf{Frontend (\texttt{Vitest})} & \textbf{487+ passed (63 suites, 0 failed)} & Auth/OAuth flows, progressive-disclosure drawers, 6 diagnostic report views, Citation Network DAG, Remediation modal, Classroom/Admin telemetry, and $<251\text{\,kB}$ chunk guards. \\
 \hline
-Browser E2E (\texttt{Playwright}) & 20 spec suites (132+ scenarios) & Zero horizontal overflow across 5 viewports $\times$ Light/Dark $\times$ EN/VI, SSE upload, split-pane inspection, teacher override, and 404/error recovery. \\
+\textbf{Browser E2E (\texttt{Playwright})} & \textbf{20 spec suites (132+ scenarios)} & Zero horizontal overflow across 5 viewports $\times$ Light/Dark $\times$ EN/VI, SSE upload, split-pane inspection, teacher override, and 404/error recovery. \\
 \hline
 \end{longtable}
 }
 
 {\setlength{\tabcolsep}{3.5pt}
 \begin{longtable}{|L{0.18}|L{0.34}|L{0.34}|C{0.14}|}
-\caption{Requirements Traceability Matrix (RTM) mapping Chapter 3 specifications to code and verification suites.}\label{tab:rtm}\\
+\caption{Requirements Traceability Matrix (RTM) mapping functional and non-functional specifications to code and verification suites.}\label{tab:rtm}\\
 \hline
 \textbf{Req.\ IDs} & \textbf{Implementing Modules} & \textbf{Verification Suite / Benchmark} & \textbf{Status} \\
 \hline
 \endfirsthead
-\multicolumn{4}{l}{\itshape Table \thetable\ (continued from previous page)}\\
+\multicolumn{4}{c}{\itshape Table \thetable\ (continued from previous page)}\\
 \hline
 \textbf{Req.\ IDs} & \textbf{Implementing Modules} & \textbf{Verification Suite / Benchmark} & \textbf{Status} \\
 \hline
@@ -78,7 +78,7 @@ Browser E2E (\texttt{Playwright}) & 20 spec suites (132+ scenarios) & Zero horiz
 \hline
 \texttt{FR-15}, \texttt{FR-16} & \texttt{api/\allowbreak routes/\allowbreak teacher.py}, \texttt{routes/system.py}, \texttt{ClassDetailPage.tsx}, \texttt{SystemHealthPage.tsx} & Transactional override, cohort analytics, \& circuit-breaker tests & Pass ($100\%$) \\
 \hline
-\texttt{NFR-01}, \texttt{NFR-02}, \texttt{NFR-07}--\texttt{10} & Full 8-layer pipeline, Docker Compose, \& Vite build (\texttt{web/}) & Latency/RSS ($P_{90}=1.33\text{\,s}$, $1.03\text{\,GB}$), WCAG E2E, $2{,}689+$ tests, chunk \& container health checks & Pass ($100\%$) \\
+\texttt{NFR-01}, \texttt{NFR-02}, \texttt{NFR-07}--\texttt{10} & Full 8-layer pipeline, Docker Compose, \& Vite build (\texttt{web/}) & Latency/RSS ($P_{90}=1.33\text{\,s}$, $1.03\text{\,GB}$), WCAG E2E, $2{,}827+$ tests, chunk \& container health checks & Pass ($100\%$) \\
 \hline
 \end{longtable}
 }
@@ -106,7 +106,7 @@ Table~\ref{tab:dataset} summarizes the evaluation datasets constructed to test e
 \textbf{Dataset / Corpus} & \textbf{Scale / Split} & \textbf{Evaluation Purpose} \\
 \hline
 \endfirsthead
-\multicolumn{3}{l}{\itshape Table \thetable\ (continued from previous page)}\\
+\multicolumn{3}{c}{\itshape Table \thetable\ (continued from previous page)}\\
 \hline
 \textbf{Dataset / Corpus} & \textbf{Scale / Split} & \textbf{Evaluation Purpose} \\
 \hline
@@ -116,15 +116,15 @@ Table~\ref{tab:dataset} summarizes the evaluation datasets constructed to test e
 \endfoot
 \hline
 \endlastfoot
-Paper-Disjoint Benchmark & 120,000 citations & 43.2K \texttt{ver.}, 36.0K \texttt{hall.}, 26.4K \texttt{meta.}, 14.4K \texttt{unr.} across 15 sub-taxonomies (\texttt{V1}--\texttt{U2}). \\
+\textbf{Paper-Disjoint Benchmark} & \textbf{120,000 citations} & 43.2K \texttt{ver.}, 36.0K \texttt{hall.}, 26.4K \texttt{meta.}, 14.4K \texttt{unr.} across 15 sub-taxonomies (\texttt{V1}--\texttt{U2}). \\
 \hline
-\quad Train / Val / Test Splits & 84K / 18K / 18K & Zero paper or title overlap; fits LR ($C=2.0$), fits Platt ($a,b$), and evaluates \textbf{RQ1} \& \textbf{RQ3}. \\
+\quad Train / Val / Test Splits & \textbf{84K / 18K / 18K} & Zero paper or title overlap; fits LR ($C=2.0$), fits Platt ($a,b$), and evaluates \textbf{RQ1} \& \textbf{RQ3}. \\
 \hline
-OOD Guardrail Stress Suite & 2,400 citations & $6 \times 400$ discrete symbolic guardrails built strictly from \texttt{test\_papers} (\textbf{RQ2}). \\
+\textbf{OOD Guardrail Stress Suite} & \textbf{2,400 citations} & $6 \times 400$ discrete symbolic guardrails built strictly from \texttt{test\_papers} (\textbf{RQ2}). \\
 \hline
-Multi-Domain Raw Gold Suite & 120 + 15 refs & 6 domains $\times$ 7 citation styles + 15 adversarial cases, zero oracle metadata (\textbf{RQ4}). \\
+\textbf{Multi-Domain Raw Gold Suite} & \textbf{120 + 15 refs} & 6 domains $\times$ 7 citation styles + 15 adversarial cases, zero oracle metadata (\textbf{RQ4}). \\
 \hline
-Multi-Style \& Regression PDFs & 310 + 841 PDFs & 30 VN legal, 60 hard-case, 220 11-style PDFs, plus 841-PDF parser stability suite (\textbf{RQ4}). \\
+\textbf{Multi-Style \& Regression PDFs} & \textbf{310 + 841 PDFs} & 30 VN legal, 60 hard-case, 220 11-style PDFs, plus 841-PDF parser stability suite (\textbf{RQ4}). \\
 \hline
 \end{longtable}
 }
@@ -160,7 +160,7 @@ Figure~\ref{fig:benchmark-charts} summarizes the quantitative empirical results 
 \textbf{Method} & \textbf{Core Mechanism} & \textbf{Acc.\ (\%)} & \textbf{P (\%)} & \textbf{R (\%)} & \textbf{F1 (\%)} & \textbf{Adj.\ McNemar $p$} \\
 \hline
 \endfirsthead
-\multicolumn{7}{l}{\itshape Table \thetable\ (continued from previous page)}\\
+\multicolumn{7}{c}{\itshape Table \thetable\ (continued from previous page)}\\
 \hline
 \textbf{Method} & \textbf{Core Mechanism} & \textbf{Acc.\ (\%)} & \textbf{P (\%)} & \textbf{R (\%)} & \textbf{F1 (\%)} & \textbf{Adj.\ McNemar $p$} \\
 \hline
@@ -194,7 +194,7 @@ Figure~\ref{fig:benchmark-charts} summarizes the quantitative empirical results 
 \textbf{Verdict Class} & \textbf{Support} & \textbf{Prec.\ (\%)} & \textbf{Rec.\ (\%)} & \textbf{F1 (\%)} & \textbf{Confusion (\texttt{ver / meta / hal / unr})} \\
 \hline
 \endfirsthead
-\multicolumn{6}{l}{\itshape Table \thetable\ (continued from previous page)}\\
+\multicolumn{6}{c}{\itshape Table \thetable\ (continued from previous page)}\\
 \hline
 \textbf{Verdict Class} & \textbf{Support} & \textbf{Prec.\ (\%)} & \textbf{Rec.\ (\%)} & \textbf{F1 (\%)} & \textbf{Confusion (\texttt{ver / meta / hal / unr})} \\
 \hline
@@ -204,13 +204,13 @@ Figure~\ref{fig:benchmark-charts} summarizes the quantitative empirical results 
 \endfoot
 \hline
 \endlastfoot
-\texttt{verified} & 6,480 & 98.46 & \textbf{99.80} & 99.13 & \texttt{6,467 / 11 / 0 / 2} \\
+\textbf{\texttt{verified}} & 6,480 & 98.46 & \textbf{99.80} & 99.13 & \texttt{6,467 / 11 / 0 / 2} \\
 \hline
-\texttt{suspected\_hallucination} & 5,400 & \textbf{99.93} & 99.69 & \textbf{99.81} & \texttt{0 / 0 / 5,383 / 17} \\
+\textbf{\texttt{suspected\_hallucination}} & 5,400 & \textbf{99.93} & 99.69 & \textbf{99.81} & \texttt{0 / 0 / 5,383 / 17} \\
 \hline
-\texttt{metadata\_error} & 3,960 & 99.15 & 96.84 & 97.98 & \texttt{101 / 3,835 / 4 / 20} \\
+\textbf{\texttt{metadata\_error}} & 3,960 & 99.15 & 96.84 & 97.98 & \texttt{101 / 3,835 / 4 / 20} \\
 \hline
-\texttt{unresolved} & 2,160 & 98.21 & 98.98 & 98.59 & \texttt{0 / 22 / 0 / 2,138} \\
+\textbf{\texttt{unresolved}} & 2,160 & 98.21 & 98.98 & 98.59 & \texttt{0 / 22 / 0 / 2,138} \\
 \hline
 \textbf{Macro / Total} & \textbf{18,000} & \textbf{98.94} & \textbf{98.83} & \textbf{98.88} & \textbf{Acc.: 99.02\%} (95\% CI $[98.87, 99.16]$) \\
 \hline
@@ -232,7 +232,7 @@ Table~\ref{tab:ood-stress} evaluates \texttt{B4}, \texttt{B5}, and \texttt{Propo
 \textbf{OOD Category ($N = 400$ each)} & \textbf{Primary Guardrail} & \textbf{\texttt{B4} (\%)} & \textbf{\texttt{B5} (\%)} & \textbf{\texttt{Proposed} (\%)} \\
 \hline
 \endfirsthead
-\multicolumn{5}{l}{\itshape Table \thetable\ (continued from previous page)}\\
+\multicolumn{5}{c}{\itshape Table \thetable\ (continued from previous page)}\\
 \hline
 \textbf{OOD Category ($N = 400$ each)} & \textbf{Primary Guardrail} & \textbf{\texttt{B4} (\%)} & \textbf{\texttt{B5} (\%)} & \textbf{\texttt{Proposed} (\%)} \\
 \hline
@@ -242,19 +242,19 @@ Table~\ref{tab:ood-stress} evaluates \texttt{B4}, \texttt{B5}, and \texttt{Propo
 \endfoot
 \hline
 \endlastfoot
-1. Retracted papers (\texttt{is\_retracted}) & \texttt{R-RETRACTED-\allowbreak PAPER} & 0.00 & 0.00 & \textbf{100.00} \\
+\textbf{1. Retracted papers} (\texttt{is\_retracted}) & \texttt{R-RETRACTED-\allowbreak PAPER} & 0.00 & 0.00 & \textbf{100.00} \\
 \hline
-2. Chimeric real DOI on invented title & \texttt{R-CHIMERIC-DOI-\allowbreak MISMATCH} & 0.00 & 64.25 & \textbf{98.50} \\
+\textbf{2. Chimeric real DOI on invented title} & \texttt{R-CHIMERIC-DOI-\allowbreak MISMATCH} & 0.00 & 64.25 & \textbf{98.50} \\
 \hline
-3. RFC 2606 placeholder/fake URLs & \texttt{R-FAKE-URL} & 0.00 & 0.00 & \textbf{100.00} \\
+\textbf{3. RFC 2606 placeholder/fake URLs} & \texttt{R-FAKE-URL} & 0.00 & 0.00 & \textbf{100.00} \\
 \hline
-4. Regional DOIs lacking public CSL & \texttt{R-DOI-RA-NO-CSL} & 0.00 & 100.00 & \textbf{100.00} \\
+\textbf{4. Regional DOIs lacking public CSL} & \texttt{R-DOI-RA-NO-CSL} & 0.00 & 100.00 & \textbf{100.00} \\
 \hline
-5. Upstream HTTP 429 rate exhaustion & \texttt{R-RATE-LIMITED-\allowbreak ABSTAIN} & 0.00 & 100.00 & \textbf{100.00} \\
+\textbf{5. Upstream HTTP 429 rate exhaustion} & \texttt{R-RATE-LIMITED-\allowbreak ABSTAIN} & 0.00 & 100.00 & \textbf{100.00} \\
 \hline
-6. VN statutory authority mismatch & \texttt{VNLegalVerifier} & 20.00 & 35.00 & \textbf{100.00} \\
+\textbf{6. VN statutory authority mismatch} & \texttt{VNLegalVerifier} & 20.00 & 35.00 & \textbf{100.00} \\
 \hline
-\textbf{Total OOD Suite ($N = 2{,}400$)} & McNemar $p = 1.47 \times 10^{-260}$ & 3.33 & 49.88 & \textbf{99.75} \\
+\textbf{Total OOD Suite ($N = 2{,}400$)} & \textbf{McNemar $p = 1.47 \times 10^{-260}$} & 3.33 & 49.88 & \textbf{99.75} \\
 \hline
 \end{longtable}
 }
@@ -271,7 +271,7 @@ Table~\ref{tab:calibration-results} compares uncalibrated symbolic confidences a
 \textbf{Calibration / Coverage Metric} & \textbf{Uncalibrated Symbolic} & \textbf{Platt Neuro-Symbolic} & \textbf{Change} \\
 \hline
 \endfirsthead
-\multicolumn{4}{l}{\itshape Table \thetable\ (continued from previous page)}\\
+\multicolumn{4}{c}{\itshape Table \thetable\ (continued from previous page)}\\
 \hline
 \textbf{Calibration / Coverage Metric} & \textbf{Uncalibrated Symbolic} & \textbf{Platt Neuro-Symbolic} & \textbf{Change} \\
 \hline
@@ -315,7 +315,7 @@ To evaluate end-to-end generalization beyond the synthetic perturbation benchmar
 \textbf{PDF Corpus} & \textbf{PDFs} & \textbf{Bib.\ Detected} & \textbf{Extracted Refs} & \textbf{Matched Links} \\
 \hline
 \endfirsthead
-\multicolumn{5}{l}{\itshape Table \thetable\ (continued from previous page)}\\
+\multicolumn{5}{c}{\itshape Table \thetable\ (continued from previous page)}\\
 \hline
 \textbf{PDF Corpus} & \textbf{PDFs} & \textbf{Bib.\ Detected} & \textbf{Extracted Refs} & \textbf{Matched Links} \\
 \hline
@@ -327,11 +327,11 @@ To evaluate end-to-end generalization beyond the synthetic perturbation benchmar
 \endlastfoot
 VN Legal Corpus (Pre-v3.80 Baseline) & 30 & 27 / 30 (90.0\%) & 164 (15 Legal) & 109 / 235 (46.4\%) \\
 \hline
-VN Legal Corpus (\textbf{CITRA v3.90.5}) & \textbf{30} & \textbf{30 / 30 (100.0\%)} & \textbf{258 (91 Legal)} & \textbf{403 / 416 (96.9\%)} \\
+\textbf{VN Legal Corpus} (\textbf{CITRA v3.90.5}) & \textbf{30} & \textbf{30 / 30 (100.0\%)} & \textbf{258 (91 Legal)} & \textbf{403 / 416 (96.9\%)} \\
 \hline
-12-Style Diagnostic Suite ($12 \times 5$) & \textbf{60} & \textbf{60 / 60 (100.0\%)} & \textbf{397 / 397 (100.0\%)} & \textbf{60 / 60 PDFs (100\%)} \\
+\textbf{12-Style Diagnostic Suite ($12 \times 5$)} & \textbf{60} & \textbf{60 / 60 (100.0\%)} & \textbf{397 / 397 (100.0\%)} & \textbf{60 / 60 PDFs (100\%)} \\
 \hline
-11-Style Open-Access Articles ($11 \times 20$) & \textbf{220} & \textbf{215 / 220 (97.7\%)} & \textbf{8,126 refs} & \textbf{8,954 / 12,770 (70.1\%)} \\
+\textbf{11-Style Open-Access Articles ($11 \times 20$)} & \textbf{220} & \textbf{215 / 220 (97.7\%)} & \textbf{8,126 refs} & \textbf{8,954 / 12,770 (70.1\%)} \\
 \hline
 \end{longtable}
 }
@@ -343,7 +343,7 @@ VN Legal Corpus (\textbf{CITRA v3.90.5}) & \textbf{30} & \textbf{30 / 30 (100.0\
 \textbf{Manuscript} & \textbf{Style} & \textbf{Refs} & \textbf{CIS} & \textbf{Ver.} & \textbf{Meta.} & \textbf{Hall.} & \textbf{Res./Unr.} \\
 \hline
 \endfirsthead
-\multicolumn{8}{l}{\itshape Table \thetable\ (continued from previous page)}\\
+\multicolumn{8}{c}{\itshape Table \thetable\ (continued from previous page)}\\
 \hline
 \textbf{Manuscript} & \textbf{Style} & \textbf{Refs} & \textbf{CIS} & \textbf{Ver.} & \textbf{Meta.} & \textbf{Hall.} & \textbf{Res./Unr.} \\
 \hline
@@ -353,19 +353,19 @@ VN Legal Corpus (\textbf{CITRA v3.90.5}) & \textbf{30} & \textbf{30 / 30 (100.0\
 \endfoot
 \hline
 \endlastfoot
-BERT (\textit{NAACL 2019}) & APA & 101 & 97.43 & 94 & 7 & 0 & 0 / 0 \\
+\textbf{BERT} (\textit{NAACL 2019}) & APA & 101 & \textbf{97.43} & 94 & 7 & 0 & 0 / 0 \\
 \hline
-Attention Is All You Need (\textit{NeurIPS}) & Numeric & 71 & 92.99 & 70 & 1 & 0 & 0 / 0 \\
+\textbf{Attention Is All You Need} (\textit{NeurIPS}) & Numeric & 71 & \textbf{92.99} & 70 & 1 & 0 & 0 / 0 \\
 \hline
-VietDepression Clinical Study (19\,pp.) & IEEE & 20 & 100.00 & 18 & 0 & 0 & 2 / 0 \\
+\textbf{VietDepression Clinical Study} (19\,pp.) & IEEE & 20 & \textbf{100.00} & 18 & 0 & 0 & 2 / 0 \\
 \hline
-SE Capstone Report A (98\,pp.) & IEEE & 27 & 99.30 & 24 & 0 & 0 & 3 / 0 \\
+\textbf{SE Capstone Report A} (98\,pp.) & IEEE & 27 & \textbf{99.30} & 24 & 0 & 0 & 3 / 0 \\
 \hline
-SE Capstone Report B (53\,pp.) & IEEE & 5 & 77.50 & 5 & 0 & 0 & 0 / 0 \\
+\textbf{SE Capstone Report B} (53\,pp.) & IEEE & 5 & \textbf{77.50} & 5 & 0 & 0 & 0 / 0 \\
 \hline
-CS Literature Survey (51\,pp.) & APA & 66 & 95.73 & 62 & 3 & 0 & 0 / 1 \\
+\textbf{CS Literature Survey} (51\,pp.) & APA & 66 & \textbf{95.73} & 62 & 3 & 0 & 0 / 1 \\
 \hline
-Seeded Capstone Audit Fixture (42\,pp.) & APA & 6 & 91.40 & 3 & 1 & 1 & 1 / 0 \\
+\textbf{Seeded Capstone Audit Fixture} (42\,pp.) & APA & 6 & \textbf{91.40} & 3 & \textbf{1} & \textbf{1} & 1 / 0 \\
 \hline
 \end{longtable}
 }
@@ -416,7 +416,7 @@ Figure~\ref{fig:nfr-scalability} and Tables~\ref{tab:nfr-step-latency}--\ref{tab
 \textbf{Manuscript Scale} & \textbf{Stage} & \textbf{$P_{50}$ (ms)} & \textbf{$P_{90}$ (ms)} & \textbf{$P_{99}$ (ms)} & \textbf{Heap $\Delta$ (MB)} & \textbf{RSS (MB)} \\
 \hline
 \endfirsthead
-\multicolumn{7}{l}{\itshape Table \thetable\ (continued from previous page)}\\
+\multicolumn{7}{c}{\itshape Table \thetable\ (continued from previous page)}\\
 \hline
 \textbf{Manuscript Scale} & \textbf{Stage} & \textbf{$P_{50}$ (ms)} & \textbf{$P_{90}$ (ms)} & \textbf{$P_{99}$ (ms)} & \textbf{Heap $\Delta$ (MB)} & \textbf{RSS (MB)} \\
 \hline
@@ -426,17 +426,17 @@ Figure~\ref{fig:nfr-scalability} and Tables~\ref{tab:nfr-step-latency}--\ref{tab
 \endfoot
 \hline
 \endlastfoot
-Article (12\,pp., 24\,refs) & \texttt{parsing} + \texttt{extract} & 182.8 & 263.7 & 309.7 & 2.36 & 835.7 \\
+\textbf{Article} (12\,pp., 24\,refs) & \texttt{parsing} + \texttt{extract} & 182.8 & 263.7 & 309.7 & 2.36 & 835.7 \\
  & \texttt{link} + \texttt{retrieve} & 39.6 & 48.0 & 52.5 & 0.18 & 835.7 \\
  & \texttt{compare} + \texttt{check} & 268.3 & 274.5 & 276.4 & 0.22 & 835.7 \\
  & \textbf{Total (All 8 steps)} & \textbf{494.1} & \textbf{583.4} & \textbf{635.5} & \textbf{1.61} & \textbf{835.7} \\
 \hline
-Capstone (50\,pp., 32\,refs) & \texttt{parsing} + \texttt{extract} & 693.1 & 702.9 & 705.3 & 6.93 & 843.1 \\
+\textbf{Capstone} (50\,pp., 32\,refs) & \texttt{parsing} + \texttt{extract} & 693.1 & 702.9 & 705.3 & 6.93 & 843.1 \\
  & \texttt{link} + \texttt{retrieve} & 98.9 & 100.4 & 101.0 & 0.32 & 843.2 \\
  & \texttt{compare} + \texttt{check} & 506.2 & 530.6 & 536.1 & 0.37 & 843.2 \\
  & \textbf{Total (All 8 steps)} & \textbf{1306.9} & \textbf{1325.1} & \textbf{1333.0} & \textbf{4.39} & \textbf{843.4} \\
 \hline
-Monograph (156\,pp., 87\,refs) & \texttt{parsing} + \texttt{extract} & 1257.4 & 1273.1 & 1276.2 & 16.78 & 1029.8 \\
+\textbf{Monograph} (156\,pp., 87\,refs) & \texttt{parsing} + \texttt{extract} & 1257.4 & 1273.1 & 1276.2 & 16.78 & 1029.8 \\
  & \texttt{link} + \texttt{retrieve} & 317.0 & 320.8 & 322.2 & 0.38 & 1029.8 \\
  & \texttt{compare} + \texttt{check} & 2593.0 & 2633.8 & 2642.7 & 1.37 & 1029.9 \\
  & \textbf{Total (All 8 steps)} & \textbf{4159.7} & \textbf{4215.3} & \textbf{4215.6} & \textbf{11.10} & \textbf{1030.8} \\
@@ -451,7 +451,7 @@ Monograph (156\,pp., 87\,refs) & \texttt{parsing} + \texttt{extract} & 1257.4 & 
 \textbf{Cache Mode} & \textbf{Parse (ms)} & \textbf{Extr.\ (ms)} & \textbf{Retr.\ (ms)} & \textbf{Total (ms)} & \textbf{Retr.\ Gain} & \textbf{E2E Gain} \\
 \hline
 \endfirsthead
-\multicolumn{7}{l}{\itshape Table \thetable\ (continued from previous page)}\\
+\multicolumn{7}{c}{\itshape Table \thetable\ (continued from previous page)}\\
 \hline
 \textbf{Cache Mode} & \textbf{Parse (ms)} & \textbf{Extr.\ (ms)} & \textbf{Retr.\ (ms)} & \textbf{Total (ms)} & \textbf{Retr.\ Gain} & \textbf{E2E Gain} \\
 \hline
@@ -463,7 +463,7 @@ Monograph (156\,pp., 87\,refs) & \texttt{parsing} + \texttt{extract} & 1257.4 & 
 \endlastfoot
 Cold Cache (Live WAN) & 76.2 & 243.1 & 8635.8 & 9407.6 & $1.00\times$ & $1.00\times$ \\
 \hline
-Warm Cache (TEI + FTS5) & 96.0 & 87.1 & \textbf{12.5} & \textbf{484.8} & \textbf{$688.72\times$} & \textbf{$19.41\times$} \\
+\textbf{Warm Cache (TEI + FTS5)} & 96.0 & \textbf{87.1} & \textbf{12.5} & \textbf{484.8} & \textbf{$688.72\times$} & \textbf{$19.41\times$} \\
 \hline
 \end{longtable}
 }
@@ -475,7 +475,7 @@ Warm Cache (TEI + FTS5) & 96.0 & 87.1 & \textbf{12.5} & \textbf{484.8} & \textbf
 \textbf{Stress Scenario} & \textbf{$N$} & \textbf{Completed} & \textbf{Upload / Queue $P_{50}/P_{90}$ (ms)} & \textbf{Throughput} & \textbf{DB Lock / 5xx} \\
 \hline
 \endfirsthead
-\multicolumn{6}{l}{\itshape Table \thetable\ (continued from previous page)}\\
+\multicolumn{6}{c}{\itshape Table \thetable\ (continued from previous page)}\\
 \hline
 \textbf{Stress Scenario} & \textbf{$N$} & \textbf{Completed} & \textbf{Upload / Queue $P_{50}/P_{90}$ (ms)} & \textbf{Throughput} & \textbf{DB Lock / 5xx} \\
 \hline
@@ -485,13 +485,13 @@ Warm Cache (TEI + FTS5) & 96.0 & 87.1 & \textbf{12.5} & \textbf{484.8} & \textbf
 \endfoot
 \hline
 \endlastfoot
-Admission Queue Worker & 20 & \textbf{20 / 20} & 315.5 / 520.7 & 30.07 essays/s & \textbf{0 / 0} \\
+Admission Queue Worker & 20 & \textbf{20 / 20} & 315.5 / 520.7 & \textbf{30.07 essays/s} & \textbf{0 / 0} \\
 \hline
-Admission Queue Worker & 50 & \textbf{50 / 50} & 3361.1 / 4079.2 & 11.57 essays/s & \textbf{0 / 0} \\
+Admission Queue Worker & \textbf{50} & \textbf{50 / 50} & 3361.1 / 4079.2 & 11.57 essays/s & \textbf{0 / 0} \\
 \hline
-HTTP \texttt{POST /api/essays} & 20 & \textbf{20 / 20} & 514.2 / 659.4 & 28.68 req/s & \textbf{0 / 0} \\
+HTTP \texttt{POST /api/essays} & 20 & \textbf{20 / 20} & 514.2 / 659.4 & \textbf{28.68 req/s} & \textbf{0 / 0} \\
 \hline
-HTTP \texttt{POST /api/essays} & 50 & \textbf{50 / 50} & 1530.2 / 1948.0 & 24.49 req/s & \textbf{0 / 0} \\
+HTTP \texttt{POST /api/essays} & \textbf{50} & \textbf{50 / 50} & 1530.2 / 1948.0 & 24.49 req/s & \textbf{0 / 0} \\
 \hline
 \end{longtable}
 }

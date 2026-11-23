@@ -37,6 +37,8 @@ essay-integrity-checker/
 ├── web/                      # React 18 + TypeScript + Vite + Tailwind CSS v3.4 frontend (488 Vitest tests / 63 files, 20 Playwright E2E suites)
 ├── scripts/                  # Corpus ingestion, 120K Neuro-Symbolic training, NFR benchmarks & maintenance utilities
 ├── configs/                  # YAML configurations (config.yaml, config.example.yaml, config.docker.yaml)
+├── FinalReport_TDTU/         # English TDTU graduation thesis (thesis.tex / thesis.pdf — follow FinalReport_TDTU/AGENTS.md)
+├── FinalReport_TDTU_VN/      # Vietnamese TDTU graduation thesis (thesis.tex / thesis.pdf — follow FinalReport_TDTU_VN/AGENTS.md)
 ├── docs/                     # Categorized docs (architecture/, reference/, reports/, plans/, superpowers/, screenshots/) — see docs/README.md
 └── tests/                    # 2,325 passing unit & integration tests (2,335-test suite)
 ```
@@ -110,6 +112,9 @@ cd web && npm run lint && npx tsc --noEmit && npx tsc -p tsconfig.e2e.json --noE
 
 # Run pipeline on a manuscript (.pdf / .docx / .bib / .ris)
 .venv/bin/python -m integrity_checker.pipeline.integrity_pipeline thesis.pdf --output reports/thesis.json
+
+# Verify compiled EN & VN TDTU graduation thesis PDFs (13pt body, 12pt tables & italic captions, IEEE refs)
+.venv/bin/python scripts/verify_thesis_pdf.py
 
 # Launch full Docker stack (GROBID :8070 + FastAPI :8000 + React Web :5173)
 docker compose up -d --build

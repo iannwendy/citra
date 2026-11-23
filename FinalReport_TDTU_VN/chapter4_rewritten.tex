@@ -14,7 +14,7 @@
 \textbf{Tầng} & \textbf{Các mô-đun chính} & \textbf{Trách nhiệm cốt lõi} \\
 \hline
 \endfirsthead
-\multicolumn{3}{l}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
+\multicolumn{3}{c}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
 \hline
 \textbf{Tầng} & \textbf{Các mô-đun chính} & \textbf{Trách nhiệm cốt lõi} \\
 \hline
@@ -24,21 +24,21 @@
 \endfoot
 \hline
 \endlastfoot
-1. Trích xuất & \texttt{document\_parser}, \texttt{grobid\_parser}, \texttt{grobid\_adapter}, \texttt{docx\_parser}, \texttt{patterns/*}, \texttt{style\_detector} & Phân tích cú pháp các tệp đầu vào PDF, DOCX, BibTeX và RIS thành văn bản nội dung, dấu trích dẫn theo ngữ cảnh trong bài và các mục tài liệu tham khảo thuộc 12 chuẩn trích dẫn. \\
+\textbf{1. Trích xuất} & \texttt{document\_parser}, \texttt{grobid\_parser}, \texttt{grobid\_adapter}, \texttt{docx\_parser}, \texttt{patterns/*}, \texttt{style\_detector} & Phân tích cú pháp các tệp đầu vào PDF, DOCX, BibTeX và RIS thành văn bản nội dung, dấu trích dẫn theo ngữ cảnh trong bài và các mục tài liệu tham khảo thuộc \textbf{12 chuẩn trích dẫn}. \\
 \hline
-2. Hợp nhất & \texttt{integrity\_pipeline.\_merge\_citations} & Khử trùng lặp các trích dẫn trong bài, danh mục tài liệu tham khảo và phụ lục thành tập công trình duy nhất nhưng vẫn giữ nguyên mọi vị trí xuất hiện nội văn. \\
+\textbf{2. Hợp nhất} & \texttt{integrity\_pipeline.\_merge\_citations} & Khử trùng lặp các trích dẫn trong bài, danh mục tài liệu tham khảo và phụ lục thành tập công trình duy nhất nhưng vẫn giữ nguyên mọi vị trí xuất hiện nội văn. \\
 \hline
-3. Liên kết & \texttt{citation\_linker}, \texttt{duplicate\_detector}, \texttt{statuses} & Tái tạo đồ thị hai phía giữa các dấu trích dẫn trong bài và danh mục tài liệu tham khảo thông qua 7 phương pháp phân giải và 8 trạng thái ánh xạ. \\
+\textbf{3. Liên kết} & \texttt{citation\_linker}, \texttt{duplicate\_detector}, \texttt{statuses} & Tái tạo đồ thị hai phía giữa các dấu trích dẫn trong bài và danh mục tài liệu tham khảo thông qua \textbf{7 phương pháp phân giải} và \textbf{8 trạng thái ánh xạ}. \\
 \hline
-4. Truy hồi & \texttt{retrieval\_orchestrator}, \texttt{local\_db}, \texttt{link\_validator}, \texttt{html\_meta\_verifier}, hơn 15 trình khách & Điều phối truy vấn qua chỉ mục ngoại tuyến SQLite FTS5, hơn 15 API trực tuyến, Retraction Watch và các bộ kiểm tra HTTP/Wayback/HTML an toàn chống SSRF. \\
+\textbf{4. Truy hồi} & \texttt{retrieval\_orchestrator}, \texttt{local\_db}, \texttt{link\_validator}, \texttt{html\_meta\_verifier}, hơn 15 trình khách & Điều phối truy vấn qua chỉ mục ngoại tuyến SQLite FTS5, \textbf{hơn 15 API trực tuyến}, Retraction Watch và các bộ kiểm tra HTTP/Wayback/HTML an toàn chống SSRF. \\
 \hline
-5. Đối sánh & \texttt{features}, \texttt{fuzzy}, \texttt{semantic}, \texttt{author\_matcher}, \texttt{venue\_normalizer} & Tính toán độ tương đồng từ vựng, khoảng cách siêu dữ liệu, điểm căn chỉnh gộp theo câu bằng SBERT, lập trường luận điểm và điểm đối sánh xuyên ngôn ngữ \texttt{VI}$\leftrightarrow$\texttt{EN} chuẩn ONNX INT8. \\
+\textbf{5. Đối sánh} & \texttt{features}, \texttt{fuzzy}, \texttt{semantic}, \texttt{author\_matcher}, \texttt{venue\_normalizer} & Tính toán độ tương đồng từ vựng, khoảng cách siêu dữ liệu, điểm căn chỉnh gộp theo câu bằng SBERT, lập trường luận điểm và điểm đối sánh xuyên ngôn ngữ \texttt{VI}$\leftrightarrow$\texttt{EN} chuẩn ONNX INT8. \\
 \hline
-6. Kiểm chứng & \texttt{neuro\_symbolic\_checker}, \texttt{rules}, \texttt{vn\_legal\_verifier}, \texttt{calibration} & Đánh giá tầng sơ lọc Mức 0 cùng 16 nhóm luật ký hiệu (68 mã luật), kết hợp với Hồi quy Logistic 16 chiều và hiệu chỉnh xác suất Platt. \\
+\textbf{6. Kiểm chứng} & \texttt{neuro\_symbolic\_checker}, \texttt{rules}, \texttt{vn\_legal\_verifier}, \texttt{calibration} & Đánh giá tầng sơ lọc Mức 0 cùng 16 nhóm luật ký hiệu (\textbf{68 mã luật}), kết hợp với Hồi quy Logistic 16 chiều và hiệu chỉnh xác suất Platt. \\
 \hline
-7. Chấm điểm \& Xuất bản & \texttt{cis}, \texttt{explanation}, \texttt{bibliography\_formatter}, \texttt{docx\_exporter} & Tính Điểm toàn vẹn trích dẫn (CIS) năm thành phần, sinh lời giải thích song ngữ, đồng thời xuất báo cáo đã làm sạch và tệp \texttt{.docx} đã chuẩn hóa. \\
+\textbf{7. Chấm điểm \& Xuất bản} & \texttt{cis}, \texttt{explanation}, \texttt{bibliography\_formatter}, \texttt{docx\_exporter} & Tính \textbf{Điểm toàn vẹn trích dẫn (CIS) năm thành phần}, sinh lời giải thích song ngữ, đồng thời xuất báo cáo đã làm sạch và tệp \texttt{.docx} đã chuẩn hóa. \\
 \hline
-8. Trình bày & FastAPI \texttt{api/*}, React/TypeScript \texttt{web/src/*} & Truyền luồng tiến độ qua SSE, cung cấp sáu chế độ xem báo cáo chẩn đoán, phân tích thống kê lớp học, ghi đè kết quả trực tiếp cho giảng viên và bảng quản trị hệ thống. \\
+\textbf{8. Trình bày} & FastAPI \texttt{api/*}, React/TypeScript \texttt{web/src/*} & Truyền luồng tiến độ qua SSE, cung cấp sáu chế độ xem báo cáo chẩn đoán, phân tích thống kê lớp học, ghi đè kết quả trực tiếp cho giảng viên và bảng quản trị hệ thống. \\
 \hline
 \end{longtable}
 }
@@ -82,7 +82,7 @@ Các mục tài liệu tham khảo và dấu trích dẫn nội văn được đ
 \textbf{Chuẩn} & \textbf{Ưu tiên} & \textbf{Mẫu đánh dấu trong bài} & \textbf{Mẫu mục tài liệu tham khảo} \\
 \hline
 \endfirsthead
-\multicolumn{4}{l}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
+\multicolumn{4}{c}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
 \hline
 \textbf{Chuẩn} & \textbf{Ưu tiên} & \textbf{Mẫu đánh dấu trong bài} & \textbf{Mẫu mục tài liệu tham khảo} \\
 \hline
@@ -92,29 +92,29 @@ Các mục tài liệu tham khảo và dấu trích dẫn nội văn được đ
 \endfoot
 \hline
 \endlastfoot
-APA (7th) & 100 & \textit{(Author et al., 2020)}, \textit{Author (2020a)} & Author, A. B. (2020). Title of work. \textit{Venue, 12}(3), 45--67. \\
+\textbf{APA (7th)} & \textbf{100} & \textit{(Author et al., 2020)}, \textit{Author (2020a)} & Author, A. B. (2020). Title of work. \textit{Venue, 12}(3), 45--67. \\
 \hline
-IEEE & 90 & \textit{[1]}, \textit{[1, 2]}, \textit{[1]--[3]} & [1] A. Author, ``Title,'' \textit{Venue}, vol.\ 1, pp.\ 1--10, 2020. \\
+\textbf{IEEE} & \textbf{90} & \textit{[1]}, \textit{[1, 2]}, \textit{[1]--[3]} & [1] A. Author, ``Title,'' \textit{Venue}, vol.\ 1, pp.\ 1--10, 2020. \\
 \hline
-ACM & 88 & \textit{[1]}, \textit{[Author 2020]} & [1] Author Name. 2020. Title. In \textit{Proc.\ ACM}, 1--10. \\
+\textbf{ACM} & 88 & \textit{[1]}, \textit{[Author 2020]} & [1] Author Name. 2020. Title. In \textit{Proc.\ ACM}, 1--10. \\
 \hline
-Harvard & 85 & \textit{(Author, 2020)}, \textit{(Author 2020: 15)} & Author, A. (2020) \textit{Title}. Place: Publisher. \\
+\textbf{Harvard} & 85 & \textit{(Author, 2020)}, \textit{(Author 2020: 15)} & Author, A. (2020) \textit{Title}. Place: Publisher. \\
 \hline
-Vancouver & 80 & \textit{[1]}, \textit{(1--3)} & 1. Author AB. Title. \textit{Venue}. 2020;12(1):10--20. \\
+\textbf{Vancouver} & 80 & \textit{[1]}, \textit{(1--3)} & 1. Author AB. Title. \textit{Venue}. 2020;12(1):10--20. \\
 \hline
-Nature & 78 & Chỉ số trên / \textit{[1]} & 1. Author, A. Title. \textit{Nature} \textbf{580}, 100--105 (2020). \\
+\textbf{Nature} & 78 & Chỉ số trên / \textit{[1]} & 1. Author, A. Title. \textit{Nature} \textbf{580}, 100--105 (2020). \\
 \hline
-CSE & 77 & \textit{(Author 2020)}, chỉ số trên & Author AB. 2020. Title. \textit{Venue}. 12(1):10--20. \\
+\textbf{CSE} & 77 & \textit{(Author 2020)}, chỉ số trên & Author AB. 2020. Title. \textit{Venue}. 12(1):10--20. \\
 \hline
-ACS & 76 & \textit{(1)}, chỉ số trên & (1) Author, A. B. Title. \textit{J.\ Am.\ Chem.\ Soc.} \textbf{2020}, \textit{142}, 1--5. \\
+\textbf{ACS} & 76 & \textit{(1)}, chỉ số trên & (1) Author, A. B. Title. \textit{J.\ Am.\ Chem.\ Soc.} \textbf{2020}, \textit{142}, 1--5. \\
 \hline
-AMA & 75 & Chỉ số trên / \textit{[1]} & 1. Author AB. Title. \textit{JAMA}. 2020;323(1):1--10. \\
+\textbf{AMA} & 75 & Chỉ số trên / \textit{[1]} & 1. Author AB. Title. \textit{JAMA}. 2020;323(1):1--10. \\
 \hline
-Chicago & 70 & \textit{(Author 2020, 45)}, chú thích chân trang & Author, First. 2020. \textit{Title}. Place: Publisher. \\
+\textbf{Chicago} & 70 & \textit{(Author 2020, 45)}, chú thích chân trang & Author, First. 2020. \textit{Title}. Place: Publisher. \\
 \hline
-MLA (9th) & 70 & \textit{(Author 45)}, \textit{(Author and Coauthor 12)} & Author, First. ``Title.'' \textit{Venue}, vol.\ 1, no.\ 2, 2020, pp.\ 1--15. \\
+\textbf{MLA (9th)} & 70 & \textit{(Author 45)}, \textit{(Author and Coauthor 12)} & Author, First. ``Title.'' \textit{Venue}, vol.\ 1, no.\ 2, 2020, pp.\ 1--15. \\
 \hline
-VN Legal & Quy tắc & \textit{(Luật số 20/2023/QH15)} & Quốc hội / Chính phủ. (2023). \textit{Luật / Nghị định / Thông tư}. \\
+\textbf{VN Legal} & \textbf{Quy tắc} & \textit{(Luật số 20/2023/QH15)} & Quốc hội / Chính phủ. (2023). \textit{Luật / Nghị định / Thông tư}. \\
 \hline
 \end{longtable}
 }
@@ -150,7 +150,7 @@ Tính toàn vẹn cấu trúc nội tại đòi hỏi một đồ thị hai phí
 \textbf{Phương pháp} & \textbf{Độ tin cậy} & \textbf{Tiêu chí đối sánh} \\
 \hline
 \endfirsthead
-\multicolumn{3}{l}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
+\multicolumn{3}{c}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
 \hline
 \textbf{Phương pháp} & \textbf{Độ tin cậy} & \textbf{Tiêu chí đối sánh} \\
 \hline
@@ -160,21 +160,21 @@ Tính toàn vẹn cấu trúc nội tại đòi hỏi một đồ thị hai phí
 \endfoot
 \hline
 \endlastfoot
-\texttt{tei\_link} & 0.98 & Con trỏ trực tiếp \texttt{xml:id} trong GROBID TEI-XML nối từ thẻ nội văn \texttt{<ref>} tới \texttt{<biblStruct>}. \\
+\textbf{\texttt{tei\_link}} & \textbf{0.98} & Con trỏ trực tiếp \texttt{xml:id} trong GROBID TEI-XML nối từ thẻ nội văn \texttt{<ref>} tới \texttt{<biblStruct>}. \\
 \hline
-\texttt{doi\_exact} & 0.95 & Mã DOI sau chuẩn hóa xuất hiện trùng khớp ở cả dấu trích dẫn nội văn lẫn mục tài liệu tham khảo. \\
+\textbf{\texttt{doi\_exact}} & \textbf{0.95} & Mã DOI sau chuẩn hóa xuất hiện trùng khớp ở cả dấu trích dẫn nội văn lẫn mục tài liệu tham khảo. \\
 \hline
-\texttt{arxiv\_exact} & 0.95 & Định danh chuẩn hóa \texttt{arXiv} trùng khớp hoàn toàn ở cả hai phía. \\
+\textbf{\texttt{arxiv\_exact}} & \textbf{0.95} & Định danh chuẩn hóa \texttt{arXiv} trùng khớp hoàn toàn ở cả hai phía. \\
 \hline
-\texttt{author\_year} & 0.90 & Họ tác giả đã chuẩn hóa, năm xuất bản và hậu tố tùy chọn (\texttt{a}--\texttt{f}) thống nhất (bao gồm suy diễn tác giả -- số trang theo chuẩn MLA). \\
+\textbf{\texttt{author\_year}} & 0.90 & Họ tác giả đã chuẩn hóa, năm xuất bản và hậu tố tùy chọn (\texttt{a}--\texttt{f}) thống nhất (bao gồm suy diễn tác giả -- số trang theo chuẩn MLA). \\
 \hline
-\texttt{numeric\_index} & 0.90 & Số thứ tự trong ngoặc vuông hoặc chỉ số trên (hoặc dải mở rộng \texttt{[1]--[3]}) khớp với chỉ mục tài liệu tham khảo. \\
+\textbf{\texttt{numeric\_index}} & 0.90 & Số thứ tự trong ngoặc vuông hoặc chỉ số trên (hoặc dải mở rộng \texttt{[1]--[3]}) khớp với chỉ mục tài liệu tham khảo. \\
 \hline
-\texttt{fuzzy} & 0.65 & Mức chồng lấn từ khóa tiêu đề hoặc tên tác giả vượt ngưỡng dự phòng khi thiếu khóa định danh chính xác. \\
+\textbf{\texttt{fuzzy}} & 0.65 & Mức chồng lấn từ khóa tiêu đề hoặc tên tác giả vượt ngưỡng dự phòng khi thiếu khóa định danh chính xác. \\
 \hline
-\texttt{no\_keys} & 0.30 & Không đủ khóa phân biệt hoặc xảy ra đồng hạng giữa nhiều mục tham khảo (\texttt{ambiguous\_mapping}). \\
+\textbf{\texttt{no\_keys}} & 0.30 & Không đủ khóa phân biệt hoặc xảy ra đồng hạng giữa nhiều mục tham khảo (\texttt{ambiguous\_mapping}). \\
 \hline
-\texttt{manual\_review} & 1.00 & Liên kết được giảng viên có thẩm quyền thẩm định và xác nhận trực tiếp. \\
+\textbf{\texttt{manual\_review}} & \textbf{1.00} & Liên kết được giảng viên có thẩm quyền thẩm định và xác nhận trực tiếp. \\
 \hline
 \end{longtable}
 }
@@ -186,7 +186,7 @@ Tính toàn vẹn cấu trúc nội tại đòi hỏi một đồ thị hai phí
 \textbf{Trạng thái ánh xạ} & \textbf{Lỗi toàn vẹn} & \textbf{Mức phạt CIS} & \textbf{Ý nghĩa cấu trúc} \\
 \hline
 \endfirsthead
-\multicolumn{4}{l}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
+\multicolumn{4}{c}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
 \hline
 \textbf{Trạng thái ánh xạ} & \textbf{Lỗi toàn vẹn} & \textbf{Mức phạt CIS} & \textbf{Ý nghĩa cấu trúc} \\
 \hline
@@ -196,21 +196,21 @@ Tính toàn vẹn cấu trúc nội tại đòi hỏi một đồ thị hai phí
 \endfoot
 \hline
 \endlastfoot
-\texttt{matched} & Không & 0.00 & Liên kết một--một duy nhất, nhất quán về siêu dữ liệu tác giả và năm xuất bản. \\
+\textbf{\texttt{matched}} & Không & 0.00 & Liên kết một--một duy nhất, nhất quán về siêu dữ liệu tác giả và năm xuất bản. \\
 \hline
-\texttt{missing\_reference} & Có & 0.20 & Dấu trích dẫn trong bài viện dẫn một nguồn không tồn tại trong danh mục tham khảo (trích dẫn mồ côi). \\
+\textbf{\texttt{missing\_reference}} & \textbf{Có} & \textbf{0.20} & Dấu trích dẫn trong bài viện dẫn một nguồn không tồn tại trong danh mục tham khảo (trích dẫn mồ côi). \\
 \hline
-\texttt{in\_text\_mismatch} & Có & 0.15 & Cặp trích dẫn đã liên kết mâu thuẫn nhau về năm xuất bản, họ tác giả hoặc từ khóa tiêu đề. \\
+\textbf{\texttt{in\_text\_mismatch}} & \textbf{Có} & \textbf{0.15} & Cặp trích dẫn đã liên kết mâu thuẫn nhau về năm xuất bản, họ tác giả hoặc từ khóa tiêu đề. \\
 \hline
-\texttt{uncited\_reference} & Có & 0.10 & Mục tài liệu tham khảo có liệt kê ở cuối bài nhưng không được trích dẫn ở bất kỳ đâu trong phần nội dung. \\
+\textbf{\texttt{uncited\_reference}} & \textbf{Có} & \textbf{0.10} & Mục tài liệu tham khảo có liệt kê ở cuối bài nhưng không được trích dẫn ở bất kỳ đâu trong phần nội dung. \\
 \hline
-\texttt{duplicate\_reference} & Có & 0.10 & Hai hoặc nhiều mục trong danh mục tài liệu tham khảo cùng trỏ về một ấn phẩm duy nhất. \\
+\textbf{\texttt{duplicate\_reference}} & \textbf{Có} & \textbf{0.10} & Hai hoặc nhiều mục trong danh mục tài liệu tham khảo cùng trỏ về một ấn phẩm duy nhất. \\
 \hline
-\texttt{ambiguous\_mapping} & Có & 0.05 & Dấu trích dẫn trong bài khớp ngang bằng với nhiều mục tài liệu tham khảo khác nhau. \\
+\textbf{\texttt{ambiguous\_mapping}} & \textbf{Có} & 0.05 & Dấu trích dẫn trong bài khớp ngang bằng với nhiều mục tài liệu tham khảo khác nhau. \\
 \hline
-\texttt{style\_inconsistent} & Có & 0.02 & Mục tham khảo hoặc dấu trích dẫn lệch khỏi chuẩn trình bày chủ đạo của bản thảo. \\
+\textbf{\texttt{style\_inconsistent}} & \textbf{Có} & 0.02 & Mục tham khảo hoặc dấu trích dẫn lệch khỏi chuẩn trình bày chủ đạo của bản thảo. \\
 \hline
-\texttt{unresolved} & Không & 0.00 & Không đủ thông tin cấu trúc để phân loại trạng thái liên kết. \\
+\textbf{\texttt{unresolved}} & Không & 0.00 & Không đủ thông tin cấu trúc để phân loại trạng thái liên kết. \\
 \hline
 \end{longtable}
 }
@@ -252,7 +252,7 @@ Từ ứng viên tốt nhất của tầng truy hồi, \texttt{FeatureCalculator
 \textbf{Tên đặc trưng} & \textbf{Kiểu} & \textbf{Cách tính toán} \\
 \hline
 \endfirsthead
-\multicolumn{3}{l}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
+\multicolumn{3}{c}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
 \hline
 \textbf{Tên đặc trưng} & \textbf{Kiểu} & \textbf{Cách tính toán} \\
 \hline
@@ -262,27 +262,27 @@ Từ ứng viên tốt nhất của tầng truy hồi, \texttt{FeatureCalculator
 \endfoot
 \hline
 \endlastfoot
-\texttt{title\_sim\_fuzzy} & \texttt{float} & Giá trị lớn nhất giữa khớp chính xác sau chuẩn hóa, khớp tiền tố tiêu đề chính ($0.95$), khớp chuỗi con có kiểm soát ($0.90$) và \texttt{token\_set\_ratio} của RapidFuzz. \\
+\textbf{\texttt{title\_sim\_fuzzy}} & \texttt{float} & Giá trị lớn nhất giữa khớp chính xác sau chuẩn hóa, khớp tiền tố tiêu đề chính ($0.95$), khớp chuỗi con có kiểm soát ($0.90$) và \texttt{token\_set\_ratio} của RapidFuzz. \\
 \hline
-\texttt{title\_sim\_semantic} & \texttt{float} & Độ tương đồng cosine giữa vector nhúng \texttt{all-MiniLM-L6-v2} của tiêu đề trích dẫn và tiêu đề ứng viên. \\
+\textbf{\texttt{title\_sim\_semantic}} & \texttt{float} & Độ tương đồng cosine giữa vector nhúng \texttt{all-MiniLM-L6-v2} của tiêu đề trích dẫn và tiêu đề ứng viên. \\
 \hline
-\texttt{title\_sim\_max} & \texttt{float} & Giá trị lớn nhất giữa \texttt{title\_sim\_fuzzy} và \texttt{title\_sim\_semantic}. \\
+\textbf{\texttt{title\_sim\_max}} & \texttt{float} & Giá trị lớn nhất giữa \texttt{title\_sim\_fuzzy} và \texttt{title\_sim\_semantic}. \\
 \hline
-\texttt{author\_jaccard} & \texttt{float} & Hệ số chồng lấn họ tác giả đã lược dấu nhưng vẫn bảo toàn các họ tiếng Việt ngắn (\textit{Le}, \textit{Vo}, \textit{Do}). \\
+\textbf{\texttt{author\_jaccard}} & \texttt{float} & Hệ số chồng lấn họ tác giả đã lược dấu nhưng vẫn bảo toàn các họ tiếng Việt ngắn (\textit{Le}, \textit{Vo}, \textit{Do}). \\
 \hline
-\texttt{year\_distance} & \texttt{int} & Giá trị nhỏ nhất của $|y_{\text{cited}} - y_{\text{cand}}|$ qua các bản ghi tiền ấn phẩm/lần tái bản tương ứng ($999$ nếu khuyết năm). \\
+\textbf{\texttt{year\_distance}} & \texttt{int} & Giá trị nhỏ nhất của $|y_{\text{cited}} - y_{\text{cand}}|$ qua các bản ghi tiền ấn phẩm/lần tái bản tương ứng ($999$ nếu khuyết năm). \\
 \hline
-\texttt{venue\_sim} & \texttt{float} & Độ tương đồng từ khóa nơi công bố thuộc đoạn $[0, 1]$ sau khi mở rộng bí danh bằng \texttt{VenueNormalizer}. \\
+\textbf{\texttt{venue\_sim}} & \texttt{float} & Độ tương đồng từ khóa nơi công bố thuộc đoạn $[0, 1]$ sau khi mở rộng bí danh bằng \texttt{VenueNormalizer}. \\
 \hline
-\texttt{doi\_exact\_match} & \texttt{bool} & Khớp chính xác mã DOI đã chuẩn hóa hoặc tương đương định danh chuẩn giữa DOI của arXiv và DOI nhà xuất bản. \\
+\textbf{\texttt{doi\_exact\_match}} & \texttt{bool} & Khớp chính xác mã DOI đã chuẩn hóa hoặc tương đương định danh chuẩn giữa DOI của arXiv và DOI nhà xuất bản. \\
 \hline
-\texttt{source\_consensus} & \texttt{int} & Số lượng cơ sở dữ liệu độc lập cùng trả về bản ghi ứng viên củng cố lẫn nhau. \\
+\textbf{\texttt{source\_consensus}} & \texttt{int} & Số lượng cơ sở dữ liệu độc lập cùng trả về bản ghi ứng viên củng cố lẫn nhau. \\
 \hline
-\texttt{content\_alignment\_score} & \texttt{float} & Điểm căn chỉnh nơ-ron gộp theo câu giữa ngữ cảnh câu trích dẫn trong bài và tiêu đề/tóm tắt ứng viên (Phương trình~\eqref{eq:abs-pooling}). \\
+\textbf{\texttt{content\_alignment\_score}} & \texttt{float} & Điểm căn chỉnh nơ-ron gộp theo câu giữa ngữ cảnh câu trích dẫn trong bài và tiêu đề/tóm tắt ứng viên (Phương trình~\eqref{eq:abs-pooling}). \\
 \hline
-\texttt{stance\_label} & \texttt{str} & Nhãn lập trường hỗ trợ luận điểm (\texttt{supported}, \texttt{partially\_supported}, \texttt{neutral}, \texttt{contradiction\_risk}) thông qua cổng lọc độ đặc trưng gốc từ. \\
+\textbf{\texttt{stance\_label}} & \texttt{str} & Nhãn lập trường hỗ trợ luận điểm (\texttt{supported}, \texttt{partially\_supported}, \texttt{neutral}, \texttt{contradiction\_risk}) thông qua cổng lọc độ đặc trưng gốc từ. \\
 \hline
-\texttt{url\_status} & \texttt{enum} & Trạng thái hoạt động sáu mức của URL (\texttt{alive}, \texttt{restricted\_alive}, \texttt{archived\_alive}, \texttt{dead\_link}, \texttt{fake\_domain}, \texttt{unchecked}). \\
+\textbf{\texttt{url\_status}} & \texttt{enum} & Trạng thái hoạt động sáu mức của URL (\texttt{alive}, \texttt{restricted\_alive}, \texttt{archived\_alive}, \texttt{dead\_link}, \texttt{fake\_domain}, \texttt{unchecked}). \\
 \hline
 \end{longtable}
 }
@@ -318,7 +318,7 @@ Hình~\ref{fig:matching} minh họa đường ống đối sánh nơ-ron dùng b
 \textbf{Nhóm} & \textbf{Mã luật đại diện} & \textbf{Điều kiện kích hoạt và Nhãn phán quyết} \\
 \hline
 \endfirsthead
-\multicolumn{3}{l}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
+\multicolumn{3}{c}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
 \hline
 \textbf{Nhóm} & \textbf{Mã luật đại diện} & \textbf{Điều kiện kích hoạt và Nhãn phán quyết} \\
 \hline
@@ -328,39 +328,39 @@ Hình~\ref{fig:matching} minh họa đường ống đối sánh nơ-ron dùng b
 \endfoot
 \hline
 \endlastfoot
-Mức 0 & \texttt{R-URL-RESOURCE}, \texttt{R-WEB-RESOURCE}, \texttt{R-VN-LEGAL-VERIFIED}, \texttt{R-VN-LEGAL-\allowbreak MISMATCH} & Tài liệu hướng dẫn web thuần túy, tạo tác phần mềm/RFC/HF hoặc văn bản pháp luật Việt Nam được \texttt{VNLegalVerifier} đối chứng $\rightarrow$ \texttt{resource} (hoặc \texttt{metadata\_error} nếu mâu thuẫn cơ quan ban hành/số hiệu). \\
+\textbf{Mức 0} & \texttt{R-URL-RESOURCE}, \texttt{R-WEB-RESOURCE}, \texttt{R-VN-LEGAL-VERIFIED}, \texttt{R-VN-LEGAL-\allowbreak MISMATCH} & Tài liệu hướng dẫn web thuần túy, tạo tác phần mềm/RFC/HF hoặc văn bản pháp luật Việt Nam được \texttt{VNLegalVerifier} đối chứng $\rightarrow$ \textbf{\texttt{resource}} (hoặc \texttt{metadata\_error} nếu mâu thuẫn cơ quan ban hành/số hiệu). \\
 \hline
-1 & \texttt{R-FAKE-URL}, \texttt{R-FABRICATED-DOI}, \texttt{R-CHIMERIC-DOI-\allowbreak MISMATCH}, \texttt{R-RETRACTED-PAPER} & Tên miền giả chuẩn RFC 2606, tiền tố DOI chưa đăng ký hoặc DOI thật nhưng phân giải ra công trình không liên quan $\rightarrow$ \texttt{suspected\_hallucination}; dính cờ Retraction Watch (\texttt{is\_retracted}) $\rightarrow$ \texttt{metadata\_error}. \\
+\textbf{1} & \texttt{R-FAKE-URL}, \texttt{R-FABRICATED-DOI}, \texttt{R-CHIMERIC-DOI-\allowbreak MISMATCH}, \texttt{R-RETRACTED-PAPER} & Tên miền giả chuẩn RFC 2606, tiền tố DOI chưa đăng ký hoặc DOI thật nhưng phân giải ra công trình không liên quan $\rightarrow$ \textbf{\texttt{suspected\_hallucination}}; dính cờ Retraction Watch (\texttt{is\_retracted}) $\rightarrow$ \textbf{\texttt{metadata\_error}}. \\
 \hline
-2 & \texttt{R-FUTURE-YEAR}, \texttt{R-FUTURE-YEAR-\allowbreak KNOWN-AUTHOR} & Năm trích dẫn vượt quá năm dương lịch hiện tại: công trình lạ $\rightarrow$ \texttt{suspected\_hallucination}; công trình/tác giả đã biết $\rightarrow$ \texttt{metadata\_error}. \\
+\textbf{2} & \texttt{R-FUTURE-YEAR}, \texttt{R-FUTURE-YEAR-\allowbreak KNOWN-AUTHOR} & Năm trích dẫn vượt quá năm dương lịch hiện tại: công trình lạ $\rightarrow$ \textbf{\texttt{suspected\_hallucination}}; công trình/tác giả đã biết $\rightarrow$ \textbf{\texttt{metadata\_error}}. \\
 \hline
-3 & \texttt{R-KNOWN-PAPER}, \texttt{R-TITLE-MISMATCH} & Khớp danh sách trắng 101 bài báo kinh điển: đồng nhất toàn bộ siêu dữ liệu và lập trường $\rightarrow$ \texttt{verified}; sai lệch năm/tác giả/luận điểm $\rightarrow$ \texttt{metadata\_error}. \\
+\textbf{3} & \texttt{R-KNOWN-PAPER}, \texttt{R-TITLE-MISMATCH} & Khớp danh sách trắng 101 bài báo kinh điển: đồng nhất toàn bộ siêu dữ liệu và lập trường $\rightarrow$ \textbf{\texttt{verified}}; sai lệch năm/tác giả/luận điểm $\rightarrow$ \textbf{\texttt{metadata\_error}}. \\
 \hline
-4 & \texttt{R-DEAD-URL}, \texttt{R-NONEXISTENT-DOI}, \texttt{R-NO-SCHOLARLY-\allowbreak RECORD} & Không tìm thấy ứng viên nào dù $\ge 2$ cơ sở dữ liệu trực tuyến trả về HTTP 200 sạch (hoặc xác nhận URL chết không có bản lưu trữ) $\rightarrow$ \texttt{suspected\_hallucination} (trần độ tin cậy $\le 0.88$ nếu chỉ dựa trên sự vắng mặt bản ghi). \\
+\textbf{4} & \texttt{R-DEAD-URL}, \texttt{R-NONEXISTENT-DOI}, \texttt{R-NO-SCHOLARLY-\allowbreak RECORD} & Không tìm thấy ứng viên nào dù $\ge 2$ cơ sở dữ liệu trực tuyến trả về HTTP 200 sạch (hoặc xác nhận URL chết không có bản lưu trữ) $\rightarrow$ \textbf{\texttt{suspected\_hallucination}} (trần độ tin cậy $\le 0.88$ nếu chỉ dựa trên sự vắng mặt bản ghi). \\
 \hline
-5 & \texttt{R-FAIL-ALL}, \texttt{R-RATE-LIMITED-\allowbreak ABSTAIN}, \texttt{R-DOI-RA-NO-CSL} & Không có ứng viên do cạn hạn mức HTTP 429, đứt kết nối mạng hoặc DOI khu vực hợp lệ nhưng không công khai siêu dữ liệu CSL $\rightarrow$ \texttt{unresolved}. \\
+\textbf{5} & \texttt{R-FAIL-ALL}, \texttt{R-RATE-LIMITED-\allowbreak ABSTAIN}, \texttt{R-DOI-RA-NO-CSL} & Không có ứng viên do cạn hạn mức HTTP 429, đứt kết nối mạng hoặc DOI khu vực hợp lệ nhưng không công khai siêu dữ liệu CSL $\rightarrow$ \textbf{\texttt{unresolved}}. \\
 \hline
-6 & \texttt{R-DOI-TITLE-AUTHOR} & Khớp chính xác DOI trực tuyến kèm $\texttt{title\_sim} \ge 0.90$ và $\texttt{author\_jaccard} \ge 0.50$ $\rightarrow$ \texttt{verified}. \\
+\textbf{6} & \texttt{R-DOI-TITLE-AUTHOR} & Khớp chính xác DOI trực tuyến kèm $\texttt{title\_sim} \ge 0.90$ và $\texttt{author\_jaccard} \ge 0.50$ $\rightarrow$ \textbf{\texttt{verified}}. \\
 \hline
-7 & \texttt{R-LOCAL\_DB\_VERIFIED}, \texttt{R-LOCAL\_DB\_GOOD\_MATCH} & Khớp chỉ mục FTS5 ngoại tuyến ($\texttt{title\_sim\_fuzzy} \ge 0.95$, $\texttt{author\_jaccard} \ge 0.80$, $|\Delta y| = 0$) và không xung đột DOI $\rightarrow$ \texttt{verified}. \\
+\textbf{7} & \texttt{R-LOCAL\_DB\_VERIFIED}, \texttt{R-LOCAL\_DB\_GOOD\_MATCH} & Khớp chỉ mục FTS5 ngoại tuyến ($\texttt{title\_sim\_fuzzy} \ge 0.95$, $\texttt{author\_jaccard} \ge 0.80$, $|\Delta y| = 0$) và không xung đột DOI $\rightarrow$ \textbf{\texttt{verified}}. \\
 \hline
-8 & \texttt{R-WELL-LINKED}, \texttt{R-WELL-LINKED-\allowbreak MODERATE} & Trích dẫn đã liên kết (\texttt{matched}) có mức đồng thuận cao về tiêu đề/tác giả/năm và không mâu thuẫn định danh $\rightarrow$ \texttt{verified}. \\
+\textbf{8} & \texttt{R-WELL-LINKED}, \texttt{R-WELL-LINKED-\allowbreak MODERATE} & Trích dẫn đã liên kết (\texttt{matched}) có mức đồng thuận cao về tiêu đề/tác giả/năm và không mâu thuẫn định danh $\rightarrow$ \textbf{\texttt{verified}}. \\
 \hline
-9 & \texttt{R-DOI-TITLE-\allowbreak MISMATCH} & DOI trực tuyến phân giải thành công nhưng độ tương đồng tiêu đề rơi vào khoảng $[0.60, 0.90)$ $\rightarrow$ \texttt{metadata\_error} kèm khoanh vùng trường sai lệch. \\
+\textbf{9} & \texttt{R-DOI-TITLE-\allowbreak MISMATCH} & DOI trực tuyến phân giải thành công nhưng độ tương đồng tiêu đề rơi vào khoảng $[0.60, 0.90)$ $\rightarrow$ \textbf{\texttt{metadata\_error}} kèm khoanh vùng trường sai lệch. \\
 \hline
-10 & \texttt{R-CONSENSUS-FULL}, \texttt{R-CONSENSUS-\allowbreak PARTIAL} & Từ $\ge 2$ cơ sở dữ liệu đồng thuận về tiêu đề ($\ge 0.90$): khớp tác giả/năm $\rightarrow$ \texttt{verified}; lệch tác giả/năm $\rightarrow$ \texttt{metadata\_error}. \\
+\textbf{10} & \texttt{R-CONSENSUS-FULL}, \texttt{R-CONSENSUS-\allowbreak PARTIAL} & Từ $\ge 2$ cơ sở dữ liệu đồng thuận về tiêu đề ($\ge 0.90$): khớp tác giả/năm $\rightarrow$ \textbf{\texttt{verified}}; lệch tác giả/năm $\rightarrow$ \textbf{\texttt{metadata\_error}}. \\
 \hline
-11 & \texttt{R-SINGLE-SOURCE-\allowbreak VERIFIED}, \texttt{R-BOOK-EDITION-\allowbreak VERIFIED}, \texttt{R-SINGLE-SOURCE-\allowbreak PARTIAL} & Khớp một cơ sở dữ liệu trực tuyến duy nhất ($\ge 0.90$ tiêu đề, $\ge 0.80$ tác giả, $|\Delta y| \le 1$, hoặc $\le 15$ năm giữa các lần tái bản sách trên OpenLibrary) $\rightarrow$ \texttt{verified}; trôi lệch trường $\rightarrow$ \texttt{metadata\_error}. \\
+\textbf{11} & \texttt{R-SINGLE-SOURCE-\allowbreak VERIFIED}, \texttt{R-BOOK-EDITION-\allowbreak VERIFIED}, \texttt{R-SINGLE-SOURCE-\allowbreak PARTIAL} & Khớp một cơ sở dữ liệu trực tuyến duy nhất ($\ge 0.90$ tiêu đề, $\ge 0.80$ tác giả, $|\Delta y| \le 1$, hoặc $\le 15$ năm giữa các lần tái bản sách trên OpenLibrary) $\rightarrow$ \textbf{\texttt{verified}}; trôi lệch trường $\rightarrow$ \textbf{\texttt{metadata\_error}}. \\
 \hline
-12 & \texttt{R-AMBIGUOUS-\allowbreak MAPPING} & Bộ liên kết hai phía gắn cờ \texttt{ambiguous\_mapping} $\rightarrow$ \texttt{unresolved} với độ tin cậy giới hạn tối đa ở $0.50$. \\
+\textbf{12} & \texttt{R-AMBIGUOUS-\allowbreak MAPPING} & Bộ liên kết hai phía gắn cờ \texttt{ambiguous\_mapping} $\rightarrow$ \textbf{\texttt{unresolved}} với độ tin cậy giới hạn tối đa ở $0.50$. \\
 \hline
-13 & \texttt{R-CONTENT-\allowbreak ALIGNMENT}, \texttt{R-CONTENT-MISMATCH} & Điểm căn chỉnh ngữ cảnh -- tóm tắt cao giúp cứu các tiêu đề viết rút gọn ($\rightarrow$ \texttt{verified}); luận điểm trong bài mâu thuẫn với bài báo đã khớp $\rightarrow$ \texttt{metadata\_error}. \\
+\textbf{13} & \texttt{R-CONTENT-\allowbreak ALIGNMENT}, \texttt{R-CONTENT-MISMATCH} & Điểm căn chỉnh ngữ cảnh -- tóm tắt cao giúp cứu các tiêu đề viết rút gọn ($\rightarrow$ \textbf{\texttt{verified}}); luận điểm trong bài mâu thuẫn với bài báo đã khớp $\rightarrow$ \textbf{\texttt{metadata\_error}}. \\
 \hline
-14 & \texttt{R-KNOWN-AUTHOR-\allowbreak TITLE-MISMATCH} & Tác giả học thuật có thật kết hợp với tiêu đề lệch trong khoảng $[0.30, 0.90)$ $\rightarrow$ \texttt{metadata\_error}. \\
+\textbf{14} & \texttt{R-KNOWN-AUTHOR-\allowbreak TITLE-MISMATCH} & Tác giả học thuật có thật kết hợp với tiêu đề lệch trong khoảng $[0.30, 0.90)$ $\rightarrow$ \textbf{\texttt{metadata\_error}}. \\
 \hline
-15 & \texttt{R-ABSTENTION-\allowbreak BORDER}, \texttt{R-DOMAIN-EXCEPTION} & Độ tương đồng tiêu đề nằm ở vùng giáp ranh $[0.40, 0.60)$ $\rightarrow$ \texttt{unresolved}; bài báo đã xác thực nhưng kèm URL ngoài bị chết sẽ bật cờ \texttt{domain\_exception = True}. \\
+\textbf{15} & \texttt{R-ABSTENTION-\allowbreak BORDER}, \texttt{R-DOMAIN-EXCEPTION} & Độ tương đồng tiêu đề nằm ở vùng giáp ranh $[0.40, 0.60)$ $\rightarrow$ \textbf{\texttt{unresolved}}; bài báo đã xác thực nhưng kèm URL ngoài bị chết sẽ bật cờ \texttt{domain\_exception = True}. \\
 \hline
-16 & \texttt{R-WEAK-EVIDENCE}, \texttt{R-HALLUCINATED-\allowbreak SOURCE} & Nhánh dự phòng cuối ($\texttt{title\_sim} < 0.40$): có $\ge 2$ API trực tuyến phản hồi sạch + độ chồng lấn tác giả thấp $\rightarrow$ \texttt{suspected\_hallucination}; ngược lại $\rightarrow$ \texttt{unresolved}. \\
+\textbf{16} & \texttt{R-WEAK-EVIDENCE}, \texttt{R-HALLUCINATED-\allowbreak SOURCE} & Nhánh dự phòng cuối ($\texttt{title\_sim} < 0.40$): có $\ge 2$ API trực tuyến phản hồi sạch + độ chồng lấn tác giả thấp $\rightarrow$ \textbf{\texttt{suspected\_hallucination}}; ngược lại $\rightarrow$ \textbf{\texttt{unresolved}}. \\
 \hline
 \end{longtable}
 }
@@ -393,7 +393,7 @@ Kết hợp cả năm thành phần trong Bảng~\ref{tab:cis} sẽ thu được
 \textbf{Thành phần} & \textbf{Trọng số} & \textbf{Định nghĩa chính xác trong \texttt{CISCalculator.compute()}} \\
 \hline
 \endfirsthead
-\multicolumn{3}{l}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
+\multicolumn{3}{c}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
 \hline
 \textbf{Thành phần} & \textbf{Trọng số} & \textbf{Định nghĩa chính xác trong \texttt{CISCalculator.compute()}} \\
 \hline
@@ -403,15 +403,15 @@ Kết hợp cả năm thành phần trong Bảng~\ref{tab:cis} sẽ thu được
 \endfoot
 \hline
 \endlastfoot
-\texttt{verified\_ratio} ($s_{\text{ver}}$) & 0.35 & $N_{\text{verified}} / N_{\text{acad}}$, đo lường tỷ lệ tài liệu tham khảo học thuật được đối chứng xác thực. \\
+\textbf{\texttt{verified\_ratio}} ($s_{\text{ver}}$) & \textbf{0.35} & $N_{\text{verified}} / N_{\text{acad}}$, đo lường tỷ lệ tài liệu tham khảo học thuật được đối chứng xác thực. \\
 \hline
-\texttt{metadata\_accuracy} ($s_{\text{meta}}$) & 0.25 & Điểm độ trung thực siêu dữ liệu thư mục phân bậc theo Phương trình~\eqref{eq:cis-meta}. \\
+\textbf{\texttt{metadata\_accuracy}} ($s_{\text{meta}}$) & \textbf{0.25} & Điểm độ trung thực siêu dữ liệu thư mục phân bậc theo Phương trình~\eqref{eq:cis-meta}. \\
 \hline
-\texttt{in\_text\_bib\_consistency} ($s_{\text{link}}$) & 0.25 & Phần bù từ $1$ trừ đi tổng mức phạt liên kết có trọng số (Bảng~\ref{tab:mapping-statuses}) trên các liên kết nội văn, mục không được trích dẫn và mục trùng lặp. \\
+\textbf{\texttt{in\_text\_bib\_consistency}} ($s_{\text{link}}$) & \textbf{0.25} & Phần bù từ $1$ trừ đi tổng mức phạt liên kết có trọng số (Bảng~\ref{tab:mapping-statuses}) trên các liên kết nội văn, mục không được trích dẫn và mục trùng lặp. \\
 \hline
-\texttt{format\_consistency} ($s_{\text{fmt}}$) & 0.10 & Độ nhất quán chuẩn trình bày toàn tài liệu suy ra từ \texttt{StyleProfile} và độ lệch chuẩn của từng mục. \\
+\textbf{\texttt{format\_consistency}} ($s_{\text{fmt}}$) & \textbf{0.10} & Độ nhất quán chuẩn trình bày toàn tài liệu suy ra từ \texttt{StyleProfile} và độ lệch chuẩn của từng mục. \\
 \hline
-\texttt{identifier\_validity} ($s_{\text{id}}$) & 0.05 & Tỷ lệ các trích dẫn có gắn DOI/URL phân giải hợp lệ mà không gặp lỗi \texttt{dead\_link}, \texttt{fake\_domain} hoặc \texttt{domain\_exception}. \\
+\textbf{\texttt{identifier\_validity}} ($s_{\text{id}}$) & \textbf{0.05} & Tỷ lệ các trích dẫn có gắn DOI/URL phân giải hợp lệ mà không gặp lỗi \texttt{dead\_link}, \texttt{fake\_domain} hoặc \texttt{domain\_exception}. \\
 \hline
 \end{longtable}
 }

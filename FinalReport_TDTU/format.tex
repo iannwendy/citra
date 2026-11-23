@@ -1,4 +1,5 @@
 % Simplified format for TDTU thesis
+\RequirePackage{fix-cm}
 \usepackage{polyglossia}
 \setmainlanguage{english}
 \setotherlanguage{vietnamese}
@@ -95,35 +96,33 @@
 % The actual heading on the page is already formatted as "CHAPTER N: Title"
 % via the \def\@makechapterhead override below.
 
-% Number subsubsections as x.y.z and include them in TOC
+% Number subsubsections as x.y.z.w (up to 3 subsection levels per TDTU Section 2.2)
 \setcounter{secnumdepth}{3}
 \setcounter{tocdepth}{3}
 \makeatletter
-\@addtoreset{subsubsection}{section}
+\@addtoreset{subsubsection}{subsection}
 \makeatother
 
-% Chapter heading format
+% Chapter heading format (16pt Bold ALL CAPS, TDTU Mau 6E: CHAPTER N. TITLE)
 \makeatletter
 \def\@makechapterhead#1{%
   \vspace*{-5ex}%
   {\parindent \z@ \raggedright \normalfont
     \interlinepenalty\@M
-    % 16pt chapter title; the second argument is kept at 16pt so that the
-    % global 1.5 line-spacing setting does not make chapter headings oversized.
-    \fontsize{16pt}{16pt}\selectfont
+    \linespread{1.0}\fontsize{16pt}{22pt}\selectfont
     \bfseries \color{black}
-    \MakeUppercase{Chapter \thechapter: #1}\par\nobreak
+    \MakeUppercase{Chapter \thechapter. #1}\par\nobreak
     \vskip 20\p@
   }}
 \makeatother
 
-% Chapter* formatting (for unnumbered chapters like TOC, Abstract)
+% Chapter* formatting (for unnumbered chapters like TOC, Acknowledgment, Declaration)
 \makeatletter
 \def\@makeschapterhead#1{%
   \vspace*{-4ex}%
   {\parindent \z@ \raggedright \normalfont
     \interlinepenalty\@M
-    \fontsize{16pt}{16pt}\selectfont
+    \linespread{1.0}\fontsize{16pt}{22pt}\selectfont
     \bfseries \centering
     #1\par\nobreak
     \vskip 20\p@
@@ -146,13 +145,13 @@
   {\normalfont\normalsize\bfseries}}
 \makeatother
 
-% Subsubsection formatting - italic for 3-level headings (x.x.x)
+% Subsubsection formatting - italic for 3rd-level subsections (x.y.z.w)
 \makeatletter
 \def\subsubsection{\@startsection{subsubsection}{3}{\z@}%
   {3.25ex\@plus1ex \@minus.2ex}%
   {1.5ex\@plus.2ex}%
   {\normalfont\normalsize\itshape}}
-\renewcommand{\thesubsubsection}{\thesection.\arabic{subsubsection}}
+\renewcommand{\thesubsubsection}{\thesubsection.\arabic{subsubsection}}
 \makeatother
 
 % Header / Footer
@@ -183,31 +182,49 @@
 \setlength{\parindent}{1.27cm} % one Word tab at the left margin
 \setlength{\parskip}{0pt}
 
-% Caption
-\usepackage[labelfont=bf]{caption}
+% Captions (TDTU FIT spec: 12pt, regular weight, italic, centered;
+% table caption above table, figure caption below figure)
+\usepackage{caption}
+\DeclareCaptionFont{tdtucaption}{\linespread{1.2}\fontsize{12pt}{15pt}\selectfont\mdseries\itshape}
+\captionsetup{
+  font=tdtucaption,
+  labelfont=tdtucaption,
+  textfont=tdtucaption,
+  justification=centering,
+  singlelinecheck=true
+}
 \numberwithin{figure}{chapter}
 \numberwithin{table}{chapter}
 
-% Tables: allow hyphenation-like breaks inside long identifiers so that no
-% cell can run into its neighbour, and add a little vertical padding.
+% Data tables (TDTU FIT spec: 12pt Normal text, vertically centered cells "Giua o",
+% bold for headers and emphasized values; frontmatter signature/abbreviation layouts keep 13pt)
 \usepackage{array}
-\renewcommand{\arraystretch}{1.2}
+\newif\iftdtudatatable
+\tdtudatatablefalse
+\AddToHook{env/longtable/begin}{\iftdtudatatable\changefontsizes{12pt}\setstretch{1.2}\fi}
+\AddToHook{env/table/begin}{\iftdtudatatable\changefontsizes{12pt}\setstretch{1.2}\fi}
+
+\renewcommand{\arraystretch}{1.25}
 \setlength{\emergencystretch}{3em}
 \setlength{\LTleft}{0pt}
 \setlength{\LTright}{\fill}
 \setlength{\LTpre}{10pt}
 \setlength{\LTpost}{10pt}
 \setlength{\LTcapwidth}{\textwidth}
-\captionsetup[table]{width=\textwidth,position=above,skip=6pt}
-\captionsetup[figure]{width=\textwidth,position=below,skip=8pt}
+\captionsetup[table]{width=\textwidth,position=above,skip=6pt,justification=centering}
+\captionsetup[longtable]{width=\textwidth,position=above,skip=6pt,justification=centering}
+\captionsetup[figure]{width=\textwidth,position=below,skip=8pt,justification=centering}
+\captionsetup[lstlisting]{font=tdtucaption,labelfont=tdtucaption,textfont=tdtucaption,justification=centering,skip=6pt}
 
 % Word-like proportional column types whose fractional widths sum to 1.0 of \textwidth:
-%   L{0.30} -> left-aligned paragraph column (30% of \textwidth)
-%   C{0.15} -> centered paragraph column (15% of \textwidth)
-%   R{0.15} -> right-aligned paragraph column (15% of \textwidth)
-\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{\dimexpr #1\textwidth-2\tabcolsep-1.5\arrayrulewidth\relax}}
-\newcolumntype{C}[1]{>{\centering\arraybackslash}p{\dimexpr #1\textwidth-2\tabcolsep-1.5\arrayrulewidth\relax}}
-\newcolumntype{R}[1]{>{\raggedleft\arraybackslash}p{\dimexpr #1\textwidth-2\tabcolsep-1.5\arrayrulewidth\relax}}
+%   L{0.30} -> vertically centered, left-aligned cell (30% of \textwidth)
+%   C{0.15} -> vertically & horizontally centered cell (15% of \textwidth)
+%   R{0.15} -> vertically centered, right-aligned cell (15% of \textwidth)
+%   P{0.30} -> top-aligned borderless glossary column (30% of \textwidth)
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}m{\dimexpr #1\textwidth-2\tabcolsep-1.5\arrayrulewidth\relax}}
+\newcolumntype{C}[1]{>{\centering\arraybackslash}m{\dimexpr #1\textwidth-2\tabcolsep-1.5\arrayrulewidth\relax}}
+\newcolumntype{R}[1]{>{\raggedleft\arraybackslash}m{\dimexpr #1\textwidth-2\tabcolsep-1.5\arrayrulewidth\relax}}
+\newcolumntype{P}[1]{>{\raggedright\arraybackslash}p{\dimexpr #1\textwidth-2\tabcolsep\relax}}
 
 % Emulate small caps cleanly in Times New Roman (which lacks a native OTF smcp table on macOS)
 \DeclareRobustCommand{\textsc}[1]{{\fontsize{10.5pt}{13pt}\selectfont\MakeUppercase{#1}}}
@@ -217,7 +234,7 @@
 
 
 % TOC formatting
-\renewcommand{\contentsname}{TABLE OF CONTENT}
+\renewcommand{\contentsname}{CONTENTS}
 \makeatletter
 \renewcommand{\@pnumwidth}{1.55em}
 \renewcommand{\@dotsep}{1.5}
@@ -232,7 +249,7 @@
       \leavevmode \bfseries
       \advance\leftskip\@tempdima
       \hskip -\leftskip
-      \renewcommand{\numberline}[1]{\MakeUppercase{Chapter~##1:} }%
+      \renewcommand{\numberline}[1]{\MakeUppercase{Chapter~##1.} }%
       \MakeUppercase{#1}\nobreak
       \leaders\hbox{$\m@th \mkern \@dotsep mu\hbox{.}\mkern \@dotsep mu$}\hfill
       \nobreak\kern 2pt{\bfseries \normalcolor #2}\par
@@ -291,19 +308,20 @@
     \endgroup
   \fi}
 
-% LOF/LOT formatting: prepend "Figure"/"Table" and use denser dots
+% LOF/LOT formatting (TDTU Mau 7E & Mau 8E: "Figure 1.1: ..." / "Table 1.1: ...")
 \renewcommand{\l@figure}[2]{%
   \ifnum \c@tocdepth >\m@ne
     \addpenalty{-\@highpenalty}%
     \vskip 1.5pt \@plus \p@
-    \setlength\@tempdima{2.5em}%
+    \setlength\@tempdima{5.8em}%
     \begingroup
       \parindent \z@ \rightskip \@pnumwidth
       \parfillskip -\@pnumwidth
       \leavevmode
       \advance\leftskip\@tempdima
       \hskip -\leftskip
-      Figure~#1\nobreak
+      \renewcommand{\numberline}[1]{\hb@xt@\@tempdima{Figure~##1:\hfil}}%
+      #1\nobreak
       \leaders\hbox{$\m@th \mkern 1.5mu\hbox{.}\mkern 1.5mu$}\hfill
       \nobreak\kern 2pt{\normalcolor #2}\par
     \endgroup
@@ -312,14 +330,15 @@
   \ifnum \c@tocdepth >\m@ne
     \addpenalty{-\@highpenalty}%
     \vskip 1pt \@plus \p@
-    \setlength\@tempdima{2.5em}%
+    \setlength\@tempdima{5.6em}%
     \begingroup
       \parindent \z@ \rightskip \@pnumwidth
       \parfillskip -\@pnumwidth
       \leavevmode
       \advance\leftskip\@tempdima
       \hskip -\leftskip
-      Table~#1\nobreak
+      \renewcommand{\numberline}[1]{\hb@xt@\@tempdima{Table~##1:\hfil}}%
+      #1\nobreak
       \leaders\hbox{$\m@th \mkern 1.5mu\hbox{.}\mkern 1.5mu$}\hfill
       \nobreak\kern 2pt{\normalcolor #2}\par
     \endgroup

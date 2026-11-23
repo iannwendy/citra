@@ -16,7 +16,7 @@ Every functional requirement is specified as an atomic, testable obligation assi
 \textbf{ID} & \textbf{Actor} & \textbf{Requirement Specification} & \textbf{Prio.} & \textbf{Acceptance Criterion} \\
 \hline
 \endfirsthead
-\multicolumn{5}{l}{\itshape Table \thetable\ (continued from previous page)}\\
+\multicolumn{5}{c}{\itshape Table \thetable\ (continued from previous page)}\\
 \hline
 \textbf{ID} & \textbf{Actor} & \textbf{Requirement Specification} & \textbf{Prio.} & \textbf{Acceptance Criterion} \\
 \hline
@@ -28,45 +28,45 @@ Every functional requirement is specified as an atomic, testable obligation assi
 \endlastfoot
 \multicolumn{5}{|l|}{\textbf{Subsystem 1: Identity, Session Management, and Access Control}} \\
 \hline
-\texttt{FR-01} & Guest / Student & The system shall register accounts, verify one-time email activation and password-reset tokens, and authenticate sessions via local credentials or Google OAuth2. & Must & Invalid/expired token rejected; revoked JWT returns HTTP 401. \\
+\textbf{\texttt{FR-01}} & Guest / Student & The system shall register accounts, verify one-time email activation and password-reset tokens, and authenticate sessions via local credentials or Google OAuth2. & \textbf{Must} & Invalid/expired token rejected; revoked JWT returns \textbf{HTTP 401}. \\
 \hline
-\texttt{FR-02} & All Roles & The system shall enforce Role-Based Access Control (\texttt{user}, \texttt{teacher}, \texttt{admin}), personal API keys, and cross-user ownership checks on every resource. & Must & Cross-user essay/verdict access returns HTTP 403 (zero IDOR). \\
+\textbf{\texttt{FR-02}} & All Roles & The system shall enforce Role-Based Access Control (\texttt{user}, \texttt{teacher}, \texttt{admin}), personal API keys, and cross-user ownership checks on every resource. & \textbf{Must} & Cross-user essay/verdict access returns \textbf{HTTP 403} (zero IDOR). \\
 \hline
 \multicolumn{5}{|l|}{\textbf{Subsystem 2: Document Ingestion, Parsing, and Bidirectional Linking}} \\
 \hline
-\texttt{FR-03} & Student / Teacher & The system shall accept single and batch manuscript uploads in PDF, DOCX, BibTeX, and RIS formats after validating magic bytes, file size, page count, and monthly quota. & Must & Disguised non-PDF/DOCX or over-quota upload rejected cleanly. \\
+\textbf{\texttt{FR-03}} & Student / Teacher & The system shall accept single and batch manuscript uploads in PDF, DOCX, BibTeX, and RIS formats after validating magic bytes, file size, page count, and monthly quota. & \textbf{Must} & Disguised non-PDF/DOCX or over-quota upload rejected cleanly. \\
 \hline
-\texttt{FR-04} & Student / Teacher & The system shall stream real-time progress across eight pipeline stages and refund upload quota automatically if an asynchronous job fails permanently. & Must & SSE emits steps 0--7; crashed job refunds quota atomically. \\
+\textbf{\texttt{FR-04}} & Student / Teacher & The system shall stream real-time progress across eight pipeline stages and refund upload quota automatically if an asynchronous job fails permanently. & \textbf{Must} & SSE emits steps 0--7; crashed job refunds quota atomically. \\
 \hline
-\texttt{FR-05} & Pipeline & The system shall segment uploaded manuscripts into body text, in-text markers with surrounding context, and bibliography entries across 12 citation styles (including Vietnamese laws). & Must & $\ge 97\%$ bibliography detection on 310-PDF multi-style suite. \\
+\textbf{\texttt{FR-05}} & Pipeline & The system shall segment uploaded manuscripts into body text, in-text markers with surrounding context, and bibliography entries across 12 citation styles (including Vietnamese laws). & \textbf{Must} & \textbf{$\ge 97\%$} bibliography detection on 310-PDF multi-style suite. \\
 \hline
-\texttt{FR-06} & Pipeline & The system shall detect scanned or legacy-encoded Vietnamese PDFs and invoke selective Optical Character Recognition (OCR) or encoding normalization. & Should & Scanned pages recorded in document diagnostics metadata. \\
+\textbf{\texttt{FR-06}} & Pipeline & The system shall detect scanned or legacy-encoded Vietnamese PDFs and invoke selective Optical Character Recognition (OCR) or encoding normalization. & Should & Scanned pages recorded in document diagnostics metadata. \\
 \hline
-\texttt{FR-07} & Pipeline & The system shall link every in-text citation marker to its target bibliography entry and classify each edge into one of eight structural mapping statuses. & Must & Orphans, uncited refs, and year mismatches isolated accurately. \\
+\textbf{\texttt{FR-07}} & Pipeline & The system shall link every in-text citation marker to its target bibliography entry and classify each edge into one of eight structural mapping statuses. & \textbf{Must} & Orphans, uncited refs, and year mismatches isolated accurately. \\
 \hline
 \multicolumn{5}{|l|}{\textbf{Subsystem 3: Federated Retrieval and Identifier Validation}} \\
 \hline
-\texttt{FR-08} & Pipeline & The system shall query the offline scholarly corpus and live registries by domain, recording per-source success, failure, and rate-limit provenance. & Must & Offline recall $\ge 99\%$; HTTP 429 distinguished from 0 hits. \\
+\textbf{\texttt{FR-08}} & Pipeline & The system shall query the offline scholarly corpus and live registries by domain, recording per-source success, failure, and rate-limit provenance. & \textbf{Must} & Offline recall \textbf{$\ge 99\%$}; \textbf{HTTP 429} distinguished from 0 hits. \\
 \hline
-\texttt{FR-09} & Pipeline & The system shall validate cited URLs and DOIs against SSRF-safe HTTP probes, Retraction Watch metadata, and Internet Archive snapshots. & Must & Private IP targets blocked; retracted works flagged $100\%$. \\
+\textbf{\texttt{FR-09}} & Pipeline & The system shall validate cited URLs and DOIs against SSRF-safe HTTP probes, Retraction Watch metadata, and Internet Archive snapshots. & \textbf{Must} & Private IP targets blocked; retracted works flagged \textbf{$100\%$}. \\
 \hline
 \multicolumn{5}{|l|}{\textbf{Subsystem 4: Neuro-Symbolic Verification, Scoring, and Remediation}} \\
 \hline
-\texttt{FR-10} & Pipeline & The system shall compute lexical, semantic, and cross-lingual (\texttt{VI}$\leftrightarrow$\texttt{EN}) alignment between in-text claims and retrieved source titles/abstracts. & Must & Contradicted claims and cross-lingual matches scored in $[0,1]$. \\
+\textbf{\texttt{FR-10}} & Pipeline & The system shall compute lexical, semantic, and cross-lingual (\texttt{VI}$\leftrightarrow$\texttt{EN}) alignment between in-text claims and retrieved source titles/abstracts. & \textbf{Must} & Contradicted claims and cross-lingual matches scored in $[0,1]$. \\
 \hline
-\texttt{FR-11} & Pipeline & The system shall assign one of five verdict labels, a Platt-calibrated probability, and an ordered list of triggered symbolic rule IDs to each reference. & Must & Test accuracy $\ge 98.5\%$, $\text{ECE} \le 0.05$, $100\%$ rule trace. \\
+\textbf{\texttt{FR-11}} & Pipeline & The system shall assign one of five verdict labels, a Platt-calibrated probability, and an ordered list of triggered symbolic rule IDs to each reference. & \textbf{Must} & Test accuracy \textbf{$\ge 98.5\%$}, \textbf{$\text{ECE} \le 0.05$}, \textbf{$100\%$} rule trace. \\
 \hline
-\texttt{FR-12} & Pipeline & The system shall calculate the five-component Citation Integrity Score (CIS) in $[0, 100]$ and generate bilingual (\texttt{EN}/\texttt{VI}) explanations. & Must & Component weights sum to $1.00$; explanations render in EN \& VI. \\
+\textbf{\texttt{FR-12}} & Pipeline & The system shall calculate the five-component Citation Integrity Score (CIS) in $[0, 100]$ and generate bilingual (\texttt{EN}/\texttt{VI}) explanations. & \textbf{Must} & Component weights sum to $1.00$; explanations render in EN \& VI. \\
 \hline
-\texttt{FR-13} & Student / Teacher & The system shall export sanitized reports (PDF, DOCX, CSV, JSON) and generate repaired bibliographies in APA, IEEE, TDTU, BibTeX, RIS, and DOCX formats. & Should & Repaired entries reflect canonical registry metadata without macros. \\
+\textbf{\texttt{FR-13}} & Student / Teacher & The system shall export sanitized reports (PDF, DOCX, CSV, JSON) and generate repaired bibliographies in APA, IEEE, TDTU, BibTeX, RIS, and DOCX formats. & Should & Repaired entries reflect canonical registry metadata without macros. \\
 \hline
-\texttt{FR-14} & Student / Public & The system shall issue time-limited cryptographic share links with QR verification receipts for read-only third-party inspection. & Should & Expired or tampered share token returns HTTP 404/403. \\
+\textbf{\texttt{FR-14}} & Student / Public & The system shall issue time-limited cryptographic share links with QR verification receipts for read-only third-party inspection. & Should & Expired or tampered share token returns \textbf{HTTP 404/403}. \\
 \hline
 \multicolumn{5}{|l|}{\textbf{Subsystem 5: Classroom Cohort Supervision and Platform Administration}} \\
 \hline
-\texttt{FR-15} & Teacher & The system shall allow teachers to manage classes via join codes, inspect cohort analytics and shared hallucinations, and override verdicts when override permission is granted. & Must & Override updates verdict, recalculates CIS, and logs audit entry. \\
+\textbf{\texttt{FR-15}} & Teacher & The system shall allow teachers to manage classes via join codes, inspect cohort analytics and shared hallucinations, and override verdicts when override permission is granted. & \textbf{Must} & Override updates verdict, recalculates CIS, and logs audit entry. \\
 \hline
-\texttt{FR-16} & Admin & The system shall allow administrators to manage accounts, promo codes, cache state, upstream circuit breakers, and audit logs. & Must & Circuit-breaker reset and cache clear take effect immediately. \\
+\textbf{\texttt{FR-16}} & Admin & The system shall allow administrators to manage accounts, promo codes, cache state, upstream circuit breakers, and audit logs. & \textbf{Must} & Circuit-breaker reset and cache clear take effect immediately. \\
 \hline
 \end{longtable}
 }
@@ -82,7 +82,7 @@ To ensure production readiness on standard university hardware without GPUs, ten
 \textbf{ID} & \textbf{ISO/IEC 25010 Attribute} & \textbf{Quality Requirement} & \textbf{Target Metric / SLA} \\
 \hline
 \endfirsthead
-\multicolumn{4}{l}{\itshape Table \thetable\ (continued from previous page)}\\
+\multicolumn{4}{c}{\itshape Table \thetable\ (continued from previous page)}\\
 \hline
 \textbf{ID} & \textbf{ISO/IEC 25010 Attribute} & \textbf{Quality Requirement} & \textbf{Target Metric / SLA} \\
 \hline
@@ -92,25 +92,25 @@ To ensure production readiness on standard university hardware without GPUs, ten
 \endfoot
 \hline
 \endlastfoot
-\texttt{NFR-01} & Performance Efficiency (Time Behaviour) & Warm-cache verification latency for a 50-page capstone report ($\sim$32 references) on CPU hardware. & $P_{90} \le 2.5\text{\,s}$ (cold Wide Area Network [WAN] $\le 15\text{\,s}$). \\
+\textbf{\texttt{NFR-01}} & \textbf{Performance Efficiency} (Time Behaviour) & Warm-cache verification latency for a 50-page capstone report ($\sim$32 references) on CPU hardware. & \textbf{$P_{90} \le 2.5\text{\,s}$} (cold Wide Area Network [WAN] $\le 15\text{\,s}$). \\
 \hline
-\texttt{NFR-02} & Performance Efficiency (Resource Utilization) & Peak backend Python Resident Set Size (RSS) during a 150-page monograph analysis. & $\text{RSS} \le 1.5\text{\,GB}$; heap $\Delta \le 25\text{\,MB}$. \\
+\textbf{\texttt{NFR-02}} & \textbf{Performance Efficiency} (Resource Utilization) & Peak backend Python Resident Set Size (RSS) during a 150-page monograph analysis. & \textbf{$\text{RSS} \le 1.5\text{\,GB}$}; heap $\Delta \le 25\text{\,MB}$. \\
 \hline
-\texttt{NFR-03} & Performance Efficiency (Capacity) & Simultaneous classroom deadline uploads handled without SQLite lock errors or HTTP 5xx responses. & $50$ concurrent uploads, $0\%$ failure. \\
+\textbf{\texttt{NFR-03}} & \textbf{Performance Efficiency} (Capacity) & Simultaneous classroom deadline uploads handled without SQLite lock errors or HTTP 5xx responses. & \textbf{$50$ concurrent uploads, $0\%$ failure}. \\
 \hline
-\texttt{NFR-04} & Reliability (Fault Tolerance) & Graceful degradation when GROBID or upstream scholarly APIs time out or return HTTP 429. & Automatic PyMuPDF fallback; $100\%$ safe abstention on 429. \\
+\textbf{\texttt{NFR-04}} & \textbf{Reliability} (Fault Tolerance) & Graceful degradation when GROBID or upstream scholarly APIs time out or return HTTP 429. & Automatic PyMuPDF fallback; \textbf{$100\%$ safe abstention} on 429. \\
 \hline
-\texttt{NFR-05} & Functional Suitability & Zero false hallucination accusations on verified works and well-calibrated confidence probabilities. & False hall.\ $\le 0.1\%$; $\text{ECE} \le 0.05$. \\
+\textbf{\texttt{NFR-05}} & \textbf{Functional Suitability} & Zero false hallucination accusations on verified works and well-calibrated confidence probabilities. & False hall.\ \textbf{$\le 0.1\%$}; \textbf{$\text{ECE} \le 0.05$}. \\
 \hline
-\texttt{NFR-06} & Security (Confidentiality \& Integrity) & Protection against SSRF, IDOR, cross-site scripting, CSV formula injection, and brute-force login. & Pinned-IP SSRF block; salted \texttt{bcrypt} + SHA-256/HMAC tokens. \\
+\textbf{\texttt{NFR-06}} & \textbf{Security} (Confidentiality \& Integrity) & Protection against SSRF, IDOR, cross-site scripting, CSV formula injection, and brute-force login. & \textbf{Pinned-IP SSRF block}; salted \texttt{bcrypt} + SHA-256/HMAC tokens. \\
 \hline
-\texttt{NFR-07} & Interaction Capability (Usability) & Accessible Light and Dark editorial interfaces with progressive disclosure and bilingual localization. & WCAG 2.1 AA ($\ge 4.5:1$ contrast); $0\text{\,px}$ overflow. \\
+\textbf{\texttt{NFR-07}} & \textbf{Interaction Capability} (Usability) & Accessible Light and Dark editorial interfaces with progressive disclosure and bilingual localization. & \textbf{WCAG 2.1 AA} ($\ge 4.5:1$ contrast); $0\text{\,px}$ overflow. \\
 \hline
-\texttt{NFR-08} & Performance Efficiency (Time \& Resource) & Code-split frontend JavaScript delivery for fast initial page rendering over campus networks. & Initial entry chunk $\le 250\text{\,kB}$ ($\le 80\text{\,kB}$ gzip). \\
+\textbf{\texttt{NFR-08}} & \textbf{Performance Efficiency} (Time \& Resource) & Code-split frontend JavaScript delivery for fast initial page rendering over campus networks. & Initial entry chunk \textbf{$\le 250\text{\,kB}$} ($\le 80\text{\,kB}$ gzip). \\
 \hline
-\texttt{NFR-09} & Maintainability (Modularity \& Testability) & Acyclic 8-layer Python architecture and automated backend, frontend, and browser regression suites. & $\ge 2{,}500$ automated tests, $0$ failures. \\
+\textbf{\texttt{NFR-09}} & \textbf{Maintainability} (Modularity \& Testability) & Acyclic 8-layer Python architecture and automated backend, frontend, and browser regression suites. & \textbf{$\ge 2{,}500$} automated tests, $0$ failures. \\
 \hline
-\texttt{NFR-10} & Portability (Installability \& Replaceability) & Reproducible containerized deployment across Linux and macOS CPU hosts without proprietary GPUs. & 3-container health ready $\le 60\text{\,s}$; $0$ GPU dependencies. \\
+\textbf{\texttt{NFR-10}} & \textbf{Portability} (Installability \& Replaceability) & Reproducible containerized deployment across Linux and macOS CPU hosts without proprietary GPUs. & 3-container health ready \textbf{$\le 60\text{\,s}$}; $0$ GPU dependencies. \\
 \hline
 \end{longtable}
 }
@@ -140,7 +140,7 @@ Table~\ref{tab:uc01}, Table~\ref{tab:uc02}, Table~\ref{tab:uc03}, Table~\ref{tab
 \textbf{Field} & \textbf{Specification} \\
 \hline
 \endfirsthead
-\multicolumn{2}{l}{\itshape Table \thetable\ (continued from previous page)}\\
+\multicolumn{2}{c}{\itshape Table \thetable\ (continued from previous page)}\\
 \hline
 \textbf{Field} & \textbf{Specification} \\
 \hline
@@ -150,17 +150,17 @@ Table~\ref{tab:uc01}, Table~\ref{tab:uc02}, Table~\ref{tab:uc03}, Table~\ref{tab
 \endfoot
 \hline
 \endlastfoot
-Use Case ID \& Name & \textbf{UC-01:} Upload Manuscript and Stream Verification (\texttt{FR-03}--\texttt{FR-12}) \\
+\textbf{Use Case ID \& Name} & \textbf{UC-01:} Upload Manuscript and Stream Verification (\texttt{FR-03}--\texttt{FR-12}) \\
 \hline
-Primary Actor & Student (\texttt{user}) or Teacher (\texttt{teacher}) \\
+\textbf{Primary Actor} & Student (\texttt{user}) or Teacher (\texttt{teacher}) \\
 \hline
-Preconditions & Actor is authenticated with an active session and remaining monthly upload quota $\ge 1$. \\
+\textbf{Preconditions} & Actor is authenticated with an active session and remaining monthly upload quota $\ge 1$. \\
 \hline
-Postconditions & \texttt{essays}, \texttt{citations}, and \texttt{verdicts} rows are persisted; CIS and style profile are stored. \\
+\textbf{Postconditions} & \texttt{essays}, \texttt{citations}, and \texttt{verdicts} rows are persisted; CIS and style profile are stored. \\
 \hline
-Main Success Scenario & 1. Actor selects a \texttt{.pdf}, \texttt{.docx}, \texttt{.bib}, or \texttt{.ris} file (optionally choosing an enrolled class). \newline 2. Backend validates magic bytes, size, page limit, and atomically decrements quota via Compare-And-Swap (CAS). \newline 3. Backend persists \texttt{EssayRecord(job\_status='queued')} and enqueues the job in \texttt{PipelineAdmissionController}. \newline 4. Client subscribes to \texttt{GET /api/essays/\{id\}/events} (SSE) and renders stages 0--7 in real time. \newline 5. Worker completes extraction, linking, retrieval, matching, symbolic/ML checking, and CIS scoring, marking \texttt{job\_status='completed'}. \newline 6. Client navigates to \texttt{/verification/report/\{id\}}. \\
+\textbf{Main Success Scenario} & \textbf{1.} Actor selects a \texttt{.pdf}, \texttt{.docx}, \texttt{.bib}, or \texttt{.ris} file (optionally choosing an enrolled class). \newline \textbf{2.} Backend validates magic bytes, size, page limit, and atomically decrements quota via Compare-And-Swap (CAS). \newline \textbf{3.} Backend persists \texttt{EssayRecord(job\_status='queued')} and enqueues the job in \texttt{PipelineAdmissionController}. \newline \textbf{4.} Client subscribes to \texttt{GET /api/essays/\{id\}/events} (SSE) and renders stages 0--7 in real time. \newline \textbf{5.} Worker completes extraction, linking, retrieval, matching, symbolic/ML checking, and CIS scoring, marking \texttt{job\_status='completed'}. \newline \textbf{6.} Client navigates to \texttt{/verification/report/\{id\}}. \\
 \hline
-Alternative / Exception Flows & \textbf{2a. Invalid MIME or magic bytes:} Backend returns HTTP 400; quota is untouched. \newline \textbf{2b. Quota exhausted:} Backend returns HTTP 402/429; UI displays plan upgrade modal. \newline \textbf{5a. GROBID or external API timeout:} Pipeline switches to PyMuPDF fallback or emits \texttt{R-RATE-LIMITED-ABSTAIN} (\texttt{unresolved}) without failing the job. \newline \textbf{5b. Unrecoverable worker crash:} Stale-job recovery marks \texttt{failed} and refunds 1 quota unit via CAS. \\
+\textbf{Alternative / Exception Flows} & \textbf{2a. Invalid MIME or magic bytes:} Backend returns HTTP 400; quota is untouched. \newline \textbf{2b. Quota exhausted:} Backend returns HTTP 402/429; UI displays plan upgrade modal. \newline \textbf{5a. GROBID or external API timeout:} Pipeline switches to PyMuPDF fallback or emits \texttt{R-RATE-LIMITED-ABSTAIN} (\texttt{unresolved}) without failing the job. \newline \textbf{5b. Unrecoverable worker crash:} Stale-job recovery marks \texttt{failed} and refunds 1 quota unit via CAS. \\
 \hline
 \end{longtable}
 
@@ -170,7 +170,7 @@ Alternative / Exception Flows & \textbf{2a. Invalid MIME or magic bytes:} Backen
 \textbf{Field} & \textbf{Specification} \\
 \hline
 \endfirsthead
-\multicolumn{2}{l}{\itshape Table \thetable\ (continued from previous page)}\\
+\multicolumn{2}{c}{\itshape Table \thetable\ (continued from previous page)}\\
 \hline
 \textbf{Field} & \textbf{Specification} \\
 \hline
@@ -180,17 +180,17 @@ Alternative / Exception Flows & \textbf{2a. Invalid MIME or magic bytes:} Backen
 \endfoot
 \hline
 \endlastfoot
-Use Case ID \& Name & \textbf{UC-02:} Repair Bibliography and Export Manuscript (\texttt{FR-13}) \\
+\textbf{Use Case ID \& Name} & \textbf{UC-02:} Repair Bibliography and Export Manuscript (\texttt{FR-13}) \\
 \hline
-Primary Actor & Student (\texttt{user}) or Teacher (\texttt{teacher}) \\
+\textbf{Primary Actor} & Student (\texttt{user}) or Teacher (\texttt{teacher}) \\
 \hline
-Preconditions & Target essay belongs to Actor (or Actor's supervised class) and \texttt{job\_status='completed'}. \\
+\textbf{Preconditions} & Target essay belongs to Actor (or Actor's supervised class) and \texttt{job\_status='completed'}. \\
 \hline
-Postconditions & Formatted bibliography strings or repaired \texttt{.docx} / report files are downloaded cleanly. \\
+\textbf{Postconditions} & Formatted bibliography strings or repaired \texttt{.docx} / report files are downloaded cleanly. \\
 \hline
-Main Success Scenario & 1. Actor clicks \textit{Fix \& Format Citations} on the report header. \newline 2. Backend (\texttt{GET /api/essays/\{id\}/remediate}) maps verified and metadata-erroneous citations to canonical registry fields while isolating \texttt{suspected\_hallucination} entries for manual removal. \newline 3. Actor selects target style (\texttt{APA 7th}, \texttt{IEEE}, \texttt{TDTU}, \texttt{BibTeX}, or \texttt{RIS}) and previews field-level diffs. \newline 4. Actor downloads the repaired \texttt{.docx} manuscript or sanitized PDF/CSV/JSON audit report. \\
+\textbf{Main Success Scenario} & \textbf{1.} Actor clicks \textit{Fix \& Format Citations} on the report header. \newline \textbf{2.} Backend (\texttt{GET /api/essays/\{id\}/remediate}) maps verified and metadata-erroneous citations to canonical registry fields while isolating \texttt{suspected\_hallucination} entries for manual removal. \newline \textbf{3.} Actor selects target style (\texttt{APA 7th}, \texttt{IEEE}, \texttt{TDTU}, \texttt{BibTeX}, or \texttt{RIS}) and previews field-level diffs. \newline \textbf{4.} Actor downloads the repaired \texttt{.docx} manuscript or sanitized PDF/CSV/JSON audit report. \\
 \hline
-Alternative / Exception Flows & \textbf{2a. Citation is suspected hallucination:} System refuses to fabricate replacement metadata and marks entry \texttt{hallucination} for author deletion. \\
+\textbf{Alternative / Exception Flows} & \textbf{2a. Citation is suspected hallucination:} System refuses to fabricate replacement metadata and marks entry \texttt{hallucination} for author deletion. \\
 \hline
 \end{longtable}
 
@@ -200,7 +200,7 @@ Alternative / Exception Flows & \textbf{2a. Citation is suspected hallucination:
 \textbf{Field} & \textbf{Specification} \\
 \hline
 \endfirsthead
-\multicolumn{2}{l}{\itshape Table \thetable\ (continued from previous page)}\\
+\multicolumn{2}{c}{\itshape Table \thetable\ (continued from previous page)}\\
 \hline
 \textbf{Field} & \textbf{Specification} \\
 \hline
@@ -210,17 +210,17 @@ Alternative / Exception Flows & \textbf{2a. Citation is suspected hallucination:
 \endfoot
 \hline
 \endlastfoot
-Use Case ID \& Name & \textbf{UC-03:} Adjudicate and Override Citation Verdict (\texttt{FR-15}) \\
+\textbf{Use Case ID \& Name} & \textbf{UC-03:} Adjudicate and Override Citation Verdict (\texttt{FR-15}) \\
 \hline
-Primary Actor & Teacher (\texttt{teacher}) or Administrator (\texttt{admin}) with \texttt{can\_override\_verdicts = True} \\
+\textbf{Primary Actor} & Teacher (\texttt{teacher}) or Administrator (\texttt{admin}) with \texttt{can\_override\_verdicts = True} \\
 \hline
-Preconditions & Essay belongs to a class owned by Teacher (or Actor is Admin); target verdict belongs to that essay. \\
+\textbf{Preconditions} & Essay belongs to a class owned by Teacher (or Actor is Admin); target verdict belongs to that essay. \\
 \hline
-Postconditions & Verdict label updated, essay CIS recomputed, and \texttt{audit\_logs} row inserted in one transaction. \\
+\textbf{Postconditions} & Verdict label updated, essay CIS recomputed, and \texttt{audit\_logs} row inserted in one transaction. \\
 \hline
-Main Success Scenario & 1. Teacher inspects a flagged citation in the Reference Inspector or Pending Reviews queue. \newline 2. Teacher selects a new verdict label (e.g.\ \texttt{verified}) and enters a written justification note. \newline 3. Backend (\texttt{POST /api/essays/\{id\}/verdicts/\{vid\}/override}) verifies RBAC, capability flag, and essay-to-verdict ownership. \newline 4. Within a single DB transaction, backend updates \texttt{VerdictRecord}, re-runs \texttt{CISCalculator.compute()}, updates \texttt{EssayRecord.cis\_json}, and inserts an \texttt{AuditLog} entry. \newline 5. UI refreshes the CIS score ring and displays the override badge. \\
+\textbf{Main Success Scenario} & \textbf{1.} Teacher inspects a flagged citation in the Reference Inspector or Pending Reviews queue. \newline \textbf{2.} Teacher selects a new verdict label (e.g.\ \texttt{verified}) and enters a written justification note. \newline \textbf{3.} Backend (\texttt{POST /api/essays/\{id\}/verdicts/\{vid\}/override}) verifies RBAC, capability flag, and essay-to-verdict ownership. \newline \textbf{4.} Within a single DB transaction, backend updates \texttt{VerdictRecord}, re-runs \texttt{CISCalculator.compute()}, updates \texttt{EssayRecord.cis\_json}, and inserts an \texttt{AuditLog} entry. \newline \textbf{5.} UI refreshes the CIS score ring and displays the override badge. \\
 \hline
-Alternative / Exception Flows & \textbf{3a. Capability flag is False:} Backend aborts with HTTP 403 Forbidden. \newline \textbf{3b. Verdict ID belongs to another essay (IDOR attempt):} Backend aborts with HTTP 404/403. \\
+\textbf{Alternative / Exception Flows} & \textbf{3a. Capability flag is False:} Backend aborts with HTTP 403 Forbidden. \newline \textbf{3b. Verdict ID belongs to another essay (IDOR attempt):} Backend aborts with HTTP 404/403. \\
 \hline
 \end{longtable}
 
@@ -230,7 +230,7 @@ Alternative / Exception Flows & \textbf{3a. Capability flag is False:} Backend a
 \textbf{Field} & \textbf{Specification} \\
 \hline
 \endfirsthead
-\multicolumn{2}{l}{\itshape Table \thetable\ (continued from previous page)}\\
+\multicolumn{2}{c}{\itshape Table \thetable\ (continued from previous page)}\\
 \hline
 \textbf{Field} & \textbf{Specification} \\
 \hline
@@ -240,17 +240,17 @@ Alternative / Exception Flows & \textbf{3a. Capability flag is False:} Backend a
 \endfoot
 \hline
 \endlastfoot
-Use Case ID \& Name & \textbf{UC-04:} Supervise Classroom Cohort and Shared Anomalies (\texttt{FR-15}) \\
+\textbf{Use Case ID \& Name} & \textbf{UC-04:} Supervise Classroom Cohort and Shared Anomalies (\texttt{FR-15}) \\
 \hline
-Primary Actor & Teacher (\texttt{teacher}) \\
+\textbf{Primary Actor} & Teacher (\texttt{teacher}) \\
 \hline
-Preconditions & Teacher is authenticated and owns at least one classroom cohort. \\
+\textbf{Preconditions} & Teacher is authenticated and owns at least one classroom cohort. \\
 \hline
-Postconditions & Cohort analytics, shared hallucination clusters, and ZIP/CSV gradebooks are generated. \\
+\textbf{Postconditions} & Cohort analytics, shared hallucination clusters, and ZIP/CSV gradebooks are generated. \\
 \hline
-Main Success Scenario & 1. Teacher creates a class and shares the generated \texttt{join\_code} (default format \texttt{CITRA-XXXX}) with students. \newline 2. Students enroll via \texttt{POST /api/teacher/classes/join} and attach project report uploads to the class. \newline 3. Teacher opens \texttt{/teacher/classes/\{classId\}}; backend aggregates cohort CIS bands, 5-year citation recency, top triggered rules, and identical fabricated citations appearing across multiple students. \newline 4. Teacher exports sanitized CSV summary or bulk ZIP archive of cohort reports. \\
+\textbf{Main Success Scenario} & \textbf{1.} Teacher creates a class and shares the generated \texttt{join\_code} (default format \texttt{CITRA-XXXX}) with students. \newline \textbf{2.} Students enroll via \texttt{POST /api/teacher/classes/join} and attach project report uploads to the class. \newline \textbf{3.} Teacher opens \texttt{/teacher/classes/\{classId\}}; backend aggregates cohort CIS bands, 5-year citation recency, top triggered rules, and identical fabricated citations appearing across multiple students. \newline \textbf{4.} Teacher exports sanitized CSV summary or bulk ZIP archive of cohort reports. \\
 \hline
-Alternative / Exception Flows & \textbf{2a. Compromised join code:} Teacher regenerates \texttt{join\_code} without dropping existing members. \\
+\textbf{Alternative / Exception Flows} & \textbf{2a. Compromised join code:} Teacher regenerates \texttt{join\_code} without dropping existing members. \\
 \hline
 \end{longtable}
 
@@ -260,7 +260,7 @@ Alternative / Exception Flows & \textbf{2a. Compromised join code:} Teacher rege
 \textbf{Field} & \textbf{Specification} \\
 \hline
 \endfirsthead
-\multicolumn{2}{l}{\itshape Table \thetable\ (continued from previous page)}\\
+\multicolumn{2}{c}{\itshape Table \thetable\ (continued from previous page)}\\
 \hline
 \textbf{Field} & \textbf{Specification} \\
 \hline
@@ -270,17 +270,17 @@ Alternative / Exception Flows & \textbf{2a. Compromised join code:} Teacher rege
 \endfoot
 \hline
 \endlastfoot
-Use Case ID \& Name & \textbf{UC-05:} Monitor System Telemetry and Reset Circuit Breakers (\texttt{FR-16}) \\
+\textbf{Use Case ID \& Name} & \textbf{UC-05:} Monitor System Telemetry and Reset Circuit Breakers (\texttt{FR-16}) \\
 \hline
-Primary Actor & Administrator (\texttt{admin}) \\
+\textbf{Primary Actor} & Administrator (\texttt{admin}) \\
 \hline
-Preconditions & Actor is authenticated with \texttt{role = 'admin'}. \\
+\textbf{Preconditions} & Actor is authenticated with \texttt{role = 'admin'}. \\
 \hline
-Postconditions & Upstream provider circuit breakers or expired cache entries are safely reset; telemetry is refreshed. \\
+\textbf{Postconditions} & Upstream provider circuit breakers or expired cache entries are safely reset; telemetry is refreshed. \\
 \hline
-Main Success Scenario & 1. Admin navigates to \texttt{/admin/system}. \newline 2. Backend (\texttt{GET /api/system/health}) reports GROBID readiness, SQLite WAL statistics, cache hit rates, verdict distributions, and per-provider circuit-breaker states (\texttt{closed}, \texttt{half\_open}, \texttt{open}). \newline 3. After an external API outage resolves, Admin triggers \texttt{POST /api/system/circuit-breakers/reset} to restore live traffic immediately. \\
+\textbf{Main Success Scenario} & \textbf{1.} Admin navigates to \texttt{/admin/system}. \newline \textbf{2.} Backend (\texttt{GET /api/system/health}) reports GROBID readiness, SQLite WAL statistics, cache hit rates, verdict distributions, and per-provider circuit-breaker states (\texttt{closed}, \texttt{half\_open}, \texttt{open}). \newline \textbf{3.} After an external API outage resolves, Admin triggers \texttt{POST /api/system/circuit-breakers/reset} to restore live traffic immediately. \\
 \hline
-Alternative / Exception Flows & \textbf{2a. GROBID container unreachable:} Health monitor marks parser \texttt{degraded (regex fallback)} while keeping uploads operational. \\
+\textbf{Alternative / Exception Flows} & \textbf{2a. GROBID container unreachable:} Health monitor marks parser \texttt{degraded (regex fallback)} while keeping uploads operational. \\
 \hline
 \end{longtable}
 
@@ -316,7 +316,7 @@ The persistence layer comprises \textbf{fifteen SQLAlchemy ORM tables} in the pr
 \textbf{Table Name} & \textbf{Principal Columns and Responsibility} & \textbf{Relationships \& Keys} \\
 \hline
 \endfirsthead
-\multicolumn{3}{l}{\itshape Table \thetable\ (continued from previous page)}\\
+\multicolumn{3}{c}{\itshape Table \thetable\ (continued from previous page)}\\
 \hline
 \textbf{Table Name} & \textbf{Principal Columns and Responsibility} & \textbf{Relationships \& Keys} \\
 \hline
@@ -326,35 +326,35 @@ The persistence layer comprises \textbf{fifteen SQLAlchemy ORM tables} in the pr
 \endfoot
 \hline
 \endlastfoot
-\texttt{users} & Credentials, OAuth link, \texttt{role}, \texttt{can\_override\_verdicts}, \texttt{plan\_tier}, quota counters, \texttt{created\_at}, \texttt{last\_login\_at} & 1-to-N with essays, sessions, tokens, classes, memberships, API keys \\
+\textbf{\texttt{users}} & Credentials, OAuth link, \texttt{role}, \texttt{can\_override\_verdicts}, \texttt{plan\_tier}, quota counters, \texttt{created\_at}, \texttt{last\_login\_at} & \textbf{1-to-N} with essays, sessions, tokens, classes, memberships, API keys \\
 \hline
-\texttt{sessions} & Active bearer \texttt{token} string, \texttt{created\_at}, \texttt{expires\_at} & N-to-1 \texttt{users}; revoked on logout or password change \\
+\textbf{\texttt{sessions}} & Active bearer \texttt{token} string, \texttt{created\_at}, \texttt{expires\_at} & \textbf{N-to-1} \texttt{users}; revoked on logout or password change \\
 \hline
-\texttt{auth\_tokens} & One-time SHA-256 \texttt{token\_hash} digests for email activation and password reset & N-to-1 \texttt{users}; indexed on \texttt{token\_hash} \\
+\textbf{\texttt{auth\_tokens}} & One-time SHA-256 \texttt{token\_hash} digests for email activation and password reset & \textbf{N-to-1} \texttt{users}; indexed on \texttt{token\_hash} \\
 \hline
-\texttt{api\_keys} & \texttt{name}, \texttt{key\_prefix}, SHA-256 \texttt{key\_hash}, \texttt{created\_at}, \texttt{last\_used\_at}, \texttt{is\_active} & N-to-1 \texttt{users}; programmatic CLI/API access \\
+\textbf{\texttt{api\_keys}} & \texttt{name}, \texttt{key\_prefix}, SHA-256 \texttt{key\_hash}, \texttt{created\_at}, \texttt{last\_used\_at}, \texttt{is\_active} & \textbf{N-to-1} \texttt{users}; programmatic CLI/API access \\
 \hline
-\texttt{essays} & \texttt{filename}, \texttt{num\_pages}, \texttt{job\_status}, \texttt{job\_attempt\_count}, \texttt{job\_heartbeat\_at}, \texttt{quota\_charged}, \texttt{style\_profile\_json}, \texttt{cis\_json} & N-to-1 \texttt{users} \& optional \texttt{classes}; 1-to-N citations, verdicts \\
+\textbf{\texttt{essays}} & \texttt{filename}, \texttt{num\_pages}, \texttt{job\_status}, \texttt{job\_attempt\_count}, \texttt{job\_heartbeat\_at}, \texttt{quota\_charged}, \texttt{style\_profile\_json}, \texttt{cis\_json} & \textbf{N-to-1} \texttt{users} \& optional \texttt{classes}; \textbf{1-to-N} citations, verdicts \\
 \hline
-\texttt{citations} & Extracted \texttt{in\_text} / \texttt{reference\_list} text, parsed fields, surrounding \texttt{context}, \texttt{mapping\_status}, \texttt{citation\_link\_json} & N-to-1 \texttt{essays} (cascade delete) \\
+\textbf{\texttt{citations}} & Extracted \texttt{in\_text} / \texttt{reference\_list} text, parsed fields, surrounding \texttt{context}, \texttt{mapping\_status}, \texttt{citation\_link\_json} & \textbf{N-to-1} \texttt{essays} (cascade delete) \\
 \hline
-\texttt{verdicts} & Five-class \texttt{label}, calibrated \texttt{confidence}, \texttt{triggered\_rules}, \texttt{mismatched\_fields}, \texttt{features} JSON, override fields & N-to-1 \texttt{essays} (cascade delete); 1-to-N \texttt{audit\_logs} \\
+\textbf{\texttt{verdicts}} & Five-class \texttt{label}, calibrated \texttt{confidence}, \texttt{triggered\_rules}, \texttt{mismatched\_fields}, \texttt{features} JSON, override fields & \textbf{N-to-1} \texttt{essays} (cascade delete); \textbf{1-to-N} \texttt{audit\_logs} \\
 \hline
-\texttt{citation\_cache} & Normalized query key, serialized multi-source candidate payload, \texttt{hit\_count}, \texttt{created\_at}, \texttt{last\_hit\_at} & Global cross-essay cache reducing redundant API traffic \\
+\textbf{\texttt{citation\_cache}} & Normalized query key, serialized multi-source candidate payload, \texttt{hit\_count}, \texttt{created\_at}, \texttt{last\_hit\_at} & Global cross-essay cache reducing redundant API traffic \\
 \hline
-\texttt{classes} & Cohort name, description, unique \texttt{join\_code} (\texttt{CITRA-XXXX}), \texttt{teacher\_id} & N-to-1 \texttt{users} (teacher); 1-to-N memberships \& essays \\
+\textbf{\texttt{classes}} & Cohort name, description, unique \texttt{join\_code} (\texttt{CITRA-XXXX}), \texttt{teacher\_id} & \textbf{N-to-1} \texttt{users} (teacher); \textbf{1-to-N} memberships \& essays \\
 \hline
-\texttt{class\_memberships} & Student enrollment record linking \texttt{student\_id} to \texttt{class\_id} & Unique composite key \texttt{(class\_id, student\_id)} \\
+\textbf{\texttt{class\_memberships}} & Student enrollment record linking \texttt{student\_id} to \texttt{class\_id} & \textbf{Unique composite key} \texttt{(class\_id, student\_id)} \\
 \hline
-\texttt{audit\_logs} & \texttt{verdict\_id}, acting username, \texttt{original\_label}, \texttt{new\_label}, justification \texttt{note}, \texttt{logged\_at} & N-to-1 \texttt{verdicts}; no update endpoint \\
+\textbf{\texttt{audit\_logs}} & \texttt{verdict\_id}, acting username, \texttt{original\_label}, \texttt{new\_label}, justification \texttt{note}, \texttt{logged\_at} & \textbf{N-to-1} \texttt{verdicts}; no update endpoint \\
 \hline
-\texttt{billing\_transactions} & Checkout session ID, \texttt{plan\_tier}, \texttt{billing\_cycle}, USD/VND amounts, Stripe / VNPay metadata, \texttt{status} & N-to-1 \texttt{users}; payment audit ledger \\
+\textbf{\texttt{billing\_transactions}} & Checkout session ID, \texttt{plan\_tier}, \texttt{billing\_cycle}, USD/VND amounts, Stripe / VNPay metadata, \texttt{status} & \textbf{N-to-1} \texttt{users}; payment audit ledger \\
 \hline
-\texttt{promo\_codes} & Code string, percent/fixed discount, tier/cycle filters, \texttt{max\_uses}, \texttt{used\_count}, \texttt{expires\_at} & 1-to-N \texttt{promo\_redemptions} \\
+\textbf{\texttt{promo\_codes}} & Code string, percent/fixed discount, tier/cycle filters, \texttt{max\_uses}, \texttt{used\_count}, \texttt{expires\_at} & \textbf{1-to-N} \texttt{promo\_redemptions} \\
 \hline
-\texttt{promo\_redemptions} & Applied discount amount, \texttt{promo\_code\_id}, \texttt{user\_id}, \texttt{transaction\_id} & Joins \texttt{promo\_codes}, \texttt{users}, and \texttt{billing\_transactions} \\
+\textbf{\texttt{promo\_redemptions}} & Applied discount amount, \texttt{promo\_code\_id}, \texttt{user\_id}, \texttt{transaction\_id} & Joins \texttt{promo\_codes}, \texttt{users}, and \texttt{billing\_transactions} \\
 \hline
-\texttt{schema\_migrations} & Revision \texttt{version} PK (\texttt{0001}--\texttt{0013}), \texttt{name}, SHA-256 \texttt{checksum}, \texttt{execution\_ms}, \texttt{applied\_at} & Startup schema integrity ledger \\
+\textbf{\texttt{schema\_migrations}} & Revision \texttt{version} PK (\texttt{0001}--\texttt{0013}), \texttt{name}, SHA-256 \texttt{checksum}, \texttt{execution\_ms}, \texttt{applied\_at} & Startup schema integrity ledger \\
 \hline
 \end{longtable}
 }
@@ -385,7 +385,7 @@ All backend endpoints are mounted under the \texttt{/api} prefix in \texttt{api/
 \textbf{Route Prefix} & \textbf{Principal Endpoints and Operations} \\
 \hline
 \endfirsthead
-\multicolumn{2}{l}{\itshape Table \thetable\ (continued from previous page)}\\
+\multicolumn{2}{c}{\itshape Table \thetable\ (continued from previous page)}\\
 \hline
 \textbf{Route Prefix} & \textbf{Principal Endpoints and Operations} \\
 \hline
@@ -395,19 +395,19 @@ All backend endpoints are mounted under the \texttt{/api} prefix in \texttt{api/
 \endfoot
 \hline
 \endlastfoot
-\texttt{/api/auth/*} & \texttt{POST /register}, \texttt{/login}, \texttt{/google} (OAuth2), \texttt{/logout}, \texttt{/activate}, \texttt{/forgot-password}, \texttt{/reset-password}, \texttt{GET /me}. \\
+\textbf{\texttt{/api/auth/*}} & \texttt{POST /register}, \texttt{/login}, \texttt{/google} \textbf{(OAuth2)}, \texttt{/logout}, \texttt{/activate}, \texttt{/forgot-password}, \texttt{/reset-password}, \texttt{GET /me}. \\
 \hline
-\texttt{/api/essays/*} & \texttt{POST /essays} (upload), \texttt{GET /essays}, \texttt{/essays/stats}, \texttt{/essays/\{id\}/status}, \texttt{/essays/\{id\}/events} (SSE), \texttt{/essays/\{id\}/report} (\texttt{json|csv|pdf|docx}), \texttt{/essays/\{id\}/remediate}, \texttt{/essays/\{id\}/export-healed-docx}, \texttt{/essays/\{id\}/revision-diff}, \texttt{/essays/\{id\}/page-preview/\{p\}}, \texttt{POST /essays/\{id\}/share}, \texttt{GET /essays/shared/\{token\}}, \texttt{/essays/sandbox/*}. \\
+\textbf{\texttt{/api/essays/*}} & \texttt{POST /essays} (upload), \texttt{GET /essays}, \texttt{/essays/stats}, \texttt{/essays/\{id\}/status}, \texttt{/essays/\{id\}/events} \textbf{(SSE)}, \texttt{/essays/\{id\}/report} (\texttt{json|csv|pdf|docx}), \texttt{/essays/\{id\}/remediate}, \texttt{/essays/\{id\}/export-healed-docx}, \texttt{/essays/\{id\}/revision-diff}, \texttt{/essays/\{id\}/page-preview/\{p\}}, \texttt{POST /essays/\{id\}/share}, \texttt{GET /essays/shared/\{token\}}, \texttt{/essays/sandbox/*}. \\
 \hline
 \texttt{/api/essays/\allowbreak\{id\}/\allowbreak verdicts/*} & \texttt{POST /api/essays/\allowbreak\{id\}/\allowbreak verdicts/\allowbreak\{vid\}/override} (capability-gated teacher override + transactional CIS recalculation). \\
 \hline
-\texttt{/api/teacher/*} & \texttt{GET /dashboard}, \texttt{/classes}, \texttt{POST /classes/join}, \texttt{/classes/\{id\}/regenerate-code}, \texttt{GET /classes/\{id\}/analytics}, \texttt{/classes/\{id\}/pending-reviews}, \texttt{/classes/\{id\}/export.csv}, \texttt{/classes/\{id\}/export.zip}. \\
+\textbf{\texttt{/api/teacher/*}} & \texttt{GET /dashboard}, \texttt{/classes}, \texttt{POST /classes/join}, \texttt{/classes/\{id\}/regenerate-code}, \texttt{GET /classes/\{id\}/analytics}, \texttt{/classes/\{id\}/pending-reviews}, \texttt{/classes/\{id\}/export.csv}, \texttt{/classes/\{id\}/export.zip}. \\
 \hline
-\texttt{/api/users/*} & Admin \texttt{/users} management; self-service \texttt{PATCH/DELETE /users/me}, \texttt{/users/me/password}, \texttt{/users/me/avatar}, and \texttt{/users/me/api-keys}. \\
+\textbf{\texttt{/api/users/*}} & Admin \texttt{/users} management; self-service \texttt{PATCH/DELETE /users/me}, \texttt{/users/me/password}, \texttt{/users/me/avatar}, and \texttt{/users/me/api-keys}. \\
 \hline
-\texttt{/api/billing/*} & \texttt{GET /plans}, \texttt{/subscription}, \texttt{POST /create-checkout-session}, Stripe \& VNPay HMAC-SHA512 verification, \texttt{/cancel}, and admin \texttt{/admin/promos}. \\
+\textbf{\texttt{/api/billing/*}} & \texttt{GET /plans}, \texttt{/subscription}, \texttt{POST /create-checkout-session}, Stripe \& VNPay \textbf{HMAC-SHA512} verification, \texttt{/cancel}, and admin \texttt{/admin/promos}. \\
 \hline
-\texttt{/api/system/*}, \texttt{/api/audit/*}, \texttt{/api/cache}, \texttt{/api/export/*} & \texttt{GET /api/health}, \texttt{GET /api/system/health}, \texttt{POST /api/system/circuit-breakers/reset}, \texttt{DELETE /api/cache}, \texttt{GET /api/audit/log}, \texttt{GET /api/export/report} (admin system summary). \\
+\textbf{\texttt{/api/system/*}}, \textbf{\texttt{/api/audit/*}}, \textbf{\texttt{/api/cache}}, \textbf{\texttt{/api/export/*}} & \texttt{GET /api/health}, \texttt{GET /api/system/health}, \texttt{POST /api/system/circuit-breakers/reset}, \texttt{DELETE /api/cache}, \texttt{GET /api/audit/log}, \texttt{GET /api/export/report} (admin system summary). \\
 \hline
 \end{longtable}
 }
