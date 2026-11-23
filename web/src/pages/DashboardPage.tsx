@@ -17,9 +17,6 @@ import {
   TrendingUp,
   Layers,
   Terminal,
-  GitBranch,
-  AlertCircle,
-  Lock,
   ArrowUp,
   ArrowDown,
   ArrowUpDown,
@@ -78,8 +75,7 @@ const DEFAULT_STATS: DashboardStats = {
 export function DashboardPage() {
   const { t, i18n } = useTranslation();
   const toast = useToast();
-  const { isUser, isTeacher, isAdmin, has, canBatchUpload } = useRole();
-  const canViewTrace = has('view_logic_trace');
+  const { isUser, isTeacher, isAdmin, canBatchUpload } = useRole();
   const { data: essays = [], isLoading, error, refetch, isFetching } = useEssays();
   const {
     data: stats = DEFAULT_STATS,
@@ -605,43 +601,6 @@ export function DashboardPage() {
                   </TableCell>
                   <TableCell className="py-1 md:py-4 px-0 md:px-3.5 xl:px-5 whitespace-nowrap text-right">
                     <div className="flex items-center justify-end gap-1.5 pt-2 md:pt-0 border-t md:border-t-0 border-slate-100 dark:border-slate-800/60">
-                      {!isInProgress && !isFailed && (
-                        <>
-                          <Link
-                            to={`/verification/report/${essay.id}/issues`}
-                            title={t('essay.issues')}
-                            className="hidden xl:inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-mono font-medium whitespace-nowrap shrink-0 rounded-lg border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-amber-300 dark:hover:border-amber-700 hover:text-amber-600 dark:hover:text-amber-400 transition-colors"
-                          >
-                            <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-                            <span>{t('essay.issues')}</span>
-                          </Link>
-                          {canViewTrace ? (
-                            <Link
-                              to={`/verification/report/${essay.id}/trace`}
-                              title={t('essay.logicTrace')}
-                              data-testid={`dashboard-trace-link-${essay.id}`}
-                              className="hidden xl:inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-mono font-medium whitespace-nowrap shrink-0 rounded-lg border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-violet-300 dark:hover:border-violet-700 hover:text-violet-600 dark:hover:text-violet-400 transition-colors"
-                            >
-                              <GitBranch className="h-3.5 w-3.5 shrink-0" />
-                              <span>{lang === 'vi' ? 'Truy vết' : 'Trace'}</span>
-                            </Link>
-                          ) : (
-                            <Link
-                              to="/pricing"
-                              title={
-                                lang === 'vi'
-                                  ? 'Logic Trace có trong gói Pro / Ultra — bấm để nâng cấp'
-                                  : 'Logic Trace is available on Pro / Ultra — click to upgrade'
-                              }
-                              data-testid={`dashboard-trace-locked-${essay.id}`}
-                              className="hidden xl:inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-mono font-medium whitespace-nowrap shrink-0 rounded-lg border border-dashed border-slate-200 dark:border-slate-800 text-slate-400 dark:text-slate-500 hover:text-amber-600 dark:hover:text-amber-400 transition-colors"
-                            >
-                              <Lock className="h-3.5 w-3.5 shrink-0" />
-                              <span>{lang === 'vi' ? 'Truy vết' : 'Trace'}</span>
-                            </Link>
-                          )}
-                        </>
-                      )}
                       <Link
                         to={targetHref}
                         data-testid={`dashboard-primary-action-${essay.id}`}

@@ -99,7 +99,7 @@ describe('EssayPage capability gating', () => {
   });
 });
 
-describe('DashboardPage Trace button gating', () => {
+describe('DashboardPage streamlined row actions', () => {
   beforeEach(async () => {
     vi.restoreAllMocks();
     await i18n.changeLanguage('en');
@@ -118,16 +118,25 @@ describe('DashboardPage Trace button gating', () => {
     ]);
   });
 
-  it('Pro student gets the Logic Trace link', async () => {
-    renderWithProviders(<DashboardPage />, { user: makeUser('user', 'pro') });
-    const link = await screen.findByTestId('dashboard-trace-link-5');
-    expect(link.getAttribute('href')).toBe('/verification/report/5/trace');
+  it('keeps only the primary View action and hides Issues and Trace buttons for Pro users', async () => {
+    const { container } = renderWithProviders(<DashboardPage />, { user: makeUser('user', 'pro') });
+    const viewLink = await screen.findByTestId('dashboard-primary-action-5');
+    expect(viewLink.getAttribute('href')).toBe('/verification/report/5');
+    expect(viewLink.textContent?.trim()).toBe('View');
+    expect(screen.queryByTestId('dashboard-trace-link-5')).toBeNull();
+    expect(screen.queryByTestId('dashboard-trace-locked-5')).toBeNull();
+    expect(container.querySelector('a[href="/verification/report/5/issues"]')).toBeNull();
+    expect(container.querySelector('a[href="/verification/report/5/trace"]')).toBeNull();
   });
 
-  it('Basic student gets a locked Trace link that points to pricing', async () => {
-    renderWithProviders(<DashboardPage />, { user: makeUser('user', 'basic') });
-    const link = await screen.findByTestId('dashboard-trace-locked-5');
-    expect(link.getAttribute('href')).toBe('/pricing');
+  it('keeps only the primary View action and hides Issues and Trace buttons for Basic users', async () => {
+    const { container } = renderWithProviders(<DashboardPage />, { user: makeUser('user', 'basic') });
+    const viewLink = await screen.findByTestId('dashboard-primary-action-5');
+    expect(viewLink.getAttribute('href')).toBe('/verification/report/5');
+    expect(viewLink.textContent?.trim()).toBe('View');
     expect(screen.queryByTestId('dashboard-trace-link-5')).toBeNull();
+    expect(screen.queryByTestId('dashboard-trace-locked-5')).toBeNull();
+    expect(container.querySelector('a[href="/verification/report/5/issues"]')).toBeNull();
+    expect(container.querySelector('a[href="/verification/report/5/trace"]')).toBeNull();
   });
 });

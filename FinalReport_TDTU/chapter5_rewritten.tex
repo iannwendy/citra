@@ -3,7 +3,7 @@
 
 \section{Experimental Design and Verification Setup}
 
-Following Empirical Software Engineering evaluation standards~\cite{wohlin2012experimentation}, this chapter evaluates \textbf{CITRA} (\texttt{v3.90.4}) through automated unit, integration, and browser test suites, requirements traceability verification, and controlled quantitative benchmarks structured around five Research Questions (\textbf{RQ1}--\textbf{RQ5}).
+Following Empirical Software Engineering evaluation standards~\cite{wohlin2012experimentation}, this chapter evaluates \textbf{CITRA} (\texttt{v3.90.5}) through automated unit, integration, and browser test suites, requirements traceability verification, and controlled quantitative benchmarks structured around five Research Questions (\textbf{RQ1}--\textbf{RQ5}).
 
 \subsection{Research Questions}
 
@@ -21,7 +21,7 @@ Software verification spans three automated test layers summarized in Table~\ref
 
 {\setlength{\tabcolsep}{3.5pt}
 \begin{longtable}{|L{0.23}|L{0.25}|L{0.52}|}
-\caption{Automated software verification suites executed in version \texttt{3.90.4}.}\label{tab:test-suites}\\
+\caption{Automated software verification suites executed in version \texttt{3.90.5}.}\label{tab:test-suites}\\
 \hline
 \textbf{Verification Layer} & \textbf{Execution Result} & \textbf{Verified Subsystem Scope} \\
 \hline
@@ -327,7 +327,7 @@ To evaluate end-to-end generalization beyond the synthetic perturbation benchmar
 \endlastfoot
 VN Legal Corpus (Pre-v3.80 Baseline) & 30 & 27 / 30 (90.0\%) & 164 (15 Legal) & 109 / 235 (46.4\%) \\
 \hline
-VN Legal Corpus (\textbf{CITRA v3.90.4}) & \textbf{30} & \textbf{30 / 30 (100.0\%)} & \textbf{258 (91 Legal)} & \textbf{403 / 416 (96.9\%)} \\
+VN Legal Corpus (\textbf{CITRA v3.90.5}) & \textbf{30} & \textbf{30 / 30 (100.0\%)} & \textbf{258 (91 Legal)} & \textbf{403 / 416 (96.9\%)} \\
 \hline
 12-Style Diagnostic Suite ($12 \times 5$) & \textbf{60} & \textbf{60 / 60 (100.0\%)} & \textbf{397 / 397 (100.0\%)} & \textbf{60 / 60 PDFs (100\%)} \\
 \hline
@@ -370,7 +370,7 @@ Seeded Capstone Audit Fixture (42\,pp.) & APA & 6 & 91.40 & 3 & 1 & 1 & 1 / 0 \\
 \end{longtable}
 }
 
-Figures~\ref{fig:demo-debugger}--\ref{fig:demo-consistency} display the live diagnostic views in \textbf{CITRA} (\texttt{v3.90.4}) on the seeded Software Engineering capstone audit manuscript (6 bibliography entries and 28 inline mentions). Figure~\ref{fig:demo-debugger} contrasts a chimeric DOI hallucination flag (left) with a side-by-side publication-year discrepancy diff (\texttt{2021} vs.\ canonical \texttt{2019}, right). Figure~\ref{fig:demo-trace-context} shows the 5-stage logic trace with ONNX INT8 \texttt{VI}$\leftrightarrow$\texttt{EN} concept alignment (left) and the inline Document Inspector context stream (right). Figure~\ref{fig:demo-consistency} illustrates the bidirectional In-Text Consistency view isolating orphan inline markers and uncited bibliography entries.
+Figures~\ref{fig:demo-debugger}--\ref{fig:demo-consistency} display the live diagnostic views in \textbf{CITRA} (\texttt{v3.90.5}) on the seeded Software Engineering capstone audit manuscript (6 bibliography entries and 28 inline mentions). Figure~\ref{fig:demo-debugger} contrasts a chimeric DOI hallucination flag (left) with a side-by-side publication-year discrepancy diff (\texttt{2021} vs.\ canonical \texttt{2019}, right). Figure~\ref{fig:demo-trace-context} shows the 5-stage logic trace with ONNX INT8 \texttt{VI}$\leftrightarrow$\texttt{EN} concept alignment (left) and the inline Document Inspector context stream (right). Figure~\ref{fig:demo-consistency} illustrates the bidirectional In-Text Consistency view isolating orphan inline markers and uncited bibliography entries.
 
 \begin{figure}[H]
     \centering
@@ -521,4 +521,4 @@ To guard against Type I errors from multiple baseline comparisons and skewed err
 
 \section{Chapter Summary}
 
-This chapter verified \textbf{CITRA} (\texttt{v3.90.4}) across 2,827+ automated checks, a full Requirements Traceability Matrix, and five empirical research questions, demonstrating $99.02\%$ in-distribution accuracy ($\text{ECE} = 0.0395$), $99.75\%$ OOD symbolic accuracy, $100.00\%$ six-domain E2E gold accuracy, and zero-error 50-user burst scalability. Chapter~\ref{chap:conclusion} summarizes achievements, current limitations, and future research directions.
+This chapter verified \textbf{CITRA} (\texttt{v3.90.5}) across 2,827+ automated checks, a full Requirements Traceability Matrix, and five empirical research questions, demonstrating $99.02\%$ in-distribution accuracy ($\text{ECE} = 0.0395$), $99.75\%$ OOD symbolic accuracy, $100.00\%$ six-domain E2E gold accuracy, and zero-error 50-user burst scalability. Chapter~\ref{chap:conclusion} summarizes achievements, current limitations, and future research directions.
