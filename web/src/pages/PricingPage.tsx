@@ -2099,7 +2099,7 @@ export function PricingPage() {
                       }
                     />
                     <SolvaAnimatedMetric
-                      targetValue={99.02}
+                      targetValue={99.21}
                       suffix="%"
                       decimals={2}
                       decimalSeparator={lang === 'vi' ? ',' : '.'}
@@ -2110,7 +2110,7 @@ export function PricingPage() {
                       }
                     />
                     <SolvaAnimatedMetric
-                      targetValue={99.93}
+                      targetValue={99.78}
                       suffix="%"
                       decimals={2}
                       decimalSeparator={lang === 'vi' ? ',' : '.'}
@@ -2385,7 +2385,7 @@ function PricingSolvaHeader({
           },
           {
             title: 'Độ tin cậy thực tế',
-            desc: 'Chính xác 99,02% trên 120.000 bài báo',
+            desc: 'Chính xác 99,20% trên 120.000 bài báo',
             href: '/#benchmark-120k',
             icon: Sparkles,
           },
@@ -2417,7 +2417,7 @@ function PricingSolvaHeader({
           },
           {
             title: 'Proven Accuracy',
-            desc: '99.02% accuracy across 120,000 papers',
+            desc: '99.20% accuracy across 120,000 papers',
             href: '/#benchmark-120k',
             icon: Sparkles,
           },

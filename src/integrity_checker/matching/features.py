@@ -6,9 +6,10 @@ v1.3: Bổ sung content alignment features cho Neural layer.
 from __future__ import annotations
 
 import re
+from collections import Counter
 
 from integrity_checker.matching.author_matcher import _has_et_al_indicator, author_match_score
-from integrity_checker.matching.fuzzy import FuzzyMatcher
+from integrity_checker.matching.fuzzy import FuzzyMatcher, _fold_diacritics
 from integrity_checker.matching.semantic import (
     _DIRECT_REFUTATION_RE,
     _EXPLICIT_CONTRADICTION_NEGATION_RE,
@@ -808,6 +809,23 @@ class FeatureCalculator:
                 best.abstract = cand.abstract
         return best
 
+    _CJK_CHAR_RE = re.compile(r"[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]")
+    _TITLE_UNIT_RE = re.compile(r"[a-z0-9]+|[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]")
+    _LATIN_WORD_RE = re.compile(r"[a-z]{2,}")
+    _SERIES_PREFIX_RE = re.compile(
+        r"^(?:proceedings\s+of|lecture\s+notes|chapter\s+\d+|part\s+[ivx\d]+|"
+        r"volume\s+\d+|special\s+issue|findings\s+of|workshop\s+on|supplement\b|"
+        r"(?:rfc|iso(?:/iec(?:/ieee)?)?|ieee\s+std|ietf|w3c|nist\s+sp|ansi|itu-[a-z]|etsi)\s+[a-z0-9./\-]+)\b",
+        re.IGNORECASE,
+    )
+    _TECH_STANDARD_PREFIX_RE = re.compile(
+        r"^(?:rfc|iso(?:/iec(?:/ieee)?)?|ieee\s+std|ietf|w3c|nist\s+sp|ansi|itu-[a-z]|etsi)\s+[a-z0-9./\-]+\s*[:\-—–]\s*",
+        re.IGNORECASE,
+    )
+    _TITLE_FUNC_WORDS: frozenset[str] = frozenset(
+        {"a", "an", "the", "of", "in", "on", "for", "to", "and", "or", "with", "by", "at", "from"}
+    )
+
     def _compute_title_similarity(
         self,
         citation_title: str,
@@ -815,34 +833,55 @@ class FeatureCalculator:
         *,
         is_raw_fallback: bool = False,
     ) -> float:
-        """Compute title similarity with safe partial match support.
+        """Compute title similarity with safe asymmetric partial match and symmetric containment fidelity."""
+        return self.compute_title_similarity(
+            citation_title,
+            candidate_title,
+            fuzzy=self.fuzzy,
+            is_raw_fallback=is_raw_fallback,
+        )
+
+    @classmethod
+    def compute_title_similarity(
+        cls,
+        citation_title: str,
+        candidate_title: str,
+        *,
+        fuzzy: FuzzyMatcher | None = None,
+        is_raw_fallback: bool = False,
+    ) -> float:
+        """Stateless title similarity shared across live pipeline and offline evaluation.
 
         Strategy:
-        1. Exact match (case/punctuation-insensitive) → 1.0
-        2. Safe prefix match (subtitle delimiter or high length ratio) → 0.95
-        3. Safe substring match (high length ratio, or candidate title inside unparsed raw_text) → 0.90
-        4. Fallback to fuzzy token_set_ratio
+        1. Exact / dehyphenated / edition-stripped match → 1.0 / 0.98
+        2. Strictly asymmetric subtitle or parenthesized translation/series omission
+           (citation shorter than canonical candidate) → 0.95
+        3. Safe substring match (raw_text fallback, or high-coverage contiguous substring
+           inside canonical candidate) → 0.90
+        4. Symmetric containment-aware fuzzy blend: 0.50 * token_set_ratio + 0.50 * max(lev, multiset_f1),
+           with alien-Latin penalty when an ungrounded Latin suffix is appended to a CJK title.
         """
         if not citation_title or not candidate_title:
             return 0.0
 
-        c_main, c_alts = self._strip_medium_tags_and_extract_alt_titles(citation_title)
-        cand_main, cand_alts = self._strip_medium_tags_and_extract_alt_titles(candidate_title)
+        matcher = fuzzy or FuzzyMatcher()
+        c_main, c_alts = cls._strip_medium_tags_and_extract_alt_titles(citation_title)
+        cand_main, cand_alts = cls._strip_medium_tags_and_extract_alt_titles(candidate_title)
         if c_alts or cand_alts:
-            best_alt_sim = self._compute_single_title_similarity(
-                c_main, cand_main, is_raw_fallback=is_raw_fallback
+            best_alt_sim = cls._compute_single_title_similarity_with_matcher(
+                matcher, c_main, cand_main, is_raw_fallback=is_raw_fallback
             )
             for ac in [c_main, *c_alts]:
                 for acand in [cand_main, *cand_alts]:
                     best_alt_sim = max(
                         best_alt_sim,
-                        self._compute_single_title_similarity(
-                            ac, acand, is_raw_fallback=is_raw_fallback
+                        cls._compute_single_title_similarity_with_matcher(
+                            matcher, ac, acand, is_raw_fallback=is_raw_fallback
                         ),
                     )
             return best_alt_sim
-        return self._compute_single_title_similarity(
-            c_main, cand_main, is_raw_fallback=is_raw_fallback
+        return cls._compute_single_title_similarity_with_matcher(
+            matcher, c_main, cand_main, is_raw_fallback=is_raw_fallback
         )
 
     def _compute_single_title_similarity(
@@ -852,12 +891,37 @@ class FeatureCalculator:
         *,
         is_raw_fallback: bool = False,
     ) -> float:
+        return self._compute_single_title_similarity_with_matcher(
+            self.fuzzy,
+            citation_title,
+            candidate_title,
+            is_raw_fallback=is_raw_fallback,
+        )
+
+    @classmethod
+    def _compute_single_title_similarity_with_matcher(
+        cls,
+        fuzzy: FuzzyMatcher,
+        citation_title: str,
+        candidate_title: str,
+        *,
+        is_raw_fallback: bool = False,
+    ) -> float:
         if not citation_title or not candidate_title:
             return 0.0
 
-        # Normalize case, whitespace, ampersands, dashes, and trailing punctuation
-        c_clean = re.sub(r"\s+", " ", citation_title.lower().strip().rstrip(".,;:?!"))
-        cand_clean = re.sub(r"\s+", " ", candidate_title.lower().strip().rstrip(".,;:?!"))
+        # Normalize case, surrounding typographic quotes, whitespace, ampersands, dashes, and trailing punctuation
+        _quote_chars = "\"'“”‘’«»"
+        c_clean = re.sub(
+            r"\s+",
+            " ",
+            citation_title.lower().strip().strip(_quote_chars).rstrip(".,;:?!").strip(_quote_chars),
+        )
+        cand_clean = re.sub(
+            r"\s+",
+            " ",
+            candidate_title.lower().strip().strip(_quote_chars).rstrip(".,;:?!").strip(_quote_chars),
+        )
         c_clean = re.sub(r"\s*&\s*", " and ", c_clean).replace("\u2013", "-").replace("\u2014", "-")
         cand_clean = re.sub(r"\s*&\s*", " and ", cand_clean).replace("\u2013", "-").replace("\u2014", "-")
         if not c_clean or not cand_clean:
@@ -876,37 +940,132 @@ class FeatureCalculator:
         if c_no_ed and cand_no_ed and c_no_ed == cand_no_ed:
             return 0.98
 
+        # Technical standard code prefix on exactly ONE side (e.g. "RFC 9110: HTTP Semantics" vs "HTTP Semantics").
+        # Never strip both sides when both carry standard codes (so "RFC 9110: ..." vs "RFC 8446: ..." still conflicts).
+        c_has_std = bool(cls._TECH_STANDARD_PREFIX_RE.match(c_clean))
+        cand_has_std = bool(cls._TECH_STANDARD_PREFIX_RE.match(cand_clean))
+        if c_has_std != cand_has_std:
+            c_no_std = cls._TECH_STANDARD_PREFIX_RE.sub("", c_clean).strip() if c_has_std else c_clean
+            cand_no_std = (
+                cls._TECH_STANDARD_PREFIX_RE.sub("", cand_clean).strip() if cand_has_std else cand_clean
+            )
+            if c_no_std and cand_no_std and c_no_std == cand_no_std:
+                return 0.98
+
         c_base = c_no_ed or c_clean
         cand_base = cand_no_ed or cand_clean
-        shorter, longer = (
-            (c_base, cand_base)
-            if len(c_base) <= len(cand_base)
-            else (cand_base, c_base)
-        )
-        len_ratio = len(shorter) / len(longer) if longer else 0.0
+        shorter_len = min(len(c_base), len(cand_base))
+        longer_len = max(len(c_base), len(cand_base))
+        len_ratio = shorter_len / longer_len if longer_len else 0.0
 
-        # 2. Safe prefix/colon-split match: either length ratio >= 0.65, or followed/preceded by a subtitle separator
-        if len(shorter) >= 12 and longer.startswith(shorter):
-            remainder = longer[len(shorter):].lstrip()
-            if len_ratio >= 0.65 or (remainder and remainder[0] in ".:,-—–(?!;"):
-                return 0.95
-        if len(shorter) >= 12 and any(sep in longer for sep in (":", "?", "!")):
-            parts = [p.strip() for p in re.split(r"[:?!]", longer, maxsplit=1)]
-            if shorter in parts:
-                return 0.95
+        # 2. Strictly ASYMMETRIC subtitle/prefix omission (citation shorter than canonical candidate).
+        #    Require an explicit bibliographic delimiter (colon, dash, sentence/question punctuation,
+        #    or parenthetical) so mid-phrase trailing truncations ("A Survey of Large Language" vs
+        #    "... Models") or arbitrary subtitle-only citations never inflate to 0.95.
+        if not is_raw_fallback:
+            for c_sub, cand_sub in ((c_clean, cand_clean), (c_base, cand_base)):
+                if len(c_sub) >= len(cand_sub):
+                    continue
+                c_cjk_cnt = len(cls._CJK_CHAR_RE.findall(c_sub))
+                min_pref = 6 if c_cjk_cnt >= 4 else 12
+                if len(c_sub) >= min_pref and cand_sub.startswith(c_sub):
+                    remainder = cand_sub[len(c_sub):]
+                    at_boundary = (not remainder) or (not remainder[0].isalnum()) or c_cjk_cnt >= 4
+                    rem_l = remainder.lstrip(" \"'“”‘’«»")
+                    has_delim = bool(
+                        (
+                            rem_l
+                            and (
+                                rem_l[0] in ":?!;."
+                                or (rem_l[0] == "(" and ")" in cand_clean[len(c_sub):])
+                                or remainder.startswith(" - ")
+                                or remainder.startswith(" — ")
+                                or remainder.startswith(" – ")
+                            )
+                        )
+                        or (c_sub[-1] in "?!" and remainder.startswith(" "))
+                    )
+                    if at_boundary and has_delim:
+                        return 0.95
+                if len(c_sub) >= min_pref and any(sep in cand_sub for sep in (":", "?", "!")):
+                    parts = [
+                        p.strip().strip(_quote_chars)
+                        for p in re.split(r"[:?!]", cand_sub)
+                        if p.strip()
+                    ]
+                    if parts and c_sub == parts[0]:
+                        return 0.95
+                    if (
+                        len(c_sub) >= 15
+                        and len(parts) >= 2
+                        and c_sub in parts[1:]
+                        and (
+                            bool(cls._SERIES_PREFIX_RE.match(parts[0]))
+                            or (len(parts[0].split()) == 1 and len(parts[0]) <= 12)
+                        )
+                    ):
+                        return 0.95
 
-        # 3. Safe substring match: require length ratio >= 0.70 (or candidate title in raw_text fallback)
-        if len(shorter) >= 15 and shorter in longer:
-            if len_ratio >= 0.70:
-                return 0.90
-            if is_raw_fallback and cand_clean == shorter and len(cand_clean) >= 15:
-                return 0.90
+        # 3. Safe substring match ONLY for unparsed raw_text fallback blobs.
+        #    Unanchored substring matches on parsed titles (e.g. dropping leading "Failures of" or
+        #    "Multilingual") must fall through to symmetric fidelity scoring instead of inflating.
+        if is_raw_fallback and len(cand_clean) >= 15 and cand_clean in c_clean:
+            return 0.90
 
-        # 4. Fallback to fuzzy matching
+        # 4. Fallback to symmetric containment-aware fuzzy matching (prevents token_set_ratio
+        #    subset-inflation on truncated/spliced/duplicated titles while preserving word-swap tolerance).
         raw_tset = max(
-            self.fuzzy.token_set_ratio(c_clean, cand_clean),
-            self.fuzzy.token_set_ratio(c_dehyph, cand_dehyph),
+            fuzzy.token_set_ratio(c_clean, cand_clean),
+            fuzzy.token_set_ratio(c_dehyph, cand_dehyph),
         )
-        if len_ratio < 0.65 and not is_raw_fallback:
-            return raw_tset * (0.35 + 0.65 * len_ratio)
-        return raw_tset
+        if is_raw_fallback:
+            return raw_tset
+
+        lev = max(
+            fuzzy.levenshtein_ratio(c_clean, cand_clean),
+            fuzzy.levenshtein_ratio(c_dehyph, cand_dehyph),
+        )
+
+        def _multiset_f1(s1: str, s2: str) -> float:
+            u1 = cls._TITLE_UNIT_RE.findall(_fold_diacritics(s1))
+            u2 = cls._TITLE_UNIT_RE.findall(_fold_diacritics(s2))
+            if not u1 or not u2:
+                return 0.0
+            inter = sum((Counter(u1) & Counter(u2)).values())
+            return (2.0 * inter) / (len(u1) + len(u2))
+
+        tok_f1 = max(_multiset_f1(c_clean, cand_clean), _multiset_f1(c_dehyph, cand_dehyph))
+        sym_fidelity = max(lev, tok_f1)
+
+        # Penalize ungrounded Latin words appended to a predominantly CJK canonical title
+        cand_cjk_cnt = len(cls._CJK_CHAR_RE.findall(cand_clean))
+        if cand_cjk_cnt >= 4 and (cand_cjk_cnt / max(len(cand_clean.replace(" ", "")), 1)) >= 0.45:
+            c_latin = set(cls._LATIN_WORD_RE.findall(c_clean))
+            cand_latin = set(cls._LATIN_WORD_RE.findall(cand_clean))
+            alien_latin = c_latin - cand_latin
+            if alien_latin:
+                sym_fidelity = max(0.0, sym_fidelity - min(0.35, 0.15 * len(alien_latin)))
+
+        # When cited tokens form a strict proper subset of canonical tokens without qualifying
+        # as a legitimate subtitle/series/edition omission above, raw_tset=1.0 is pure subset
+        # inflation unless only a single short function word (e.g. leading "The") was omitted.
+        u_c = cls._TITLE_UNIT_RE.findall(_fold_diacritics(c_base))
+        u_cand = cls._TITLE_UNIT_RE.findall(_fold_diacritics(cand_base))
+        missing_units = list((Counter(u_cand) - Counter(u_c)).elements())
+        is_non_delim_substantive_subset = bool(
+            u_c
+            and u_cand
+            and set(u_c) < set(u_cand)
+            and (
+                len(missing_units) >= 2
+                or any(
+                    len(tok) >= 4 and tok not in cls._TITLE_FUNC_WORDS
+                    for tok in missing_units
+                )
+            )
+        )
+        if is_non_delim_substantive_subset:
+            return sym_fidelity
+
+        tset_w = 0.25 if len_ratio < 0.25 else 0.50
+        return tset_w * raw_tset + (1.0 - tset_w) * sym_fidelity

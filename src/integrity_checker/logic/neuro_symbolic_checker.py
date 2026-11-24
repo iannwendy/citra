@@ -20,6 +20,8 @@ from integrity_checker.logging import get_logger
 from integrity_checker.logic.calibration import HybridMLScorer
 from integrity_checker.logic.rules import (
     SymbolicRules,
+    _has_contradictory_title_tokens,
+    _has_explicit_title_year_conflict,
     _is_fake_url,
     has_polarity_or_catastrophic_content_conflict,
     is_explicit_or_named_refutation_context,
@@ -943,9 +945,9 @@ class NeuroSymbolicChecker:
             known_title = paper_info.get("title", "")
 
             if citation_title and known_title:
-                # Calculate title similarity using FuzzyMatcher
-                title_sim = self.rules.fuzzy.token_set_ratio(
-                    citation_title.lower(), known_title.lower()
+                # Calculate title similarity using unified symmetric containment-aware title matcher
+                title_sim = self.feature_calculator._compute_title_similarity(
+                    citation_title, known_title, is_raw_fallback=False
                 )
                 title_sim_threshold = 0.5  # Below this = likely wrong title
 
@@ -966,8 +968,8 @@ class NeuroSymbolicChecker:
                     has_real_matching_candidate = any(
                         cand.found
                         and cand.title
-                        and self.rules.fuzzy.token_set_ratio(
-                            citation_title.lower(), cand.title.lower()
+                        and self.feature_calculator._compute_title_similarity(
+                            citation_title, cand.title, is_raw_fallback=False
                         )
                         >= 0.70
                         and (
@@ -1222,6 +1224,66 @@ class NeuroSymbolicChecker:
                             features.has_doi_conflict = True  # type: ignore[attr-defined]
                             if "R-DOI-CONFLICT" not in known_rules:
                                 known_rules.append("R-DOI-CONFLICT")
+
+                    if (
+                        citation_title
+                        and known_title
+                        and not is_chapter_in_known_book
+                        and not getattr(features, "cross_lingual_title_detected", False)
+                    ):
+                        kp_title_sim = self.feature_calculator._compute_title_similarity(
+                            citation_title, known_title, is_raw_fallback=False
+                        )
+                        kp_contra_title = _has_contradictory_title_tokens(
+                            citation_title,
+                            citation.raw_text,
+                            known_title,
+                            citation_venue=citation.venue,
+                        )
+                        kp_year_conflict = _has_explicit_title_year_conflict(
+                            citation_title, known_title
+                        )
+                        # Official code-repository citations of seminal ML software libraries often carry
+                        # the GitHub/PyPI README tagline after the canonical software name before ":"
+                        # (e.g., "Transformers: State-of-the-art Machine Learning for PyTorch..." with
+                        # github.com/huggingface/transformers) alongside exact authors & year.
+                        cit_url_low = (citation.url or "").lower()
+                        is_official_repo_tagline = bool(
+                            cit_url_low
+                            and any(
+                                host in cit_url_low
+                                for host in (
+                                    "github.com/",
+                                    "gitlab.com/",
+                                    "bitbucket.org/",
+                                    "huggingface.co/",
+                                    "pypi.org/",
+                                )
+                            )
+                            and source.url_status != "dead_link"
+                            and not _is_fake_url(citation.url or "")[0]
+                            and ":" in citation_title
+                            and ":" in known_title
+                            and citation_title.split(":", 1)[0].strip().lower()
+                            == known_title.split(":", 1)[0].strip().lower()
+                            and bool(citation.authors)
+                            and bool(known_candidate.authors)
+                            and not author_match_details(
+                                citation.authors, known_candidate.authors
+                            ).only_cited
+                            and (features.year_distance <= self.rules.year_tolerance or features.year_distance >= 900)
+                        )
+                        if (
+                            not is_official_repo_tagline
+                            and (
+                                kp_year_conflict
+                                or kp_title_sim < 0.85
+                                or (kp_contra_title and kp_title_sim < 0.92)
+                            )
+                        ):
+                            kp_mismatched.append("title")
+                            if "R-TITLE-MISMATCH" not in known_rules:
+                                known_rules.append("R-TITLE-MISMATCH")
 
                     if (
                         0 < features.year_distance < 900

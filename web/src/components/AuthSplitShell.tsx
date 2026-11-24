@@ -319,8 +319,8 @@ export function AuthSplitShell({
               className="font-mono text-[9.5px] xl:text-[10px] font-semibold tracking-wider uppercase whitespace-nowrap"
             >
               {lang === 'vi'
-                ? '120.000 BÀI · 99,02% CHÍNH XÁC'
-                : '120K BENCHMARK · 99.02% ACC'}
+                ? '120.000 BÀI · 99,20% CHÍNH XÁC'
+                : '120K BENCHMARK · 99.20% ACC'}
             </span>
           </div>
         </div>

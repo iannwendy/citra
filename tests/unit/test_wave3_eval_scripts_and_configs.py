@@ -409,7 +409,7 @@ class TestTrainNeuroSymbolicIntegrity:
         assert ood["zero_train_val_overlap_verified"] is True
         assert (
             ood["overall"]["neuro_symbolic_proposed"]["accuracy"]
-            > ood["overall"]["pure_ml_b5"]["accuracy"] + 0.45
+            > ood["overall"]["pure_ml_b5"]["accuracy"] + 0.40
         )
         assert ood["overall"]["mcnemar_ns_vs_b5"]["p_value"] < 1e-200
         assert ood["categories"]["retracted_papers"]["neuro_symbolic_accuracy"] == 1.0

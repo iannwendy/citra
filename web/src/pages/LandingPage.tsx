@@ -720,7 +720,7 @@ function SolvaHeader({
           },
           {
             title: 'Độ tin cậy thực tế',
-            desc: 'Chính xác 99,02% trên 120.000 bài báo',
+            desc: 'Chính xác 99,20% trên 120.000 bài báo',
             href: '#benchmark-120k',
             icon: Sparkles,
           },
@@ -752,7 +752,7 @@ function SolvaHeader({
           },
           {
             title: 'Proven Accuracy',
-            desc: '99.02% accuracy across 120,000 papers',
+            desc: '99.20% accuracy across 120,000 papers',
             href: '#benchmark-120k',
             icon: Sparkles,
           },
@@ -1144,7 +1144,7 @@ function SolvaHeroSection({
                   >
                     {lang === 'vi' ? (
                       <>
-                        Kiểm định trên 120.000 bài báo · Chính xác 99,02% khi rà soát{' '}
+                        Kiểm định trên 120.000 bài báo · Chính xác 99,20% khi rà soát{' '}
                         <span className="citra-nowrap-tail whitespace-nowrap">
                           trích dẫn{'\u00A0'}
                           <span
@@ -1157,7 +1157,7 @@ function SolvaHeroSection({
                       </>
                     ) : (
                       <>
-                        Tested on 120,000 papers · 99.02% accuracy catching citation{' '}
+                        Tested on 120,000 papers · 99.20% accuracy catching citation{' '}
                         <span className="citra-nowrap-tail whitespace-nowrap">
                           errors{'\u00A0'}
                           <span
@@ -1272,7 +1272,7 @@ function SolvaHeroSection({
                   </div>
                   <div className="min-w-0">
                     <div className="font-solva-serif text-[20px] sm:text-[22px] leading-none tracking-[-0.04em] text-emerald-700 dark:text-emerald-400">
-                      {lang === 'vi' ? '99,02%' : '99.02%'}
+                      {lang === 'vi' ? '99,20%' : '99.20%'}
                     </div>
                     <div
                       style={{ color: 'var(--solva-muted)' }}
@@ -1283,7 +1283,7 @@ function SolvaHeroSection({
                   </div>
                   <div className="min-w-0">
                     <div className="font-solva-serif text-[20px] sm:text-[22px] leading-none tracking-[-0.04em] text-emerald-700 dark:text-emerald-400">
-                      {lang === 'vi' ? '99,75%' : '99.75%'}
+                      {lang === 'vi' ? '99,96%' : '99.96%'}
                     </div>
                     <div
                       style={{ color: 'var(--solva-muted)' }}
@@ -1436,15 +1436,15 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
     {
       badge: lang === 'vi' ? 'ĐỘ TIN CẬY VƯỢT TRỘI' : 'HIGH RELIABILITY',
       badgeTone: 'emerald' as const,
-      displayValue: lang === 'vi' ? '99,02%' : '99.02%',
+      displayValue: lang === 'vi' ? '99,20%' : '99.20%',
       title:
         lang === 'vi'
           ? 'Chính xác khi phát hiện nguồn ảo & sai lệch'
           : 'Accuracy catching fake or mismatched sources',
       desc:
         lang === 'vi'
-          ? 'Nhận diện chuẩn xác tài liệu do AI tự bịa, đường dẫn DOI không tồn tại và năm xuất bản sai — đạt 99,75% ngay cả trên 2.400 ca trích dẫn khó.'
-          : 'Spots AI-invented references, broken DOIs, and wrong publication years — maintaining 99.75% accuracy across 2,400 tricky edge-case citations.',
+          ? 'Nhận diện chuẩn xác tài liệu do AI tự bịa, đường dẫn DOI không tồn tại và năm xuất bản sai — đạt 99,96% ngay cả trên 2.400 ca trích dẫn khó.'
+          : 'Spots AI-invented references, broken DOIs, and wrong publication years — maintaining 99.96% accuracy across 2,400 tricky edge-case citations.',
     },
     {
       badge:
@@ -1478,56 +1478,56 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
           : 'Distinct scholarly papers',
       desc:
         lang === 'vi'
-          ? 'Phân tách độc lập tuyệt đối theo bài báo và tiêu đề chuẩn hóa giữa 84.000 bài huấn luyện, 18.000 bài thẩm định và 18.000 bài kiểm thử độc lập (|Train ∩ Val ∩ Test| = 0). Mã hóa 419.053 chuỗi văn bản thực bằng Sentence-BERT, 0% np.clip.'
-          : 'Strict paper- & title-disjoint 84,000 Train · 18,000 Val · 18,000 Held-Out Test split (|Train ∩ Val ∩ Test| = 0) prior to perturbation. 419,053 unique texts encoded via Sentence-BERT with zero clamping.',
+          ? 'Phân tách độc lập tuyệt đối theo bài báo và tiêu đề chuẩn hóa giữa 84.000 bài huấn luyện, 18.000 bài thẩm định và 18.000 bài kiểm thử độc lập (|Train ∩ Val ∩ Test| = 0). Mã hóa 419.109 chuỗi văn bản thực bằng Sentence-BERT, 0% np.clip.'
+          : 'Strict paper- & title-disjoint 84,000 Train · 18,000 Val · 18,000 Held-Out Test split (|Train ∩ Val ∩ Test| = 0) prior to perturbation. 419,109 unique texts encoded via Sentence-BERT with zero clamping.',
     },
     {
-      badge: lang === 'vi' ? 'MACRO-F1: 0.9888 · HẠNG #1 ID & OOD' : 'MACRO-F1: 0.9888 · #1 ON ID & OOD',
+      badge: lang === 'vi' ? 'MACRO-F1: 0.9903 · HẠNG #1 ID & OOD' : 'MACRO-F1: 0.9903 · #1 ON ID & OOD',
       badgeTone: 'emerald' as const,
-      value: 99.02,
+      value: 99.21,
       decimals: 2,
       suffix: '%',
       formatThousands: false,
       title:
         lang === 'vi'
-          ? 'Độ chính xác Neuro-Symbolic (99,75% trên 2.400 mẫu OOD)'
-          : 'Neuro-Symbolic Accuracy (99.75% on 2,400-Sample OOD)',
+          ? 'Độ chính xác Neuro-Symbolic (99,96% trên 2.400 mẫu OOD)'
+          : 'Neuro-Symbolic Accuracy (99.96% on 2,400-Sample OOD)',
       desc:
         lang === 'vi'
-          ? 'Kiến trúc Neuro-Symbolic đề xuất đạt 99,02% Accuracy (17.823/18.000, Macro-F1 0.9888), vượt qua cả mô hình học máy thuần túy B5 (97,98%, McNemar p = 6.17e-23) trên ID và bỏ xa B5 trên bộ 2.400 mẫu OOD (99,75% vs. 49,88%).'
-          : 'Proposed Neuro-Symbolic engine achieves 99.02% Accuracy (17,823/18,000, 0.9888 Macro-F1), statistically outperforming Pure ML B5 on ID (97.98%, p = 6.17e-23) and OOD (99.75% vs. 49.88%).',
+          ? 'Kiến trúc Neuro-Symbolic đề xuất đạt 99,20% Accuracy (17.857/18.000, Macro-F1 0.9903), vượt qua cả mô hình học máy thuần túy B5 (97,76%, McNemar p = 5.79e-45) trên ID và bỏ xa B5 trên bộ 2.400 mẫu OOD (99,96% vs. 57,37%).'
+          : 'Proposed Neuro-Symbolic engine achieves 99.20% Accuracy (17,856/18,000, 0.9903 Macro-F1), statistically outperforming Pure ML B5 on ID (97.67%, p = 5.79e-45) and OOD (99.96% vs. 57.37%).',
     },
     {
       badge: lang === 'vi' ? '0% KẾT LUẬN OAN CHO BÀI THẬT' : '0% FALSE ACCUSATIONS',
       badgeTone: 'emerald' as const,
-      value: 99.93,
+      value: 99.78,
       decimals: 2,
       suffix: '%',
       formatThousands: false,
       title:
         lang === 'vi'
-          ? 'Precision nhận diện trích dẫn ngụy tạo (F1 = 0.9981)'
-          : 'Hallucination Detection Precision (F1 = 0.9981)',
+          ? 'Precision nhận diện trích dẫn ngụy tạo (F1 = 0.9972)'
+          : 'Hallucination Detection Precision (F1 = 0.9972)',
       desc:
         lang === 'vi'
-          ? 'Phát hiện 5.383 / 5.400 trích dẫn chắp vá cùng miền tinh vi (Recall 99,69%, Precision 99,93%) mà không cáo buộc oan bất kỳ công trình hợp lệ nào (0 / 6.480 VERIFIED) và không để lọt bất kỳ trích dẫn ảo nào sang VERIFIED (0 / 5.400).'
-          : 'Catches 5,383 / 5,400 plausible same-domain spliced hallucinations (99.69% recall, 99.93% precision) with 0 / 6,480 legitimate works falsely accused and 0 / 5,400 fabrications leaked into VERIFIED.',
+          ? 'Phát hiện 5.382 / 5.400 trích dẫn chắp vá cùng miền tinh vi (Recall 99,67%, Precision 99,78%) mà không cáo buộc oan bất kỳ công trình hợp lệ nào (0 / 6.480 VERIFIED) và không để lọt bất kỳ trích dẫn ảo nào sang VERIFIED (0 / 5.400).'
+          : 'Catches 5,382 / 5,400 plausible same-domain spliced hallucinations (99.67% recall, 99.78% precision) with 0 / 6,480 legitimate works falsely accused and 0 / 5,400 fabrications leaked into VERIFIED.',
     },
     {
-      badge: '↓ 6.19× ECE · ↓ 7.32× BRIER',
+      badge: '↓ 6.02× ECE · ↓ 8.38× BRIER',
       badgeTone: 'amber' as const,
-      value: 0.0395,
+      value: 0.0411,
       decimals: 4,
       suffix: '',
       formatThousands: false,
       title:
         lang === 'vi'
-          ? 'Sai số hiệu chỉnh xác suất ECE (Brier = 0.0125)'
-          : 'Expected Calibration Error ECE (Brier = 0.0125)',
+          ? 'Sai số hiệu chỉnh xác suất ECE (Brier = 0.0108)'
+          : 'Expected Calibration Error ECE (Brier = 0.0108)',
       desc:
         lang === 'vi'
-          ? 'Hiệu chỉnh hậu nghiệm Logit-Space Platt Scaling (a = 1.8077, b = 1.1160) kéo giảm 6,19 lần sai số ECE (0.2445 → 0.0395) và 7,32 lần Brier (0.0915 → 0.0125), đạt 99,31% chính xác ở độ phủ 90% và 100% (120/120) E2E Gold.'
-          : 'Post-hoc Logit-Space Platt Scaling (a = 1.8077, b = 1.1160) cuts ECE by 6.19× (0.2445 → 0.0395) and Brier by 7.32× (0.0915 → 0.0125), with 99.31% accuracy @ 90% coverage and 100% (120/120) E2E Gold.',
+          ? 'Hiệu chỉnh hậu nghiệm Logit-Space Platt Scaling (a = 1.8304, b = 1.1474) kéo giảm 6,05 lần sai số ECE (0.2475 → 0.0411) và 8,46 lần Brier (0.0905 → 0.0108), đạt 99,53% chính xác ở độ phủ 90% và 100% (120/120) E2E Gold.'
+          : 'Post-hoc Logit-Space Platt Scaling (a = 1.8304, b = 1.1474) cuts ECE by 6.02× (0.2475 → 0.0411) and Brier by 8.38× (0.0905 → 0.0108), with 99.49% accuracy @ 90% coverage and 100% (120/120) E2E Gold.',
     },
   ];
 
@@ -1542,10 +1542,10 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
         lang === 'vi'
           ? 'Bỏ lọt toàn bộ bài báo hội nghị và sách chuyên khảo không đăng ký mã DOI'
           : 'Misses valid conference papers & books without DOIs',
-      acc: 26.34,
-      prec: '0.2336',
-      rec: '0.3496',
-      f1: '0.1963',
+      acc: 26.24,
+      prec: '0.2342',
+      rec: '0.3489',
+      f1: '0.1957',
       highlight: false,
     },
     {
@@ -1558,10 +1558,10 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
         lang === 'vi'
           ? 'Khuyết thiếu kho bản thảo arXiv, kỷ yếu DBLP/ACL, sách chuyên khảo OpenLibrary và y sinh Europe PMC'
           : 'Lacks arXiv preprints, DBLP CS proceedings, OpenLibrary & Europe PMC',
-      acc: 58.11,
-      prec: '0.5626',
-      rec: '0.4794',
-      f1: '0.4513',
+      acc: 58.27,
+      prec: '0.5651',
+      rec: '0.4811',
+      f1: '0.4534',
       highlight: false,
     },
     {
@@ -1574,10 +1574,10 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
         lang === 'vi'
           ? 'Dễ dàng bị qua mặt bởi tiêu đề AI chắp vá từ khóa cùng miền và làm ngơ sai lệch năm / tác giả'
           : 'Fooled by plausible same-domain chimeric LLM titles; ignores year & author drift',
-      acc: 66.86,
-      prec: '0.4930',
-      rec: '0.5214',
-      f1: '0.4585',
+      acc: 66.93,
+      prec: '0.4940',
+      rec: '0.5211',
+      f1: '0.4570',
       highlight: false,
     },
     {
@@ -1588,12 +1588,12 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
           : 'Linear multi-feature scorer without abstention band',
       note:
         lang === 'vi'
-          ? 'Cưỡng ép ra phán quyết cứng ở vùng ranh giới nhạy cảm [0.40, 0.60), dẫn tới sụp đổ 3,33% trên OOD'
-          : 'Forces hard verdicts in borderline [0.40, 0.60) cases (3.33% on OOD)',
-      acc: 80.13,
-      prec: '0.6212',
-      rec: '0.6607',
-      f1: '0.6269',
+          ? 'Cưỡng ép ra phán quyết cứng ở vùng ranh giới nhạy cảm [0.40, 0.60), dẫn tới sụp đổ 4,17% trên OOD'
+          : 'Forces hard verdicts in borderline [0.40, 0.60) cases (4.17% on OOD)',
+      acc: 80.48,
+      prec: '0.6234',
+      rec: '0.6648',
+      f1: '0.6309',
       highlight: false,
     },
     {
@@ -1606,26 +1606,26 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
         lang === 'vi'
           ? 'Thiếu khả năng kiểm chứng ngữ nghĩa câu trích dẫn với tóm tắt bài gốc và không kiểm tra liên kết sống'
           : 'No sentence-level abstract entailment or active HTTP/DOI link checks',
-      acc: 81.93,
-      prec: '0.6328',
-      rec: '0.6811',
-      f1: '0.6466',
+      acc: 82.76,
+      prec: '0.6383',
+      rec: '0.6908',
+      f1: '0.6556',
       highlight: false,
     },
     {
-      code: 'B5 · HybridMLScorer (16D, C = 2.0)',
+      code: 'B5 · HybridMLScorer (16D, C = 0.25)',
       name:
         lang === 'vi'
-          ? 'HybridMLScorer 16 chiều thuần học máy (C = 2.0 — sụp đổ còn 49,88% trên 2.400 mẫu OOD!)'
-          : 'Pure 16D HybridMLScorer (C = 2.0 — collapses to 49.88% on 2,400-sample OOD!)',
+          ? 'HybridMLScorer 16 chiều thuần học máy (C = 0.25 — sụp đổ còn 57,37% trên 2.400 mẫu OOD!)'
+          : 'Pure 16D HybridMLScorer (C = 0.25 — collapses to 57.37% on 2,400-sample OOD!)',
       note:
         lang === 'vi'
-          ? 'Thiếu rào chắn ký hiệu bậc nhất cho bài bị rút (Retracted 0%), URL giả (0%) và ghép lai DOI'
-          : 'Lacks symbolic guardrails for retracted papers (0%), fake URLs (0%) & chimeric DOIs',
-      acc: 97.98,
-      prec: '0.9805',
-      rec: '0.9800',
-      f1: '0.9802',
+          ? 'Thiếu rào chắn ký hiệu bậc nhất cho bài bị rút (Retracted 0%), URL giả (0%) và thẩm quyền luật VN (45%)'
+          : 'Lacks symbolic guardrails for retracted papers (0%), fake URLs (0%) & VN legal statutes (45%)',
+      acc: 97.67,
+      prec: '0.9753',
+      rec: '0.9768',
+      f1: '0.9759',
       highlight: false,
     },
     {
@@ -1636,12 +1636,12 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
           : `CITRA Unified Neuro-Symbolic (Multi-Source + Verb-Agnostic Specificity + ${SYMBOLIC_RULES_COUNT}+ Rules + Platt)`,
       note:
         lang === 'vi'
-          ? 'Hạng #1 trên cả ID (p = 6.17e-23 vs. B5) & OOD (99,75% vs. 49,88%) · 100% (120/120) E2E Gold'
-          : '#1 on both ID (p = 6.17e-23 vs. B5) & OOD (99.75% vs. 49.88%) · 100% (120/120) E2E Gold',
-      acc: 99.02,
-      prec: '0.9894',
-      rec: '0.9883',
-      f1: '0.9888',
+          ? 'Hạng #1 trên cả ID (p = 5.79e-45 vs. B5) & OOD (99,96% vs. 57,37%) · 100% (120/120) E2E Gold'
+          : '#1 on both ID (p = 5.79e-45 vs. B5) & OOD (99.96% vs. 57.37%) · 100% (120/120) E2E Gold',
+      acc: 99.21,
+      prec: '0.9899',
+      rec: '0.9908',
+      f1: '0.9903',
       highlight: true,
     },
   ];
@@ -1652,9 +1652,9 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
       subtypes: 'V1 – V4',
       totalSamples: lang === 'vi' ? '43.200 (36%)' : '43,200 (36%)',
       testSupport: lang === 'vi' ? '6.480' : '6,480',
-      precision: lang === 'vi' ? '0.9846 (98,5%)' : '0.9846 (98.5%)',
-      recall: lang === 'vi' ? '0.9980 (99,8%)' : '0.9980 (99.8%)',
-      f1: '0.9913',
+      precision: lang === 'vi' ? '0.9923 (99,2%)' : '0.9923 (99.2%)',
+      recall: lang === 'vi' ? '0.9972 (99,7%)' : '0.9972 (99.7%)',
+      f1: '0.9947',
       tone: 'emerald' as const,
       desc:
         lang === 'vi'
@@ -1666,23 +1666,23 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
       subtypes: 'H1 – H4',
       totalSamples: lang === 'vi' ? '36.000 (30%)' : '36,000 (30%)',
       testSupport: lang === 'vi' ? '5.400' : '5,400',
-      precision: lang === 'vi' ? '0.9993 (99,9%)' : '0.9993 (99.9%)',
-      recall: lang === 'vi' ? '0.9969 (99,7%)' : '0.9969 (99.7%)',
-      f1: '0.9981',
+      precision: lang === 'vi' ? '0.9978 (99,8%)' : '0.9978 (99.8%)',
+      recall: lang === 'vi' ? '0.9967 (99,7%)' : '0.9967 (99.7%)',
+      f1: '0.9972',
       tone: 'red' as const,
       desc:
         lang === 'vi'
-          ? 'Ngụy tạo hoàn toàn (H1), chắp vá tiêu đề cùng miền kết hợp tên học giả thật (H2), mã DOI giả / ghép lai (H3), hoặc liên kết chết HTTP 404 (H4). Bắt trọn 5.383 / 5.400 mẫu (17 mẫu biên chuyển sang UNRESOLVED), 0 kết tội oan bài VERIFIED.'
-          : 'Complete fabrication (H1), plausible same-domain spliced titles with real scholar names (H2), fabricated/chimeric DOIs (H3), dead HTTP 404 URLs (H4). 5,383 / 5,400 caught (0 false accusations on VERIFIED).',
+          ? 'Ngụy tạo hoàn toàn (H1), chắp vá tiêu đề cùng miền kết hợp tên học giả thật (H2), mã DOI giả / ghép lai (H3), hoặc liên kết chết HTTP 404 (H4). Bắt trọn 5.382 / 5.400 mẫu (18 mẫu biên chuyển sang UNRESOLVED), 0 kết tội oan bài VERIFIED.'
+          : 'Complete fabrication (H1), plausible same-domain spliced titles with real scholar names (H2), fabricated/chimeric DOIs (H3), dead HTTP 404 URLs (H4). 5,382 / 5,400 caught (0 false accusations on VERIFIED).',
     },
     {
       label: 'METADATA_ERROR',
       subtypes: 'M1 – M5',
       totalSamples: lang === 'vi' ? '26.400 (22%)' : '26,400 (22%)',
       testSupport: lang === 'vi' ? '3.960' : '3,960',
-      precision: lang === 'vi' ? '0.9915 (99,2%)' : '0.9915 (99.2%)',
-      recall: lang === 'vi' ? '0.9684 (96,8%)' : '0.9684 (96.8%)',
-      f1: '0.9798',
+      precision: lang === 'vi' ? '0.9910 (99,1%)' : '0.9910 (99.1%)',
+      recall: lang === 'vi' ? '0.9773 (97,7%)' : '0.9773 (97.7%)',
+      f1: '0.9841',
       tone: 'amber' as const,
       desc:
         lang === 'vi'
@@ -1694,9 +1694,9 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
       subtypes: 'U1 – U2',
       totalSamples: lang === 'vi' ? '14.400 (12%)' : '14,400 (12%)',
       testSupport: lang === 'vi' ? '2.160' : '2,160',
-      precision: lang === 'vi' ? '0.9821 (98,2%)' : '0.9821 (98.2%)',
-      recall: lang === 'vi' ? '0.9898 (99,0%)' : '0.9898 (99.0%)',
-      f1: '0.9859',
+      precision: lang === 'vi' ? '0.9785 (97,9%)' : '0.9785 (97.9%)',
+      recall: lang === 'vi' ? '0.9921 (99,2%)' : '0.9921 (99.2%)',
+      f1: '0.9853',
       tone: 'slate' as const,
       desc:
         lang === 'vi'
@@ -1860,7 +1860,7 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
         >
           {showTechnicalDetails && (
             <div className="space-y-[24px] animate-debugger-switch">
-            {/* 4 Technical Telemetry Cards (`120,000` · `99.02%` · `99.93%` · `0.0395`) */}
+            {/* 4 Technical Telemetry Cards (`120,000` · `99.20%` · `99.78%` · `0.0411`) */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-[16px]">
               {headlineMetrics.map((item, idx) => (
                 <div
@@ -2178,8 +2178,8 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
                     </div>
                     <span className="self-start sm:self-center px-3 py-1 rounded-[8px] bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300 font-mono text-[11px] font-semibold shrink-0">
                       {lang === 'vi'
-                        ? 'Độ chính xác chung: 99,02% [98,87%; 99,16%]'
-                        : 'Overall Acc: 99.02% [98.87%, 99.16%]'}
+                        ? 'Độ chính xác chung: 99,20% [99,08%; 99,34%]'
+                        : 'Overall Acc: 99.20% [99.07%, 99.33%]'}
                     </span>
                   </div>
 
@@ -2275,14 +2275,14 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
                         className="font-solva-sans text-[13px] sm:text-[14px] mt-1"
                       >
                         {lang === 'vi'
-                          ? 'Ước lượng tham số Platt (a = 1.8077, b = 1.1160) hoàn toàn độc lập trên tập Thẩm định (18.000 mẫu), đảm bảo điểm độ tin cậy phản ánh trung thực xác suất đúng thực nghiệm.'
-                          : 'Platt parameters (a = 1.8077, b = 1.1160) fitted strictly on the 18,000-sample Validation split align confidence scores with true empirical accuracy.'}
+                          ? 'Ước lượng tham số Platt (a = 1.8304, b = 1.1474) hoàn toàn độc lập trên tập Thẩm định (18.000 mẫu), đảm bảo điểm độ tin cậy phản ánh trung thực xác suất đúng thực nghiệm.'
+                          : 'Platt parameters (a = 1.8304, b = 1.1474) fitted strictly on the 18,000-sample Validation split align confidence scores with true empirical accuracy.'}
                       </p>
                     </div>
                     <span className="self-start sm:self-center px-3 py-1 rounded-[8px] bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300 font-mono text-[11px] font-semibold shrink-0">
                       {lang === 'vi'
-                        ? '99,31% Chính xác @ 90% Độ phủ'
-                        : '99.31% Acc @ 90% Coverage'}
+                        ? '99,53% Chính xác @ 90% Độ phủ'
+                        : '99.49% Acc @ 90% Coverage'}
                     </span>
                   </div>
 
@@ -2323,20 +2323,20 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
                               <span style={{ color: 'var(--solva-muted)' }}>
                                 {lang === 'vi' ? 'Sai số ECE:' : 'ECE Error:'}
                               </span>
-                              <strong style={{ color: 'var(--solva-ink)' }}>0.2445</strong>
+                              <strong style={{ color: 'var(--solva-ink)' }}>0.2475</strong>
                             </div>
                             <div className="flex justify-between">
                               <span style={{ color: 'var(--solva-muted)' }}>
                                 {lang === 'vi' ? 'Điểm Brier:' : 'Brier Score:'}
                               </span>
-                              <strong style={{ color: 'var(--solva-ink)' }}>0.0915</strong>
+                              <strong style={{ color: 'var(--solva-ink)' }}>0.0905</strong>
                             </div>
                             <div className="flex justify-between">
                               <span style={{ color: 'var(--solva-muted)' }}>
                                 {lang === 'vi' ? 'Chính xác @ 70% Phủ:' : 'Acc @ 70% Cov:'}
                               </span>
                               <strong style={{ color: 'var(--solva-ink)' }}>
-                                {lang === 'vi' ? '99,03%' : '99.03%'}
+                                {lang === 'vi' ? '99,39%' : '99.38%'}
                               </strong>
                             </div>
                             <div className="flex justify-between">
@@ -2344,7 +2344,7 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
                                 {lang === 'vi' ? 'Chính xác @ 90% Phủ:' : 'Acc @ 90% Cov:'}
                               </span>
                               <strong style={{ color: 'var(--solva-ink)' }}>
-                                {lang === 'vi' ? '99,08%' : '99.08%'}
+                                {lang === 'vi' ? '99,31%' : '99.31%'}
                               </strong>
                             </div>
                           </div>
@@ -2368,7 +2368,7 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
                                 {lang === 'vi' ? 'Sai số ECE:' : 'ECE Error:'}
                               </span>
                               <strong className="text-emerald-700 dark:text-emerald-300">
-                                {lang === 'vi' ? '0.0395 (↓ 6,19×)' : '0.0395 (↓ 6.19×)'}
+                                {lang === 'vi' ? '0.0411 (↓ 6,05×)' : '0.0411 (↓ 6.02×)'}
                               </strong>
                             </div>
                             <div className="flex justify-between">
@@ -2376,7 +2376,7 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
                                 {lang === 'vi' ? 'Điểm Brier:' : 'Brier Score:'}
                               </span>
                               <strong className="text-emerald-700 dark:text-emerald-300">
-                                {lang === 'vi' ? '0.0125 (↓ 7,32×)' : '0.0125 (↓ 7.32×)'}
+                                {lang === 'vi' ? '0.0108 (↓ 8,46×)' : '0.0108 (↓ 8.38×)'}
                               </strong>
                             </div>
                             <div className="flex justify-between">
@@ -2384,7 +2384,7 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
                                 {lang === 'vi' ? 'Chính xác @ 70% Phủ:' : 'Acc @ 70% Cov:'}
                               </span>
                               <strong className="text-emerald-700 dark:text-emerald-300">
-                                {lang === 'vi' ? '99,23%' : '99.23%'}
+                                {lang === 'vi' ? '99,49%' : '99.49%'}
                               </strong>
                             </div>
                             <div className="flex justify-between">
@@ -2392,7 +2392,7 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
                                 {lang === 'vi' ? 'Chính xác @ 90% Phủ:' : 'Acc @ 90% Cov:'}
                               </span>
                               <strong className="text-emerald-700 dark:text-emerald-300">
-                                {lang === 'vi' ? '99,31%' : '99.31%'}
+                                {lang === 'vi' ? '99,53%' : '99.49%'}
                               </strong>
                             </div>
                           </div>
@@ -2421,27 +2421,27 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
                         {[
                           {
                             metric: lang === 'vi' ? 'Độ chính xác tổng thể' : 'Overall Accuracy',
-                            est: lang === 'vi' ? '99,02%' : '99.02%',
-                            ci: lang === 'vi' ? '[98,87%; 99,16%]' : '[98.87%, 99.16%]',
+                            est: lang === 'vi' ? '99,20%' : '99.20%',
+                            ci: lang === 'vi' ? '[99,08%; 99,34%]' : '[99.07%, 99.33%]',
                             se: lang === 'vi' ? '±0,07%' : '±0.07%',
                           },
                           {
                             metric: lang === 'vi' ? 'Điểm Macro-F1' : 'Macro-F1 Score',
-                            est: '0.9888',
-                            ci: '[0.9871, 0.9905]',
-                            se: '±0.0009',
-                          },
-                          {
-                            metric: lang === 'vi' ? 'Sai số ECE đã hiệu chỉnh' : 'Calibrated ECE',
-                            est: '0.0395',
-                            ci: '[0.0380, 0.0410]',
+                            est: '0.9903',
+                            ci: '[0.9888, 0.9919]',
                             se: '±0.0008',
                           },
                           {
+                            metric: lang === 'vi' ? 'Sai số ECE đã hiệu chỉnh' : 'Calibrated ECE',
+                            est: '0.0411',
+                            ci: '[0.0397, 0.0425]',
+                            se: '±0.0007',
+                          },
+                          {
                             metric: lang === 'vi' ? 'Điểm Brier (Brier Score)' : 'Brier Score',
-                            est: '0.0125',
-                            ci: '[0.0113, 0.0137]',
-                            se: '±0.0006',
+                            est: '0.0108',
+                            ci: '[0.0097, 0.0118]',
+                            se: '±0.0005',
                           },
                         ].map((item) => (
                           <div
@@ -4708,7 +4708,7 @@ function SolvaClientResultsSection({ lang }: { lang: Lang }) {
                   }
                 />
                 <SolvaAnimatedMetric
-                  targetValue={99.02}
+                  targetValue={99.21}
                   suffix="%"
                   decimals={2}
                   decimalSeparator={lang === 'vi' ? ',' : '.'}
@@ -4719,7 +4719,7 @@ function SolvaClientResultsSection({ lang }: { lang: Lang }) {
                   }
                 />
                 <SolvaAnimatedMetric
-                  targetValue={99.93}
+                  targetValue={99.78}
                   suffix="%"
                   decimals={2}
                   decimalSeparator={lang === 'vi' ? ',' : '.'}

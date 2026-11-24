@@ -2542,8 +2542,8 @@ describe('Premium Subscription, Pricing, Stripe Checkout & Paywall UI/UX Flows',
           expect(fullPageText).toContain('Thư viện & kho dữ liệu học thuật uy tín');
           expect(fullPageText).toContain('Độ chính xác kiểm chứng trích dẫn');
           expect(fullPageText).toContain('Độ chuẩn xác phát hiện nguồn ảo (0 kết luận oan)');
-          expect(fullPageText).toContain('99,02%');
-          expect(fullPageText).toContain('99,93%');
+          expect(fullPageText).toContain('99,20%');
+          expect(fullPageText).toContain('99,78%');
         } else {
           expect(nav.textContent).toContain('120K Benchmark');
           expect(fullPageText).toContain('Trusted academic libraries & indexes');

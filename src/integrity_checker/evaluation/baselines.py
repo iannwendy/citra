@@ -531,15 +531,17 @@ class BaselineRunner:
         ):
             return "verified"
 
-        if doi_ok and title_best >= 0.90 and aj >= 0.50 and (yd <= 1 or yd >= 900):
+        # Unified lexical title floor mirroring SymbolicRules Rule 1 / Rule 3 / Rule 2 / Rule 4a2
+        has_lex_title_corrupt = bool(tf < (0.82 if doi_ok else 0.85))
+        if doi_ok and title_best >= 0.90 and not has_lex_title_corrupt and aj >= 0.50 and (yd <= 1 or yd >= 900):
             return "verified"
-        if title_best >= 0.90 and aj >= 0.50 and (yd <= 1 or yd >= 900) and consensus >= 2:
+        if title_best >= 0.90 and not has_lex_title_corrupt and aj >= 0.50 and (yd <= 1 or yd >= 900) and consensus >= 2:
             return "verified"
         if tf >= 0.90 and aj >= 0.80 and (yd <= 1 or yd >= 900) and consensus >= 1:
             return "verified"
-        if doi_ok and title_best < 0.90:
+        if doi_ok and (title_best < 0.90 or has_lex_title_corrupt):
             return "metadata_error"
-        if title_best >= 0.60 and (aj < 0.50 or (1 < yd < 900) or title_best < 0.90):
+        if title_best >= 0.60 and (aj < 0.50 or (1 < yd < 900) or title_best < 0.90 or has_lex_title_corrupt):
             return "metadata_error"
         if 0.42 <= title_best < 0.60 and yd <= 2 and (
             (consensus >= 2 and aj >= 0.75) or (aj >= 0.85 and yd <= 1 and tf >= 0.52)

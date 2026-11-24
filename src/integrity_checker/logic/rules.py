@@ -20,6 +20,7 @@ chủ nhân duy nhất). Rules chỉ điều chỉnh ``label`` + ``confidence`` 
 from __future__ import annotations
 
 import re
+from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -99,9 +100,71 @@ def _normalize_greek_tokens(text: str) -> str:
 
 _TITLE_MEDIUM_BRACKET_RE = re.compile(
     r"\s*\[(?:online|preprint|internet|web|software|computer\s+software|"
-    r"dataset|electronic\s+resource|accessed[^\]]*|trực\s+tuyến)\]",
+    r"dataset|electronic\s+resource|accessed[^\]]*|trực\s+tuyến|"
+    r"in\s+(?:french|chinese|german|spanish|russian|japanese|korean|vietnamese|"
+    r"italian|portuguese|arabic|dutch|polish|turkish|hindi)|translated\s+from[^\]]*)\]",
     re.IGNORECASE,
 )
+_TECH_STANDARD_PREFIX_RE = re.compile(
+    r"^(?:rfc|iso(?:/iec(?:/ieee)?)?|ieee\s+std|ietf|w3c|nist\s+sp|ansi|itu-[a-z]|etsi)\s+[a-z0-9./\-]+\s*[:\-—–]\s*",
+    re.IGNORECASE,
+)
+
+
+_CJK_TITLE_CHAR_RE = re.compile(r"[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]")
+_UPPER_ACRONYM_STOP_2_3: frozenset[str] = frozenset(
+    {
+        "OF", "IN", "ON", "TO", "AT", "BY", "AS", "OR", "AN", "IS", "IT", "NO",
+        "SO", "UP", "IF", "WE", "DO", "GO", "BE", "THE", "AND", "FOR", "NOT",
+        "ARE", "BUT", "CAN", "HAS", "HAD", "ITS", "OUR", "OUT", "USE", "VIA",
+        "NEW", "TWO", "ONE", "ALL", "HOW", "WHY", "WHO", "MAY", "PER", "US",
+        "UK", "EU", "UN", "VN", "II", "III", "IV", "VI", "VII", "VIII", "IX",
+        "XI", "XII", "ED", "VOL", "PP",
+    }
+)
+_INITIALISM_SKIP_WORDS: frozenset[str] = frozenset(
+    {"of", "the", "and", "for", "in", "on", "to", "a", "an", "with", "by"}
+)
+
+
+def _is_ordered_subseq(needle: str, haystack: str) -> bool:
+    it = iter(haystack)
+    return all(ch in it for ch in needle)
+
+
+def _is_initialism_in_title(acr_lower: str, best_words: list[str]) -> bool:
+    """Return True if a 2-4 char acronym matches consecutive word initials or a long
+    single-word compound/Greek-root expansion (e.g. EEG -> electroencephalography) in `best_words`."""
+    k = len(acr_lower)
+    if k < 2:
+        return False
+    if len(best_words) >= k:
+        streams = (best_words, [w for w in best_words if w not in _INITIALISM_SKIP_WORDS])
+        for words in streams:
+            initials = "".join(w[0] for w in words if w)
+            if acr_lower in initials:
+                return True
+    # Single-word scientific compound expansion (e.g. EEG -> electroencephalography,
+    # ECG -> electrocardiography): require len >= 12 so short words like "connection" never absorb CNN.
+    if k >= 3:
+        for w in best_words:
+            if len(w) >= 12 and w[0] == acr_lower[0] and _is_ordered_subseq(acr_lower, w):
+                return True
+    return False
+
+
+def _has_explicit_title_year_conflict(
+    citation_title: str | None,
+    best_title: str | None,
+) -> bool:
+    """Return True when both explicit titles contain 4-digit years that disagree (e.g. 2025 vs 2026)."""
+    if not citation_title or not str(citation_title).strip() or not best_title or not str(best_title).strip():
+        return False
+    c_clean = _TITLE_MEDIUM_BRACKET_RE.sub(" ", str(citation_title))
+    b_clean = _TITLE_MEDIUM_BRACKET_RE.sub(" ", str(best_title))
+    c_years = set(re.findall(r"\b(?:19|20)\d{2}\b", c_clean))
+    b_years = set(re.findall(r"\b(?:19|20)\d{2}\b", b_clean))
+    return bool(c_years and b_years and c_years != b_years)
 
 
 def _has_contradictory_title_tokens(
@@ -111,9 +174,11 @@ def _has_contradictory_title_tokens(
     *,
     citation_venue: str | None = None,
 ) -> bool:
-    """Return True if the cited title contains >= 1 non-typo content word absent from `best_title`."""
+    """Return True if the cited title contains ungrounded content words, conflicting years,
+    alien 2-3 char acronyms, or duplicated phrase stutters absent from `best_title`."""
     if not best_title or not str(best_title).strip():
         return False
+    has_explicit_title = bool(citation_title and str(citation_title).strip())
     cited_seg = _TITLE_MEDIUM_BRACKET_RE.sub(" ", (citation_title or "")).strip()
     if not cited_seg and citation_raw:
         raw_no_links = _TITLE_MEDIUM_BRACKET_RE.sub(
@@ -138,30 +203,188 @@ def _has_contradictory_title_tokens(
         "towards", "toward", "across", "between", "among", "about", "their",
     }
     best_clean = _TITLE_MEDIUM_BRACKET_RE.sub(" ", str(best_title))
-    c_norm = _normalize_greek_tokens(_fold_author_diacritics(cited_seg).lower())
+    # Strip optional trailing parenthesized venue tag (e.g. "(CVPR)", "(ACL)") on explicit titles
+    cited_clean_for_tokens = (
+        re.sub(r"\s*\([A-Z0-9\-]{2,10}\)\s*$", "", cited_seg).strip()
+        if has_explicit_title
+        else cited_seg
+    ) or cited_seg
+    # Strip leading technical-standard code ("RFC 9110: ", "ISO/IEC 25010: ") when present on
+    # exactly ONE side so "RFC 9110: HTTP Semantics" matches "HTTP Semantics" without masking
+    # genuine code conflicts ("RFC 9110: ..." vs "RFC 8446: ...").
+    c_has_std_pfx = bool(_TECH_STANDARD_PREFIX_RE.match(cited_clean_for_tokens))
+    b_has_std_pfx = bool(_TECH_STANDARD_PREFIX_RE.match(best_clean.strip()))
+    if c_has_std_pfx != b_has_std_pfx:
+        if c_has_std_pfx:
+            cited_clean_for_tokens = _TECH_STANDARD_PREFIX_RE.sub("", cited_clean_for_tokens).strip() or cited_clean_for_tokens
+        else:
+            best_clean = _TECH_STANDARD_PREFIX_RE.sub("", best_clean.strip()).strip() or best_clean
+
+    # 1. Both-sided explicit 4-digit year conflict (e.g. 2025 vs 2026; never presence-vs-absence)
+    if has_explicit_title and _has_explicit_title_year_conflict(cited_seg, best_clean):
+        return True
+
+    c_norm = _normalize_greek_tokens(_fold_author_diacritics(cited_clean_for_tokens).lower())
     b_norm = _normalize_greek_tokens(_fold_author_diacritics(best_clean).lower())
     c_dehyph = re.sub(r"(?<=[a-z0-9])-(?=[a-z0-9])", "", c_norm)
     b_dehyph = re.sub(r"(?<=[a-z0-9])-(?=[a-z0-9])", "", b_norm)
+    b_words = re.findall(r"[a-z0-9]+", b_norm)
+    b_toks = list(
+        dict.fromkeys(
+            re.findall(r"[a-z0-9]{2,}", b_norm) + re.findall(r"[a-z0-9]{2,}", b_dehyph)
+        )
+    )
+    if not b_toks:
+        # Pure non-Latin best_title (e.g. CJK): detect alien Latin words/acronyms injected by citation
+        if has_explicit_title and len(_CJK_TITLE_CHAR_RE.findall(best_clean)) >= 4:
+            alien_words = [
+                w
+                for w in re.findall(r"[A-Za-z]{2,}", cited_clean_for_tokens)
+                if w.upper() not in _UPPER_ACRONYM_STOP_2_3 and w.lower() not in _title_stop
+            ]
+            if alien_words:
+                return True
+        return False
+
+    b_set = set(b_toks)
+    b_compounds = set(b_set)
+    for i in range(len(b_words) - 1):
+        b_compounds.add(b_words[i] + b_words[i + 1])
+        if i + 2 < len(b_words):
+            b_compounds.add(b_words[i] + b_words[i + 1] + b_words[i + 2])
+
+    # Cover split-hyphen / split-compound tokens ("End to-End" -> "endtoend", "Sub word" -> "subword")
+    c_words = re.findall(r"[a-z0-9]+", c_norm)
+    c_covered_by_compound: set[str] = set()
+    for i in range(len(c_words) - 1):
+        pair = c_words[i] + c_words[i + 1]
+        if pair in b_compounds:
+            c_covered_by_compound.update({c_words[i], c_words[i + 1], pair})
+        if i + 2 < len(c_words):
+            triple = c_words[i] + c_words[i + 1] + c_words[i + 2]
+            if triple in b_compounds:
+                c_covered_by_compound.update(
+                    {
+                        c_words[i],
+                        c_words[i + 1],
+                        c_words[i + 2],
+                        c_words[i] + c_words[i + 1],
+                        c_words[i + 1] + c_words[i + 2],
+                        triple,
+                    }
+                )
+
+    # 2. Content words (len >= 4) check
     c_toks = [
         w for w in re.findall(r"[a-z0-9]{4,}", c_dehyph)
         if w not in _title_stop and not re.fullmatch(r"(?:18|19|20)\d{2}[a-z]?", w)
     ]
-    b_toks = list(
-        dict.fromkeys(
-            re.findall(r"[a-z0-9]{3,}", b_norm) + re.findall(r"[a-z0-9]{3,}", b_dehyph)
-        )
-    )
-    if not c_toks or not b_toks:
-        return False
-    b_set = set(b_toks)
+    b_toks_3plus = [bt for bt in b_toks if len(bt) >= 3]
     for ct in c_toks:
-        if ct in b_set:
+        if ct in b_set or ct in c_covered_by_compound:
             continue
-        if len(ct) >= 5 and any(bt.startswith(ct[:5]) or ct.startswith(bt[:5]) for bt in b_toks if len(bt) >= 5):
+        if len(ct) >= 5 and any(
+            bt.startswith(ct[:5]) or ct.startswith(bt[:5]) for bt in b_toks_3plus if len(bt) >= 5
+        ):
             continue
-        if any(SequenceMatcher(None, ct, bt).ratio() >= 0.80 for bt in b_toks):
+        if any(SequenceMatcher(None, ct, bt).ratio() >= 0.80 for bt in b_toks_3plus):
             continue
         return True
+
+    # 3. Guarded 2-3 char uppercase acronym check (explicit non-ALL-CAPS or CJK-mixed titles only)
+    if has_explicit_title:
+        alpha_words = re.findall(r"[A-Za-z]{2,}", cited_clean_for_tokens)
+        is_cjk_mixed = len(_CJK_TITLE_CHAR_RE.findall(cited_clean_for_tokens)) >= 4
+        allcaps_ratio = (
+            sum(1 for w in alpha_words if w.isupper()) / len(alpha_words)
+            if alpha_words
+            else 1.0
+        )
+        if is_cjk_mixed or allcaps_ratio < 0.50:
+            for acr in re.findall(r"(?<![A-Za-z])[A-Z]{2,3}(?![A-Za-z])", cited_clean_for_tokens):
+                if acr in _UPPER_ACRONYM_STOP_2_3:
+                    continue
+                low_acr = acr.lower()
+                if low_acr in b_set or (low_acr + "s") in b_set:
+                    continue
+                if _is_initialism_in_title(low_acr, b_words):
+                    continue
+                return True
+
+    # 4. Duplicated multi-word phrase stutter absent from canonical title
+    if has_explicit_title and len(c_words) >= 6:
+        c_bigrams = Counter(zip(c_words, c_words[1:], strict=False))
+        b_bigrams = Counter(zip(b_words, b_words[1:], strict=False))
+        for bg, cnt in c_bigrams.items():
+            if cnt >= 2 and b_bigrams.get(bg, 0) < cnt and any(len(tok) >= 4 for tok in bg):
+                return True
+
+    # 5. Non-delimiter substantive edge truncation on strict substring titles
+    #    Catches dropped leading qualifiers/negations ("Failures of Reasoning..." -> "Reasoning...")
+    #    and mid-phrase trailing head-noun drops ("A Survey of Large Language" vs "... Models")
+    #    while preserving legitimate subtitle omissions after ":", "—", "?", "!", "(", or short series prefixes.
+    if has_explicit_title and len(c_norm) >= 12 and len(c_norm) < len(b_norm):
+        c_strip = re.sub(r"\s+", " ", c_norm.strip(" \"'“”‘’«».,;:?!"))
+        b_strip = re.sub(r"\s+", " ", b_norm.strip(" \"'“”‘’«».,;:?!"))
+        pos = b_strip.find(c_strip) if c_strip else -1
+        if pos >= 0:
+            prefix = b_strip[:pos]
+            suffix = b_strip[pos + len(c_strip):]
+            prefix_boundary = pos == 0 or not prefix[-1].isalnum()
+            suffix_boundary = (not suffix) or not suffix[0].isalnum()
+            if prefix_boundary and suffix_boundary:
+                # Leading drop: substantive content word(s) omitted before c_strip
+                if prefix.strip():
+                    pref_clean = prefix.strip().rstrip(":?!;-—– ")
+                    is_series_or_short_tag = bool(
+                        re.search(r"[:?!]\s*$", prefix.strip())
+                        and (
+                            re.match(
+                                r"^(?:proceedings\s+of|lecture\s+notes|chapter\s+\d+|"
+                                r"part\s+[ivx\d]+|volume\s+\d+|special\s+issue|"
+                                r"findings\s+of|workshop\s+on|supplement\b)\b",
+                                pref_clean,
+                            )
+                            or (len(pref_clean.split()) == 1 and len(pref_clean) <= 12)
+                        )
+                    )
+                    pref_content = [
+                        w
+                        for w in re.findall(r"[a-z0-9]{4,}", pref_clean)
+                        if w not in _title_stop
+                    ]
+                    if pref_content and not is_series_or_short_tag:
+                        return True
+                # Trailing drop without subtitle/clause delimiter
+                if suffix.strip():
+                    suf_l = suffix.lstrip(" \"'“”‘’«»")
+                    has_sub_delim = bool(
+                        (
+                            suf_l
+                            and (
+                                suf_l[0] in ":?!;.("
+                                or suf_l[0] == "["
+                                or suffix.startswith((" - ", " — ", " – "))
+                            )
+                        )
+                        or (c_strip[-1] in "?!" and suffix.startswith(" "))
+                    )
+                    # A complete long main title (>= 32 chars) omitting an optional trailing
+                    # instrumental/methodological modifier ("with a Constrained Variational Framework",
+                    # "using ...", "via ...") is not a mid-noun-phrase truncation like "Large Language" -> "... Models".
+                    is_optional_prep_tail = bool(
+                        len(c_strip) >= 32
+                        and re.match(r"^\s+(?:with|using|via|through|based\s+on|under)\s+", suffix)
+                    )
+                    suf_content = [
+                        w
+                        for w in re.findall(r"[a-z0-9]{4,}", suffix)
+                        if w not in _title_stop
+                        and not re.fullmatch(r"(?:18|19|20)\d{2}[a-z]?", w)
+                    ]
+                    if suf_content and not has_sub_delim and not is_optional_prep_tail:
+                        return True
+
     return False
 
 
@@ -1109,6 +1332,7 @@ class SymbolicRules:
         citation_doi: str | None = None,
         citation_authors: list[str] | None = None,
         has_contradiction_risk_veto: bool = False,
+        has_title_corruption: bool = False,
     ) -> RuleOutcome | None:
         """Rule: LOCAL_DB only with perfect match → VERIFIED.
 
@@ -1154,7 +1378,7 @@ class SymbolicRules:
                 and not is_arxiv_vs_pub_doi
             )
         )
-        if has_real_doi_conflict or (
+        if has_real_doi_conflict or has_title_corruption or (
             has_contradiction_risk_veto
             and (not features.doi_exact_match or has_polarity_or_catastrophic_content_conflict(features))
         ):
@@ -1209,6 +1433,7 @@ class SymbolicRules:
         style_penalty: float = 0.0,
         citation_doi: str | None = None,
         has_contradiction_risk_veto: bool = False,
+        has_title_corruption: bool = False,
     ) -> RuleOutcome | None:
         """Rule: LOCAL_DB only with good match → VERIFIED.
 
@@ -1258,6 +1483,7 @@ class SymbolicRules:
         # Good match: fuzzy title >= 0.90, title >= 0.95 AND (author >= 0.5 or exact DOI/arXiv + author >= 0.35) AND year match
         if (
             not has_real_doi_conflict
+            and not has_title_corruption
             and not has_contradiction_risk_veto
             and features.title_sim_fuzzy >= 0.90
             and title_sim >= 0.95
@@ -1291,6 +1517,7 @@ class SymbolicRules:
         style_penalty: float = 0.0,
         citation_doi: str | None = None,
         citation_authors: list[str] | None = None,
+        has_title_corruption: bool = False,
     ) -> RuleOutcome | None:
         """Rule: LOCAL_DB / curated knowledge base match with metadata discrepancy → METADATA_ERROR.
 
@@ -1323,7 +1550,7 @@ class SymbolicRules:
             return None
 
         mismatched: list[str] = []
-        if title_sim_fuzzy < 0.90:
+        if title_sim_fuzzy < 0.90 or has_title_corruption:
             mismatched.append("title")
         is_authorless_doi_match = (
             author_sim == 0.0
@@ -2366,11 +2593,27 @@ class SymbolicRules:
                 )
             )
         )
+        has_explicit_title_year_conflict = _has_explicit_title_year_conflict(
+            citation_title,
+            best.title if best else None,
+        )
         has_contradictory_title = _has_contradictory_title_tokens(
             citation_title,
             citation_raw or source.citation_raw,
             best.title if best else None,
             citation_venue=citation_venue,
+        )
+        _lexical_fuzzy_floor = 0.82 if (doi_match and not has_contradictory_title) else 0.85
+        has_lexical_title_corruption = bool(
+            best is not None
+            and not is_titleless_journal_ref
+            and not getattr(features, "cross_lingual_title_detected", False)
+            and not getattr(features, "cross_lingual_detected", False)
+            and (
+                has_explicit_title_year_conflict
+                or features.title_sim_fuzzy < _lexical_fuzzy_floor
+                or (has_contradictory_title and features.title_sim_fuzzy < 0.92)
+            )
         )
 
         # --- Rule 1: DOI + title + author strong match → VERIFIED ---
@@ -2385,6 +2628,7 @@ class SymbolicRules:
             and (
                 (
                     title_sim >= self.title_sim_verified
+                    and not has_lexical_title_corruption
                     and (
                         author_sim >= self.author_jaccard_verified
                         or (
@@ -2689,6 +2933,7 @@ class SymbolicRules:
             citation_doi=citation_doi,
             citation_authors=citation_authors,
             has_contradiction_risk_veto=has_contradiction_risk_veto,
+            has_title_corruption=has_lexical_title_corruption,
         )
         if local_verified:
             return local_verified
@@ -2700,6 +2945,7 @@ class SymbolicRules:
             style_penalty,
             citation_doi=citation_doi,
             has_contradiction_risk_veto=has_contradiction_risk_veto,
+            has_title_corruption=has_lexical_title_corruption,
         )
         if local_good:
             return local_good
@@ -2726,7 +2972,8 @@ class SymbolicRules:
         if (
             mapping_is_matched
             and features.title_sim_fuzzy >= 0.7
-            and (features.title_sim_fuzzy >= self.title_sim_verified or not has_contradictory_title)
+            and not has_explicit_title_year_conflict
+            and (features.title_sim_fuzzy >= 0.92 or not has_contradictory_title)
             and author_sim >= 0.3
             and year_dist <= self.year_tolerance
             and not has_doi_conflict
@@ -2815,11 +3062,18 @@ class SymbolicRules:
             )
 
         # --- Rule 2: DOI resolves + moderate title similarity → METADATA_ERROR ---
-        # Only apply for live sources, not for local_db (which is handled above)
+        # Apply whenever a live source resolved the DOI (or best is non-local);
+        # pure local_db matches are handled by _rule_local_db_metadata_error below.
         if (
             doi_match
-            and self.title_sim_metadata_error <= title_sim < self.title_sim_verified
-            and "local_db" not in source.sources_succeeded  # Skip if local_db matched
+            and (
+                self.title_sim_metadata_error <= title_sim < self.title_sim_verified
+                or (has_lexical_title_corruption and title_sim >= self.title_sim_metadata_error)
+            )
+            and (
+                _has_live_source(source, verified_sources)
+                or "local_db" not in source.sources_succeeded
+            )
         ):
             mismatched.append("title")
             if year_dist > self.year_tolerance and year_dist < 900:
@@ -3013,6 +3267,7 @@ class SymbolicRules:
         if (
             consensus >= self.consensus_verified
             and title_sim >= self.title_sim_verified
+            and not has_lexical_title_corruption
             and not _is_topical_buzzword_doi_conflict
         ):
             if (
@@ -3076,6 +3331,7 @@ class SymbolicRules:
             consensus >= 1
             and _has_live_source(source, verified_sources)
             and features.title_sim_fuzzy >= 0.90
+            and not has_lexical_title_corruption
             and author_sim >= 0.80
             and (year_dist <= self.year_tolerance or year_dist >= 900)
             and not has_doi_conflict
@@ -3211,12 +3467,19 @@ class SymbolicRules:
         )
 
         _is_live_src = _has_live_source(source, verified_sources)
+        _has_explicit_cit_title = bool(citation_title and str(citation_title).strip())
         _has_substantive_title_conflict = bool(
-            _is_live_src
-            and has_contradictory_title
-            and title_sim < self.title_sim_verified
-            and not getattr(features, "cross_lingual_detected", False)
+            not getattr(features, "cross_lingual_detected", False)
             and not is_cross_lingual_title
+            and (
+                has_explicit_title_year_conflict
+                or (has_contradictory_title and features.title_sim_fuzzy < 0.92)
+                or (
+                    _has_explicit_cit_title
+                    and has_lexical_title_corruption
+                    and (doi_match or "local_db" in source.sources_succeeded)
+                )
+            )
         )
         if content_alignment_score > 0 and not is_missing_reference:
             if (
@@ -3259,6 +3522,7 @@ class SymbolicRules:
             style_penalty,
             citation_doi=citation_doi,
             citation_authors=citation_authors,
+            has_title_corruption=has_lexical_title_corruption,
         )
         if local_meta_err:
             return local_meta_err
@@ -3407,7 +3671,11 @@ class SymbolicRules:
             and (
                 (
                     title_sim >= self.title_sim_verified
-                    and (author_sim < self.author_jaccard_verified or _has_year_mismatch_4a2)
+                    and (
+                        author_sim < self.author_jaccard_verified
+                        or _has_year_mismatch_4a2
+                        or has_lexical_title_corruption
+                    )
                 )
                 or (
                     self.title_sim_metadata_error <= title_sim < self.title_sim_verified
@@ -3424,7 +3692,7 @@ class SymbolicRules:
                 )
             )
         ):
-            if title_sim < self.title_sim_verified:
+            if title_sim < self.title_sim_verified or has_lexical_title_corruption:
                 mismatched.append("title")
             if author_sim < self.author_jaccard_verified:
                 mismatched.append("author")

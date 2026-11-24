@@ -307,11 +307,11 @@ Môi trường thực thi hỗ trợ ba chế độ triển khai thông qua bi�
 
 \subsection{Lược đồ Quan hệ và Kho Học thuật Cục bộ FTS5}
 
-Tầng lưu trữ bền vững bao gồm \textbf{mười lăm bảng SQLAlchemy ORM} trong cơ sở dữ liệu ứng dụng chính (\texttt{data/app.db}) song hành cùng kho dữ liệu học thuật ngoại tuyến chuyên phục vụ đọc (\texttt{data/local\_papers.db}, gồm 129,125 bản ghi được đánh chỉ mục toàn văn bằng SQLite FTS5), như được tổng hợp tại Bảng~\ref{tab:data-model} và biểu diễn trực quan qua Sơ đồ Thực thể -- Kết hợp (ERD) ký hiệu chân chim (Crow's Foot) ở Hình~\ref{fig:data-model}. Các liên kết chia sẻ báo cáo công khai (\texttt{FR-14}) được cấp phát dưới dạng token phi trạng thái có chữ ký HMAC-SHA256 (\texttt{sh\_\{eid\}\_\{exp\}\_\{sig\}}) thay vì phải lưu thêm các bản ghi phiên chia sẻ khả biến trong cơ sở dữ liệu.
+Tầng lưu trữ bền vững bao gồm \textbf{mười lăm bảng SQLAlchemy ORM} trong cơ sở dữ liệu ứng dụng chính (\texttt{data/app.db}) song hành cùng kho dữ liệu học thuật ngoại tuyến chuyên phục vụ đọc (\texttt{data/local\_papers.db}, gồm 129,137 bản ghi được đánh chỉ mục toàn văn bằng SQLite FTS5), như được tổng hợp tại Bảng~\ref{tab:data-model} và biểu diễn trực quan qua Sơ đồ Thực thể -- Kết hợp (ERD) ký hiệu chân chim (Crow's Foot) ở Hình~\ref{fig:data-model}. Các liên kết chia sẻ báo cáo công khai (\texttt{FR-14}) được cấp phát dưới dạng token phi trạng thái có chữ ký HMAC-SHA256 (\texttt{sh\_\{eid\}\_\{exp\}\_\{sig\}}) thay vì phải lưu thêm các bản ghi phiên chia sẻ khả biến trong cơ sở dữ liệu.
 
 {\setlength{\tabcolsep}{3.5pt}
 \begin{longtable}{|L{0.25}|L{0.46}|L{0.29}|}
-\caption{Các thực thể SQLAlchemy ORM lưu trữ bền vững trong \texttt{db/models.py} (\texttt{v3.90.5}).}\label{tab:data-model}\\
+\caption{Các thực thể SQLAlchemy ORM lưu trữ bền vững trong \texttt{db/models.py} (\texttt{v3.90.6}).}\label{tab:data-model}\\
 \hline
 \textbf{Tên bảng} & \textbf{Các cột chính và trách nhiệm} & \textbf{Quan hệ \& Khóa} \\
 \hline
@@ -362,7 +362,7 @@ Tầng lưu trữ bền vững bao gồm \textbf{mười lăm bảng SQLAlchemy 
 \begin{figure}[H]
     \centering
     \includegraphics[width=\textwidth,keepaspectratio]{picture/figures/fig3_3_data_model.png}
-    \caption[Sơ đồ Thực thể -- Kết hợp (ERD) ký hiệu chân chim của lược đồ cơ sở dữ liệu 15 bảng]{Sơ đồ Thực thể -- Kết hợp (ERD) ký hiệu chân chim của 15 bảng ORM ứng dụng (\texttt{app.db}) và kho dữ liệu học thuật ngoại tuyến SQLite FTS5 gồm 129,125 bản ghi (\texttt{local\_papers.db}).}
+    \caption[Sơ đồ Thực thể -- Kết hợp (ERD) ký hiệu chân chim của lược đồ cơ sở dữ liệu 15 bảng]{Sơ đồ Thực thể -- Kết hợp (ERD) ký hiệu chân chim của 15 bảng ORM ứng dụng (\texttt{app.db}) và kho dữ liệu học thuật ngoại tuyến SQLite FTS5 gồm 129,137 bản ghi (\texttt{local\_papers.db}).}
     \label{fig:data-model}
 \end{figure}
 
@@ -380,7 +380,7 @@ Toàn bộ điểm cuối (endpoint) phía máy chủ được gắn dưới ti�
 
 {\setlength{\tabcolsep}{3.5pt}
 \begin{longtable}{|L{0.31}|L{0.69}|}
-\caption{Các nhóm điểm cuối REST và SSE của FastAPI được gắn dưới tiền tố \texttt{/api} (\texttt{v3.90.5}).}\label{tab:api-surface}\\
+\caption{Các nhóm điểm cuối REST và SSE của FastAPI được gắn dưới tiền tố \texttt{/api} (\texttt{v3.90.6}).}\label{tab:api-surface}\\
 \hline
 \textbf{Tiền tố đường dẫn} & \textbf{Các điểm cuối và thao tác chính} \\
 \hline

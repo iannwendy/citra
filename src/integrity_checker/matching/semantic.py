@@ -196,6 +196,28 @@ _ACADEMIC_GENERIC_STOP_WORDS: frozenset[str] = frozenset(
         "value", "values", "various", "vector", "vectors", "very", "vol", "well",
         "were", "what", "when", "where", "which", "while", "with", "within",
         "without", "word", "words", "work", "works", "would",
+        # Closed-class discourse / connective / auxiliary words (zero domain semantics)
+        "upon", "always", "rather", "itself", "typically", "generally", "largely",
+        "primarily", "directly", "widely", "extensively", "publicly", "closely",
+        "already", "indeed", "unlike", "beyond", "whatsoever", "whether",
+        "moreover", "nevertheless", "nonetheless", "whereas", "thereby", "hereby",
+        "becomes", "become", "becoming", "became", "made", "remain", "remains",
+        "remaining", "remained", "arise", "arises", "arising", "exist", "exists",
+        "existed", "does", "done", "doing",
+        # Universal scholarly reporting / meta-discourse verbs (same class as show/report/propose)
+        "conclude", "concluded", "concludes", "concluding", "conclusion", "conclusions",
+        "reveal", "revealed", "reveals", "revealing",
+        "observe", "observed", "observes", "observing", "observation", "observations",
+        "confirm", "confirmed", "confirms", "confirming",
+        "require", "requires", "required", "requiring", "requirement", "requirements",
+        "rely", "relies", "relied", "relying",
+        "involve", "involves", "involved", "involving",
+        "address", "addresses", "addressed", "addressing",
+        "offer", "offers", "offered", "offering",
+        "leverage", "leverages", "leveraged", "leveraging",
+        "allow", "allows", "allowed", "allowing",
+        "analyse", "analysed", "analyses", "analysing", "analyzing",
+        "challenging", "evaluations",
     }
 )
 
@@ -204,17 +226,51 @@ _FIRST_PERSON_ADOPTION_CLAUSE_RE = re.compile(
     r"based\s+on|using|leveraging|for)\s+([^,]{3,95}),\s*(?:we|our)\b",
     re.IGNORECASE | re.DOTALL,
 )
+_CALLOUT_UPPER_CHARS = r"A-Z\u00C0-\u00D6\u00D8-\u00DE\u0100-\u017E\u01A0-\u01AF\u1E00-\u1EFF"
+_CALLOUT_LETTER_CHARS = r"A-Za-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u024F\u1E00-\u1EFF"
+_CALLOUT_PARTICLE_RE = (
+    r"(?:(?:[Vv]an|[Vv]on|[Dd]e|[Dd]el|[Dd]ella|[Dd]er|[Dd]i|[Dd]u|[Dd]a|"
+    r"[Dd]os|[Dd]as|[Ll]a|[Ll]e|[Ee]l|[Aa]l|[Bb]in|[Ii]bn)\s+)*"
+)
+_CALLOUT_SURNAME_RE = rf"(?:{_CALLOUT_PARTICLE_RE}[{_CALLOUT_UPPER_CHARS}][{_CALLOUT_LETTER_CHARS}'\u2019\-]+)"
 _CITATION_CALLOUT_STRIP_RE = re.compile(
-    r"(?:\b[A-Z][A-Za-z'\-]+(?:\s+(?:and|&)\s+[A-Z][A-Za-z'\-]+|\s+et\s+al\.)?\s*\((?:18|19|20)\d{2}[a-z]?\)"
-    r"|\([A-Z][^()\n]{1,75}(?:18|19|20)\d{2}[a-z]?\)"
-    r"|\[\d+(?:\s*[,;–\-]\s*\d+)*\])"
+    rf"(?:(?<!\w){_CALLOUT_SURNAME_RE}"
+    rf"(?:(?:,\s*{_CALLOUT_SURNAME_RE})*(?:,?\s+(?:and|&|và)\s+{_CALLOUT_SURNAME_RE})|\s+et\s+al\.|\s+và\s+cộng\s+sự)?"
+    rf"\s*\((?:18|19|20)\d{{2}}[a-z]?\)"
+    rf"|\((?:{_CALLOUT_PARTICLE_RE})?[{_CALLOUT_UPPER_CHARS}][^()\n]{{1,75}}(?:18|19|20)\d{{2}}[a-z]?\)"
+    rf"|\[\d+(?:\s*[,;–\-]\s*\d+)*\])"
+)
+_THIRD_PERSON_REPORT_FRAME_RE = re.compile(
+    rf"(?:^\s*(?:regarding|concerning|according\s+to|"
+    rf"as\s+(?:shown|reported|demonstrated|argued|noted|found|observed)\s+(?:by|in)|"
+    rf"in\s+their\s+(?:study|paper|work|article))\b"
+    rf"|{_CALLOUT_SURNAME_RE}"
+    rf"(?:(?:,\s*{_CALLOUT_SURNAME_RE})*(?:,?\s+(?:and|&|và)\s+{_CALLOUT_SURNAME_RE})|\s+et\s+al\.)?"
+    rf"\s*\((?:18|19|20)\d{{2}}[a-z]?\)\s+"
+    rf"(?:report|reports|reported|show|shows|showed|demonstrate|demonstrates|demonstrated|"
+    rf"claim|claims|claimed|find|finds|found|argue|argues|argued|conclude|concludes|concluded|"
+    rf"observe|observes|observed|suggest|suggests|suggested|propose|proposes|proposed|"
+    rf"introduce|introduces|introduced|present|presents|presented|describe|describes|described|"
+    rf"note|notes|noted|state|states|stated|establish|establishes|established|prove|proves|proved)\s+that\b)",
+    re.IGNORECASE,
+)
+_REPORT_THAT_CLAUSE_RE = re.compile(
+    r"\b(?:report|reports|reported|show|shows|showed|demonstrate|demonstrates|demonstrated|"
+    r"claim|claims|claimed|argue|argues|argued|state|states|stated|find|finds|found)\s+that\b",
+    re.IGNORECASE,
 )
 _MULTI_REF_BRACKET_RE = re.compile(r"\[\s*\d+\s*(?:[,;–\-]\s*\d+\s*)+\]")
 _APA_MULTI_CITATION_RE = re.compile(
     r"\([^()\n]*(?:18|19|20)\d{2}[a-z]?[^()\n]*;[^()\n]*(?:18|19|20)\d{2}[a-z]?[^()\n]*\)"
 )
+_FIRST_PERSON_METHOD_USAGE_RE = re.compile(
+    r"\b(?:we|our)\b[^.;]{0,90}\b(?:use|uses|used|using|adopt\w*|apply|applies|applied|employ\w*|implement\w*|"
+    r"fine[\s\-]?tun\w*|train\w*|project\w*|visualiz\w*|cluster\w*|preprocess\w*|integrat\w*|leverag\w*)\b",
+    re.IGNORECASE,
+)
 _METHOD_USAGE_SENTENCE_RE = re.compile(
-    r"\b(?:we|our|this\s+(?:study|paper|work|thesis)|the\s+(?:implementation|pipeline|system|experiment|experiments))\b"
+    r"\b(?:this\s+(?:study|paper|work|thesis)|the\s+(?:implementation|pipeline|system|experiment|experiments))\b"
+    r"(?![^.;]{0,45}\b(?:the\s+)?authors?\b)"
     r"[^.;]{0,90}\b(?:use|uses|used|using|adopt\w*|apply|applies|applied|employ\w*|implement\w*|"
     r"fine[\s\-]?tun\w*|train\w*|project\w*|visualiz\w*|cluster\w*|preprocess\w*|integrat\w*|leverag\w*)\b",
     re.IGNORECASE,
@@ -236,29 +292,111 @@ _PDF_RUNNING_BANNER_PREFIX_RE = re.compile(
     r"^\s*(?:essay\s+\d+\s*[—–\-][^\n.]{0,60}?(?=\b(?:The|In|A|An|We|Recent|Prior|For|Building)\b)"
     r"|[A-Z][A-Z,\s\-]{3,28}\s+\d{1,4}\s+)",
 )
-_NON_ENGLISH_SCRIPT_OR_DIACRITIC_RE = re.compile(
-    r"[\u0400-\u04ff\u0590-\u06ff\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af"
-    r"äöüßñçøåæœÄÖÜẞÑÇØÅÆŒ]"
+_NON_LATIN_SCRIPT_RE = re.compile(
+    r"[\u0370-\u03ff\u0400-\u04ff\u0590-\u06ff\u0900-\u097f\u0e00-\u0e7f"
+    r"\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]"
+)
+_EURO_DIACRITIC_RE = re.compile(
+    r"[äöüßñçøåæœéèêëàâùûôîìòíóúąćęłńśźżÄÖÜẞÑÇØÅÆŒÉÈÊËÀÂÙÛÔÎÌÒÍÓÚĄĆĘŁŃŚŹŻ]"
+)
+_ENGLISH_LOANWORDS_DIACRITIC: frozenset[str] = frozenset(
+    {
+        "naïve", "naive", "résumé", "résumés", "café", "cliché", "rôle", "coöperate",
+        "façade", "protégé", "exposé", "déjà", "vis-à-vis", "über", "recherché",
+        "attaché", "fiancé", "entree", "entrée", "passé", "soignée", "à",
+    }
+)
+_EN_EXCLUSIVE_FUNC_WORDS: frozenset[str] = frozenset(
+    {
+        "the", "and", "that", "for", "with", "this", "from", "are", "was", "were",
+        "have", "has", "which", "their", "these", "those", "into", "between",
+        "through", "such", "when", "where", "while", "we", "our", "they", "its",
+        "also", "than", "not", "but", "about", "both", "each", "many", "most",
+        "been", "being", "would", "could", "should", "does", "did", "of", "to", "is",
+    }
 )
 _FOREIGN_FUNCTION_WORDS: frozenset[str] = frozenset(
     {
-        "wir", "und", "zur", "der", "die", "das", "mit", "für", "auf", "einer", "einem",
-        "nous", "dans", "pour", "avec", "les", "des", "une", "sont", "cette",
-        "para", "con", "los", "las", "una", "del", "como",
-        "kami", "dengan", "untuk", "pada", "yang", "dalam",
+        # German (excluding STEM/eponym overlaps: die, der, von, den -> soft set)
+        "wir", "und", "zur", "zum", "das", "mit", "für", "auf",
+        "einer", "einem", "eines", "einen", "dem", "ist", "sind",
+        "werden", "wird", "nicht", "durch", "über", "bei", "nach", "aus", "auch", "sich",
+        # French (excluding STEM/English overlaps: un, est, sur, par -> soft set)
+        "nous", "dans", "pour", "avec", "les", "des", "une", "sont",
+        "cette", "cet", "ces", "aux", "du", "au", "qui",
+        "que", "mais", "comme", "sans", "sous", "chez", "leurs", "leur",
+        # Spanish (excluding chemical/English overlaps: para, con, por -> soft set)
+        "los", "las", "una", "del", "como", "sobre",
+        "desde", "hacia", "mediante", "está", "están", "este", "esta", "estos", "estas", "más", "también",
+        # Indonesian / Malay
+        "kami", "dengan", "untuk", "pada", "yang", "dalam", "dari", "oleh",
+        "atau", "dan", "ini", "itu", "tidak", "sebagai", "dapat", "melalui", "terhadap",
+        # Polish
+        "jest", "oraz", "przez", "dla", "przy", "jako", "lub", "nie", "się",
+        "które", "który", "której", "między", "bez",
+    }
+)
+_SOFT_FOREIGN_FUNCTION_WORDS: frozenset[str] = frozenset(
+    {
+        "de", "la", "le", "en", "do", "al", "se",
+        "die", "der", "von", "den", "para", "con", "por", "un", "est", "sur", "par",
     }
 )
 
 
 def _is_non_english_or_foreign_text(text: str | None) -> bool:
-    """Detect non-English scripts, non-VN European diacritics, or foreign function-word syntax."""
+    """Detect non-English scripts, European diacritic prose, or foreign function-word syntax.
+
+    Strips bibliographic callouts first so European author surnames (e.g., Röttger, Müller,
+    van der Berg) do not misclassify English prose as foreign language, and applies case-aware
+    function-word matching so uppercase English acronyms (MIT, CoN, DES) or capitalized eponyms
+    (Schrödinger, Gödel) do not trigger false positives while short DE/FR/ES/ID/PL clauses do.
+    """
     if not text:
         return False
-    if _NON_ENGLISH_SCRIPT_OR_DIACRITIC_RE.search(text):
+    stripped = _CITATION_CALLOUT_STRIP_RE.sub(" ", text)
+    if _NON_LATIN_SCRIPT_RE.search(stripped):
         return True
-    words = [w.lower() for w in re.findall(r"[A-Za-z]{2,}", text)]
-    foreign_hits = sum(1 for w in words if w in _FOREIGN_FUNCTION_WORDS)
-    return foreign_hits >= 2
+
+    words_raw = re.findall(r"[^\W\d_]{2,}", stripped)
+    if not words_raw:
+        return False
+
+    en_hits = sum(1 for w in words_raw if w.lower() in _EN_EXCLUSIVE_FUNC_WORDS)
+
+    strong_foreign_hits = 0
+    soft_foreign_hits = 0
+    for idx, w in enumerate(words_raw):
+        # Accept lowercase tokens or sentence-initial Title Case (e.g., "Das Modell...", "Zur...")
+        is_candidate = w.islower() or (idx == 0 and w[0].isupper() and w[1:].islower())
+        if not is_candidate:
+            continue
+        low = w.lower()
+        if low in _FOREIGN_FUNCTION_WORDS:
+            strong_foreign_hits += 1
+        elif low in _SOFT_FOREIGN_FUNCTION_WORDS:
+            soft_foreign_hits += 1
+
+    foreign_hits = strong_foreign_hits + (soft_foreign_hits if en_hits == 0 else 0)
+
+    non_loan_accented = [
+        w
+        for w in words_raw
+        if _EURO_DIACRITIC_RE.search(w) and w.lower() not in _ENGLISH_LOANWORDS_DIACRITIC
+    ]
+    lower_accented = [w for w in non_loan_accented if w.islower()]
+
+    if foreign_hits >= 2 and foreign_hits > en_hits:
+        return True
+    if len(lower_accented) >= 2 and en_hits <= 1:
+        return True
+    if len(non_loan_accented) >= 1 and foreign_hits >= 1 and en_hits == 0:
+        return True
+    if len(lower_accented) >= 1 and en_hits == 0 and len(words_raw) <= 8:
+        return True
+    if strong_foreign_hits >= 1 and en_hits == 0 and len(words_raw) <= 7:
+        return True
+    return False
 
 
 def _light_technical_stem(token: str) -> str:
@@ -329,6 +467,11 @@ def _light_technical_stem(token: str) -> str:
     return w
 
 
+_ACADEMIC_GENERIC_STOP_STEMS: frozenset[str] = _ACADEMIC_GENERIC_STOP_WORDS | frozenset(
+    _light_technical_stem(w) for w in _ACADEMIC_GENERIC_STOP_WORDS
+)
+
+
 def _extract_distinctive_stems(text: str | None) -> set[str]:
     """Extract distinctive technical word stems and domain acronyms from scholarly English text."""
     if not text:
@@ -348,7 +491,7 @@ def _extract_distinctive_stems(text: str | None) -> set[str]:
             if len(low) < 4 and not is_acronym:
                 continue
             stem = low if is_acronym else _light_technical_stem(low)
-            if stem not in _ACADEMIC_GENERIC_STOP_WORDS and len(stem) >= 3:
+            if stem not in _ACADEMIC_GENERIC_STOP_STEMS and len(stem) >= 3:
                 stems.add(stem)
     return stems
 
@@ -412,6 +555,13 @@ def _has_ungrounded_novel_claim(
         return False
 
     title_stems = _extract_distinctive_stems(source_title)
+    # Title-only plural-acronym symmetry ("LLMs" in title also strips echoed "LLM" in claim,
+    # and vice versa) without widening claim <-> abstract accidental collisions.
+    if source_title:
+        for plur_acr in re.findall(r"\b([A-Z]{2,6})s\b", source_title):
+            title_stems.add(plur_acr.lower())
+        for sing_acr in re.findall(r"\b([A-Z]{2,6})\b", source_title):
+            title_stems.add(sing_acr.lower() + "s")
     source_union = abs_stems | title_stems
 
     # Exempt explicit first-person methodological adoption / implementation tool-usage sentences
@@ -423,9 +573,18 @@ def _has_ungrounded_novel_claim(
         and not _DIRECT_REFUTATION_RE.search(cited_context)
     ):
         return False
+    m_fp_method = _FIRST_PERSON_METHOD_USAGE_RE.search(cited_context)
     if (
-        _METHOD_USAGE_SENTENCE_RE.search(cited_context)
-        and not re.match(r"^\s*(?:regarding|concerning|according\s+to)\b", cited_context, re.I)
+        m_fp_method
+        and not _REPORT_THAT_CLAUSE_RE.search(cited_context[: m_fp_method.start()])
+        and not _EXPLICIT_CONTRADICTION_NEGATION_RE.search(cited_context)
+        and not _DIRECT_REFUTATION_RE.search(cited_context)
+    ):
+        return False
+    m_method = _METHOD_USAGE_SENTENCE_RE.search(cited_context)
+    if (
+        m_method
+        and not _THIRD_PERSON_REPORT_FRAME_RE.search(cited_context[: m_method.start() + 30])
         and not _EXPLICIT_CONTRADICTION_NEGATION_RE.search(cited_context)
         and not _DIRECT_REFUTATION_RE.search(cited_context)
     ):
@@ -436,7 +595,7 @@ def _has_ungrounded_novel_claim(
     )
     claim_stems = _extract_distinctive_stems(cleaned_ctx)
     claim_non_title = {c for c in claim_stems if not _stem_in_set(c, title_stems)}
-    if _GENERIC_SURVEY_MENTION_RE.search(cleaned_ctx) and len(claim_non_title) <= 6:
+    if raw_sim >= 0.25 and _GENERIC_SURVEY_MENTION_RE.search(cleaned_ctx) and len(claim_non_title) <= 6:
         return False
     grounded_non_title = _grounded_stems(claim_non_title, abs_stems)
 

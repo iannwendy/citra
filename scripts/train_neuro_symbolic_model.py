@@ -87,6 +87,7 @@ from integrity_checker.logic.cis import CISCalculator  # noqa: E402
 from integrity_checker.logic.rules import SymbolicRules  # noqa: E402
 from integrity_checker.logic.vn_legal_verifier import verify_vn_legal_citation  # noqa: E402
 from integrity_checker.matching.author_matcher import author_match_score  # noqa: E402
+from integrity_checker.matching.features import FeatureCalculator  # noqa: E402
 from integrity_checker.matching.fuzzy import FuzzyMatcher  # noqa: E402
 from integrity_checker.matching.semantic import SemanticMatcher  # noqa: E402
 from integrity_checker.matching.venue_normalizer import VenueNormalizer  # noqa: E402
@@ -1598,7 +1599,14 @@ def build_split_dataset(
             aj = 0.0
             v_sim = 0.0
         else:
-            tf = float(fuzzy.token_set_ratio(spec["cited_title"].lower(), spec["cand_title"].lower()))
+            tf = float(
+                FeatureCalculator.compute_title_similarity(
+                    spec["cited_title"],
+                    spec["cand_title"],
+                    fuzzy=fuzzy,
+                    is_raw_fallback=False,
+                )
+            )
             ts = max(0.0, min(1.0, float(raw_title_sems[idx_item])))
             aj = float(author_match_score(spec["cited_authors"], spec["cand_authors"]))
             v_sim = (
@@ -2359,7 +2367,14 @@ def run_ood_guardrail_stress_test(
         if not has_cand:
             tf, ts, aj, v_sim = 0.0, 0.0, 0.0, 0.0
         else:
-            tf = float(fuzzy.token_set_ratio(spec["cited_title"].lower(), spec["cand_title"].lower()))
+            tf = float(
+                FeatureCalculator.compute_title_similarity(
+                    spec["cited_title"],
+                    spec["cand_title"],
+                    fuzzy=fuzzy,
+                    is_raw_fallback=False,
+                )
+            )
             ts = max(0.0, min(1.0, float(ood_title_sems[idx_o])))
             aj = float(author_match_score(spec["cited_authors"], spec["cand_authors"]))
             v_sim = float(venue_norm.similarity(spec["cited_venue"], spec["cand_venue"]))

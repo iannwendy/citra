@@ -34,7 +34,7 @@ Các nền tảng kiểm tra liêm chính học thuật, trình quản lý tài 
 
 {\setlength{\tabcolsep}{3.5pt}
 \begin{longtable}{|L{0.22}|C{0.11}|C{0.11}|C{0.11}|C{0.12}|C{0.11}|C{0.11}|C{0.11}|}
-\caption{So sánh tính năng giữa các nhóm công cụ hiện có và CITRA (\texttt{v3.90.5}).}\label{tab:related-work}\\
+\caption{So sánh tính năng giữa các nhóm công cụ hiện có và CITRA (\texttt{v3.90.6}).}\label{tab:related-work}\\
 \hline
 \textbf{Nhóm hệ thống} & \textbf{PDF đa chuẩn} & \textbf{Liên kết 2 phía} & \textbf{15+ API trực tuyến} & \textbf{Đối sánh nhận định} & \textbf{Từ chối an toàn} & \textbf{Xác suất hiệu chỉnh} & \textbf{Pháp luật VN} \\
 \hline
@@ -59,7 +59,7 @@ Trình quản lý trích dẫn (Zotero / GROBID) & Có & Không & Một phần &
 \hline
 Bộ chuẩn kiểm chứng nhận định (SciFact / ALCE) & Không & Không & Không & Có & Một phần & Không & Không \\
 \hline
-\textbf{CITRA (\texttt{v3.90.5})} & \textbf{Có (12)} & \textbf{Có (8)} & \textbf{Có (15+)} & \textbf{VI$\leftrightarrow$EN} & \textbf{Có} & \textbf{Platt} & \textbf{Có} \\
+\textbf{CITRA (\texttt{v3.90.6})} & \textbf{Có (12)} & \textbf{Có (8)} & \textbf{Có (15+)} & \textbf{VI$\leftrightarrow$EN} & \textbf{Có} & \textbf{Platt} & \textbf{Có} \\
 \hline
 \end{longtable}
 }
@@ -86,7 +86,7 @@ Các nghiên cứu trắc lượng thư mục quy mô lớn cho thấy sự chê
 \endfoot
 \hline
 \endlastfoot
-\textbf{Kho cục bộ} (\texttt{local\_papers.db}) & \textbf{129,125 bản ghi} (128,105 bài báo duy nhất; 82,877 bản tóm tắt) từ ACL Anthology~\cite{acl-anthology} và arXiv & Tra cứu ngoại tuyến \textbf{Tầng 0} dưới 100\,ms bằng SQLite FTS5 BM25 \\
+\textbf{Kho cục bộ} (\texttt{local\_papers.db}) & \textbf{129,137 bản ghi} (128,115 bài báo duy nhất; 82,887 bản tóm tắt) từ ACL Anthology~\cite{acl-anthology} và arXiv & Tra cứu ngoại tuyến \textbf{Tầng 0} dưới 100\,ms bằng SQLite FTS5 BM25 \\
 \hline
 \textbf{Danh sách kinh điển} (\texttt{\_KNOWN\_PAPERS}) & \textbf{101} công trình nền tảng thuộc lĩnh vực KHMT, AI, NLP và học sâu & Tra cứu tức thời \textbf{Tầng 0} cho các bài báo kinh điển có tần suất trích dẫn cao \\
 \hline

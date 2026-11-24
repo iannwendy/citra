@@ -3,7 +3,7 @@
 
 \section{Thiết kế Thực nghiệm và Môi trường Kiểm định}
 
-Tuân thủ các chuẩn mực đánh giá trong Kỹ thuật Phần mềm Thực nghiệm~\cite{wohlin2012experimentation}, chương này đánh giá toàn diện hệ thống \textbf{CITRA} (\texttt{v3.90.5}) thông qua các bộ kiểm thử tự động ở mức đơn vị, tích hợp và trình duyệt, đối chiếu truy vết yêu cầu, cùng các bài đo kiểm định lượng có kiểm soát xoay quanh năm Câu hỏi Nghiên cứu (\textbf{RQ1}--\textbf{RQ5}).
+Tuân thủ các chuẩn mực đánh giá trong Kỹ thuật Phần mềm Thực nghiệm~\cite{wohlin2012experimentation}, chương này đánh giá toàn diện hệ thống \textbf{CITRA} (\texttt{v3.90.6}) thông qua các bộ kiểm thử tự động ở mức đơn vị, tích hợp và trình duyệt, đối chiếu truy vết yêu cầu, cùng các bài đo kiểm định lượng có kiểm soát xoay quanh năm Câu hỏi Nghiên cứu (\textbf{RQ1}--\textbf{RQ5}).
 
 \subsection{Các câu hỏi nghiên cứu}
 
@@ -21,7 +21,7 @@ Quy trình kiểm định phần mềm bao phủ ba tầng kiểm thử tự đ�
 
 {\setlength{\tabcolsep}{3.5pt}
 \begin{longtable}{|L{0.23}|L{0.25}|L{0.52}|}
-\caption{Các bộ kiểm thử phần mềm tự động được thực thi trên phiên bản \texttt{3.90.5}.}\label{tab:test-suites}\\
+\caption{Các bộ kiểm thử phần mềm tự động được thực thi trên phiên bản \texttt{3.90.6}.}\label{tab:test-suites}\\
 \hline
 \textbf{Tầng kiểm định} & \textbf{Kết quả thực thi} & \textbf{Phạm vi phân hệ được kiểm định} \\
 \hline
@@ -72,7 +72,7 @@ Quy trình kiểm định phần mềm bao phủ ba tầng kiểm thử tự đ�
 \hline
 \texttt{FR-08}, \texttt{FR-09} & \texttt{database/\allowbreak local\_db.py}, \texttt{retrieval\_orchestrator.py}, \texttt{html\_meta\_verifier.py} & Đo kiểm 500 truy vấn FTS5 ($99.8\%$ recall) \& nhóm OOD 1, 3, 4, 5 (Bảng~\ref{tab:ood-stress}) & Đạt ($99.8\%$) \\
 \hline
-\texttt{FR-10}, \texttt{FR-11}, \texttt{NFR-05} & \texttt{matching/\allowbreak semantic.py}, \texttt{logic/\allowbreak rules.py}, \texttt{calibration.py} & Tập đo kiểm tách rời 120K ($N=18\text{K}$ test) \& bộ 2.4K OOD (các Bảng~\ref{tab:baselines}--\ref{tab:calibration-results}) & Đạt ($99.02\%$) \\
+\texttt{FR-10}, \texttt{FR-11}, \texttt{NFR-05} & \texttt{matching/\allowbreak semantic.py}, \texttt{logic/\allowbreak rules.py}, \texttt{calibration.py} & Tập đo kiểm tách rời 120K ($N=18\text{K}$ test) \& bộ 2.4K OOD (các Bảng~\ref{tab:baselines}--\ref{tab:calibration-results}) & Đạt ($99.20\%$) \\
 \hline
 \texttt{FR-12}, \texttt{FR-13}, \texttt{FR-14} & \texttt{logic/\allowbreak cis.py}, \texttt{docx\_exporter.py}, \texttt{routes/\allowbreak essays.py}, \texttt{Shared\allowbreak Report\allowbreak Page.tsx} & Kiểm thử đơn hình CIS $300 \times 20$ ($\rho = 0.9987$), xuất DOCX đã sửa \& chia sẻ HMAC & Đạt ($100\%$) \\
 \hline
@@ -87,14 +87,14 @@ Quy trình kiểm định phần mềm bao phủ ba tầng kiểm thử tự đ�
 
 Bảng~\ref{tab:dataset} tóm tắt các tập dữ liệu đánh giá được xây dựng nhằm kiểm thử từng tầng xử lý mà không gây nhiễm chéo giữa tập huấn luyện và tập kiểm thử:
 \begin{enumerate}
-    \item \textbf{Tập đo kiểm 120,000 mẫu tách biệt hoàn toàn theo bài báo và tiêu đề:} Từ 128,105 bài báo hợp lệ và duy nhất trong \texttt{local\_papers.db}, đúng 120,000 bài báo phân biệt (gồm 80,000 bài có tóm tắt đầy đủ $>80$ ký tự và 40,000 bản ghi đầy đủ siêu dữ liệu) được phân hoạch \emph{trước khi tạo nhiễu} thành ba tập: \textbf{Huấn luyện (Train)} (84,000 mẫu, $70\%$), \textbf{Kiểm chứng (Validation)} (18,000 mẫu, $15\%$) và \textbf{Kiểm thử độc lập (Held-Out Test)} (18,000 mẫu, $15\%$). Các bước kiểm tra giao tập hợp bằng chương trình xác nhận $\text{Train} \cap \text{Val} = \text{Train} \cap \text{Test} = \text{Val} \cap \text{Test} = \emptyset$ trên cả \texttt{paper\_id} lẫn tiêu đề đã chuẩn hóa. Do các mục thuộc nhãn \texttt{resource} đã được sàng lọc tất định ngay tại Bậc 0 (và được đánh giá đầu-cuối trong \textbf{RQ4}), tập đo kiểm 120,000 mẫu tập trung đánh giá bốn nhãn học thuật trên \textbf{15 phân nhóm nhiễu loạn chi tiết}:
+    \item \textbf{Tập đo kiểm 120,000 mẫu tách biệt hoàn toàn theo bài báo và tiêu đề:} Từ 128,115 bài báo hợp lệ và duy nhất trong \texttt{local\_papers.db}, đúng 120,000 bài báo phân biệt (gồm 80,000 bài có tóm tắt đầy đủ $>80$ ký tự và 40,000 bản ghi đầy đủ siêu dữ liệu) được phân hoạch \emph{trước khi tạo nhiễu} thành ba tập: \textbf{Huấn luyện (Train)} (84,000 mẫu, $70\%$), \textbf{Kiểm chứng (Validation)} (18,000 mẫu, $15\%$) và \textbf{Kiểm thử độc lập (Held-Out Test)} (18,000 mẫu, $15\%$). Các bước kiểm tra giao tập hợp bằng chương trình xác nhận $\text{Train} \cap \text{Val} = \text{Train} \cap \text{Test} = \text{Val} \cap \text{Test} = \emptyset$ trên cả \texttt{paper\_id} lẫn tiêu đề đã chuẩn hóa. Do các mục thuộc nhãn \texttt{resource} đã được sàng lọc tất định ngay tại Bậc 0 (và được đánh giá đầu-cuối trong \textbf{RQ4}), tập đo kiểm 120,000 mẫu tập trung đánh giá bốn nhãn học thuật trên \textbf{15 phân nhóm nhiễu loạn chi tiết}:
     \begin{itemize}
         \item \texttt{verified} ($36\%$, \texttt{V1}--\texttt{V4}): trích dẫn chuẩn xác nguyên bản (\texttt{V1}), lược bỏ phụ đề sau dấu hai chấm (\texttt{V2}), chuyển đổi phiên bản từ arXiv sang hội nghị lệch $\pm 1$ năm (\texttt{V3}) và câu trích dẫn trong bài được diễn giải lại (\texttt{V4}).
         \item \texttt{suspected\_hallucination} ($30\%$, \texttt{H1}--\texttt{H4}): ghép chéo tiêu đề/tác giả cùng lĩnh vực không có kết quả khớp trong cơ sở dữ liệu (\texttt{H1}), ghép chéo tiêu đề/tác giả kèm ứng viên nhiễu có độ trùng lặp thấp (\texttt{H2}), hậu tố DOI không tồn tại gắn dưới tiền tố nhà xuất bản thật (\texttt{H3}) và công trình bịa đặt đi kèm liên kết chết HTTP 404 hoặc tên miền giả theo chuẩn RFC 2606 (\texttt{H4}).
         \item \texttt{metadata\_error} ($22\%$, \texttt{M1}--\texttt{M5}): sai lệch năm xuất bản $\ge 2$ năm (\texttt{M1}), tráo đổi/ghép nhầm đồng tác giả hoặc sai tên nơi công bố (\texttt{M2}), DOI hợp lệ nhưng đi kèm tiêu đề bị biến đổi vừa phải (\texttt{M3}), trích dẫn không có DOI bị biến đổi một phần tiêu đề hoặc có mệnh đề trong bài mâu thuẫn với tóm tắt (\texttt{M4}), và sai lệch đa trường hoặc ngoại lệ tên miền có URL hỏng (\texttt{M5}).
         \item \texttt{unresolved} ($12\%$, \texttt{U1}--\texttt{U2}): độ tương đồng tiêu đề nằm ở vùng giáp ranh $[0.40, 0.60)$ (\texttt{U1}) và cạn kiệt hạn mức truy vấn HTTP 429 từ nguồn thượng nguồn hoặc DOI khu vực không hỗ trợ chuẩn CSL (\texttt{U2}).
     \end{itemize}
-    Để ngăn chặn hiện tượng học vẹt lối tắt gán nhãn~\cite{poliak2018hypothesis}, các bản ghi có tóm tắt đầy đủ được phân tầng đều qua cả bốn nhãn sao cho điểm gióng hàng Sentence-BERT khác không xuất hiện ở mọi nhãn ($P(\texttt{verified} \mid \text{score} > 0) = 54.06\%$), đồng thời toàn bộ 419,053 chuỗi văn bản duy nhất được mã hóa bằng mô hình \texttt{all-MiniLM-L6-v2} mà không cắt ngưỡng bằng \texttt{np.clip}.
+    Để ngăn chặn hiện tượng học vẹt lối tắt gán nhãn~\cite{poliak2018hypothesis}, các bản ghi có tóm tắt đầy đủ được phân tầng đều qua cả bốn nhãn sao cho điểm gióng hàng Sentence-BERT khác không xuất hiện ở mọi nhãn ($P(\texttt{verified} \mid \text{score} > 0) = 54.06\%$), đồng thời toàn bộ 419,109 chuỗi văn bản duy nhất được mã hóa bằng mô hình \texttt{all-MiniLM-L6-v2} mà không cắt ngưỡng bằng \texttt{np.clip}.
     \item \textbf{Bộ kiểm thử rào chắn ký hiệu ngoài phân phối (OOD) gồm 2,400 mẫu:} Sáu nhóm tình huống biên rời rạc ($6 \times 400 = 2{,}400$) được sinh hoàn toàn từ tập bài báo kiểm thử độc lập \texttt{test\_papers}, bao gồm bài báo đã bị rút lại, DOI thật ghép vào tiêu đề giả (chimeric DOI), URL giả chuẩn RFC 2606, DOI khu vực thiếu siêu dữ liệu CSL, lỗi cạn kiệt hạn mức API HTTP 429 và sai lệch thẩm quyền ban hành văn bản pháp luật Việt Nam.
     \item \textbf{Tập tham khảo thô đầu-cuối và các kho tài liệu PDF đa chuẩn:} Tập chuẩn vàng gồm 120 chuỗi tài liệu tham khảo thô ($6\text{ lĩnh vực} \times 20\text{ tài liệu}$ trải trên 7 chuẩn trích dẫn) cộng thêm 15 mẫu đối kháng, kho trích xuất 310 tệp PDF đa chuẩn và pháp luật Việt Nam, kho kiểm thử hồi quy đa tổ chức gồm 841 tệp PDF, cùng các lượt chạy kiểm định trên báo cáo đồ án tốt nghiệp hoàn chỉnh.
 \end{enumerate}
@@ -118,7 +118,7 @@ Bảng~\ref{tab:dataset} tóm tắt các tập dữ liệu đánh giá được 
 \endlastfoot
 \textbf{Tập đo kiểm tách biệt theo bài báo} & \textbf{120,000 trích dẫn} & 43.2K \texttt{ver.}, 36.0K \texttt{hall.}, 26.4K \texttt{meta.}, 14.4K \texttt{unr.} trên 15 phân nhóm (\texttt{V1}--\texttt{U2}). \\
 \hline
-\quad Tập Train / Val / Test & \textbf{84K / 18K / 18K} & Không trùng bài báo hay tiêu đề; huấn luyện LR ($C=2.0$), khớp Platt ($a,b$) và đánh giá \textbf{RQ1} \& \textbf{RQ3}. \\
+\quad Tập Train / Val / Test & \textbf{84K / 18K / 18K} & Không trùng bài báo hay tiêu đề; huấn luyện LR ($C=0.25$), khớp Platt ($a,b$) và đánh giá \textbf{RQ1} \& \textbf{RQ3}. \\
 \hline
 \textbf{Bộ kiểm thử rào chắn OOD} & \textbf{2,400 trích dẫn} & $6 \times 400$ ca rào chắn ký hiệu rời rạc sinh hoàn toàn từ \texttt{test\_papers} (\textbf{RQ2}). \\
 \hline
@@ -131,7 +131,7 @@ Bảng~\ref{tab:dataset} tóm tắt các tập dữ liệu đánh giá được 
 
 \subsection{Các phương pháp cơ sở, Độ đo đánh giá và Kiểm định thống kê}
 
-Sáu phương pháp cơ sở (baselines) có độ phức tạp tăng dần được đem ra so sánh trên cùng tập kiểm thử độc lập gồm 18,000 mẫu: \texttt{B0} (\texttt{doi\_only}: chỉ tra cứu khớp chính xác DOI), \texttt{B1} (\texttt{crossref}: chỉ tra cứu đơn nguồn từ Crossref), \texttt{B2} (\texttt{fuzzy\_only}: đặt ngưỡng khớp xấp xỉ tiêu đề RapidFuzz kết hợp độ tương đồng Jaccard tác giả), \texttt{B3} (\texttt{embedding}: đặt ngưỡng tương đồng cosine bằng Sentence-BERT), \texttt{B4} (\texttt{no\_calib}: tổ hợp tuyến tính có trọng số theo kinh nghiệm nhưng không có cơ chế từ chối phán quyết) và \texttt{B5} (\texttt{ml\_hybrid}: Hồi quy Logistic Đa thức thuần túy 16 đặc trưng với $C = 2.0$, không sử dụng rào chắn ký hiệu).
+Sáu phương pháp cơ sở (baselines) có độ phức tạp tăng dần được đem ra so sánh trên cùng tập kiểm thử độc lập gồm 18,000 mẫu: \texttt{B0} (\texttt{doi\_only}: chỉ tra cứu khớp chính xác DOI), \texttt{B1} (\texttt{crossref}: chỉ tra cứu đơn nguồn từ Crossref), \texttt{B2} (\texttt{fuzzy\_only}: đặt ngưỡng khớp xấp xỉ tiêu đề RapidFuzz kết hợp độ tương đồng Jaccard tác giả), \texttt{B3} (\texttt{embedding}: đặt ngưỡng tương đồng cosine bằng Sentence-BERT), \texttt{B4} (\texttt{no\_calib}: tổ hợp tuyến tính có trọng số theo kinh nghiệm nhưng không có cơ chế từ chối phán quyết) và \texttt{B5} (\texttt{ml\_hybrid}: Hồi quy Logistic Đa thức thuần túy 16 đặc trưng với $C = 0.25$, không sử dụng rào chắn ký hiệu).
 
 Chất lượng phân loại được đo lường bằng độ chính xác tổng thể (Accuracy) cùng các chỉ số trung bình vĩ mô không trọng số gồm Macro-Precision, Macro-Recall và Macro-F1~\cite{Chawla2009}. Chất lượng hiệu chỉnh xác suất được định lượng thông qua Sai số hiệu chỉnh kỳ vọng (ECE) 10 khoảng chia~\cite{guo2017} tại Phương trình~\eqref{eq:ece} và Điểm Brier đánh giá độ chính xác nhãn dự đoán cao nhất~\cite{brier1950} tại Phương trình~\eqref{eq:brier}:
 \begin{equation}\label{eq:ece}
@@ -170,19 +170,19 @@ Hình~\ref{fig:benchmark-charts} tổng hợp các kết quả thực nghiệm �
 \endfoot
 \hline
 \endlastfoot
-\texttt{B0} (\texttt{doi\_only}) & Chỉ khớp chính xác DOI & 26.34 & 23.36 & 34.96 & 19.63 & $< 10^{-16}$ \\
+\texttt{B0} (\texttt{doi\_only}) & Chỉ khớp chính xác DOI & 26.24 & 23.42 & 34.89 & 19.57 & $< 10^{-16}$ \\
 \hline
-\texttt{B1} (\texttt{crossref}) & Tra cứu đơn nguồn Crossref & 58.11 & 56.26 & 47.94 & 45.13 & $< 10^{-16}$ \\
+\texttt{B1} (\texttt{crossref}) & Tra cứu đơn nguồn Crossref & 58.27 & 56.51 & 48.11 & 45.34 & $< 10^{-16}$ \\
 \hline
-\texttt{B3} (\texttt{embedding}) & Ngưỡng cosine SBERT & 66.86 & 49.30 & 52.14 & 45.85 & $< 10^{-16}$ \\
+\texttt{B3} (\texttt{embedding}) & Ngưỡng cosine SBERT & 66.93 & 49.40 & 52.11 & 45.70 & $< 10^{-16}$ \\
 \hline
-\texttt{B4} (\texttt{no\_calib}) & Điểm tuyến tính, không hoãn & 80.13 & 62.12 & 66.07 & 62.69 & $< 10^{-16}$ \\
+\texttt{B4} (\texttt{no\_calib}) & Điểm tuyến tính, không hoãn & 80.48 & 62.34 & 66.48 & 63.09 & $< 10^{-16}$ \\
 \hline
-\texttt{B2} (\texttt{fuzzy\_only}) & RapidFuzz + Jaccard tác giả & 81.93 & 63.28 & 68.11 & 64.66 & $< 10^{-16}$ \\
+\texttt{B2} (\texttt{fuzzy\_only}) & RapidFuzz + Jaccard tác giả & 82.76 & 63.83 & 69.08 & 65.56 & $< 10^{-16}$ \\
 \hline
-\texttt{B5} (\texttt{ml\_hybrid}) & MLR 16 chiều thuần ($C = 2.0$) & 97.98 & 98.05 & 98.00 & 98.02 & $6.17 \times 10^{-23}$ \\
+\texttt{B5} (\texttt{ml\_hybrid}) & MLR 16 chiều thuần ($C = 0.25$) & 97.67 & 97.53 & 97.68 & 97.59 & $5.79 \times 10^{-45}$ \\
 \hline
-\textbf{\texttt{Proposed}} & \textbf{Neuro-Symbolic + Platt} & \textbf{99.02} & \textbf{98.94} & \textbf{98.83} & \textbf{98.88} & \textbf{Đối chiếu (\#1)} \\
+\textbf{\texttt{Proposed}} & \textbf{Neuro-Symbolic + Platt} & \textbf{99.21} & \textbf{98.99} & \textbf{99.08} & \textbf{99.04} & \textbf{Đối chiếu (\#1)} \\
 \hline
 \end{longtable}
 }
@@ -204,26 +204,26 @@ Hình~\ref{fig:benchmark-charts} tổng hợp các kết quả thực nghiệm �
 \endfoot
 \hline
 \endlastfoot
-\textbf{\texttt{verified}} & 6,480 & 98.46 & \textbf{99.80} & 99.13 & \texttt{6,467 / 11 / 0 / 2} \\
+\textbf{\texttt{verified}} & 6,480 & 99.23 & \textbf{99.71} & 99.47 & \texttt{6,461 / 18 / 0 / 1} \\
 \hline
-\textbf{\texttt{suspected\_hallucination}} & 5,400 & \textbf{99.93} & 99.69 & \textbf{99.81} & \texttt{0 / 0 / 5,383 / 17} \\
+\textbf{\texttt{suspected\_hallucination}} & 5,400 & \textbf{99.78} & 99.67 & \textbf{99.72} & \texttt{0 / 0 / 5,382 / 18} \\
 \hline
-\textbf{\texttt{metadata\_error}} & 3,960 & 99.15 & 96.84 & 97.98 & \texttt{101 / 3,835 / 4 / 20} \\
+\textbf{\texttt{metadata\_error}} & 3,960 & 99.10 & 97.73 & 98.41 & \texttt{50 / 3,870 / 12 / 28} \\
 \hline
-\textbf{\texttt{unresolved}} & 2,160 & 98.21 & 98.98 & 98.59 & \texttt{0 / 22 / 0 / 2,138} \\
+\textbf{\texttt{unresolved}} & 2,160 & 97.85 & 99.21 & 98.53 & \texttt{0 / 17 / 0 / 2,143} \\
 \hline
-\textbf{Trung bình vĩ mô / Tổng} & \textbf{18,000} & \textbf{98.94} & \textbf{98.83} & \textbf{98.88} & \textbf{Acc.: 99.02\%} (95\% CI $[98.87, 99.16]$) \\
+\textbf{Trung bình vĩ mô / Tổng} & \textbf{18,000} & \textbf{98.99} & \textbf{99.08} & \textbf{99.04} & \textbf{Acc.: 99.20\%} (95\% CI $[99.07, 99.33]$) \\
 \hline
 \end{longtable}
 }
 
-Các phương pháp cơ sở dựa trên tín hiệu đơn lẻ thất bại vì những nguyên nhân cấu trúc rõ ràng: \texttt{B0} ($26.34\%$) bỏ sót các bài báo hội nghị hợp lệ được trích dẫn mà không kèm DOI, \texttt{B1} ($58.11\%$) bỏ sót các bài báo trên ACL/arXiv không được lập chỉ mục trong Crossref, còn phương pháp nhúng ngữ nghĩa thuần túy \texttt{B3} ($66.86\%$) nhầm lẫn các trích dẫn ảo giác ghép chéo cùng lĩnh vực (\texttt{H1}) với tiêu đề thật do vốn từ vựng chuyên ngành trùng lặp cao. Bộ phân loại hồi quy logistic 16 đặc trưng \texttt{B5} đạt độ chính xác $97.98\%$ ($363$ lỗi), trong khi động cơ \texttt{Proposed} cải thiện độ chính xác thêm $+1.03$ điểm phần trăm lên \textbf{99.02\% (17,823/18,000, 177 lỗi)} và nâng Macro-F1 lên \textbf{98.88\%} (khoảng tin cậy $95\%$ bootstrap $[98.71\%, 99.05\%]$, kiểm định McNemar hiệu chỉnh Holm--Bonferroni $\chi^2 = 97.23, p = 6.17 \times 10^{-23}$, giúp cắt giảm $51.2\%$ số lỗi tồn dư). Quan trọng nhất, có \textbf{0 / 6,480 trích dẫn hợp lệ thật sự bị kết luận nhầm là ảo giác} (cận trên Clopper--Pearson $95\%$ là $0.057\%$) và \textbf{0 / 5,400 trích dẫn bịa đặt lọt sang nhãn \texttt{verified}} (cận trên Clopper--Pearson $95\%$ là $0.068\%$).
+Các phương pháp cơ sở dựa trên tín hiệu đơn lẻ thất bại vì những nguyên nhân cấu trúc rõ ràng: \texttt{B0} ($26.24\%$) bỏ sót các bài báo hội nghị hợp lệ được trích dẫn mà không kèm DOI, \texttt{B1} ($58.27\%$) bỏ sót các bài báo trên ACL/arXiv không được lập chỉ mục trong Crossref, còn phương pháp nhúng ngữ nghĩa thuần túy \texttt{B3} ($66.93\%$) nhầm lẫn các trích dẫn ảo giác ghép chéo cùng lĩnh vực (\texttt{H1}) với tiêu đề thật do vốn từ vựng chuyên ngành trùng lặp cao. Bộ phân loại hồi quy logistic 16 đặc trưng \texttt{B5} đạt độ chính xác $97.67\%$ ($420$ lỗi), trong khi động cơ \texttt{Proposed} cải thiện độ chính xác thêm $+1.53$ điểm phần trăm lên \textbf{99.20\% (17,856/18,000, 144 lỗi)} và nâng Macro-F1 lên \textbf{99.03\%} (khoảng tin cậy $95\%$ bootstrap $[98.88\%, 99.19\%]$, kiểm định McNemar hiệu chỉnh Holm--Bonferroni $\chi^2 = 197.97, p = 5.79 \times 10^{-45}$, giúp cắt giảm $65.7\%$ số lỗi tồn dư). Quan trọng nhất, có \textbf{0 / 6,480 trích dẫn hợp lệ thật sự bị kết luận nhầm là ảo giác} (cận trên Clopper--Pearson $95\%$ là $0.057\%$) và \textbf{0 / 5,400 trích dẫn bịa đặt lọt sang nhãn \texttt{verified}} (cận trên Clopper--Pearson $95\%$ là $0.068\%$).
 
-\rqanswer{RQ1}{Trên 18,000 trích dẫn kiểm thử độc lập không trùng bài báo, CITRA đạt độ chính xác $99.02\%$ và Macro-F1 $98.88\%$, vượt trội có ý nghĩa thống kê so với cả sáu phương pháp cơ sở ($p \le 6.17 \times 10^{-23}$) và không ghi nhận bất kỳ cáo buộc ảo giác sai nào trên các bài báo hợp lệ ($0/6{,}480$).}
+\rqanswer{RQ1}{Trên 18,000 trích dẫn kiểm thử độc lập không trùng bài báo, CITRA đạt độ chính xác $99.20\%$ và Macro-F1 $99.03\%$, vượt trội có ý nghĩa thống kê so với cả sáu phương pháp cơ sở ($p \le 5.79 \times 10^{-45}$) và không ghi nhận bất kỳ cáo buộc ảo giác sai nào trên các bài báo hợp lệ ($0/6{,}480$).}
 
 \section{RQ2: Độ bền vững của Rào chắn Ký hiệu ngoài phân phối (OOD)}
 
-Bảng~\ref{tab:ood-stress} đánh giá các phương pháp \texttt{B4}, \texttt{B5} và \texttt{Proposed} trên bộ kiểm thử sức chịu tải ngoài phân phối (OOD) gồm 2,400 mẫu. Do các đặc trưng tương đồng liên tục 16 chiều vẫn giữ giá trị rất cao (khớp $1.00$ ở cả tiêu đề, tác giả và năm xuất bản) ngay cả khi bài báo đã bị rút lại trong cơ sở dữ liệu Retraction Watch hoặc mang đường dẫn URL giữ chỗ theo chuẩn RFC 2606, mô hình Hồi quy Logistic 16 chiều thuần túy (\texttt{B5}) chỉ đạt $0.00\%$ ở cả hai nhóm này và đạt $49.88\%$ trên toàn bộ tập OOD (sở dĩ đạt $100.00\%$ ở Nhóm 4--5 chỉ vì đặc trưng thứ 16 của nó nhận được các bit hoãn phán quyết \texttt{doi\_ra\_status} và \texttt{api\_exhausted} từ tầng thượng nguồn; nếu thiếu các tín hiệu này, \texttt{B4} tụt xuống $0.00\%$). Ngược lại, hệ luật ký hiệu Bậc 0 cùng Nhóm 1/5 của \textbf{CITRA} kiểm tra trực tiếp các vị từ nguồn gốc rời rạc trước khi chấm điểm liên tục, nhờ đó đạt độ chính xác \textbf{99.75\% (2,394 / 2,400)} ($\chi^2 = 1{,}189.04, p = 1.47 \times 10^{-260}$ khi so với \texttt{B5}).
+Bảng~\ref{tab:ood-stress} đánh giá các phương pháp \texttt{B4}, \texttt{B5} và \texttt{Proposed} trên bộ kiểm thử sức chịu tải ngoài phân phối (OOD) gồm 2,400 mẫu. Do các đặc trưng tương đồng liên tục 16 chiều vẫn giữ giá trị rất cao (khớp $1.00$ ở cả tiêu đề, tác giả và năm xuất bản) ngay cả khi bài báo đã bị rút lại trong cơ sở dữ liệu Retraction Watch hoặc mang đường dẫn URL giữ chỗ theo chuẩn RFC 2606, mô hình Hồi quy Logistic 16 chiều thuần túy (\texttt{B5}) chỉ đạt $0.00\%$ ở cả hai nhóm này và đạt $57.37\%$ trên toàn bộ tập OOD (sở dĩ đạt $100.00\%$ ở Nhóm 4--5 chỉ vì đặc trưng thứ 16 của nó nhận được các bit hoãn phán quyết \texttt{doi\_ra\_status} và \texttt{api\_exhausted} từ tầng thượng nguồn; nếu thiếu các tín hiệu này, \texttt{B4} tụt xuống $0.00\%$). Ngược lại, hệ luật ký hiệu Bậc 0 cùng Nhóm 1/5 của \textbf{CITRA} kiểm tra trực tiếp các vị từ nguồn gốc rời rạc trước khi chấm điểm liên tục, nhờ đó đạt độ chính xác \textbf{99.96\% (2,399 / 2,400)} ($\chi^2 = 1{,}018.00, p = 8.07 \times 10^{-224}$ khi so với \texttt{B5}).
 
 {\setlength{\tabcolsep}{3.5pt}
 \begin{longtable}{|L{0.35}|L{0.25}|C{0.10}|C{0.11}|C{0.19}|}
@@ -244,7 +244,7 @@ Bảng~\ref{tab:ood-stress} đánh giá các phương pháp \texttt{B4}, \texttt
 \endlastfoot
 \textbf{1. Bài báo bị rút lại} (\texttt{is\_retracted}) & \texttt{R-RETRACTED-\allowbreak PAPER} & 0.00 & 0.00 & \textbf{100.00} \\
 \hline
-\textbf{2. DOI thật ghép tiêu đề bịa đặt} & \texttt{R-CHIMERIC-DOI-\allowbreak MISMATCH} & 0.00 & 64.25 & \textbf{98.50} \\
+\textbf{2. DOI thật ghép tiêu đề bịa đặt} & \texttt{R-CHIMERIC-DOI-\allowbreak MISMATCH} & 0.00 & 99.25 & \textbf{99.75} \\
 \hline
 \textbf{3. URL giả/giữ chỗ chuẩn RFC 2606} & \texttt{R-FAKE-URL} & 0.00 & 0.00 & \textbf{100.00} \\
 \hline
@@ -252,18 +252,18 @@ Bảng~\ref{tab:ood-stress} đánh giá các phương pháp \texttt{B4}, \texttt
 \hline
 \textbf{5. Cạn kiệt hạn mức HTTP 429 thượng nguồn} & \texttt{R-RATE-LIMITED-\allowbreak ABSTAIN} & 0.00 & 100.00 & \textbf{100.00} \\
 \hline
-\textbf{6. Sai lệch thẩm quyền văn bản luật VN} & \texttt{VNLegal\allowbreak Verifier} & 20.00 & 35.00 & \textbf{100.00} \\
+\textbf{6. Sai lệch thẩm quyền văn bản luật VN} & \texttt{VNLegal\allowbreak Verifier} & 25.00 & 45.00 & \textbf{100.00} \\
 \hline
-\textbf{Tổng toàn bộ tập OOD ($N = 2{,}400$)} & \textbf{McNemar $p = 1.47 \times 10^{-260}$} & 3.33 & 49.88 & \textbf{99.75} \\
+\textbf{Tổng toàn bộ tập OOD ($N = 2{,}400$)} & \textbf{McNemar $p = 8.07 \times 10^{-224}$} & 4.17 & 57.37 & \textbf{99.96} \\
 \hline
 \end{longtable}
 }
 
-\rqanswer{RQ2}{Các rào chắn ký hiệu bậc nhất nâng độ chính xác ngoài phân phối (OOD) từ $49.88\%$ (học máy thuần túy \texttt{B5}) lên $99.75\%$ ($2{,}394/2{,}400$), ngăn chặn $100\%$ ca xác thực nhầm bài báo đã bị rút lại hoặc chứa URL giả, đồng thời bảo đảm $100\%$ từ chối phán quyết an toàn khi gặp lỗi giới hạn tần suất HTTP 429.}
+\rqanswer{RQ2}{Các rào chắn ký hiệu bậc nhất nâng độ chính xác ngoài phân phối (OOD) từ $57.37\%$ (học máy thuần túy \texttt{B5}) lên $99.96\%$ ($2{,}399/2{,}400$), ngăn chặn $100\%$ ca xác thực nhầm bài báo đã bị rút lại hoặc chứa URL giả, đồng thời bảo đảm $100\%$ từ chối phán quyết an toàn khi gặp lỗi giới hạn tần suất HTTP 429.}
 
 \section{RQ3: Hiệu chỉnh Xác suất và Độ nhạy Thang chấm CIS}
 
-Bảng~\ref{tab:calibration-results} đối chiếu độ tin cậy ký hiệu chưa hiệu chỉnh với phép hiệu chỉnh Platt trên không gian logit trên tập kiểm thử 18,000 mẫu. Cần lưu ý rằng Bảng~\ref{tab:calibration-results} tách bạch rõ giữa \emph{Độ bao phủ không từ chối phán quyết} ($\Pr[\hat{y} \neq \texttt{unresolved}] = 87.91\%$, bám sát tỷ lệ tiên nghiệm $88.00\%$ của các nhãn khác \texttt{unresolved} trong dữ liệu chuẩn) và \emph{Tỷ lệ dự đoán có độ tin cậy cao} ($\Pr[\hat{p} \ge 0.50] = 99.89\%$). Phép hiệu chỉnh Platt giúp giảm $83.8\%$ Sai số hiệu chỉnh kỳ vọng (ECE) ($0.2445 \rightarrow \mathbf{0.0395}$, khoảng tin cậy $95\%$ $[0.0380, 0.0410]$) và giảm $86.3\%$ Điểm Brier ($0.0915 \rightarrow \mathbf{0.0125}$, kiểm định Wilcoxon $p < 10^{-16}$). Hơn nữa, khi làm nhiễu vectơ trọng số thang chấm CIS mặc định $(0.35, 0.25, 0.25, 0.10, 0.05)$ qua 20 vectơ đơn hình chuẩn hóa trên 300 hồ sơ bản thảo, hệ số tương quan hạng Spearman trung bình đạt $\rho = 0.9987$ ($\min \rho = 0.9964$), hệ số $\tau$ của Kendall đạt $0.9765$ và độ dịch chuyển tuyệt đối trung bình chỉ ở mức $1.75$ điểm CIS.
+Bảng~\ref{tab:calibration-results} đối chiếu độ tin cậy ký hiệu chưa hiệu chỉnh với phép hiệu chỉnh Platt trên không gian logit trên tập kiểm thử 18,000 mẫu. Cần lưu ý rằng Bảng~\ref{tab:calibration-results} tách bạch rõ giữa \emph{Độ bao phủ không từ chối phán quyết} ($\Pr[\hat{y} \neq \texttt{unresolved}] = 87.83\%$, bám sát tỷ lệ tiên nghiệm $88.00\%$ của các nhãn khác \texttt{unresolved} trong dữ liệu chuẩn) và \emph{Tỷ lệ dự đoán có độ tin cậy cao} ($\Pr[\hat{p} \ge 0.50] = 99.89\%$). Phép hiệu chỉnh Platt giúp giảm $83.4\%$ Sai số hiệu chỉnh kỳ vọng (ECE) ($0.2475 \rightarrow \mathbf{0.0411}$, khoảng tin cậy $95\%$ $[0.0397, 0.0425]$) và giảm $88.1\%$ Điểm Brier ($0.0905 \rightarrow \mathbf{0.0108}$, kiểm định Wilcoxon $p < 10^{-16}$). Hơn nữa, khi làm nhiễu vectơ trọng số thang chấm CIS mặc định $(0.35, 0.25, 0.25, 0.10, 0.05)$ qua 20 vectơ đơn hình chuẩn hóa trên 300 hồ sơ bản thảo, hệ số tương quan hạng Spearman trung bình đạt $\rho = 0.9987$ ($\min \rho = 0.9964$), hệ số $\tau$ của Kendall đạt $0.9765$ và độ dịch chuyển tuyệt đối trung bình chỉ ở mức $1.75$ điểm CIS.
 
 \begin{longtable}{|L{0.40}|C{0.21}|C{0.21}|C{0.18}|}
 \caption{Kết quả hiệu chỉnh xác suất và đánh đổi rủi ro -- độ bao phủ có chọn lọc ($N = 18{,}000$).}\label{tab:calibration-results}\\
@@ -281,29 +281,29 @@ Bảng~\ref{tab:calibration-results} đối chiếu độ tin cậy ký hiệu c
 \endfoot
 \hline
 \endlastfoot
-Sai số hiệu chỉnh kỳ vọng (ECE $\downarrow$) & 0.2445 & \textbf{0.0395} & $-83.8\%$ ($6.19\times\downarrow$) \\
+Sai số hiệu chỉnh kỳ vọng (ECE $\downarrow$) & 0.2475 & \textbf{0.0411} & $-83.4\%$ ($6.02\times\downarrow$) \\
 \hline
-Điểm Brier ($\downarrow$) & 0.0915 & \textbf{0.0125} & $-86.3\%$ ($7.32\times\downarrow$) \\
+Điểm Brier ($\downarrow$) & 0.0905 & \textbf{0.0108} & $-88.1\%$ ($8.38\times\downarrow$) \\
 \hline
-Độ bao phủ không hoãn ($\hat{y} \neq \texttt{unresolved}$) & 87.91\% & \textbf{87.91\%} & Giữ nguyên ($0.00$\,pp) \\
+Độ bao phủ không hoãn ($\hat{y} \neq \texttt{unresolved}$) & 87.83\% & \textbf{87.83\%} & Giữ nguyên ($0.00$\,pp) \\
 \hline
-Tỷ lệ độ tin cậy cao ($\hat{p} \ge 0.50$) & 91.22\% & \textbf{99.89\%} & $+8.67$\,pp \\
+Tỷ lệ độ tin cậy cao ($\hat{p} \ge 0.50$) & 90.69\% & \textbf{99.89\%} & $+9.20$\,pp \\
 \hline
-Độ chính xác có chọn lọc tại $70\%$ độ phủ ($\uparrow$) & 99.03\% & \textbf{99.23\%} & $+0.20$\,pp \\
+Độ chính xác có chọn lọc tại $70\%$ độ phủ ($\uparrow$) & 99.38\% & \textbf{99.49\%} & $+0.10$\,pp \\
 \hline
-Độ chính xác có chọn lọc tại $90\%$ độ phủ ($\uparrow$) & 99.08\% & \textbf{99.31\%} & $+0.23$\,pp \\
+Độ chính xác có chọn lọc tại $90\%$ độ phủ ($\uparrow$) & 99.31\% & \textbf{99.49\%} & $+0.22$\,pp \\
 \hline
-Độ chính xác có chọn lọc tại $95\%$ độ phủ ($\uparrow$) & 99.11\% & \textbf{99.32\%} & $+0.21$\,pp \\
+Độ chính xác có chọn lọc tại $95\%$ độ phủ ($\uparrow$) & 99.31\% & \textbf{99.46\%} & $+0.18$\,pp \\
 \hline
 \end{longtable}
 
-\rqanswer{RQ3}{Phép hiệu chỉnh Platt trên không gian logit cắt giảm ECE $6.19\times$ xuống còn $0.0395$ và giảm Điểm Brier $7.32\times$ xuống còn $0.0125$ mà không làm thay đổi độ bao phủ không từ chối phán quyết ($87.91\%$), đồng thời thứ hạng điểm CIS vẫn bất biến trước các nhiễu loạn trọng số (hệ số Spearman trung bình $\rho = 0.9987$).}
+\rqanswer{RQ3}{Phép hiệu chỉnh Platt trên không gian logit cắt giảm ECE $6.02\times$ xuống còn $0.0411$ và giảm Điểm Brier $8.38\times$ xuống còn $0.0108$ mà không làm thay đổi độ bao phủ không từ chối phán quyết ($87.83\%$), đồng thời thứ hạng điểm CIS vẫn bất biến trước các nhiễu loạn trọng số (hệ số Spearman trung bình $\rho = 0.9987$).}
 
 \section{RQ4: Kiểm định Đầu-Cuối Đa lĩnh vực và trên Bản thảo Thực tế}
 
 Để đánh giá khả năng khái quát hóa đầu-cuối vượt ra ngoài tập đo kiểm nhiễu loạn tổng hợp, ba thực nghiệm trên dữ liệu thực tế đã được tiến hành:
 \begin{enumerate}
-    \item \textbf{Bộ chuẩn vàng tham khảo thô đa lĩnh vực ($N = 120 + 15$):} Đưa các chuỗi tài liệu tham khảo thô đã định dạng đi xuyên suốt chuỗi mô-đun \texttt{Reference\allowbreak ListParser} $\rightarrow$ \texttt{Retrieval\allowbreak Orchestrator} $\rightarrow$ \texttt{Neuro\allowbreak Symbolic\allowbreak Checker} trên sáu lĩnh vực (mỗi lĩnh vực 20 tài liệu: Khoa học Máy tính/AI, Y sinh học, Kinh tế/Khoa học Xã hội, Kỹ thuật/Vật lý, Văn bản Pháp luật Việt Nam và Phần mềm/Tiêu chuẩn RFC) cùng bảy chuẩn trích dẫn (APA, TDTU, IEEE, Vancouver, Chicago, Harvard, MLA) đạt \textbf{độ chính xác năm nhãn 100.00\% (120/120, Macro-F1 $= 1.0000$, $\text{ECE} = 0.0902$)} và đạt \textbf{100.00\% (15/15)} trên bộ kiểm thử đối kháng.
+    \item \textbf{Bộ chuẩn vàng tham khảo thô đa lĩnh vực ($N = 120 + 15$):} Đưa các chuỗi tài liệu tham khảo thô đã định dạng đi xuyên suốt chuỗi mô-đun \texttt{Reference\allowbreak ListParser} $\rightarrow$ \texttt{Retrieval\allowbreak Orchestrator} $\rightarrow$ \texttt{Neuro\allowbreak Symbolic\allowbreak Checker} trên sáu lĩnh vực (mỗi lĩnh vực 20 tài liệu: Khoa học Máy tính/AI, Y sinh học, Kinh tế/Khoa học Xã hội, Kỹ thuật/Vật lý, Văn bản Pháp luật Việt Nam và Phần mềm/Tiêu chuẩn RFC) cùng bảy chuẩn trích dẫn (APA, TDTU, IEEE, Vancouver, Chicago, Harvard, MLA) đạt \textbf{độ chính xác năm nhãn 100.00\% (120/120, Macro-F1 $= 1.0000$, $\text{ECE} = 0.0831$)} và đạt \textbf{100.00\% (15/15)} trên bộ kiểm thử đối kháng.
     \item \textbf{Các bộ kiểm thử trích xuất đa chuẩn (310 PDF) và đa tổ chức (841 PDF):} Bảng~\ref{tab:pdf-corpora} ghi nhận tỷ lệ nhận diện mục tài liệu tham khảo đạt $100.0\%$ và khôi phục liên kết đạt $96.9\%$ trên 30 tệp PDF pháp luật Việt Nam thực tế, trích xuất chính xác tuyệt đối $100.0\%$ ($397/397$) trên 60 tệp PDF chẩn đoán thuộc 12 chuẩn trích dẫn, và nhận diện mục tài liệu tham khảo đạt $97.7\%$ (8,126 tài liệu) trên 220 bài báo truy cập mở thực tế. Một đợt quét mở rộng kiểm tra độ ổn định của bộ phân tích cú pháp trên 841 tệp PDF đa dạng từ nhiều trường viện và arXiv đã hoàn tất với $0$ ngoại lệ chưa được xử lý.
     \item \textbf{Các bài báo khoa học hoàn chỉnh và báo cáo đồ án tốt nghiệp sinh viên đã ẩn danh:} Bảng~\ref{tab:samples} tổng hợp kết quả kiểm định đầu-cuối trên các bài báo NLP kinh điển và các báo cáo đồ án tốt nghiệp đại học đã ẩn danh. Các công trình xuất bản chuẩn mực (\textit{BERT}, \textit{Attention Is All You Need}, \textit{VietDepression}) không phát sinh bất kỳ cảnh báo ảo giác giả nào, trong khi các lỗi siêu dữ liệu chủ đích và trích dẫn bịa đặt lai ghép trong các báo cáo đồ án thử nghiệm đều được khoanh vùng chính xác.
 \end{enumerate}
@@ -327,7 +327,7 @@ Tỷ lệ độ tin cậy cao ($\hat{p} \ge 0.50$) & 91.22\% & \textbf{99.89\%} 
 \endlastfoot
 Kho PDF pháp luật VN (Cơ sở trước v3.80) & 30 & 27 / 30 (90.0\%) & 164 (15 Luật) & 109 / 235 (46.4\%) \\
 \hline
-\textbf{Kho PDF pháp luật VN} (\textbf{CITRA v3.90.5}) & \textbf{30} & \textbf{30 / 30 (100.0\%)} & \textbf{258 (91 Luật)} & \textbf{403 / 416 (96.9\%)} \\
+\textbf{Kho PDF pháp luật VN} (\textbf{CITRA v3.90.6}) & \textbf{30} & \textbf{30 / 30 (100.0\%)} & \textbf{258 (91 Luật)} & \textbf{403 / 416 (96.9\%)} \\
 \hline
 \textbf{Bộ chẩn đoán 12 chuẩn ($12 \times 5$)} & \textbf{60} & \textbf{60 / 60 (100.0\%)} & \textbf{397 / 397 (100.0\%)} & \textbf{60 / 60 PDF (100\%)} \\
 \hline
@@ -370,7 +370,7 @@ Kho PDF pháp luật VN (Cơ sở trước v3.80) & 30 & 27 / 30 (90.0\%) & 164 
 \end{longtable}
 }
 
-Các Hình~\ref{fig:demo-debugger}--\ref{fig:demo-consistency} minh họa trực tiếp các giao diện chẩn đoán của \textbf{CITRA} (\texttt{v3.90.5}) khi chạy trên bản thảo báo cáo đồ án tốt nghiệp Kỹ thuật Phần mềm có cài lỗi kiểm thử (gồm 6 mục tài liệu tham khảo và 28 lượt trích dẫn trong bài). Hình~\ref{fig:demo-debugger} đặt cạnh nhau cảnh báo ảo giác do DOI lai ghép (bên trái) và bảng đối chiếu trực quan sai lệch năm xuất bản (\texttt{2021} so với chuẩn gốc \texttt{2019}, bên phải). Hình~\ref{fig:demo-trace-context} hiển thị vết suy diễn logic 5 bước tích hợp gióng hàng khái niệm song ngữ \texttt{VI}$\leftrightarrow$\texttt{EN} qua mô hình ONNX INT8 (bên trái) cùng luồng ngữ cảnh trích dẫn trực tiếp trong Trình kiểm tra tài liệu (bên phải). Hình~\ref{fig:demo-consistency} minh họa giao diện Kiểm tra tính nhất quán hai chiều trong bài viết, giúp tách riêng các ký hiệu trích dẫn mồ côi trong văn bản và các tài liệu nằm trong danh mục nhưng chưa từng được trích dẫn.
+Các Hình~\ref{fig:demo-debugger}--\ref{fig:demo-consistency} minh họa trực tiếp các giao diện chẩn đoán của \textbf{CITRA} (\texttt{v3.90.6}) khi chạy trên bản thảo báo cáo đồ án tốt nghiệp Kỹ thuật Phần mềm có cài lỗi kiểm thử (gồm 6 mục tài liệu tham khảo và 28 lượt trích dẫn trong bài). Hình~\ref{fig:demo-debugger} đặt cạnh nhau cảnh báo ảo giác do DOI lai ghép (bên trái) và bảng đối chiếu trực quan sai lệch năm xuất bản (\texttt{2021} so với chuẩn gốc \texttt{2019}, bên phải). Hình~\ref{fig:demo-trace-context} hiển thị vết suy diễn logic 5 bước tích hợp gióng hàng khái niệm song ngữ \texttt{VI}$\leftrightarrow$\texttt{EN} qua mô hình ONNX INT8 (bên trái) cùng luồng ngữ cảnh trích dẫn trực tiếp trong Trình kiểm tra tài liệu (bên phải). Hình~\ref{fig:demo-consistency} minh họa giao diện Kiểm tra tính nhất quán hai chiều trong bài viết, giúp tách riêng các ký hiệu trích dẫn mồ côi trong văn bản và các tài liệu nằm trong danh mục nhưng chưa từng được trích dẫn.
 
 \begin{figure}[H]
     \centering
@@ -509,7 +509,7 @@ Do hiện chưa có kho ngữ liệu công khai nào gồm $10^5$ trích dẫn �
 
 \subsection{Tính hợp lệ ngoại tại}
 
-Cơ sở dữ liệu FTS5 ngoại tuyến (\texttt{local\_papers.db}) chủ yếu bao gồm các bài báo thuộc lĩnh vực khoa học máy tính và xử lý ngôn ngữ tự nhiên ($98.43\%$ từ ACL Anthology). Do đó, khi vận hành ở chế độ thuần ngoại tuyến, hệ thống sẽ có độ phủ thấp hơn đối với các bài báo thuộc lĩnh vực y sinh, nhân văn hoặc kinh tế. Trong môi trường triển khai có kết nối mạng, \textbf{CITRA} khắc phục độ lệch lĩnh vực này bằng cách định tuyến động truy vấn qua hơn 15 API đa ngành (Crossref, OpenAlex, Europe PMC, NCBI/bioRxiv, DOAJ, DataCite, OpenLibrary và \texttt{VNLegalVerifier}), được chứng thực qua kết quả chính xác $100.00\%$ trên cả sáu lĩnh vực trong \textbf{RQ4}.
+Cơ sở dữ liệu FTS5 ngoại tuyến (\texttt{local\_papers.db}) chủ yếu bao gồm các bài báo thuộc lĩnh vực khoa học máy tính và xử lý ngôn ngữ tự nhiên ($98.42\%$ từ ACL Anthology). Do đó, khi vận hành ở chế độ thuần ngoại tuyến, hệ thống sẽ có độ phủ thấp hơn đối với các bài báo thuộc lĩnh vực y sinh, nhân văn hoặc kinh tế. Trong môi trường triển khai có kết nối mạng, \textbf{CITRA} khắc phục độ lệch lĩnh vực này bằng cách định tuyến động truy vấn qua hơn 15 API đa ngành (Crossref, OpenAlex, Europe PMC, NCBI/bioRxiv, DOAJ, DataCite, OpenLibrary và \texttt{VNLegalVerifier}), được chứng thực qua kết quả chính xác $100.00\%$ trên cả sáu lĩnh vực trong \textbf{RQ4}.
 
 \subsection{Tính hợp lệ khái niệm}
 
@@ -521,4 +521,4 @@ Tính hợp lệ khái niệm xem xét liệu các độ đo đánh giá có ph�
 
 \section{Tóm tắt chương}
 
-Chương này đã kiểm định toàn diện hệ thống \textbf{CITRA} (\texttt{v3.90.5}) thông qua 2,827+ kiểm tra tự động, Ma trận truy vết yêu cầu đầy đủ và năm câu hỏi nghiên cứu thực nghiệm, chứng minh độ chính xác trong phân phối đạt $99.02\%$ ($\text{ECE} = 0.0395$), độ chính xác ký hiệu ngoài phân phối (OOD) đạt $99.75\%$, độ chính xác đầu-cuối trên bộ chuẩn vàng sáu lĩnh vực đạt $100.00\%$, cùng khả năng chịu tải đột biến 50 người dùng đồng thời không phát sinh lỗi. Chương~\ref{chap:conclusion} sẽ tổng kết các kết quả đạt được, những hạn chế hiện tại và hướng phát triển tiếp theo của đồ án tốt nghiệp.
+Chương này đã kiểm định toàn diện hệ thống \textbf{CITRA} (\texttt{v3.90.6}) thông qua 2,827+ kiểm tra tự động, Ma trận truy vết yêu cầu đầy đủ và năm câu hỏi nghiên cứu thực nghiệm, chứng minh độ chính xác trong phân phối đạt $99.20\%$ ($\text{ECE} = 0.0411$), độ chính xác ký hiệu ngoài phân phối (OOD) đạt $99.96\%$, độ chính xác đầu-cuối trên bộ chuẩn vàng sáu lĩnh vực đạt $100.00\%$, cùng khả năng chịu tải đột biến 50 người dùng đồng thời không phát sinh lỗi. Chương~\ref{chap:conclusion} sẽ tổng kết các kết quả đạt được, những hạn chế hiện tại và hướng phát triển tiếp theo của đồ án tốt nghiệp.
