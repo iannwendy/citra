@@ -36,7 +36,7 @@ import re
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from defusedxml.ElementTree import ParseError, fromstring, tostring
 
@@ -237,8 +237,11 @@ def call_grobid_fulltext(
     """
     import time
 
+    _req: Any = None
     try:
-        import requests as _req  # type: ignore[import-untyped]
+        import requests as _requests_import  # type: ignore[import-untyped]
+
+        _req = _requests_import
     except ImportError:
         _req = None
 
