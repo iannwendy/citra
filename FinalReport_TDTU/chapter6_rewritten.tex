@@ -3,7 +3,7 @@
 
 \section{Summary of Achievements Against Objectives}
 
-This graduation project designed, implemented, and empirically evaluated \textbf{CITRA} (\textit{Essay Integrity Checker v3.90.6}), an explainable neuro-symbolic software platform for automated Citation Integrity Scoring (CIS), fabricated reference detection, and bibliography remediation. Table~\ref{tab:obj-summary} maps the delivered software artifacts and empirical results directly back to the six research objectives defined in Section~\ref{sec:objectives}.
+This graduation project designed, implemented, and empirically evaluated \textbf{CITRA} (\textit{Essay Integrity Checker v3.90.7}), an explainable neuro-symbolic software platform for automated Citation Integrity Scoring (CIS), fabricated reference detection, and bibliography remediation. Table~\ref{tab:obj-summary} maps the delivered software artifacts and empirical results directly back to the six research objectives defined in Section~\ref{sec:objectives}.
 
 {\setlength{\tabcolsep}{3.5pt}
 \begin{longtable}{|C{0.14}|L{0.32}|L{0.54}|}
@@ -26,13 +26,13 @@ This graduation project designed, implemented, and empirically evaluated \textbf
 \hline
 \textbf{OBJ-2} & \textbf{Domain-aware federated retrieval} & \textbf{129,137-record} SQLite FTS5 corpus (\textbf{$99.80\%$} recall, $87.6\text{\,ms}$) + \textbf{15+ live APIs}, Retraction Watch, singleflight cache, and pinned-IP URL/HTML validators. \\
 \hline
-\textbf{OBJ-3} & \textbf{Neuro-symbolic verification \& calibration} & Dual SBERT + ONNX INT8 \texttt{VI}$\leftrightarrow$\texttt{EN} encoders fused with \textbf{68 symbolic rules}, 16D MLR ($C=0.25$), and Platt scaling (\textbf{$\text{ECE} = 0.0411$}, \textbf{$\text{Brier} = 0.0108$}). \\
+\textbf{OBJ-3} & \textbf{Neuro-symbolic verification \& calibration} & Dual SBERT + ONNX INT8 \texttt{VI}$\leftrightarrow$\texttt{EN} encoders fused with \textbf{68 symbolic rules}, 16D MLR ($C=0.25$), and Platt scaling (\textbf{$\text{ECE} = 0.0405$}, \textbf{$\text{Brier} = 0.0067$}). \\
 \hline
 \textbf{OBJ-4} & \textbf{Interpretable CIS grading \& remediation} & Five-component CIS rubric (\textbf{$\rho = 0.9987$} rank stability) plus automated APA, IEEE, TDTU, BibTeX, RIS, and \texttt{.docx} bibliography repair. \\
 \hline
 \textbf{OBJ-5} & \textbf{Secure role-based web platform} & Containerized FastAPI (\textbf{15 ORM tables}, 13 migrations (\texttt{0001}--\texttt{0013}), SSE, RBAC/IDOR, pinned-IP SSRF defense) \& React 18.3 SPA (\textbf{$228.42\text{\,kB}$} entry). \\
 \hline
-\textbf{OBJ-6} & \textbf{Leak-free large-scale evaluation} & \textbf{$99.20\%$} ID accuracy ($N=18\text{K}$), \textbf{$99.96\%$} OOD accuracy ($N=2.4\text{K}$), \textbf{$100\%$} 6-domain E2E accuracy ($120/120$), and \textbf{$50/50$} burst concurrency. \\
+\textbf{OBJ-6} & \textbf{Leak-free large-scale evaluation} & \textbf{$99.67\%$} ID accuracy ($N=18\text{K}$), \textbf{$99.96\%$} OOD accuracy ($N=2.4\text{K}$), \textbf{$100\%$} 6-domain E2E accuracy ($120/120$), and \textbf{$50/50$} burst concurrency. \\
 \hline
 \end{longtable}
 }
@@ -42,7 +42,7 @@ Figure~\ref{fig:verdict-paths} synthesizes the core architectural safeguard gove
 \begin{figure}[H]
     \centering
     \includegraphics[width=\textwidth,keepaspectratio]{picture/figures/fig6_1_verdict_paths.png}
-    \caption[Guarded neuro-symbolic decision tree separating refutation from abstention]{Guarded neuro-symbolic decision tree in CITRA (\texttt{v3.90.6}) separating evidence-backed refutation (\texttt{suspected\_hallucination}) from provenance-aware abstention (\texttt{unresolved}).}
+    \caption[Guarded neuro-symbolic decision tree separating refutation from abstention]{Guarded neuro-symbolic decision tree in CITRA (\texttt{v3.90.7}) separating evidence-backed refutation (\texttt{suspected\_hallucination}) from provenance-aware abstention (\texttt{unresolved}).}
     \label{fig:verdict-paths}
 \end{figure}
 
@@ -50,15 +50,15 @@ Figure~\ref{fig:verdict-paths} synthesizes the core architectural safeguard gove
 
 Three empirical lessons emerge from the experiments in Chapter~\ref{chap:results}:
 \begin{enumerate}
-    \item \textbf{Symbolic rules and statistical learning are complementary, not redundant.} Pure 16-dimensional Logistic Regression (\texttt{B5}) performs well on smooth similarity trade-offs ($97.67\%$ ID) yet collapses to $57.37\%$ on discrete OOD integrity rules (such as retracted articles, fake URLs, or Vietnamese statutory authority mismatches). Combining priority-ordered symbolic guardrails with ML probability blending achieves both $99.20\%$ ID accuracy and $99.96\%$ OOD accuracy.
-    \item \textbf{Post-hoc calibration is essential for trustworthy confidence reporting.} Raw symbolic rule confidences suffer from severe overconfidence ($\text{ECE} = 0.2475$). Logit-space Platt scaling lowers ECE by $6.02\times$ to $0.0411$ and Brier Score by $8.38\times$ to $0.0108$ while preserving exact non-abstention coverage ($87.83\%$).
+    \item \textbf{Symbolic rules and statistical learning are complementary, not redundant.} Pure 16-dimensional Logistic Regression (\texttt{B5}) performs well on smooth similarity trade-offs ($97.70\%$ ID) yet collapses to $57.33\%$ on discrete OOD integrity rules (such as retracted articles, fake URLs, or Vietnamese statutory authority mismatches). Combining priority-ordered symbolic guardrails with ML probability blending achieves both $99.67\%$ ID accuracy and $99.96\%$ OOD accuracy.
+    \item \textbf{Post-hoc calibration is essential for trustworthy confidence reporting.} Raw symbolic rule confidences suffer from severe overconfidence ($\text{ECE} = 0.2477$). Logit-space Platt scaling lowers ECE by $6.12\times$ to $0.0405$ and Brier Score by $12.58\times$ to $0.0067$ while preserving exact non-abstention coverage ($87.92\%$).
     \item \textbf{Offline FTS5 indexing makes CPU-only classroom deployment practical.} Caching verified candidates and indexing 129,137 papers locally yields a $688.72\times$ retrieval speedup and allows a single CPU server to handle 50 simultaneous deadline uploads without external rate-limit collapse.
 \end{enumerate}
 
 \section{System Limitations}
 \label{sec:limitations}
 
-Despite strong empirical performance, version \texttt{3.90.6} has four concrete engineering limitations:
+Despite strong empirical performance, version \texttt{3.90.7} has four concrete engineering limitations:
 \begin{itemize}
     \item \textbf{L1 (Paywalled Full-Text Claim Blindness):} Semantic claim alignment compares inline sentences against titles and open abstracts. When a student cites a specific figure, theorem, or discussion paragraph inside a closed-access article whose abstract omits that detail, \textbf{CITRA} cannot verify body-level entailment.
     \item \textbf{L2 (Domain Skew in the Offline Corpus):} Because $98.42\%$ of \texttt{local\_papers.db} originates from the ACL Anthology and CS arXiv, fully air-gapped deployments without Internet access experience reduced Tier-0 recall on biomedical, humanities, and Vietnamese domestic journal articles.

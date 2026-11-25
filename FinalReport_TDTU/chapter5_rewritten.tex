@@ -3,7 +3,7 @@
 
 \section{Experimental Design and Verification Setup}
 
-Following Empirical Software Engineering evaluation standards~\cite{wohlin2012experimentation}, this chapter evaluates \textbf{CITRA} (\texttt{v3.90.6}) through automated unit, integration, and browser test suites, requirements traceability verification, and controlled quantitative benchmarks structured around five Research Questions (\textbf{RQ1}--\textbf{RQ5}).
+Following Empirical Software Engineering evaluation standards~\cite{wohlin2012experimentation}, this chapter evaluates \textbf{CITRA} (\texttt{v3.90.7}) through automated unit, integration, and browser test suites, requirements traceability verification, and controlled quantitative benchmarks structured around five Research Questions (\textbf{RQ1}--\textbf{RQ5}).
 
 \subsection{Research Questions}
 
@@ -17,11 +17,11 @@ Following Empirical Software Engineering evaluation standards~\cite{wohlin2012ex
 
 \subsection{Automated Test Suites and Requirements Traceability Matrix}
 
-Software verification spans three automated test layers summarized in Table~\ref{tab:test-suites}: 2,320+ passing backend \texttt{pytest} unit and integration tests (with environment-gated live-network skips and 0 failures), 487+ passing frontend \texttt{Vitest} tests across 63 suites, and 20 \texttt{Playwright} end-to-end browser specification suites across desktop, tablet, and mobile viewports. In addition, an offline retrieval test over 500 stratified ACL Anthology queries achieved $99.80\%$ recall ($499/500$) and $100.0\%$ precision at $87.62\text{\,ms}$ mean latency. Table~\ref{tab:rtm} provides the bidirectional Requirements Traceability Matrix (RTM) linking the functional and non-functional specifications from Chapter~\ref{chap:overview} to their implementing packages and verification evidence.
+Software verification spans three automated test layers summarized in Table~\ref{tab:test-suites}: 2,410+ passing backend \texttt{pytest} unit and integration tests (with environment-gated live-network skips and 0 failures), 488 passing frontend \texttt{Vitest} tests across 63 suites, and 20 \texttt{Playwright} end-to-end browser specification suites across desktop, tablet, and mobile viewports. In addition, an offline retrieval test over 500 stratified ACL Anthology queries achieved $99.80\%$ recall ($499/500$) and $100.0\%$ precision at $87.62\text{\,ms}$ mean latency. Table~\ref{tab:rtm} provides the bidirectional Requirements Traceability Matrix (RTM) linking the functional and non-functional specifications from Chapter~\ref{chap:overview} to their implementing packages and verification evidence.
 
 {\setlength{\tabcolsep}{3.5pt}
 \begin{longtable}{|L{0.23}|L{0.25}|L{0.52}|}
-\caption{Automated software verification suites executed in version \texttt{3.90.6}.}\label{tab:test-suites}\\
+\caption{Automated software verification suites executed in version \texttt{3.90.7}.}\label{tab:test-suites}\\
 \hline
 \textbf{Verification Layer} & \textbf{Execution Result} & \textbf{Verified Subsystem Scope} \\
 \hline
@@ -36,9 +36,9 @@ Software verification spans three automated test layers summarized in Table~\ref
 \endfoot
 \hline
 \endlastfoot
-\textbf{Backend (\texttt{pytest})} & \textbf{2,320+ passed (0 failed)} & Multi-format extraction, 12 styles, \texttt{VNLegalVerifier}, 7-method linker, FTS5 + 15 APIs, SSRF-safe URL/HTML checks, 68 symbolic rules, Platt calibration, CIS, RBAC/IDOR, migrations \texttt{0001}--\texttt{0013}, and crash recovery. \\
+\textbf{Backend (\texttt{pytest})} & \textbf{2,410+ passed (0 failed)} & Multi-format extraction, 12 styles, \texttt{VNLegalVerifier}, 7-method linker, FTS5 + 15 APIs, SSRF-safe URL/HTML checks, 68 symbolic rules, Platt calibration, CIS, RBAC/IDOR, migrations \texttt{0001}--\texttt{0013}, and crash recovery. \\
 \hline
-\textbf{Frontend (\texttt{Vitest})} & \textbf{487+ passed (63 suites, 0 failed)} & Auth/OAuth flows, progressive-disclosure drawers, 6 diagnostic report views, Citation Network DAG, Remediation modal, Classroom/Admin telemetry, and $<251\text{\,kB}$ chunk guards. \\
+\textbf{Frontend (\texttt{Vitest})} & \textbf{488 passed (63 suites, 0 failed)} & Auth/OAuth flows, progressive-disclosure drawers, 6 diagnostic report views, Citation Network DAG, Remediation modal, Classroom/Admin telemetry, and $<251\text{\,kB}$ chunk guards. \\
 \hline
 \textbf{Browser E2E (\texttt{Playwright})} & \textbf{20 spec suites (132+ scenarios)} & Zero horizontal overflow across 5 viewports $\times$ Light/Dark $\times$ EN/VI, SSE upload, split-pane inspection, teacher override, and 404/error recovery. \\
 \hline
@@ -72,13 +72,13 @@ Software verification spans three automated test layers summarized in Table~\ref
 \hline
 \texttt{FR-08}, \texttt{FR-09} & \texttt{database/local\_db.py}, \texttt{retrieval\_orchestrator.py}, \texttt{html\_meta\_verifier.py} & 500-query FTS5 benchmark ($99.8\%$ recall) \& OOD categories 1, 3, 4, 5 (Table~\ref{tab:ood-stress}) & Pass ($99.8\%$) \\
 \hline
-\texttt{FR-10}, \texttt{FR-11}, \texttt{NFR-05} & \texttt{matching/semantic.py}, \texttt{logic/rules.py}, \texttt{calibration.py} & 120K disjoint benchmark ($N=18\text{K}$ test) \& 2.4K OOD suite (Tables~\ref{tab:baselines}--\ref{tab:calibration-results}) & Pass ($99.20\%$) \\
+\texttt{FR-10}, \texttt{FR-11}, \texttt{NFR-05} & \texttt{matching/semantic.py}, \texttt{logic/rules.py}, \texttt{calibration.py} & 120K disjoint benchmark ($N=18\text{K}$ test) \& 2.4K OOD suite (Tables~\ref{tab:baselines}--\ref{tab:calibration-results}) & Pass ($99.67\%$) \\
 \hline
 \texttt{FR-12}, \texttt{FR-13}, \texttt{FR-14} & \texttt{logic/cis.py}, \texttt{docx\_exporter.py}, \texttt{routes/essays.py}, \texttt{Shared\allowbreak ReportPage.tsx} & $300 \times 20$ CIS simplex test ($\rho = 0.9987$), DOCX repair \& HMAC share tests & Pass ($100\%$) \\
 \hline
 \texttt{FR-15}, \texttt{FR-16} & \texttt{api/\allowbreak routes/\allowbreak teacher.py}, \texttt{routes/system.py}, \texttt{ClassDetailPage.tsx}, \texttt{SystemHealthPage.tsx} & Transactional override, cohort analytics, \& circuit-breaker tests & Pass ($100\%$) \\
 \hline
-\texttt{NFR-01}, \texttt{NFR-02}, \texttt{NFR-07}--\texttt{10} & Full 8-layer pipeline, Docker Compose, \& Vite build (\texttt{web/}) & Latency/RSS ($P_{90}=1.33\text{\,s}$, $1.03\text{\,GB}$), WCAG E2E, $2{,}827+$ tests, chunk \& container health checks & Pass ($100\%$) \\
+\texttt{NFR-01}, \texttt{NFR-02}, \texttt{NFR-07}--\texttt{10} & Full 8-layer pipeline, Docker Compose, \& Vite build (\texttt{web/}) & Latency/RSS ($P_{90}=1.33\text{\,s}$, $1.03\text{\,GB}$), WCAG E2E, $2{,}920+$ tests, chunk \& container health checks & Pass ($100\%$) \\
 \hline
 \end{longtable}
 }
@@ -172,17 +172,17 @@ Figure~\ref{fig:benchmark-charts} summarizes the quantitative empirical results 
 \endlastfoot
 \texttt{B0} (\texttt{doi\_only}) & Exact DOI match only & 26.24 & 23.42 & 34.89 & 19.57 & $< 10^{-16}$ \\
 \hline
-\texttt{B1} (\texttt{crossref}) & Single-source Crossref & 58.27 & 56.51 & 48.11 & 45.34 & $< 10^{-16}$ \\
+\texttt{B1} (\texttt{crossref}) & Single-source Crossref & 58.31 & 56.64 & 48.13 & 45.38 & $< 10^{-16}$ \\
 \hline
 \texttt{B3} (\texttt{embedding}) & SBERT cosine threshold & 66.93 & 49.40 & 52.11 & 45.70 & $< 10^{-16}$ \\
 \hline
-\texttt{B4} (\texttt{no\_calib}) & Linear score, no abstain & 80.48 & 62.34 & 66.48 & 63.09 & $< 10^{-16}$ \\
+\texttt{B4} (\texttt{no\_calib}) & Linear score, no abstain & 80.53 & 62.42 & 66.52 & 63.14 & $< 10^{-16}$ \\
 \hline
-\texttt{B2} (\texttt{fuzzy\_only}) & RapidFuzz + AuthorJaccard & 82.76 & 63.83 & 69.08 & 65.56 & $< 10^{-16}$ \\
+\texttt{B2} (\texttt{fuzzy\_only}) & RapidFuzz + AuthorJaccard & 82.84 & 63.95 & 69.14 & 65.63 & $< 10^{-16}$ \\
 \hline
-\texttt{B5} (\texttt{ml\_hybrid}) & Pure 16D MLR ($C = 0.25$) & 97.67 & 97.53 & 97.68 & 97.59 & $5.79 \times 10^{-45}$ \\
+\texttt{B5} (\texttt{ml\_hybrid}) & Pure 16D MLR ($C = 0.25$) & 97.70 & 97.58 & 97.69 & 97.63 & $1.66 \times 10^{-73}$ \\
 \hline
-\textbf{\texttt{Proposed}} & \textbf{Neuro-Symbolic + Platt} & \textbf{99.21} & \textbf{98.99} & \textbf{99.08} & \textbf{99.04} & \textbf{Reference (\#1)} \\
+\textbf{\texttt{Proposed}} & \textbf{Neuro-Symbolic + Platt} & \textbf{99.67} & \textbf{99.65} & \textbf{99.64} & \textbf{99.65} & \textbf{Reference (\#1)} \\
 \hline
 \end{longtable}
 }
@@ -204,26 +204,26 @@ Figure~\ref{fig:benchmark-charts} summarizes the quantitative empirical results 
 \endfoot
 \hline
 \endlastfoot
-\textbf{\texttt{verified}} & 6,480 & 99.23 & \textbf{99.71} & 99.47 & \texttt{6,461 / 18 / 0 / 1} \\
+\textbf{\texttt{verified}} & 6,480 & 99.43 & 99.94 & 99.68 & \texttt{6,476 / 4 / 0 / 0} \\
 \hline
-\textbf{\texttt{suspected\_hallucination}} & 5,400 & \textbf{99.78} & 99.67 & \textbf{99.72} & \texttt{0 / 0 / 5,382 / 18} \\
+\textbf{\texttt{suspected\_hallucination}} & 5,400 & \textbf{99.93} & 99.96 & \textbf{99.94} & \texttt{0 / 0 / 5,398 / 2} \\
 \hline
-\textbf{\texttt{metadata\_error}} & 3,960 & 99.10 & 97.73 & 98.41 & \texttt{50 / 3,870 / 12 / 28} \\
+\textbf{\texttt{metadata\_error}} & 3,960 & 99.90 & 98.66 & 99.28 & \texttt{37 / 3,907 / 4 / 12} \\
 \hline
-\textbf{\texttt{unresolved}} & 2,160 & 97.85 & 99.21 & 98.53 & \texttt{0 / 17 / 0 / 2,143} \\
+\textbf{\texttt{unresolved}} & 2,160 & 99.36 & \textbf{100.00} & 99.68 & \texttt{0 / 0 / 0 / 2,160} \\
 \hline
-\textbf{Macro / Total} & \textbf{18,000} & \textbf{98.99} & \textbf{99.08} & \textbf{99.04} & \textbf{Acc.: 99.20\%} (95\% CI $[99.07, 99.33]$) \\
+\textbf{Macro / Total} & \textbf{18,000} & \textbf{99.65} & \textbf{99.64} & \textbf{99.65} & \textbf{Acc.: 99.67\%} (95\% CI $[99.58, 99.76]$) \\
 \hline
 \end{longtable}
 }
 
-Single-cue baselines fail for clear structural reasons: \texttt{B0} ($26.24\%$) misses valid conference papers cited without DOIs, \texttt{B1} ($58.27\%$) misses ACL/arXiv papers absent from Crossref, and pure embedding \texttt{B3} ($66.93\%$) confuses same-domain spliced hallucinations (\texttt{H1}) with real titles because topical vocabulary overlaps strongly. The 16-feature logistic classifier \texttt{B5} reaches $97.67\%$ ($420$ errors), whereas \texttt{Proposed} improves accuracy by $+1.53$ percentage points to \textbf{99.20\% (17,856/18,000, 144 errors)} and Macro-F1 to \textbf{99.03\%} ($95\%$ bootstrap CI $[98.88\%, 99.19\%]$, Holm--Bonferroni adjusted McNemar $\chi^2 = 197.97, p = 5.79 \times 10^{-45}$, cutting residual errors by $65.7\%$). Most importantly, \textbf{0 / 6,480 genuine verified citations are falsely accused of hallucination} ($95\%$ Clopper--Pearson upper bound $0.057\%$), and \textbf{0 / 5,400 fabricated citations leak into \texttt{verified}} ($95\%$ Clopper--Pearson upper bound $0.068\%$).
+Single-cue baselines fail for clear structural reasons: \texttt{B0} ($26.24\%$) misses valid conference papers cited without DOIs, \texttt{B1} ($58.31\%$) misses ACL/arXiv papers absent from Crossref, and pure embedding \texttt{B3} ($66.93\%$) confuses same-domain spliced hallucinations (\texttt{H1}) with real titles because topical vocabulary overlaps strongly. The 16-feature logistic classifier \texttt{B5} reaches $97.70\%$ ($414$ errors), whereas \texttt{Proposed} improves accuracy by $+1.97$ percentage points to \textbf{99.67\% (17,941/18,000, 59 errors)} and Macro-F1 to \textbf{99.65\%} ($95\%$ bootstrap CI $[99.55\%, 99.74\%]$, Holm--Bonferroni adjusted McNemar $\chi^2 = 328.91, p = 1.66 \times 10^{-73}$, cutting residual errors by $85.7\%$). Global one-to-one author reconciliation (preserving standalone surnames such as \textit{Du}/\textit{Das} and single-letter patronymic initials), monotonic single-source abstention boundaries, clean zero-candidate hallucination routing without author-whitelist immunity, and proportional lexical grounding deficit detection jointly raise \texttt{unresolved} recall to $100.00\%$ ($2{,}160/2{,}160$), \texttt{suspected\_hallucination} F1 to $99.94\%$ ($5{,}398/5{,}400$), and \texttt{metadata\_error} F1 to $99.28\%$. Most importantly, \textbf{0 / 6,480 genuine verified citations are falsely accused of hallucination} ($95\%$ Clopper--Pearson upper bound $0.057\%$), and \textbf{0 / 5,400 fabricated citations leak into \texttt{verified}} ($95\%$ Clopper--Pearson upper bound $0.068\%$).
 
-\rqanswer{RQ1}{On 18,000 paper-disjoint held-out citations, CITRA achieves $99.20\%$ accuracy and $99.03\%$ Macro-F1, statistically outperforming all six baselines ($p \le 5.79 \times 10^{-45}$) with zero false hallucination accusations on verified papers ($0/6{,}480$).}
+\rqanswer{RQ1}{On 18,000 paper-disjoint held-out citations, CITRA achieves $99.67\%$ accuracy and $99.65\%$ Macro-F1, statistically outperforming all six baselines ($p \le 1.66 \times 10^{-73}$) with zero false hallucination accusations on verified papers ($0/6{,}480$).}
 
 \section{RQ2: Out-of-Distribution Symbolic Guardrail Robustness}
 
-Table~\ref{tab:ood-stress} evaluates \texttt{B4}, \texttt{B5}, and \texttt{Proposed} on the 2,400-sample OOD stress suite. Because continuous 16D similarity features remain high ($1.00$ title, author, and year match) when a paper is retracted in Retraction Watch or carries an RFC 2606 placeholder URL, pure 16D Logistic Regression (\texttt{B5}) achieves $0.00\%$ on both categories and only $57.37\%$ overall (scoring $100.00\%$ on Categories 4--5 only because its 16th feature receives upstream \texttt{doi\_ra\_status} and \texttt{api\_exhausted} abstention bits, without which \texttt{B4} drops to $0.00\%$). By contrast, \textbf{CITRA}'s Order 0 and Group 1/5 symbolic rules inspect discrete provenance predicates before continuous scoring, reaching \textbf{99.96\% (2,399 / 2,400)} ($\chi^2 = 1{,}018.00, p = 8.07 \times 10^{-224}$ vs.\ \texttt{B5}).
+Table~\ref{tab:ood-stress} evaluates \texttt{B4}, \texttt{B5}, and \texttt{Proposed} on the 2,400-sample OOD stress suite. Because continuous 16D similarity features remain high ($1.00$ title, author, and year match) when a paper is retracted in Retraction Watch or carries an RFC 2606 placeholder URL, pure 16D Logistic Regression (\texttt{B5}) achieves $0.00\%$ on both categories and only $57.33\%$ overall (scoring $100.00\%$ on Categories 4--5 only because its 16th feature receives upstream \texttt{doi\_ra\_status} and \texttt{api\_exhausted} abstention bits, without which \texttt{B4} drops to $0.00\%$). By contrast, \textbf{CITRA}'s Order 0 and Group 1/5 symbolic rules inspect discrete provenance predicates before continuous scoring, reaching \textbf{99.96\% (2,399 / 2,400)} ($\chi^2 = 1{,}021.00, p = 4.89 \times 10^{-224}$ vs.\ \texttt{B5}).
 
 {\setlength{\tabcolsep}{3.5pt}
 \begin{longtable}{|L{0.35}|L{0.25}|C{0.10}|C{0.11}|C{0.19}|}
@@ -244,7 +244,7 @@ Table~\ref{tab:ood-stress} evaluates \texttt{B4}, \texttt{B5}, and \texttt{Propo
 \endlastfoot
 \textbf{1. Retracted papers} (\texttt{is\_retracted}) & \texttt{R-RETRACTED-\allowbreak PAPER} & 0.00 & 0.00 & \textbf{100.00} \\
 \hline
-\textbf{2. Chimeric real DOI on invented title} & \texttt{R-CHIMERIC-DOI-\allowbreak MISMATCH} & 0.00 & 99.25 & \textbf{99.75} \\
+\textbf{2. Chimeric real DOI on invented title} & \texttt{R-CHIMERIC-DOI-\allowbreak MISMATCH} & 0.00 & 99.00 & \textbf{99.75} \\
 \hline
 \textbf{3. RFC 2606 placeholder/fake URLs} & \texttt{R-FAKE-URL} & 0.00 & 0.00 & \textbf{100.00} \\
 \hline
@@ -254,16 +254,16 @@ Table~\ref{tab:ood-stress} evaluates \texttt{B4}, \texttt{B5}, and \texttt{Propo
 \hline
 \textbf{6. VN statutory authority mismatch} & \texttt{VNLegalVerifier} & 25.00 & 45.00 & \textbf{100.00} \\
 \hline
-\textbf{Total OOD Suite ($N = 2{,}400$)} & \textbf{McNemar $p = 8.07 \times 10^{-224}$} & 4.17 & 57.37 & \textbf{99.96} \\
+\textbf{Total OOD Suite ($N = 2{,}400$)} & \textbf{McNemar $p = 4.89 \times 10^{-224}$} & 4.17 & 57.33 & \textbf{99.96} \\
 \hline
 \end{longtable}
 }
 
-\rqanswer{RQ2}{First-order symbolic guardrails raise out-of-distribution accuracy from $57.37\%$ (pure ML \texttt{B5}) to $99.96\%$ ($2{,}399/2{,}400$), preventing $100\%$ of retracted-paper and fake-URL false verifications while guaranteeing $100\%$ safe abstention under HTTP 429 exhaustion.}
+\rqanswer{RQ2}{First-order symbolic guardrails raise out-of-distribution accuracy from $57.33\%$ (pure ML \texttt{B5}) to $99.96\%$ ($2{,}399/2{,}400$), preventing $100\%$ of retracted-paper and fake-URL false verifications while guaranteeing $100\%$ safe abstention under HTTP 429 exhaustion.}
 
 \section{RQ3: Probability Calibration and CIS Rubric Sensitivity}
 
-Table~\ref{tab:calibration-results} compares uncalibrated symbolic confidences against logit-space Platt calibration on the 18,000-sample test split. Notice that Table~\ref{tab:calibration-results} separates \emph{Non-Abstention Coverage} ($\Pr[\hat{y} \neq \texttt{unresolved}] = 87.83\%$, matching the $88.00\%$ non-\texttt{unresolved} ground-truth prior) from the \emph{High-Confidence Rate} ($\Pr[\hat{p} \ge 0.50] = 99.89\%$). Platt scaling reduces Expected Calibration Error by $83.4\%$ ($0.2475 \rightarrow \mathbf{0.0411}$, $95\%$ CI $[0.0397, 0.0425]$) and reduces Brier Score by $88.1\%$ ($0.0905 \rightarrow \mathbf{0.0108}$, Wilcoxon $p < 10^{-16}$). Furthermore, perturbing the default CIS rubric weight vector $(0.35, 0.25, 0.25, 0.10, 0.05)$ across 20 normalized simplex vectors over 300 manuscript profiles yields a mean Spearman rank correlation of $\rho = 0.9987$ ($\min \rho = 0.9964$), Kendall's $\tau = 0.9765$, and a mean absolute shift of only $1.75$ CIS points.
+Table~\ref{tab:calibration-results} compares uncalibrated symbolic confidences against logit-space Platt calibration on the 18,000-sample test split. Notice that Table~\ref{tab:calibration-results} separates \emph{Non-Abstention Coverage} ($\Pr[\hat{y} \neq \texttt{unresolved}] = 87.92\%$, matching the $88.00\%$ non-\texttt{unresolved} ground-truth prior) from the \emph{High-Confidence Rate} ($\Pr[\hat{p} \ge 0.50] = 99.99\%$). Platt scaling reduces Expected Calibration Error by $83.6\%$ ($0.2477 \rightarrow \mathbf{0.0405}$, $95\%$ CI $[0.0394, 0.0415]$) and reduces Brier Score by $92.1\%$ ($0.0843 \rightarrow \mathbf{0.0067}$, Wilcoxon $p < 10^{-16}$). Furthermore, perturbing the default CIS rubric weight vector $(0.35, 0.25, 0.25, 0.10, 0.05)$ across 20 normalized simplex vectors over 300 manuscript profiles yields a mean Spearman rank correlation of $\rho = 0.9987$ ($\min \rho = 0.9964$), Kendall's $\tau = 0.9765$, and a mean absolute shift of only $1.75$ CIS points.
 
 \begin{longtable}{|L{0.40}|C{0.21}|C{0.21}|C{0.18}|}
 \caption{Probability calibration and selective risk-coverage results ($N = 18{,}000$).}\label{tab:calibration-results}\\
@@ -281,23 +281,23 @@ Table~\ref{tab:calibration-results} compares uncalibrated symbolic confidences a
 \endfoot
 \hline
 \endlastfoot
-Expected Calibration Error (ECE $\downarrow$) & 0.2475 & \textbf{0.0411} & $-83.4\%$ ($6.02\times\downarrow$) \\
+Expected Calibration Error (ECE $\downarrow$) & 0.2477 & \textbf{0.0405} & $-83.6\%$ ($6.12\times\downarrow$) \\
 \hline
-Brier Score ($\downarrow$) & 0.0905 & \textbf{0.0108} & $-88.1\%$ ($8.38\times\downarrow$) \\
+Brier Score ($\downarrow$) & 0.0843 & \textbf{0.0067} & $-92.1\%$ ($12.58\times\downarrow$) \\
 \hline
-Non-Abstention Coverage ($\hat{y} \neq \texttt{unresolved}$) & 87.83\% & \textbf{87.83\%} & Preserved ($0.00$\,pp) \\
+Non-Abstention Coverage ($\hat{y} \neq \texttt{unresolved}$) & 87.92\% & \textbf{87.92\%} & Preserved ($0.00$\,pp) \\
 \hline
-High-Confidence Rate ($\hat{p} \ge 0.50$) & 90.69\% & \textbf{99.89\%} & $+9.20$\,pp \\
+High-Confidence Rate ($\hat{p} \ge 0.50$) & 92.82\% & \textbf{99.99\%} & $+7.17$\,pp \\
 \hline
-Selective Accuracy at $70\%$ Coverage ($\uparrow$) & 99.38\% & \textbf{99.49\%} & $+0.10$\,pp \\
+Selective Accuracy at $70\%$ Coverage ($\uparrow$) & 99.64\% & \textbf{99.67\%} & $+0.03$\,pp \\
 \hline
-Selective Accuracy at $90\%$ Coverage ($\uparrow$) & 99.31\% & \textbf{99.49\%} & $+0.22$\,pp \\
+Selective Accuracy at $90\%$ Coverage ($\uparrow$) & 99.69\% & \textbf{99.73\%} & $+0.04$\,pp \\
 \hline
-Selective Accuracy at $95\%$ Coverage ($\uparrow$) & 99.31\% & \textbf{99.46\%} & $+0.18$\,pp \\
+Selective Accuracy at $95\%$ Coverage ($\uparrow$) & 99.70\% & \textbf{99.74\%} & $+0.04$\,pp \\
 \hline
 \end{longtable}
 
-\rqanswer{RQ3}{Logit-space Platt calibration cuts ECE by $6.02\times$ to $0.0411$ and Brier Score by $8.38\times$ to $0.0108$ without altering non-abstention coverage ($87.83\%$), while CIS rankings remain invariant under weight perturbations (mean Spearman $\rho = 0.9987$).}
+\rqanswer{RQ3}{Logit-space Platt calibration cuts ECE by $6.12\times$ to $0.0405$ and Brier Score by $12.58\times$ to $0.0067$ without altering non-abstention coverage ($87.92\%$), while CIS rankings remain invariant under weight perturbations (mean Spearman $\rho = 0.9987$).}
 
 \section{RQ4: End-to-End Multi-Domain and Real Manuscript Verification}
 
@@ -327,7 +327,7 @@ To evaluate end-to-end generalization beyond the synthetic perturbation benchmar
 \endlastfoot
 VN Legal Corpus (Pre-v3.80 Baseline) & 30 & 27 / 30 (90.0\%) & 164 (15 Legal) & 109 / 235 (46.4\%) \\
 \hline
-\textbf{VN Legal Corpus} (\textbf{CITRA v3.90.6}) & \textbf{30} & \textbf{30 / 30 (100.0\%)} & \textbf{258 (91 Legal)} & \textbf{403 / 416 (96.9\%)} \\
+\textbf{VN Legal Corpus} (\textbf{CITRA v3.90.7}) & \textbf{30} & \textbf{30 / 30 (100.0\%)} & \textbf{258 (91 Legal)} & \textbf{403 / 416 (96.9\%)} \\
 \hline
 \textbf{12-Style Diagnostic Suite ($12 \times 5$)} & \textbf{60} & \textbf{60 / 60 (100.0\%)} & \textbf{397 / 397 (100.0\%)} & \textbf{60 / 60 PDFs (100\%)} \\
 \hline
@@ -370,7 +370,7 @@ VN Legal Corpus (Pre-v3.80 Baseline) & 30 & 27 / 30 (90.0\%) & 164 (15 Legal) & 
 \end{longtable}
 }
 
-Figures~\ref{fig:demo-debugger}--\ref{fig:demo-consistency} display the live diagnostic views in \textbf{CITRA} (\texttt{v3.90.6}) on the seeded Software Engineering capstone audit manuscript (6 bibliography entries and 28 inline mentions). Figure~\ref{fig:demo-debugger} contrasts a chimeric DOI hallucination flag (left) with a side-by-side publication-year discrepancy diff (\texttt{2021} vs.\ canonical \texttt{2019}, right). Figure~\ref{fig:demo-trace-context} shows the 5-stage logic trace with ONNX INT8 \texttt{VI}$\leftrightarrow$\texttt{EN} concept alignment (left) and the inline Document Inspector context stream (right). Figure~\ref{fig:demo-consistency} illustrates the bidirectional In-Text Consistency view isolating orphan inline markers and uncited bibliography entries.
+Figures~\ref{fig:demo-debugger}--\ref{fig:demo-consistency} display the live diagnostic views in \textbf{CITRA} (\texttt{v3.90.7}) on the seeded Software Engineering capstone audit manuscript (6 bibliography entries and 28 inline mentions). Figure~\ref{fig:demo-debugger} contrasts a chimeric DOI hallucination flag (left) with a side-by-side publication-year discrepancy diff (\texttt{2021} vs.\ canonical \texttt{2019}, right). Figure~\ref{fig:demo-trace-context} shows the 5-stage logic trace with ONNX INT8 \texttt{VI}$\leftrightarrow$\texttt{EN} concept alignment (left) and the inline Document Inspector context stream (right). Figure~\ref{fig:demo-consistency} illustrates the bidirectional In-Text Consistency view isolating orphan inline markers and uncited bibliography entries.
 
 \begin{figure}[H]
     \centering
@@ -521,4 +521,4 @@ To guard against Type I errors from multiple baseline comparisons and skewed err
 
 \section{Chapter Summary}
 
-This chapter verified \textbf{CITRA} (\texttt{v3.90.6}) across 2,827+ automated checks, a full Requirements Traceability Matrix, and five empirical research questions, demonstrating $99.20\%$ in-distribution accuracy ($\text{ECE} = 0.0411$), $99.96\%$ OOD symbolic accuracy, $100.00\%$ six-domain E2E gold accuracy, and zero-error 50-user burst scalability. Chapter~\ref{chap:conclusion} summarizes achievements, current limitations, and future research directions.
+This chapter verified \textbf{CITRA} (\texttt{v3.90.7}) across 2,920+ automated checks, a full Requirements Traceability Matrix, and five empirical research questions, demonstrating $99.67\%$ in-distribution accuracy ($\text{ECE} = 0.0405$), $99.96\%$ OOD symbolic accuracy, $100.00\%$ six-domain E2E gold accuracy, and zero-error 50-user burst scalability. Chapter~\ref{chap:conclusion} summarizes achievements, current limitations, and future research directions.

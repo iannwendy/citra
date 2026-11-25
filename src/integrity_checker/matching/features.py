@@ -729,7 +729,12 @@ class FeatureCalculator:
         r"audio\s+podcast|podcast|video|film|white\s+paper|working\s+paper|"
         r"master'?s\s+thesis|doctoral\s+dissertation|dissertation|thesis|"
         r"tech\.?\s*rep\.?|technical\s+report|monograph|electronic\s+resource|"
-        r"cd-rom|báo\s+cáo|luận\s+văn(?:\s+thạc\s+sĩ)?|luận\s+án(?:\s+tiến\s+sĩ)?|trực\s+tuyến"
+        r"cd-rom|báo\s+cáo|luận\s+văn(?:\s+thạc\s+sĩ)?|luận\s+án(?:\s+tiến\s+sĩ)?|trực\s+tuyến|"
+        r"in\s+(?:french|chinese|german|spanish|russian|japanese|korean|vietnamese|"
+        r"italian|portuguese|arabic|dutch|polish|turkish|hindi|norwegian|swedish|"
+        r"danish|finnish|czech|greek|hebrew|persian|thai|indonesian|malay|"
+        r"ukrainian|romanian|hungarian|bulgarian|catalan|latin|english)|"
+        r"translated\s+from[^\]]*"
         r")\]",
         re.IGNORECASE,
     )
@@ -910,20 +915,19 @@ class FeatureCalculator:
         if not citation_title or not candidate_title:
             return 0.0
 
-        # Normalize case, surrounding typographic quotes, whitespace, ampersands, dashes, and trailing punctuation
+        # Normalize case, outer & internal double/typographic quotes (preserving apostrophes),
+        # whitespace, ampersands, dashes, and trailing punctuation
         _quote_chars = "\"'“”‘’«»"
-        c_clean = re.sub(
-            r"\s+",
-            " ",
-            citation_title.lower().strip().strip(_quote_chars).rstrip(".,;:?!").strip(_quote_chars),
-        )
-        cand_clean = re.sub(
-            r"\s+",
-            " ",
-            candidate_title.lower().strip().strip(_quote_chars).rstrip(".,;:?!").strip(_quote_chars),
-        )
-        c_clean = re.sub(r"\s*&\s*", " and ", c_clean).replace("\u2013", "-").replace("\u2014", "-")
-        cand_clean = re.sub(r"\s*&\s*", " and ", cand_clean).replace("\u2013", "-").replace("\u2014", "-")
+
+        def _norm_title_str(raw_t: str) -> str:
+            t = raw_t.lower().strip().strip(_quote_chars).rstrip(".,;:?!").strip(_quote_chars)
+            t = re.sub(r'(?<=\w)["\u201c\u201d\u00ab\u00bb](?=\w)', " ", t)
+            t = re.sub(r'["\u201c\u201d\u00ab\u00bb]', "", t)
+            t = re.sub(r"\s+", " ", t).strip()
+            return re.sub(r"\s*&\s*", " and ", t).replace("\u2013", "-").replace("\u2014", "-")
+
+        c_clean = _norm_title_str(citation_title)
+        cand_clean = _norm_title_str(candidate_title)
         if not c_clean or not cand_clean:
             return 0.0
 

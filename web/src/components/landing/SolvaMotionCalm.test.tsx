@@ -440,7 +440,7 @@ describe('Task 1.6: Zero Clipping, Truncation & Orphan-Punctuation Guards (EN & 
     }
   });
 
-  it('hero-benchmark-120k-strip localizes decimal/thousand separators (99,20% & 99,96% in VI; 99.20% & 99.96% in EN) with zero .truncate or ellipsis', async () => {
+  it('hero-benchmark-120k-strip localizes decimal/thousand separators (99,67% & 99,96% in VI; 99.67% & 99.96% in EN) with zero .truncate or ellipsis', async () => {
     for (const lang of ['en', 'vi'] as const) {
       await i18n.changeLanguage(lang);
       const { getByTestId, unmount } = renderLandingApp();
@@ -451,9 +451,9 @@ describe('Task 1.6: Zero Clipping, Truncation & Orphan-Punctuation Guards (EN & 
       const stripText = strip.textContent ?? '';
       expect(stripText).not.toContain('...');
       expect(stripText).not.toContain('…');
-      expect(stripText).toContain(lang === 'vi' ? '99,20%' : '99.20%');
+      expect(stripText).toContain(lang === 'vi' ? '99,67%' : '99.67%');
       expect(stripText).toContain(lang === 'vi' ? '99,96%' : '99.96%');
-      expect(stripText).not.toContain(lang === 'vi' ? '99.20%' : '99,20%');
+      expect(stripText).not.toContain(lang === 'vi' ? '99.67%' : '99,67%');
       expect(stripText).not.toContain(lang === 'vi' ? '99.96%' : '99,96%');
       expect(stripText).toContain('15+');
       expect(stripText).toContain(lang === 'vi' ? '120.000' : '120,000');

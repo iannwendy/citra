@@ -215,7 +215,7 @@ describe('LoginPage', () => {
     unmountVi();
   });
 
-  it('Task 2.2 — AuthSplitShell left panel has zero .truncate or line-clamp-* classes, zero <button> elements, full "Semantic Scholar" chip, localized VI verdict labels, and whitespace-nowrap on 99,20% CHÍNH XÁC', async () => {
+  it('Task 2.2 — AuthSplitShell left panel has zero .truncate or line-clamp-* classes, zero <button> elements, full "Semantic Scholar" chip, localized VI verdict labels, and whitespace-nowrap on 99,67% CHÍNH XÁC', async () => {
     await i18n.changeLanguage('en');
     const { container: enContainer, unmount: unmountEn } = renderLoginPage();
     const leftPanelEn = enContainer.firstElementChild?.firstElementChild as HTMLElement;
@@ -253,7 +253,7 @@ describe('LoginPage', () => {
 
     // Accuracy badge prevents mid-phrase line breaks
     const accSpanVi = Array.from(leftPanelVi.querySelectorAll('span')).find((el) =>
-      el.textContent?.includes('99,20% CHÍNH XÁC'),
+      el.textContent?.includes('99,67% CHÍNH XÁC'),
     );
     expect(accSpanVi).toBeDefined();
     expect(

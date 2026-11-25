@@ -119,14 +119,18 @@ def _strip_punctuation(text: str) -> str:
 
 
 def _strip_leading_particles(tokens: list[str]) -> list[str]:
-    """Strip leading surname particles while preserving standalone 'Le'/'La' surnames."""
+    """Strip leading surname particles while preserving standalone surnames ('Du', 'Das', 'El', 'Le', 'La', 'Van', 'De', 'Di').
+
+    Multi-token all-particle fragments (e.g. 'van der') still return [] so incomplete particle-only
+    strings do not match real surnames.
+    """
+    if not tokens:
+        return []
+    if len(tokens) >= 2 and all(t in _PARTICLES for t in tokens):
+        return []
     res = list(tokens)
-    while res:
-        head = res[0]
-        if head in _PURE_PARTICLES or head in _AMBIGUOUS_PARTICLES and len(res) > 1:
-            res.pop(0)
-        else:
-            break
+    while len(res) > 1 and res[0] in _PARTICLES:
+        res.pop(0)
     return res
 
 
@@ -181,17 +185,32 @@ def _canonicalize_last_name(name: str, *, fold_diacritics: bool = True) -> str:
     while len(raw_tokens) > 1 and raw_tokens[-1].lower().strip(".,;:") in _GENERATIONAL_SUFFIXES:
         raw_tokens.pop()
 
-    # Strip leading particles first
-    while raw_tokens:
+    # Multi-token all-particle fragments (e.g. "van der") have no real surname token
+    cleaned_no_comma = [
+        _WHITESPACE_RE.sub(
+            " ", _LONE_APOSTROPHE_RE.sub(" ", _strip_punctuation(rt.lower()))
+        ).strip()
+        for rt in raw_tokens
+    ]
+    non_empty_cleaned = [c for c in cleaned_no_comma if c]
+    if len(non_empty_cleaned) >= 2 and all(c in _PARTICLES for c in non_empty_cleaned):
+        return ""
+
+    # Strip leading particles ONLY when followed by a real non-initial, non-particle surname token
+    # (preserves standalone Asian/European surnames like "Du Y.", "Das S.", "El B.", "Le L.").
+    while len(raw_tokens) > 1:
         first_clean = _WHITESPACE_RE.sub(
             " ", _LONE_APOSTROPHE_RE.sub(" ", _strip_punctuation(raw_tokens[0].lower()))
         ).strip()
-        if first_clean in _PURE_PARTICLES:
-            raw_tokens.pop(0)
-        elif first_clean in _AMBIGUOUS_PARTICLES and len(raw_tokens) > 1:
-            # Check if remaining tokens have at least one non-initial token
+        if first_clean in _PARTICLES:
             has_other_surname = any(
-                not _is_initial_token(rt, all_caps_name=all_caps_name)
+                (
+                    _WHITESPACE_RE.sub(
+                        " ", _LONE_APOSTROPHE_RE.sub(" ", _strip_punctuation(rt.lower()))
+                    ).strip()
+                    not in _PARTICLES
+                )
+                and not _is_initial_token(rt, all_caps_name=all_caps_name)
                 for rt in raw_tokens[1:]
             )
             if has_other_surname:
@@ -277,13 +296,117 @@ def _extract_author_signature(
     cleaned = _WHITESPACE_RE.sub(
         " ", _LONE_APOSTROPHE_RE.sub(" ", _strip_punctuation(folded.lower()))
     ).strip()
-    tokens = [
-        t for t in cleaned.split()
-        if t not in _GENERATIONAL_SUFFIXES and t not in _PURE_PARTICLES
-    ]
+    raw_toks_clean = [t for t in cleaned.split() if t and t not in _GENERATIONAL_SUFFIXES]
+    # Preserve standalone/2-token surnames like "Du, Y.", "Du Yu", "Das Sayan", "Batu El"
+    # while still dropping leading nobiliary particles in 3+-token compound names ("J. van der Berg").
+    if len(raw_toks_clean) >= 3:
+        tokens = [
+            t
+            for idx_t, t in enumerate(raw_toks_clean)
+            if t not in _PURE_PARTICLES or idx_t == len(raw_toks_clean) - 1
+        ] or raw_toks_clean
+    else:
+        tokens = raw_toks_clean
     full_tokens = [t for t in tokens if len(t) >= 2]
     initials = {t[0] for t in tokens if t}
     return primary, full_tokens, initials
+
+
+def _extract_single_letter_patronymic_info(
+    author: Author | str, *, fold_diacritics: bool = True
+) -> tuple[str, str, str]:
+    """Extract (mode, single_letter_surname, given_initial) for South Asian / Hungarian patronymics.
+
+    Handles APA-inverted single-letter surnames vs. uninverted given-first names:
+        - "B, P." / "V, V." / "T., I." -> ("comma_single", "b"/"v"/"t", "p"/"v"/"i")
+        - "Premjith B" / "Venktesh V" / "Prasanth S N" / "István Nagy T."
+          -> ("trailing_initial", "b"/"v"/"n"/"t", "p"/"v"/"p"/"i")
+
+    Strictly returns ("", "", "") when:
+        - comma-formatted surname has length != 1 (e.g. "Smith, J.") or lacks a given initial
+        - no-comma form does not end with a standalone single-letter uppercase token (e.g. "John Smith").
+    """
+    raw_str = ""
+    if isinstance(author, Author) or hasattr(author, "last_name"):
+        raw_attr = getattr(author, "raw", "") or ""
+        if isinstance(raw_attr, str) and raw_attr.strip():
+            raw_str = raw_attr.strip()
+        else:
+            ln_raw = str(getattr(author, "last_name", "") or "").strip()
+            inits_raw = getattr(author, "initials", None) or []
+            fn_raw = str(getattr(author, "first_name", "") or "").strip()
+            ln_clean = re.sub(r"[^A-Za-z]", "", _fold_diacritics(ln_raw) if fold_diacritics else ln_raw)
+            if len(ln_clean) == 1:
+                g_src = str(inits_raw[0]) if inits_raw else fn_raw
+                g_letters = re.findall(r"[A-Za-z]", _fold_diacritics(g_src) if fold_diacritics else g_src)
+                if g_letters:
+                    return ("comma_single", ln_clean.lower(), g_letters[0].lower())
+                return ("", "", "")
+            if (
+                len(ln_clean) >= 2
+                and inits_raw
+                and not getattr(author, "full_first_names", None)
+            ):
+                last_init = re.sub(r"[^A-Za-z]", "", str(inits_raw[-1]))
+                if len(last_init) == 1:
+                    return ("trailing_initial", last_init.lower(), ln_clean[0].lower())
+            return ("", "", "")
+    else:
+        raw_str = str(author or "").strip()
+
+    if not raw_str:
+        return ("", "", "")
+    cleaned_raw = _ET_AL_STRIP_RE.sub("", _LEADING_ELLIPSIS_RE.sub("", raw_str)).strip().rstrip(",;:")
+    if not cleaned_raw:
+        return ("", "", "")
+
+    if "," in cleaned_raw:
+        sur_part, rest_part = cleaned_raw.split(",", 1)
+        sur_folded = _fold_diacritics(sur_part) if fold_diacritics else sur_part
+        sur_alpha = re.sub(r"[^A-Za-z]", "", sur_folded)
+        if len(sur_alpha) != 1:
+            return ("", "", "")
+        rest_folded = _fold_diacritics(rest_part) if fold_diacritics else rest_part
+        rest_alpha = re.findall(r"[A-Za-z]", rest_folded)
+        if not rest_alpha:
+            return ("", "", "")
+        return ("comma_single", sur_alpha.lower(), rest_alpha[0].lower())
+
+    # No-comma form: inspect raw tokens BEFORE generational-suffix stripping so "Venktesh V" preserves "V"
+    raw_toks = [t.strip(",;:") for t in cleaned_raw.split() if t.strip(",;:")]
+    if len(raw_toks) < 2:
+        return ("", "", "")
+    last_tok = raw_toks[-1]
+    if not re.fullmatch(r"[A-Z]\.?", last_tok):
+        return ("", "", "")
+    # Require at least one full word (>= 2 letters) before trailing initial(s)
+    lead_tokens_folded = [
+        re.sub(r"[^A-Za-z]", "", _fold_diacritics(t) if fold_diacritics else t)
+        for t in raw_toks[:-1]
+    ]
+    full_lead = [t for t in lead_tokens_folded if len(t) >= 2]
+    if not full_lead:
+        return ("", "", "")
+    first_alpha = lead_tokens_folded[0][0].lower() if lead_tokens_folded[0] else full_lead[0][0].lower()
+    return ("trailing_initial", last_tok[0].lower(), first_alpha)
+
+
+def _is_single_letter_patronymic_match(
+    a: Author | str,
+    b: Author | str,
+    *,
+    fold_diacritics: bool = True,
+) -> bool:
+    """Return True when one author is comma-formatted 'X, Y.' (1-letter surname) and the other is 'Y... X'."""
+    if _has_vietnamese_conflict(a, b):
+        return False
+    mode_a, sur_a, init_a = _extract_single_letter_patronymic_info(a, fold_diacritics=fold_diacritics)
+    if not mode_a:
+        return False
+    mode_b, sur_b, init_b = _extract_single_letter_patronymic_info(b, fold_diacritics=fold_diacritics)
+    if not mode_b or mode_a == mode_b:
+        return False
+    return sur_a == sur_b and init_a == init_b
 
 
 def _is_swapped_author_match(
@@ -523,11 +646,194 @@ def _first_author_matches(
         _extract_author_signature(first_cand, fold_diacritics=fold_diacritics),
     ):
         return True
+    if _is_single_letter_patronymic_match(first_c, first_cand, fold_diacritics=fold_diacritics):
+        return True
     c_corp = _extract_corporate_keys(first_c, fold_diacritics=fold_diacritics)
     cand_corp = _extract_corporate_keys(first_cand, fold_diacritics=fold_diacritics)
     if c_corp and cand_corp and (c_corp & cand_corp):
         return True
     return False
+
+
+def _resolve_author_alignment(
+    cited: list,
+    candidate: list,
+    *,
+    fold_diacritics: bool = True,
+    has_et_al: bool = False,
+) -> tuple[float, set[str], set[str]]:
+    """Shared reconciled alignment engine for both author_match_score() and author_match_details().
+
+    Returns (score, cited_set, reconciled_cand_set) where swapped East-Asian, South-Asian
+    single-letter patronymic, and corporate matches add the cited canonical key into
+    reconciled_cand_set and replace the consumed candidate key when unique so
+    author_match_details().only_cited / only_candidate stay 100% consistent with score.
+    """
+    cited_set = _to_last_name_set(cited, fold_diacritics=fold_diacritics)
+    cand_set = _to_last_name_set(candidate, fold_diacritics=fold_diacritics)
+    if not cited_set or not cand_set:
+        return 0.0, cited_set, cand_set
+
+    # Remove false-positive canonical last-name collisions caused by conflicting Vietnamese diacritics
+    # (e.g. "Nguyễn" vs "Nguyên") or distinct Vietnamese family names sharing a given name
+    # (e.g. "Nguyễn Văn An" vs "Trần Văn An", "Đỗ Văn An" vs "Đào Văn An").
+    if fold_diacritics and (cited_set & cand_set):
+        for idx_c, shared_ln in enumerate(list(cited_set & cand_set)):
+            c_matching = [a for a in cited if _author_to_last_name(a, fold_diacritics=True) == shared_ln]
+            b_matching = [b for b in candidate if _author_to_last_name(b, fold_diacritics=True) == shared_ln]
+            if c_matching and b_matching and all(
+                _has_vietnamese_conflict(ca, cb) for ca in c_matching for cb in b_matching
+            ):
+                cand_set.discard(shared_ln)
+                cand_set.add(f"__vn_conflict_{idx_c}__")
+
+    effective_has_et_al = _has_et_al_indicator(cited, has_et_al=has_et_al)
+    consumed_cand_keys: set[str] = set()
+
+    # 1-to-1 candidate claiming prevents 2-to-1 collapse (e.g. ["Du, Y.", "Yu, D."] vs ["Du Yu"])
+    # and ensures shared-surname pairs (e.g. ["B, P.", "B, S."] vs ["Premjith B", "Suresh B"])
+    # reconcile distinct candidate tokens cleanly without leaking into only_candidate.
+    cited_sigs = [(a, _extract_author_signature(a, fold_diacritics=fold_diacritics)) for a in cited]
+    cand_sigs = [(b, _extract_author_signature(b, fold_diacritics=fold_diacritics)) for b in candidate]
+    used_cited_indices: set[int] = set()
+    used_cand_indices: set[int] = set()
+    direct_matched_keys: set[str] = set()
+
+    for idx_a, (a_obj, sig_c) in enumerate(cited_sigs):
+        prim_c = sig_c[0]
+        if not prim_c or prim_c not in cand_set:
+            continue
+        for idx_b, (b_obj, sig_b) in enumerate(cand_sigs):
+            if idx_b in used_cand_indices:
+                continue
+            if sig_b[0] == prim_c and not _has_vietnamese_conflict(a_obj, b_obj):
+                used_cited_indices.add(idx_a)
+                used_cand_indices.add(idx_b)
+                direct_matched_keys.add(prim_c)
+                break
+
+    # Augment cand_set with 1-to-1 swapped East-Asian, single-letter patronymic, and corporate matches
+    if len(used_cited_indices) < len(cited_sigs):
+        for idx_a, (a_obj, sig_c) in enumerate(cited_sigs):
+            if idx_a in used_cited_indices or not sig_c[0]:
+                continue
+            prim_c = sig_c[0]
+            for idx_b, (b_obj, sig_b) in enumerate(cand_sigs):
+                if idx_b in used_cand_indices:
+                    continue
+                if not _has_vietnamese_conflict(a_obj, b_obj) and (
+                    _is_swapped_author_match(sig_c, sig_b)
+                    or _is_single_letter_patronymic_match(
+                        a_obj, b_obj, fold_diacritics=fold_diacritics
+                    )
+                ):
+                    used_cited_indices.add(idx_a)
+                    used_cand_indices.add(idx_b)
+                    cand_set.add(prim_c)
+                    if sig_b[0] and sig_b[0] not in direct_matched_keys:
+                        still_unclaimed_same_key = any(
+                            j not in used_cand_indices and cand_sigs[j][1][0] == sig_b[0]
+                            for j in range(len(cand_sigs))
+                        )
+                        if not still_unclaimed_same_key:
+                            consumed_cand_keys.add(sig_b[0])
+                    break
+        # Systematic East-Asian GivenName, SurnameInitial <-> Surname, GivenInitial across >=2 co-authors
+        if len(cited_sigs) >= 2 and len(cand_sigs) >= 2:
+            mutual_pairs: list[tuple[int, int, str, str]] = []
+            tentative_b: set[int] = set(used_cand_indices)
+            for idx_a, (a_obj, (prim_c, full_c, init_c)) in enumerate(cited_sigs):
+                if idx_a in used_cited_indices or not prim_c or prim_c in cand_set or len(full_c) != 1:
+                    continue
+                given_c = init_c - {prim_c[0]}
+                if len(given_c) != 1:
+                    continue
+                for idx_b, (b_obj, (prim_b, full_b, init_b)) in enumerate(cand_sigs):
+                    if idx_b in tentative_b or not prim_b or len(full_b) != 1 or _has_vietnamese_conflict(a_obj, b_obj):
+                        continue
+                    given_b = init_b - {prim_b[0]}
+                    if given_c == {prim_b[0]} and given_b == {prim_c[0]}:
+                        mutual_pairs.append((idx_a, idx_b, prim_c, prim_b))
+                        tentative_b.add(idx_b)
+                        break
+            if len({p[2] for p in mutual_pairs}) >= 2:
+                for idx_a, idx_b, pc, pb in mutual_pairs:
+                    used_cited_indices.add(idx_a)
+                    used_cand_indices.add(idx_b)
+                    cand_set.add(pc)
+                    if pb and pb not in direct_matched_keys:
+                        still_unclaimed_same_key = any(
+                            j not in used_cand_indices and cand_sigs[j][1][0] == pb
+                            for j in range(len(cand_sigs))
+                        )
+                        if not still_unclaimed_same_key:
+                            consumed_cand_keys.add(pb)
+        # Check corporate / institutional acronym & full-name equivalence (e.g. "WHO" <-> "World Health Organization")
+        for idx_a, (a_obj, sig_c) in enumerate(cited_sigs):
+            prim_c = sig_c[0]
+            if idx_a in used_cited_indices or not prim_c or prim_c in cand_set:
+                continue
+            c_corp = _extract_corporate_keys(a_obj, fold_diacritics=fold_diacritics)
+            if c_corp:
+                for idx_b, (b_obj, sig_b) in enumerate(cand_sigs):
+                    if idx_b in used_cand_indices:
+                        continue
+                    b_corp = _extract_corporate_keys(b_obj, fold_diacritics=fold_diacritics)
+                    if c_corp & b_corp:
+                        used_cited_indices.add(idx_a)
+                        used_cand_indices.add(idx_b)
+                        cand_set.add(prim_c)
+                        prim_b = sig_b[0]
+                        if prim_b and prim_b not in direct_matched_keys:
+                            still_unclaimed_same_key = any(
+                                j not in used_cand_indices and cand_sigs[j][1][0] == prim_b
+                                for j in range(len(cand_sigs))
+                            )
+                            if not still_unclaimed_same_key:
+                                consumed_cand_keys.add(prim_b)
+                        break
+
+    reconciled_cand_set = cand_set - consumed_cand_keys
+    if not reconciled_cand_set:
+        reconciled_cand_set = set(cand_set)
+
+    # Restrict 1.0 subset shortcut to et al., multi-author subset (>=2),
+    # single-author candidate, or first-author surname match.
+    if cited_set <= reconciled_cand_set:
+        if (
+            effective_has_et_al
+            or len(cited_set) >= 2
+            or len(reconciled_cand_set) == 1
+            or _first_author_matches(cited, candidate, fold_diacritics=fold_diacritics)
+        ):
+            return 1.0, cited_set, reconciled_cand_set
+        return max(len(cited_set & reconciled_cand_set) / len(reconciled_cand_set), 0.55), cited_set, reconciled_cand_set
+    if len(reconciled_cand_set) == 1 and reconciled_cand_set <= cited_set and cited:
+        first_cited = _author_to_last_name(cited[0], fold_diacritics=fold_diacritics)
+        if first_cited and first_cited in reconciled_cand_set:
+            return 1.0, cited_set, reconciled_cand_set
+
+    intersect = len(cited_set & reconciled_cand_set)
+    # Fallback: check prefix/suffix/apostrophe match for compound tokens (len >= 5)
+    if intersect == 0:
+        prefix_matches = sum(
+            1
+            for ca in cited_set
+            if len(ca) >= 4
+            and any(
+                len(cb) >= 4
+                and (
+                    ca.replace("'", "") == cb.replace("'", "")
+                    or (len(ca) >= 5 and len(cb) >= 5 and (ca.startswith(cb) or cb.startswith(ca) or ca.endswith(cb) or cb.endswith(ca)))
+                )
+                for cb in reconciled_cand_set
+            )
+        )
+        if prefix_matches > 0:
+            return prefix_matches / len(cited_set), cited_set, reconciled_cand_set
+        return 0.0, cited_set, reconciled_cand_set
+    union = len(cited_set | reconciled_cand_set)
+    return (intersect / union if union else 0.0), cited_set, reconciled_cand_set
 
 
 def author_match_score(
@@ -544,108 +850,17 @@ def author_match_score(
     first author matches any candidate author (common in short citations
     like "Settles, B (2012)").
     FIX Phase 3 (BUG-21): Handles East Asian swapped Given/Family name order
-    (e.g. "Wei, G." vs "Wei Guodong" or "Guodong, W." vs "Guodong Wei").
+    (e.g. "Wei, G." vs "Wei Guodong" or "Guodong, W." vs "Guodong Wei"),
+    standalone particle surnames ("Du, Y." vs "Yucheng Du"), and South Asian /
+    Hungarian single-letter patronymic surnames ("B, P." vs "Premjith B").
     """
-    cited_set = _to_last_name_set(cited, fold_diacritics=fold_diacritics)
-    cand_set = _to_last_name_set(candidate, fold_diacritics=fold_diacritics)
-    if not cited_set or not cand_set:
-        return 0.0
-
-    # Remove false-positive canonical last-name collisions caused by conflicting Vietnamese diacritics
-    # (e.g. "Nguyễn" vs "Nguyên") or distinct Vietnamese family names sharing a given name
-    # (e.g. "Nguyễn Văn An" vs "Trần Văn An", "Đỗ Văn An" vs "Đào Văn An").
-    if fold_diacritics and (cited_set & cand_set):
-        for idx_c, shared_ln in enumerate(list(cited_set & cand_set)):
-            c_Matching = [a for a in cited if _author_to_last_name(a, fold_diacritics=True) == shared_ln]
-            b_Matching = [b for b in candidate if _author_to_last_name(b, fold_diacritics=True) == shared_ln]
-            if c_Matching and b_Matching and all(
-                _has_vietnamese_conflict(ca, cb) for ca in c_Matching for cb in b_Matching
-            ):
-                cand_set.discard(shared_ln)
-                cand_set.add(f"__vn_conflict_{idx_c}__")
-
-    effective_has_et_al = _has_et_al_indicator(cited, has_et_al=has_et_al)
-
-    # Augment cand_set with any swapped East-Asian / 2-token matches
-    if not (cited_set <= cand_set):
-        cited_sigs = [(a, _extract_author_signature(a, fold_diacritics=fold_diacritics)) for a in cited]
-        cand_sigs = [(b, _extract_author_signature(b, fold_diacritics=fold_diacritics)) for b in candidate]
-        for a_obj, sig_c in cited_sigs:
-            prim_c = sig_c[0]
-            if prim_c and prim_c not in cand_set:
-                if any(
-                    not _has_vietnamese_conflict(a_obj, b_obj) and _is_swapped_author_match(sig_c, sig_b)
-                    for b_obj, sig_b in cand_sigs
-                ):
-                    cand_set.add(prim_c)
-        # Systematic East-Asian GivenName, SurnameInitial <-> Surname, GivenInitial across >=2 co-authors
-        if len(cited_sigs) >= 2 and len(cand_sigs) >= 2:
-            mutual_init_matches: list[str] = []
-            for a_obj, (prim_c, full_c, init_c) in cited_sigs:
-                if not prim_c or prim_c in cand_set or len(full_c) != 1:
-                    continue
-                given_c = init_c - {prim_c[0]}
-                if len(given_c) != 1:
-                    continue
-                for b_obj, (prim_b, full_b, init_b) in cand_sigs:
-                    if not prim_b or len(full_b) != 1 or _has_vietnamese_conflict(a_obj, b_obj):
-                        continue
-                    given_b = init_b - {prim_b[0]}
-                    if given_c == {prim_b[0]} and given_b == {prim_c[0]}:
-                        mutual_init_matches.append(prim_c)
-                        break
-            if len(set(mutual_init_matches)) >= 2:
-                cand_set.update(mutual_init_matches)
-        # Check corporate / institutional acronym & full-name equivalence (e.g. "WHO" <-> "World Health Organization")
-        for a in cited:
-            prim_c = _author_to_last_name(a, fold_diacritics=fold_diacritics)
-            if not prim_c or prim_c in cand_set:
-                continue
-            c_corp = _extract_corporate_keys(a, fold_diacritics=fold_diacritics)
-            if c_corp:
-                for b in candidate:
-                    b_corp = _extract_corporate_keys(b, fold_diacritics=fold_diacritics)
-                    if c_corp & b_corp:
-                        cand_set.add(prim_c)
-                        break
-
-    # Restrict 1.0 subset shortcut to et al., multi-author subset (>=2),
-    # single-author candidate, or first-author surname match.
-    if cited_set <= cand_set:
-        if (
-            effective_has_et_al
-            or len(cited_set) >= 2
-            or len(cand_set) == 1
-            or _first_author_matches(cited, candidate, fold_diacritics=fold_diacritics)
-        ):
-            return 1.0  # Exact subset match (et al. truncation, multi-author, or first-author match)
-        return max(len(cited_set & cand_set) / len(cand_set), 0.55)
-    if len(cand_set) == 1 and cand_set <= cited_set and cited:
-        first_cited = _author_to_last_name(cited[0], fold_diacritics=fold_diacritics)
-        if first_cited and first_cited in cand_set:
-            return 1.0  # Cited entry also listed editors/introducers alongside primary author
-
-    intersect = len(cited_set & cand_set)
-    # Fallback: check prefix/suffix/apostrophe match for compound tokens (len >= 5)
-    if intersect == 0:
-        prefix_matches = sum(
-            1
-            for ca in cited_set
-            if len(ca) >= 4
-            and any(
-                len(cb) >= 4
-                and (
-                    ca.replace("'", "") == cb.replace("'", "")
-                    or (len(ca) >= 5 and len(cb) >= 5 and (ca.startswith(cb) or cb.startswith(ca) or ca.endswith(cb) or cb.endswith(ca)))
-                )
-                for cb in cand_set
-            )
-        )
-        if prefix_matches > 0:
-            return prefix_matches / len(cited_set)
-        return 0.0
-    union = len(cited_set | cand_set)
-    return intersect / union if union else 0.0
+    score, _, _ = _resolve_author_alignment(
+        cited,
+        candidate,
+        fold_diacritics=fold_diacritics,
+        has_et_al=has_et_al,
+    )
+    return score
 
 
 def author_match_details(
@@ -655,7 +870,7 @@ def author_match_details(
     fold_diacritics: bool = True,
     has_et_al: bool = False,
 ) -> AuthorMatchResult:
-    """Trả về chi tiết match (để debug/log).
+    """Trả về chi tiết match (để debug/log), đồng bộ với author_match_score().
 
     Args:
         cited: Citation.authors.
@@ -668,16 +883,16 @@ def author_match_details(
             - only_cited: list[last_name] chỉ có ở cited
             - only_candidate: list[last_name] chỉ có ở candidate
     """
-    cited_set = _to_last_name_set(cited, fold_diacritics=fold_diacritics)
-    cand_set = _to_last_name_set(candidate, fold_diacritics=fold_diacritics)
-    matched = sorted(cited_set & cand_set)
-    only_cited = sorted(cited_set - cand_set)
-    only_cand = sorted(cand_set - cited_set)
-    score = (
-        author_match_score(cited, candidate, fold_diacritics=fold_diacritics, has_et_al=has_et_al)
-        if (cited_set and cand_set)
-        else 0.0
+    score, cited_set, reconciled_cand_set = _resolve_author_alignment(
+        cited,
+        candidate,
+        fold_diacritics=fold_diacritics,
+        has_et_al=has_et_al,
     )
+    visible_cand = {k for k in reconciled_cand_set if not k.startswith("__vn_conflict_")}
+    matched = sorted(cited_set & visible_cand)
+    only_cited = sorted(cited_set - visible_cand)
+    only_cand = sorted(visible_cand - cited_set)
     return AuthorMatchResult(
         score=score,
         matched=matched,

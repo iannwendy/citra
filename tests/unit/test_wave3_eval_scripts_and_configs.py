@@ -735,7 +735,7 @@ class TestConfigsPackagingCiAndDocsParity:
         assert f"{prop_ece_str}_ECE" in readme
         assert b5_id_acc_pct in readme
         assert b5_ood_acc_pct in readme
-        for stale_tok in ("99.01%", "99.01%25", "0.9881", "0.0394"):
+        for stale_tok in ("99.01%", "99.01%25", "0.9881", "99.20%", "99.20%25", "0.9903", "0.0411"):
             assert stale_tok not in readme
             assert stale_tok not in bench_report_md
         landing_src = (REPO_ROOT / "web" / "src" / "pages" / "LandingPage.tsx").read_text(
@@ -751,7 +751,7 @@ class TestConfigsPackagingCiAndDocsParity:
         assert prop_ece_str in landing_src
         assert prop_acc_pct in pricing_src
         assert prop_acc_pct in auth_shell_src
-        for stale_web in ("98.58", "97.18%", "0.0433", "2.1621", "99.86"):
+        for stale_web in ("98.58", "97.18%", "0.0433", "2.1621", "99.86", "99.20", "0.0411", "1.8304"):
             assert stale_web not in landing_src
             assert stale_web not in pricing_src
         assert "/api/auth/token" not in readme

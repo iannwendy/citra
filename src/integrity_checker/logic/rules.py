@@ -29,7 +29,10 @@ from integrity_checker.config import get_settings
 from integrity_checker.logging import get_logger
 from integrity_checker.logic.completeness import assess_bibliographic_completeness
 from integrity_checker.matching.author_matcher import (
+    _extract_author_signature,
     _extract_corporate_keys,
+    _is_single_letter_patronymic_match,
+    _is_swapped_author_match,
     author_match_details,
 )
 from integrity_checker.matching.author_matcher import (
@@ -91,6 +94,13 @@ _NON_VENUE_WRAPPER_RE = re.compile(
 )
 
 
+_PREPRINT_ONLY_WRAPPER_RE = re.compile(
+    r"\b(?:arxiv|corr|preprints?|biorxiv|medrxiv|chemrxiv|techrxiv|psyarxiv|ssrn|hal|"
+    r"zenodo|openreview|research\s+square|researchgate)\b",
+    re.IGNORECASE,
+)
+
+
 def _normalize_greek_tokens(text: str) -> str:
     out = text
     for gr, en in _GREEK_TITLE_MAP.items():
@@ -102,7 +112,10 @@ _TITLE_MEDIUM_BRACKET_RE = re.compile(
     r"\s*\[(?:online|preprint|internet|web|software|computer\s+software|"
     r"dataset|electronic\s+resource|accessed[^\]]*|trực\s+tuyến|"
     r"in\s+(?:french|chinese|german|spanish|russian|japanese|korean|vietnamese|"
-    r"italian|portuguese|arabic|dutch|polish|turkish|hindi)|translated\s+from[^\]]*)\]",
+    r"italian|portuguese|arabic|dutch|polish|turkish|hindi|norwegian|swedish|"
+    r"danish|finnish|czech|greek|hebrew|persian|thai|indonesian|malay|"
+    r"ukrainian|romanian|hungarian|bulgarian|catalan|latin|english)|"
+    r"translated\s+from[^\]]*)\]",
     re.IGNORECASE,
 )
 _TECH_STANDARD_PREFIX_RE = re.compile(
@@ -228,6 +241,8 @@ def _has_contradictory_title_tokens(
     b_norm = _normalize_greek_tokens(_fold_author_diacritics(best_clean).lower())
     c_dehyph = re.sub(r"(?<=[a-z0-9])-(?=[a-z0-9])", "", c_norm)
     b_dehyph = re.sub(r"(?<=[a-z0-9])-(?=[a-z0-9])", "", b_norm)
+    if c_norm == b_norm or c_dehyph == b_dehyph:
+        return False
     b_words = re.findall(r"[a-z0-9]+", b_norm)
     b_toks = list(
         dict.fromkeys(
@@ -301,7 +316,7 @@ def _has_contradictory_title_tokens(
             else 1.0
         )
         if is_cjk_mixed or allcaps_ratio < 0.50:
-            for acr in re.findall(r"(?<![A-Za-z])[A-Z]{2,3}(?![A-Za-z])", cited_clean_for_tokens):
+            for acr in re.findall(r"(?<![A-Za-z0-9])[A-Z]{2,3}(?![A-Za-z0-9])", cited_clean_for_tokens):
                 if acr in _UPPER_ACRONYM_STOP_2_3:
                     continue
                 low_acr = acr.lower()
@@ -522,17 +537,43 @@ def _lead_author_compatible(
     citation_authors: list[str] | None,
     candidate_authors: list[str] | None,
 ) -> bool:
-    """Verify lead cited surname matches a candidate author without conflicting given-name initials."""
+    """Verify lead cited author matches a candidate author without conflicting given-name initials,
+    including East-Asian swapped order and South-Asian/Hungarian single-letter patronymic surnames."""
     if not citation_authors or not candidate_authors:
         return False
-    c_sur, c_init = _extract_surname_and_initial(citation_authors[0])
-    if not c_sur:
-        return False
+    lead_cited = citation_authors[0]
+    c_sur, c_init = _extract_surname_and_initial(lead_cited)
+    if c_sur:
+        for ba in candidate_authors:
+            b_sur, b_init = _extract_surname_and_initial(ba)
+            if b_sur == c_sur and (not c_init or not b_init or c_init == b_init):
+                return True
+    lead_sig = _extract_author_signature(lead_cited, fold_diacritics=True)
     for ba in candidate_authors:
-        b_sur, b_init = _extract_surname_and_initial(ba)
-        if b_sur == c_sur and (not c_init or not b_init or c_init == b_init):
+        if _is_single_letter_patronymic_match(lead_cited, ba, fold_diacritics=True):
+            return True
+        ba_sig = _extract_author_signature(ba, fold_diacritics=True)
+        if lead_sig[0] and ba_sig[0] and lead_sig[0] != ba_sig[0] and _is_swapped_author_match(lead_sig, ba_sig):
             return True
     return False
+
+
+def _all_cited_initials_compatible(
+    citation_authors: Sequence[Any] | None,
+    candidate_authors: Sequence[Any] | None,
+) -> bool:
+    """Return True when every cited author with a given initial matches candidate authors without initial conflict."""
+    if not citation_authors or not candidate_authors:
+        return False
+    cand_pairs = [_extract_surname_and_initial(ba) for ba in candidate_authors]
+    for ca in citation_authors:
+        c_sur, c_init = _extract_surname_and_initial(ca)
+        if not c_sur or not c_init:
+            continue
+        same_sur = [b_init for b_sur, b_init in cand_pairs if b_sur == c_sur]
+        if same_sur and not any((not b_init or b_init == c_init) for b_init in same_sur):
+            return False
+    return True
 
 _VENUE_STOP_TOKENS: frozenset[str] = frozenset(
     {
@@ -2251,7 +2292,7 @@ class SymbolicRules:
                     mismatched_fields=[],
                     style_penalty=style_penalty,
                 )
-            if url_status in ("dead_link", "fake_domain") and not is_known_author:
+            if url_status in ("dead_link", "fake_domain"):
                 if url_status == "fake_domain":
                     status_detail = "non-existent domain (DNS NXDOMAIN)"
                     dead_rule_id = "R-FAKE-URL"
@@ -2364,7 +2405,6 @@ class SymbolicRules:
                 and (len(clean_empty_sources) >= 1 or len(verified_sources) >= 1)
                 and not rate_limited_sources
                 and not (citation_doi and str(citation_doi).strip())
-                and not is_known_author
             ):
                 if not _is_exempt_from_incomplete_metadata(
                     citation_raw or source.citation_raw,
@@ -2394,19 +2434,28 @@ class SymbolicRules:
                 str(citation_year) if citation_year is not None else None,
             )
 
-            primary_graph_degraded = any(
-                s in ("crossref", "openalex") for s in rate_limited_sources
+            clean_empty_set = set(clean_empty_sources)
+            failed_map = source.sources_failed or {}
+            both_primary_graphs_errored = bool(
+                "crossref" in failed_map
+                and "openalex" in failed_map
+                and "crossref" not in clean_empty_set
+                and "openalex" not in clean_empty_set
+            )
+            primary_graph_degraded = bool(
+                any(s in ("crossref", "openalex") for s in rate_limited_sources)
+                or both_primary_graphs_errored
             )
 
             # When >= 2 live scholarly registries responded cleanly (HTTP 200) and found
             # zero matching records for a substantive citation, flag as SUSPECTED_HALLUCINATION
-            # UNLESS a primary graph (Crossref/OpenAlex) is rate-limited/circuit-open or the
+            # UNLESS a primary graph (Crossref/OpenAlex) is rate-limited/errored or the
             # reference is a non-journal source (book, classical/Bible text, web URL,
-            # thesis, or legal/gov report — BUG-22).
+            # thesis, or legal/gov report — BUG-22). Seminal author names receive NO blanket
+            # immunity here because LLM hallucinations routinely attach famous authors to fake papers.
             if (
                 has_substantive_meta
                 and len(clean_empty_sources) >= 2
-                and not is_known_author
                 and not primary_graph_degraded
             ):
                 if citation_doi and str(citation_doi).strip():
@@ -2471,7 +2520,7 @@ class SymbolicRules:
                     style_penalty=style_penalty,
                 )
 
-            if source.sources_failed and not source.sources_succeeded:
+            if source.sources_failed and not source.sources_succeeded and not clean_empty_sources:
                 rules_out = ["R-FAIL-ALL"]
                 reasoning_msg = (
                     "All external scholarly APIs failed or timed out — insufficient evidence to conclude."
@@ -3655,6 +3704,58 @@ class SymbolicRules:
             if (citation_authors and best and best.authors)
             else None
         )
+        _no_unmatched_cited_authors = bool(
+            not citation_authors
+            or not best
+            or not best.authors
+            or (_author_details_4a2 is not None and not _author_details_4a2.only_cited)
+        )
+        _no_unmatched_cand_authors = bool(
+            not citation_authors
+            or not best
+            or not best.authors
+            or (_author_details_4a2 is not None and not _author_details_4a2.only_candidate)
+        )
+        _has_specific_venue_match = bool(
+            _venue_sim_val >= 0.80
+            and citation_venue
+            and best
+            and best.venue
+            and not _PREPRINT_ONLY_WRAPPER_RE.search(str(citation_venue))
+            and not _PREPRINT_ONLY_WRAPPER_RE.search(str(best.venue))
+        )
+        _has_exact_multi_author_venue_corroboration = bool(
+            citation_authors
+            and len(citation_authors) >= 2
+            and best
+            and best.authors
+            and len(best.authors) >= 2
+            and author_sim >= 0.999
+            and _no_unmatched_cited_authors
+            and _no_unmatched_cand_authors
+            and _lead_author_compatible(citation_authors, best.authors)
+            and _all_cited_initials_compatible(citation_authors, best.authors)
+            and _has_specific_venue_match
+        )
+        _is_single_source_semantic_only_noise = bool(
+            consensus == 1
+            and not doi_match
+            and not is_cross_lingual_title
+            and features.title_sim_fuzzy < 0.55
+            and features.title_sim_semantic < 0.72
+            and not (
+                author_sim >= 0.85
+                and _no_unmatched_cited_authors
+                and (
+                    (year_dist is not None and abs(year_dist) <= 1 and features.title_sim_fuzzy >= 0.52)
+                    or (
+                        _has_exact_multi_author_venue_corroboration
+                        and year_dist is not None
+                        and abs(year_dist) <= 2
+                    )
+                )
+            )
+        )
         _has_compound_lead_match_4a2 = bool(
             (_author_details_4a2 and len(_author_details_4a2.matched) >= 2)
             or _lead_author_compatible(citation_authors, best.authors if best else None)
@@ -3679,6 +3780,7 @@ class SymbolicRules:
                 )
                 or (
                     self.title_sim_metadata_error <= title_sim < self.title_sim_verified
+                    and not _is_single_source_semantic_only_noise
                     and (
                         author_sim >= 0.30
                         or year_dist <= 2
@@ -3736,7 +3838,13 @@ class SymbolicRules:
             ) if best.title else 0
             has_quality_candidate = title_sim_for_check >= 0.3
 
-        if is_known_author and has_verified_sources and has_quality_candidate and author_sim >= 0.5:
+        if (
+            is_known_author
+            and has_verified_sources
+            and has_quality_candidate
+            and author_sim >= 0.5
+            and _no_unmatched_cited_authors
+        ):
             # Only apply METADATA_ERROR if we have quality evidence
             if 0.3 <= title_sim < self.title_sim_verified:
                 triggered_rules.append("R-KNOWN-AUTHOR-TITLE-MISMATCH")
@@ -3826,6 +3934,17 @@ class SymbolicRules:
                 and (
                     (consensus >= 1 and author_sim >= 0.15 and (year_dist is None or year_dist >= 900 or abs(year_dist) <= 4))
                     or (author_sim >= 0.75 and (year_dist is None or year_dist >= 900 or abs(year_dist) <= 2))
+                    or (
+                        consensus >= 1
+                        and _lead_author_compatible(citation_authors, best.authors if best else None)
+                        and features.title_sim_fuzzy >= 0.50
+                        and (year_dist is None or year_dist >= 900 or abs(year_dist) <= 4)
+                        and (
+                            consensus >= 2
+                            or _has_specific_venue_match
+                            or (year_dist is not None and abs(year_dist) <= 1)
+                        )
+                    )
                 )
             ):
                 triggered_rules.append("R-DOMAIN-EXCEPTION")
@@ -3859,9 +3978,19 @@ class SymbolicRules:
             )
 
         # --- Rule 4e: Reachable or Wayback-archived URL resource with no DOI and no scholarly match → RESOURCE ---
+        _is_scholarly_paper_url_4e = bool(
+            citation_url
+            and re.search(
+                r"(?:doi\.org|arxiv\.org|aclanthology\.org|ieeexplore\.ieee\.org|dl\.acm\.org|link\.springer\.com|sciencedirect\.com)",
+                citation_url,
+                re.IGNORECASE,
+            )
+        )
         if (
             citation_url
             and not (citation_doi and str(citation_doi).strip())
+            and not _is_scholarly_paper_url_4e
+            and not _is_single_source_semantic_only_noise
             and url_status == "archived_alive"
             and not is_known_author
         ):
@@ -3881,6 +4010,8 @@ class SymbolicRules:
         if (
             citation_url
             and not (citation_doi and str(citation_doi).strip())
+            and not _is_scholarly_paper_url_4e
+            and not _is_single_source_semantic_only_noise
             and url_status in ("alive", "restricted_alive")
             and not is_known_author
         ):
@@ -4006,27 +4137,30 @@ class SymbolicRules:
                 style_penalty=style_penalty,
             )
 
-        # --- Rule 4g (Pillar 1): Strong Author-Year Consensus with Corrupted Title in [0.42, 0.60) ---
-        _no_unmatched_cited_authors = bool(
-            not citation_authors
-            or not best
-            or not best.authors
-            or not author_match_details(citation_authors, best.authors).only_cited
-        )
+        # --- Rule 4g (Pillar 1): Strong Author-Year Consensus with Corrupted Title in [0.32, 0.60) ---
         if (
             _has_live_source(source, verified_sources)
             and not doi_match
             and not has_doi_conflict
-            and 0.42 <= title_sim < self.title_sim_metadata_error
             and year_dist is not None
             and abs(year_dist) <= 2
             and (
-                (consensus >= 2 and author_sim >= 0.75)
+                (
+                    0.42 <= title_sim < self.title_sim_metadata_error
+                    and (
+                        (consensus >= 2 and author_sim >= 0.75)
+                        or (
+                            author_sim >= 0.85
+                            and abs(year_dist) <= 1
+                            and features.title_sim_fuzzy >= 0.52
+                            and _no_unmatched_cited_authors
+                        )
+                    )
+                )
                 or (
-                    author_sim >= 0.85
-                    and abs(year_dist) <= 1
-                    and features.title_sim_fuzzy >= 0.52
-                    and _no_unmatched_cited_authors
+                    0.32 <= title_sim < self.title_sim_metadata_error
+                    and features.title_sim_fuzzy >= 0.32
+                    and _has_exact_multi_author_venue_corroboration
                 )
             )
         ):
@@ -4067,14 +4201,31 @@ class SymbolicRules:
             and year_dist is not None
             and abs(year_dist) <= 3
             and 0.25 <= title_sim < self.title_sim_metadata_error
-            and not (is_known_author and author_sim >= 0.50 and title_sim < self.abstention_low)
+            and not (
+                is_known_author
+                and author_sim >= 0.50
+                and _no_unmatched_cited_authors
+                and title_sim < self.abstention_low
+            )
+        )
+        is_single_source_semantic_border = bool(
+            _is_single_source_semantic_only_noise
+            and self.title_sim_metadata_error <= title_sim < self.title_sim_verified
+            and author_sim > 0.0
         )
         if (
             (self.abstention_low <= title_sim <= self.abstention_high and not is_semantic_only_noise)
             or is_partial_author_grey_zone
+            or is_single_source_semantic_border
         ):
             triggered_rules.append("R-ABSTENTION-BORDER")
-            if is_partial_author_grey_zone and title_sim < self.abstention_low:
+            if is_single_source_semantic_border:
+                border_reason = (
+                    f"Single-source candidate has low lexical title similarity ({features.title_sim_fuzzy:.2f}) "
+                    f"with borderline semantic similarity ({features.title_sim_semantic:.2f}) — "
+                    f"system abstains for manual review."
+                )
+            elif is_partial_author_grey_zone and title_sim < self.abstention_low:
                 border_reason = (
                     f"Partial author overlap (author_sim={author_sim:.2f}) and plausible publication year "
                     f"(year_dist={year_dist}) with grey-zone title similarity ({title_sim:.2f} in "
@@ -4096,7 +4247,12 @@ class SymbolicRules:
 
         # --- Rule fallback ---
         triggered_rules.append("R-WEAK-EVIDENCE")
-        if is_known_author and sources_found > 0 and author_sim >= 0.5:
+        if (
+            is_known_author
+            and sources_found > 0
+            and author_sim >= 0.5
+            and _no_unmatched_cited_authors
+        ):
             best = source.best_candidate()
             has_quality = best and best.title and best.title.lower() not in ["", "unknown", "n/a"]
 

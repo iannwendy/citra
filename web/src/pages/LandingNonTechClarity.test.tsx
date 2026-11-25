@@ -286,10 +286,10 @@ describe('Task 2.1 — Human-First Copywriting & Collapsible Progressive Disclos
           : 'View Full Technical Methodology & Benchmark Tables',
       );
 
-      // Default collapsed state shows 120,000 / 120.000 & 99.20% / 99,20% with zero Platt ECE / OOD / HybridMLScorer / raw enum tables
+      // Default collapsed state shows 120,000 / 120.000 & 99.67% / 99,67% with zero Platt ECE / OOD / HybridMLScorer / raw enum tables
       const collapsedBenchText = bench.textContent ?? '';
       expect(collapsedBenchText).toContain(lang === 'vi' ? '120.000' : '120,000');
-      expect(collapsedBenchText).toContain(lang === 'vi' ? '99,20%' : '99.20%');
+      expect(collapsedBenchText).toContain(lang === 'vi' ? '99,67%' : '99.67%');
       expect(collapsedBenchText).not.toMatch(
         /Platt|\bECE\b|\bOOD\b|HybridMLScorer|SUSPECTED_HALLUCINATION|np\.clip|McNemar/,
       );
@@ -328,7 +328,7 @@ describe('Task 2.1 — Human-First Copywriting & Collapsible Progressive Disclos
         name: /platt calibration & 95% ci|hiệu chỉnh platt & bootstrap 95% ci/i,
       });
       fireEvent.click(calibrationTab);
-      expect(bench.textContent).toContain('0.0411');
+      expect(bench.textContent).toContain('0.0405');
 
       if (lang === 'vi') {
         // Even with technical drawers expanded in VI, thousand separators strictly use dots

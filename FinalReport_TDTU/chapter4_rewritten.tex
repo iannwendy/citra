@@ -46,7 +46,7 @@
 \begin{figure}[H]
     \centering
     \includegraphics[width=\textwidth,keepaspectratio]{picture/figures/fig4_1_architecture.png}
-    \caption[Eight-layer software architecture and graceful degradation contracts]{Eight-layer software architecture of CITRA (\texttt{v3.90.6}) showing inter-layer contracts and graceful degradation fallbacks.}
+    \caption[Eight-layer software architecture and graceful degradation contracts]{Eight-layer software architecture of CITRA (\texttt{v3.90.7}) showing inter-layer contracts and graceful degradation fallbacks.}
     \label{fig:architecture}
 \end{figure}
 
@@ -371,7 +371,7 @@ Two provenance safeguards in \texttt{SymbolicRules} prevent overconfident false 
 
 To convert discrete symbolic outcomes into smooth, accurate probabilities, \texttt{HybridMLScorer} extracts a 16-dimensional feature vector $\mathbf{x} \in \mathbb{R}^{16}$ containing ten base features (\texttt{title\_sim\_fuzzy}, \texttt{title\_sim\_semantic}, \texttt{title\_sim\_max}, \texttt{author\_jaccard}, $\exp(-0.5 \min(|\Delta y|, 10))$, \texttt{doi\_exact\_match}, $\min(\text{consensus}, 4)/4$, \texttt{venue\_sim}, \texttt{content\_alignment\_signal}, \texttt{has\_candidate}) and six interaction terms (\texttt{title\_x\_author}, \texttt{title\_x\_year}, \texttt{title\_mismatch\_author}, \texttt{title\_mismatch\_year}, \texttt{doi\_mismatch\_title}, and \texttt{abstention\_zone\_indicator}).
 
-A Multinomial Logistic Regression model ($W \in \mathbb{R}^{4 \times 16}, \mathbf{b} \in \mathbb{R}^4$, regularized at $C = 0.25$ with balanced class weights on 84,000 disjoint training citations) outputs $P_{\text{ML}}(y \mid \mathbf{x})$. In \texttt{SymbolicRules}, provenance modifiers (\texttt{R-LOCAL\_DB}: $-0.05$, \texttt{R-API\_EXHAUSTED}: $-0.10$, \texttt{R-LOCAL\_DB\_ONLY}: $-0.15$) first adjust local-only or rate-limited symbolic confidence; \texttt{HybridMLScorer} then blends symbolic confidence $C_{\text{sym}}^{(0)}$ with $P_{\text{ML}}(y_{\text{sym}} \mid \mathbf{x})$ via Equation~\eqref{eq:platt-calib} using $\alpha = 0.72$ (raised automatically to $\alpha = 0.90$ when $C_{\text{sym}}^{(0)} \ge 0.85$ and $|C_{\text{sym}}^{(0)} - P_{\text{ML}}| > 0.45$ so symbolic guardrails on retracted or fake-URL citations are never diluted). Finally, \texttt{PlattCalibrator} ($a = 1.829957, b = 1.147329$, fitted on 18,000 validation citations), document style penalties, and the $\le 0.88$ pure-absence cap produce the final calibrated confidence.
+A Multinomial Logistic Regression model ($W \in \mathbb{R}^{4 \times 16}, \mathbf{b} \in \mathbb{R}^4$, regularized at $C = 0.25$ with balanced class weights on 84,000 disjoint training citations) outputs $P_{\text{ML}}(y \mid \mathbf{x})$. In \texttt{SymbolicRules}, provenance modifiers (\texttt{R-LOCAL\_DB}: $-0.05$, \texttt{R-API\_EXHAUSTED}: $-0.10$, \texttt{R-LOCAL\_DB\_ONLY}: $-0.15$) first adjust local-only or rate-limited symbolic confidence; \texttt{HybridMLScorer} then blends symbolic confidence $C_{\text{sym}}^{(0)}$ with $P_{\text{ML}}(y_{\text{sym}} \mid \mathbf{x})$ via Equation~\eqref{eq:platt-calib} using $\alpha = 0.72$ (raised automatically to $\alpha = 0.90$ when $C_{\text{sym}}^{(0)} \ge 0.85$ and $|C_{\text{sym}}^{(0)} - P_{\text{ML}}| > 0.45$ so symbolic guardrails on retracted or fake-URL citations are never diluted). Finally, \texttt{PlattCalibrator} ($a = 1.891263, b = 1.138599$, fitted on 18,000 validation citations), document style penalties, and the $\le 0.88$ pure-absence cap produce the final calibrated confidence.
 
 \section{Integrity Scoring and Bilingual Explanations}
 
@@ -428,13 +428,13 @@ The web client (\textbf{CITRA}) is implemented in React 18.3, TypeScript 5.8, Vi
 
 \subsection{Role-Based Workspaces and Telemetry Surfaces}
 
-Figures~\ref{fig:ui-landing}--\ref{fig:ui-portals} showcase the live \texttt{v3.90.6} interface across unauthenticated and role-gated routes. Figure~\ref{fig:ui-landing} illustrates the public landing page in Light and Dark themes. Figure~\ref{fig:ui-workspace} shows the Student/Researcher dashboard and the multi-file batch verification queue (\texttt{.pdf}, \texttt{.docx}, \texttt{.bib}, \texttt{.ris}) supporting concurrent classroom uploads. Figure~\ref{fig:ui-portals} displays the Teacher Classroom cohort analytics view (highlighting grade band histograms and cross-student shared hallucinations) alongside the Administrator System Health console monitoring GROBID, SQLite FTS5, and all fifteen upstream API circuit breakers.
+Figures~\ref{fig:ui-landing}--\ref{fig:ui-portals} showcase the live \texttt{v3.90.7} interface across unauthenticated and role-gated routes. Figure~\ref{fig:ui-landing} illustrates the public landing page in Light and Dark themes. Figure~\ref{fig:ui-workspace} shows the Student/Researcher dashboard and the multi-file batch verification queue (\texttt{.pdf}, \texttt{.docx}, \texttt{.bib}, \texttt{.ris}) supporting concurrent classroom uploads. Figure~\ref{fig:ui-portals} displays the Teacher Classroom cohort analytics view (highlighting grade band histograms and cross-student shared hallucinations) alongside the Administrator System Health console monitoring GROBID, SQLite FTS5, and all fifteen upstream API circuit breakers.
 
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.49\textwidth,keepaspectratio]{picture/figures/01-landing-light.png}\hfill
     \includegraphics[width=0.49\textwidth,keepaspectratio]{picture/figures/02-landing-dark.png}
-    \caption[CITRA landing page in WCAG AA Light and Dark themes]{CITRA (\texttt{v3.90.6}) public landing page rendered in Light mode (left) and Dark mode (right).}
+    \caption[CITRA landing page in WCAG AA Light and Dark themes]{CITRA (\texttt{v3.90.7}) public landing page rendered in Light mode (left) and Dark mode (right).}
     \label{fig:ui-landing}
 \end{figure}
 

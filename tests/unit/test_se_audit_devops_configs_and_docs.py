@@ -574,7 +574,7 @@ class TestOps10ToOps14ConfigsDocsAndThesisParity:
             ch1 = (REPO_ROOT / thesis_dir / "chapter1_rewritten.tex").read_text(encoding="utf-8")
             ch5 = (REPO_ROOT / thesis_dir / "chapter5_rewritten.tex").read_text(encoding="utf-8")
             phu = (REPO_ROOT / thesis_dir / "PhuLuc.tex").read_text(encoding="utf-8")
-            assert "2,320+" in ch1 and "487+" in ch1 and "63" in ch1
-            assert "2,320+" in ch5 and "487+" in ch5 and "63" in ch5 and "2,827+" in ch5
-            assert "487+" in phu and "63" in phu
+            assert "2,410+" in ch1 and "488" in ch1 and "63" in ch1
+            assert "2,410+" in ch5 and "488" in ch5 and "63" in ch5 and "2,920+" in ch5
+            assert "488" in phu and "63" in phu
             assert "VNPay v2.1.0" in phu

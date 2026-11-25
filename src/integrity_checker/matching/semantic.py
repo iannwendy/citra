@@ -601,6 +601,21 @@ def _has_ungrounded_novel_claim(
 
     if len(claim_non_title) >= 4 and len(grounded_non_title) == 0:
         return True
+    # Proportional lexical grounding deficit on substantive abstracts: a detailed empirical claim
+    # (>= 7 distinctive non-title technical stems) with at most 1 accidental stem overlap (<= 14.3%
+    # grounding) AND genuinely low Bi-Encoder similarity (< 0.42, or < 0.45 on denser >= 8-stem
+    # claims against >= 15-stem abstracts) indicates topic/claim misattribution rather than genuine
+    # human paraphrasing (which preserves stronger dense similarity and/or abstract stem overlap).
+    if (
+        len(claim_non_title) >= 7
+        and len(grounded_non_title) <= 1
+        and len(abs_stems) >= 12
+        and (
+            raw_sim < 0.42
+            or (len(claim_non_title) >= 8 and len(abs_stems) >= 15 and raw_sim < 0.45)
+        )
+    ):
+        return True
     return False
 
 

@@ -8,8 +8,8 @@ Engineering reference and architectural guide for AI coding assistants and contr
 
 **CITRA (`SourceLogic`)** is an explainable **Neuro-Symbolic Citation & Source Integrity Verification Platform** for academic manuscripts, theses, and research papers.
 
-- **Version:** v3.90.6 (15+ Scholarly & Technical APIs, Multilingual ONNX INT8, 120K Zero-Shortcut Benchmark, 2.4K OOD Guardrail Proof, Solva Warm Editorial Non-Tech UX Overhaul, Visual Action Studio & `<251 kB` Code-Split Bundle — 2026-11-24)
-- **Unit, Integration & E2E Tests:** `2,325 backend passed (2,335 suite) · 488 frontend Vitest passed (63 files) · 20 Playwright E2E suites, 0 failed`
+- **Version:** v3.90.7 (15+ Scholarly & Technical APIs, Multilingual ONNX INT8, 120K Zero-Shortcut Benchmark, 2.4K OOD Guardrail Proof, Solva Warm Editorial Non-Tech UX Overhaul, Visual Action Studio & `<251 kB` Code-Split Bundle — 2026-11-25)
+- **Unit, Integration & E2E Tests:** `2,418 backend passed (2,428 suite) · 488 frontend Vitest passed (63 files) · 20 Playwright E2E suites, 0 failed`
 - **Role-Based Web Workspace:** Student / Researcher (`Workspace`), Teacher (`Classroom`), Administrator (`Control`)
 - **Decision-Support Principle:** All outputs are strictly decision-support signals for academic reviewers; the system never automatically concludes academic misconduct.
 
@@ -40,7 +40,7 @@ essay-integrity-checker/
 ├── FinalReport_TDTU/         # English TDTU graduation thesis (thesis.tex / thesis.pdf — follow FinalReport_TDTU/AGENTS.md)
 ├── FinalReport_TDTU_VN/      # Vietnamese TDTU graduation thesis (thesis.tex / thesis.pdf — follow FinalReport_TDTU_VN/AGENTS.md)
 ├── docs/                     # Categorized docs (architecture/, reference/, reports/, plans/, superpowers/, screenshots/) — see docs/README.md
-└── tests/                    # 2,325 passing unit & integration tests (2,335-test suite)
+└── tests/                    # 2,418 passing unit & integration tests (2,428-test suite)
 ```
 
 ## Two-Layer Orthogonal Output Model
@@ -104,7 +104,7 @@ essay-integrity-checker/
 .venv/bin/python -m ruff check src/ tests/ scripts/
 .venv/bin/python -m mypy src/integrity_checker
 
-# Run full backend unit & integration test suite (2,325 passed / 2,335 suite)
+# Run full backend unit & integration test suite (2,418 passed / 2,428 suite)
 .venv/bin/python -m pytest tests/ -q
 
 # Run frontend ESLint, TypeScript check, Vitest suite (488 tests / 63 files), and production build

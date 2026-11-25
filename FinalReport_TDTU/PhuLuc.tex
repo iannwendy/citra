@@ -188,7 +188,7 @@ CITRA assigns verification labels at the individual reference-entry level rather
 \section*{Appendix D. Codebase Package Map}
 \label{app:modules}
 
-The repository (\texttt{v3.90.6}) separates backend domain packages (\texttt{src/\allowbreak integrity\_checker/}) from the single-page web client (\texttt{web/src/}) across the following core modules:
+The repository (\texttt{v3.90.7}) separates backend domain packages (\texttt{src/\allowbreak integrity\_checker/}) from the single-page web client (\texttt{web/src/}) across the following core modules:
 
 \begin{description}
     \item[\texttt{extraction/}] Multi-format parsers for PDF (GROBID \texttt{0.9.1-crf} TEI-XML, two-column PyMuPDF, \texttt{pdfplumber}, and selective Tesseract Vietnamese OCR), DOCX (\texttt{python-docx}), BibTeX, and RIS, alongside table-of-contents filtering and twelve citation-style extractors.
@@ -196,12 +196,12 @@ The repository (\texttt{v3.90.6}) separates backend domain packages (\texttt{src
     \item[\texttt{database/}] Offline SQLite FTS5 scholarly index (\texttt{local\_papers.db}, 129,137 records covering 128,115 unique papers and 82,887 full abstracts) using WAL mode and Okapi BM25 ranking.
     \item[\texttt{retrieval/}] Domain-aware \texttt{RetrievalOrchestrator}, 101-paper seminal whitelist, asynchronous clients for 15+ registries, Retraction Watch screening, per-provider circuit breakers, singleflight request coalescing, persistent SQLite cache, and SSRF-hardened \texttt{LinkValidator} + \texttt{SafeHtmlMetaVerifier}.
     \item[\texttt{matching/}] Symmetric containment-aware RapidFuzz lexical matching, Vietnamese-aware \texttt{author\_matcher}, \texttt{VenueNormalizer}, Sentence-BERT (\texttt{all-\allowbreak MiniLM-\allowbreak L6-v2}) title and abstract evidence alignment, citation intent/stance classification, and ONNX INT8 multilingual (\texttt{VI} $\leftrightarrow$ \texttt{EN}) bridging.
-    \item[\texttt{logic/}] \texttt{NeuroSymbolicChecker}, Order 0 pre-screening plus 16 priority-ordered rule groups (68 distinct \texttt{R-*} identifiers), \texttt{VNLegalVerifier}, 16-feature \texttt{HybridMLScorer} ($C = 0.25$), logit-space \texttt{PlattCalibrator} ($a = 1.829957, b = 1.147329$), \texttt{CISCalculator}, and bilingual explanation templates.
+    \item[\texttt{logic/}] \texttt{NeuroSymbolicChecker}, Order 0 pre-screening plus 16 priority-ordered rule groups (68 distinct \texttt{R-*} identifiers), \texttt{VNLegalVerifier}, 16-feature \texttt{HybridMLScorer} ($C = 0.25$), logit-space \texttt{PlattCalibrator} ($a = 1.891263, b = 1.138599$), \texttt{CISCalculator}, and bilingual explanation templates.
     \item[\texttt{pipeline/} \& \texttt{models/}] Singleton \texttt{IntegrityPipeline} coordinating all eight stages and Pydantic domain schemas shared across extraction, retrieval, verification, and API serialization.
     \item[\texttt{evaluation/}] Paper-disjoint 120,000-sample benchmark generator and runner, baseline ladder (\texttt{B0}--\texttt{B5}), 2,400-sample OOD guardrail suite, 120-reference E2E gold evaluator, and paired McNemar, Holm--Bonferroni, Clopper--Pearson, and bootstrap tests.
     \item[\texttt{export/}] Sanitized report exporters (PDF, DOCX, CSV, JSON, BibTeX, RIS), \texttt{bibliography\_formatter.py}, and automated bibliography repair for \texttt{.docx} manuscripts (\texttt{docx\_exporter.py}).
     \item[\texttt{db/}, \texttt{billing/} \& \texttt{api/}] Fifteen SQLAlchemy ORM models, thirteen SHA-256 checksummed schema migrations (\texttt{0001}--\texttt{0013}), adaptive SQLite WAL tuning, \texttt{PipelineAdmissionController}, stale-job recovery, Stripe/VNPay billing handlers, and FastAPI routes under \texttt{/api/*}.
-    \item[\texttt{web/}] React 18.3 and TypeScript 5.8 single-page application (\textbf{CITRA}) tested by 487+ Vitest unit/component tests (63 suites) and 20 Playwright E2E specification suites.
+    \item[\texttt{web/}] React 18.3 and TypeScript 5.8 single-page application (\textbf{CITRA}) tested by 488 Vitest unit/component tests (63 suites) and 20 Playwright E2E specification suites.
 \end{description}
 
 \section*{Appendix E. Project Execution Log and Author Contributions}

@@ -328,14 +328,14 @@ class TestPlattCalibratorAndHybridMLScorer:
 
         ns_cal = report["neuro_symbolic_platt_calibrated"]
         assert "bootstrap_95_ci" in ns_cal
-        assert ns_cal["classification"]["accuracy"] == pytest.approx(0.9920)
-        assert ns_cal["classification"]["macro_f1"] == pytest.approx(0.9903)
-        assert ns_cal["classification"]["per_class"]["suspected_hallucination"]["recall"] == pytest.approx(0.9967)
-        assert ns_cal["classification"]["per_class"]["unresolved"]["f1"] == pytest.approx(0.9853)
-        assert ns_cal["calibration"]["ece"] == pytest.approx(0.0411)
-        assert ns_cal["calibration"]["brier"] == pytest.approx(0.0108)
-        assert report["baselines_on_test_set"]["B5"]["macro_f1"] == pytest.approx(0.9759)
-        assert report["baselines_on_test_set"]["proposed"]["macro_f1"] == pytest.approx(0.9903)
+        assert ns_cal["classification"]["accuracy"] == pytest.approx(0.9967)
+        assert ns_cal["classification"]["macro_f1"] == pytest.approx(0.9965)
+        assert ns_cal["classification"]["per_class"]["suspected_hallucination"]["recall"] == pytest.approx(0.9996)
+        assert ns_cal["classification"]["per_class"]["unresolved"]["f1"] == pytest.approx(0.9968)
+        assert ns_cal["calibration"]["ece"] == pytest.approx(0.0405)
+        assert ns_cal["calibration"]["brier"] == pytest.approx(0.0067)
+        assert report["baselines_on_test_set"]["B5"]["macro_f1"] == pytest.approx(0.9763)
+        assert report["baselines_on_test_set"]["proposed"]["macro_f1"] == pytest.approx(0.9965)
         assert (
             report["baselines_on_test_set"]["proposed"]["accuracy"]
             == ns_cal["classification"]["accuracy"]
@@ -349,15 +349,15 @@ class TestPlattCalibratorAndHybridMLScorer:
             repo_root / "docs" / "reports" / "BENCHMARK_120K_NEURO_SYMBOLIC_REPORT.md"
         ).read_text(encoding="utf-8")
         for expected_token in (
-            "0.9759",
-            "0.9903",
-            "99.20%",
-            "0.0411",
-            "0.0108",
-            "1.829957",
-            "1.147329",
+            "0.9763",
+            "0.9965",
+            "99.67%",
+            "0.0405",
+            "0.0067",
+            "1.891263",
+            "1.138599",
             "99.96%",
-            "57.37%",
+            "57.33%",
             "45.00%",
             "0.9987",
             "0.0831",

@@ -11,10 +11,10 @@
 [![GROBID](https://img.shields.io/badge/GROBID-0.9.1_TEI--XML-E34F26?style=for-the-badge)](https://github.com/grobidOrg/grobid)
 [![Sentence-BERT](https://img.shields.io/badge/SBERT-MiniLM--L6--v2_%2B_ONNX_INT8-FF6F00?style=for-the-badge)](https://sbert.net)
 [![SQLite FTS5](https://img.shields.io/badge/ACL_Anthology-128K+_Papers_FTS5-003B57?style=for-the-badge&logo=sqlite&logoColor=white)](https://aclanthology.org)
-[![Benchmark](https://img.shields.io/badge/Benchmark-120%2C000_Samples_%C2%B7_99.20%25_Neuro--Symbolic_%C2%B7_99.96%25_OOD_%C2%B7_0.0411_ECE-6B21A8?style=for-the-badge)](./data/models/neuro_symbolic_benchmark_report.json)
+[![Benchmark](https://img.shields.io/badge/Benchmark-120%2C000_Samples_%C2%B7_99.67%25_Neuro--Symbolic_%C2%B7_99.96%25_OOD_%C2%B7_0.0405_ECE-6B21A8?style=for-the-badge)](./data/models/neuro_symbolic_benchmark_report.json)
 [![PDF Corpus](https://img.shields.io/badge/PDF_Stress_Corpus-310_PDFs_%C2%B7_12_Styles_%C2%B7_100%25_Hard_Cases-0F766E?style=for-the-badge)](#3-310-pdf-multi-style--vietnamese-legal-corpus-evaluation-real-world--hard-case-stress-tests)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://docker.com)
-[![Pytest](https://img.shields.io/badge/Tests-2%2C325_Backend_%C2%B7_488_Frontend_%C2%B7_20_E2E_Suites-0A0A0A?style=for-the-badge&logo=pytest&logoColor=00E676)](./tests)
+[![Pytest](https://img.shields.io/badge/Tests-2%2C418_Backend_%C2%B7_488_Frontend_%C2%B7_20_E2E_Suites-0A0A0A?style=for-the-badge&logo=pytest&logoColor=00E676)](./tests)
 
 *An editorial-grade academic citation debugger and thesis integrity verification workspace engineered for researchers, instructors, and university committees — combining structural PDF parsing, smart domain-aware retrieval across 15+ scholarly & technical databases (including DataCite, DOAJ, OpenAIRE/HAL, NCBI/bioRxiv, Hugging Face, IETF RFC, Wayback Machine, and Retraction Watch), and transparent 5-stage Neuro-Symbolic decision traces.*
 
@@ -55,7 +55,7 @@
 
 ## Overview & Brand Philosophy
 
-**CITRA** (*Essay Integrity Checker v3.90.6*) is a full-stack academic citation verification and bibliographic debugging platform developed as a Capstone Graduation Thesis (*Đồ án Tốt nghiệp CNTT*) at **Ton Duc Thang University (TDTU)**.
+**CITRA** (*Essay Integrity Checker v3.90.7*) is a full-stack academic citation verification and bibliographic debugging platform developed as a Capstone Graduation Thesis (*Đồ án Tốt nghiệp CNTT*) at **Ton Duc Thang University (TDTU)**.
 
 Large Language Models (LLMs) frequently hallucinate plausible-sounding references, conflate author lists, or fabricate publication years (`METADATA_ERROR` / `SUSPECTED_HALLUCINATION`). Meanwhile, traditional similarity checkers (e.g., Turnitin) measure text overlap rather than verifying whether cited references actually exist in canonical scholarly registries or whether in-text citations map cleanly to the bibliography.
 
@@ -172,7 +172,7 @@ Flexible academic plans (**Basic Free**, **Pro Scholar**, **Ultra Lab/Faculty**)
 | **Citation Formats** | **12 Citation Styles + Vietnamese Legal Docs** | Auto-detects **IEEE** (`[1]`, `[1]-[3]`), **APA 7th** (`(Smith et al., 2020)`), **Vancouver**, **Harvard**, **MLA 9th**, **Chicago**, **ACM**, **Nature**, **ACS**, **AMA**, **CSE**, and **Vietnamese Legal Documents** (`Luật số`, `Nghị định`, `Thông tư`, `Bản án` per TDTU standards). |
 | **Smart Retrieval** | **15+ Federated Scholarly Indexes, Retraction Watch & Active Link Validation** | Local **ACL Anthology & Scholarly SQLite FTS5** (`129,137` records / `128,115` unique papers with `82,887` full abstracts) + **Crossref**, **OpenAlex**, **DataCite** (Zenodo/Figshare/OSF), **Global DOI RA & CSL-JSON** (JaLC/CNKI/mEDRA/KISTI), **DOAJ**, **OpenAIRE Graph & HAL**, **NCBI Entrez & bioRxiv/medRxiv**, **DBLP**, **arXiv**, **OpenLibrary**, **Europe PMC**, **Hugging Face Hub**, **IETF Datatracker RFC & PyPI**, and **SerpApi Google Scholar** fallback, paired with **Retraction Watch Detection** (`is_retracted`) and active **HTTP + Wayback Machine Link Validation** (`HTTP 200 OK`, `403 Restricted/Paywall`, `Archived Alive`, `404 Dead Link`, `Fake Domain`). |
 | **Deep Neural Layer** | **Sentence-Level Evidence, Intent, Stance & Cross-Lingual Bridge** | **Sentence-BERT (`all-MiniLM-L6-v2`)** focal-sentence vs. abstract sentence-level max-pooling (`best_evidence_sentence`), **Citation Intent Classification** (`background`, `methodology`, `result_comparison`), **Claim Stance & Polarity Verification** (`supported`, `partially_supported`, `contradiction_risk`), **Vietnamese ↔ English Semantic Bridging**, **Multi-Occurrence Aggregation**, and **Implicit Body Passage Discovery** for uncited references. |
-| **Neuro-Symbolic Verification** | **16D Feature Vector + 68 Symbolic Rules + Platt Calibration** | Combines **Sentence-BERT + Multilingual MiniLM ONNX INT8** neural evidence & title alignment (+ **Monolingual Specificity Gate**), **Symmetric Containment-Aware RapidFuzz**, **AuthorMatcher**, and **VenueNormalizer** with **68 deterministic Symbolic Rules across 16 priority groups** (`R-RETRACTED-PAPER`, `R-WAYBACK-ARCHIVED`, `R-GLOBAL-DOI-RA-VERIFIED`, `R-HF-VERIFIED`, `R-RFC-VERIFIED`, etc.) and a **Multinomial Logistic Regression + Logit-Space Platt Scaling** scorer trained on **120,000 paper- & title-disjoint samples** (`Acc = 99.20%` / `Macro-F1 = 0.9903` Unified Neuro-Symbolic, outperforming Pure ML `B5` on **both** ID (`97.67%` Acc / `0.9759` Macro-F1, `p < 0.001`) and OOD Hard-Guardrail (`99.96%` vs. `57.37%`), `100.00%` (`120/120`) E2E Gold Acc, `ECE = 0.0411`, `Brier = 0.0108`). |
+| **Neuro-Symbolic Verification** | **16D Feature Vector + 68 Symbolic Rules + Platt Calibration** | Combines **Sentence-BERT + Multilingual MiniLM ONNX INT8** neural evidence & title alignment (+ **Monolingual Specificity Gate** & **Proportional Grounding Deficit**), **Symmetric Containment-Aware RapidFuzz**, **Global AuthorMatcher**, and **VenueNormalizer** with **68 deterministic Symbolic Rules across 16 priority groups** (`R-RETRACTED-PAPER`, `R-WAYBACK-ARCHIVED`, `R-GLOBAL-DOI-RA-VERIFIED`, `R-HF-VERIFIED`, `R-RFC-VERIFIED`, etc.) and a **Multinomial Logistic Regression + Logit-Space Platt Scaling** scorer trained on **120,000 paper- & title-disjoint samples** (`Acc = 99.67%` / `Macro-F1 = 0.9965` Unified Neuro-Symbolic, outperforming Pure ML `B5` on **both** ID (`97.70%` Acc / `0.9763` Macro-F1, `p = 1.66 × 10^-73`) and OOD Hard-Guardrail (`99.96%` vs. `57.33%`), `100.00%` (`120/120`) E2E Gold Acc, `ECE = 0.0405`, `Brier = 0.0067`). |
 | **Live Sandbox** | **Interactive ACL Sandbox & Synthetic PDF Generator** | Sample `10–20` real papers from the local `129,137`-record (`128,115` unique-paper) ACL Anthology & scholarly database (`/sandbox`), inject controlled Layer-1/Layer-2 anomalies (`Sửa sai Năm`, `Sửa sai Tác giả`, `Bịa nguồn giả`, `Uncited Ref`, `Orphan In-text`), verify instantaneously, or synthesize a complete multi-page academic PDF manuscript. |
 | **Auto-Remediation** | **1-Click Bibliography Auto-Fix & Auto-Healed `.DOCX`** | Automatically repairs mismatched publication years, titles, author lists, venues, and DOIs using canonical records, outputting standardized **APA 7th**, **IEEE**, **Harvard/TDTU**, **BibTeX (`.bib`)**, **RIS (`.ris`)**, and one-click **Auto-Healed `.DOCX` manuscripts with change logs**. |
 | **Interactive IDE** | **6 Specialized Inspection Views** | **Split-Pane Reference Debugger** (side-by-side diff), **Two-Layer Citation & Source Network Graph (DAG)**, **1-Click Auto-Remediation Studio**, **5-Stage Logic Trace**, **Diagnostic Issues Hub**, **Bipartite Consistency Matrix**, and **Document Context Stream + Inline PDF Page Preview**. |
@@ -290,54 +290,54 @@ To rigorously evaluate the **Neuro-Symbolic Logic Checker**, **HybridMLScorer**,
 | **1. Strict Stratified Paper- & Title-Disjoint Split (`0% Overlap`)** | From `129,137` records in `data/local_papers.db` (`98.42%` ACL Anthology; `128,115` valid unique-title papers: `82,887` full-abstract + `45,228` metadata-only), samples **`120,000` distinct real scholarly papers** (`80,000` full-abstract `>80` chars + `40,000` metadata-complete) and partitions **before** generating perturbations:<br>• **Train (`70%`)**: `84,000` papers (`56,000` full-abstract + `28,000` metadata)<br>• **Validation (`15%`)**: `18,000` papers (`12,000` full-abstract + `6,000` metadata)<br>• **Held-Out Test (`15%`)**: `18,000` papers (`12,000` full-abstract + `6,000` metadata)<br>• Programmatic set-intersection audit (`paper_id` & normalized title): `Train ∩ Val = 0`, `Train ∩ Test = 0`, `Val ∩ Test = 0`. | **SciFact** (*Wadden et al., EMNLP 2020*) & **FEVER** (*Thorne et al., NAACL 2018*) |
 | **2. Zero 1-Way Feature Shortcut (`4-Class Context Alignment`)** | Stratifies full-abstract papers (`66.7%`) across **all 4 canonical classes** so authentic multi-sentence `Sentence-BERT` context-vs-abstract alignment (`content_alignment_score > 0`) occurs across every class (`VERIFIED`: `50.0%` [median `0.5840`], `METADATA_ERROR`: `44.8%` [median `0.4633`, incl. aligned contexts & 12-template verb-agnostic `R-CONTENT-MISMATCH`], `SUSPECTED_HALLUCINATION`: `8.8%` / `40%` of candidate-bearing `H2/H4` [median `0.2152`], `UNRESOLVED`: `23.2%` / `35%` of `U1` [median `0.3775`]; $P(\text{VERIFIED} \mid \text{score} > 0) = 54.06\%$). | **Poliak et al.** (*NAACL 2018*) & **Gururangan et al.** (*NAACL 2018*) |
 | **3. Plausible Same-Domain Hallucinations & 15 Sub-Taxonomies** | Replaces synthetic templates with sanitized cross-paper spliced academic titles (`p1` lead + `p3` methodological tail), real scholar names (`[donor["authors"][0], donor["authors"][-1]]` disjoint from `p2`), real scholarly venues (`ACL`, `EMNLP`, `COLING`, `TACL`, `LREC`, `NAACL`), and bounded publication years (`1950 <= cited_year <= 2026`) strictly within the same split across `V1–V4` (`43,200`), `H1–H4` (`36,000`), `M1–M5` (`26,400`), and `U1–U2` (`14,400`). | **Walters & Wilder** (*Scientific Reports, 2023*) & **ALCE** (*Gao et al., EMNLP 2023*) |
-| **4. Unclamped Feature Extraction & Unified `SymbolicRules`** | Encodes **`419,109` unique texts** (from `600,000` strings) via **`Sentence-BERT (all-MiniLM-L6-v2)`** on GPU (`mps`) with **zero `np.clip` clamping**, **zero stemmer pre-screening**, and production `FeatureCalculator.compute_title_similarity`. `BaselineRunner("proposed")` invokes the exact production `SymbolicRules` engine (`99.20%` Acc / `0.9903` Macro-F1 across both tables). | **Sentence-BERT** (*Reimers & Gurevych, EMNLP 2019*) |
-| **5. Hyperparameter Tuning & Post-Hoc Platt Calibration** | • Grid-searches L2 regularization $C \in \{0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0\}$ for [`HybridMLScorer`](src/integrity_checker/logic/calibration.py) on **Validation (`18,000`)** $\rightarrow$ **$C = 0.25$** (`Val Macro-F1 = 0.9757`).<br>• Fits [`PlattCalibrator`](src/integrity_checker/logic/calibration.py) strictly on **Validation** $\rightarrow$ **$a = 1.829957, b = 1.147329$**. | **Platt Scaling** (*Platt, 1999*) & **Modern Neural Calibration** (*Guo et al., ICML 2017*) |
+| **4. Unclamped Feature Extraction & Unified `SymbolicRules`** | Encodes **`419,109` unique texts** (from `600,000` strings) via **`Sentence-BERT (all-MiniLM-L6-v2)`** on GPU (`mps`) with **zero `np.clip` clamping**, **zero stemmer pre-screening**, global surname normalization (`author_matcher` standalone particles & South-Asian/Hungarian single-letter patronymics), and production `FeatureCalculator.compute_title_similarity`. `BaselineRunner("proposed")` invokes the exact production `SymbolicRules` engine (`99.67%` Acc / `0.9965` Macro-F1 across both tables). | **Sentence-BERT** (*Reimers & Gurevych, EMNLP 2019*) |
+| **5. Hyperparameter Tuning & Post-Hoc Platt Calibration** | • Grid-searches L2 regularization $C \in \{0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0\}$ for [`HybridMLScorer`](src/integrity_checker/logic/calibration.py) on **Validation (`18,000`)** $\rightarrow$ **$C = 0.25$** (`Val Macro-F1 = 0.9768`).<br>• Fits [`PlattCalibrator`](src/integrity_checker/logic/calibration.py) strictly on **Validation** $\rightarrow$ **$a = 1.891263, b = 1.138599$**. | **Platt Scaling** (*Platt, 1999*) & **Modern Neural Calibration** (*Guo et al., ICML 2017*) |
 | **6. Paired Significance, OOD Stress (`N = 2,400`) & CIS Sensitivity** | Reports **Continuity-Corrected McNemar's $\chi^2$**, **1,000-Resample Paired Bootstrap $p$-values**, **Paired Wilcoxon Brier test**, **6-Category OOD Hard-Guardrail Stress Test**, and **300×20 CIS Sensitivity Analysis**. | **Dror et al.** (*ACL 2018*), **Berg-Kirkpatrick et al.** (*EMNLP 2012*) & **Dietterich** (*1998*) |
 
 #### In-Distribution Ablation Study & Paired Statistical Significance ($N = 18,000$ Held-Out Test Papers)
 
 | Method / Baseline | Description | Accuracy | Macro-P | Macro-R | **Macro-F1** | $\Delta\text{Macro-F1}$ (`Proposed - B`) & Paired Significance |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: |
-| **`B0` (`doi_only`)** | Exact DOI match only | `26.24%` | `0.2342` | `0.3489` | `0.1957` | **`+0.7947`** (`McNemar χ² = 13,087.15, p < 1e-16; Boot p < 0.001`) |
-| **`B1` (`single_source_crossref`)** | Single-source lookup (`Crossref` only) | `58.27%` | `0.5651` | `0.4811` | `0.4534` | **`+0.5370`** (`McNemar χ² = 7,318.32, p < 1e-16; Boot p < 0.001`) |
-| **`B3` (`embedding_only`)** | Pure neural `Sentence-BERT` cosine threshold on title | `66.93%` | `0.4940` | `0.5211` | `0.4570` | **`+0.5334`** (`McNemar χ² = 5,734.96, p < 1e-16; Boot p < 0.001`) |
-| **`B4` (`no_calibration`)** | Multi-feature linear combination without abstention band | `80.48%` | `0.6234` | `0.6648` | `0.6309` | **`+0.3595`** (`McNemar χ² = 3,268.17, p < 1e-16; Boot p < 0.001`) |
-| **`B2` (`fuzzy_only`)** | Lexical `RapidFuzz` title + `AuthorJaccard` only | `82.76%` | `0.6383` | `0.6908` | `0.6556` | **`+0.3349`** (`McNemar χ² = 2,867.95, p < 1e-16; Boot p < 0.001`) |
-| **`B5` (`ml_hybrid`)** *(In-Dist.)* | `HybridMLScorer` (16D Logistic Regression, $C = 0.25$ — *collapses to `57.37%` on OOD below!*) | `97.67%` | `0.9753` | `0.9768` | `0.9759` | **`+0.0144`** (`McNemar χ² = 197.97, p = 5.79e-45; Boot p < 0.001`) |
-| **`Proposed` (`Neuro-Symbolic`)** | **Production `SymbolicRules` + Symmetric Title Containment + Verb-Agnostic Specificity + HTTP Link Check + `PlattCalibrator`** | **`99.20%`** | **`0.9899`** | **`0.9908`** | **`0.9903`** | *#1 on Both ID (`17,856 / 18,000`) & OOD (`2,399 / 2,400 = 99.96%`)* |
+| **`B0` (`doi_only`)** | Exact DOI match only | `26.24%` | `0.2342` | `0.3489` | `0.1957` | **`+0.8008`** (`McNemar χ² = 13,213.00, p < 1e-16; Boot p < 0.001`) |
+| **`B1` (`single_source_crossref`)** | Single-source lookup (`Crossref` only) | `58.31%` | `0.5664` | `0.4813` | `0.4538` | **`+0.5427`** (`McNemar χ² = 7,435.01, p < 1e-16; Boot p < 0.001`) |
+| **`B3` (`embedding_only`)** | Pure neural `Sentence-BERT` cosine threshold on title | `66.93%` | `0.4940` | `0.5211` | `0.4570` | **`+0.5394`** (`McNemar χ² = 5,878.04, p < 1e-16; Boot p < 0.001`) |
+| **`B4` (`no_calibration`)** | Multi-feature linear combination without abstention band | `80.53%` | `0.6242` | `0.6652` | `0.6314` | **`+0.3651`** (`McNemar χ² = 3,411.31, p < 1e-16; Boot p < 0.001`) |
+| **`B2` (`fuzzy_only`)** | Lexical `RapidFuzz` title + `AuthorJaccard` only | `82.84%` | `0.6395` | `0.6914` | `0.6563` | **`+0.3401`** (`McNemar χ² = 2,995.36, p < 1e-16; Boot p < 0.001`) |
+| **`B5` (`ml_hybrid`)** *(In-Dist.)* | `HybridMLScorer` (16D Logistic Regression, $C = 0.25$ — *collapses to `57.33%` on OOD below!*) | `97.70%` | `0.9758` | `0.9769` | `0.9763` | **`+0.0202`** (`McNemar χ² = 328.91, p = 1.66e-73; Boot p < 0.001`) |
+| **`Proposed` (`Neuro-Symbolic`)** | **Production `SymbolicRules` + Global Author Matcher + Symmetric Title Containment + Proportional Specificity + HTTP Link Check + `PlattCalibrator`** | **`99.67%`** | **`0.9965`** | **`0.9964`** | **`0.9965`** | *#1 on Both ID (`17,941 / 18,000`) & OOD (`2,399 / 2,400 = 99.96%`)* |
 
 #### Per-Class Verification Performance, Confusion Matrix & 95% Bootstrap CI ($N = 18,000$ Test Samples)
 
 | Canonical Verdict Class | Test Support ($N$) | Precision | Recall | **F1-Score** | Confusion Row (`VER` / `META` / `HAL` / `UNR`) & Safety Invariant |
 | :--- | :---: | :---: | :---: | :---: | :--- |
-| **`VERIFIED`** | `6,480` | **`0.9923`** | **`0.9971`** | **`0.9947`** | `6,461 / 18 / 0 / 1` — **`0` legitimate `VERIFIED` papers accused as hallucinated; `0` fabrications marked `VERIFIED`** |
-| **`SUSPECTED_HALLUCINATION`** | `5,400` | **`0.9978`** | **`0.9967`** | **`0.9972`** | `0 / 0 / 5,382 / 18` — `99.67%` recall & `99.78%` precision across plausible same-domain spliced hallucinations |
-| **`METADATA_ERROR`** | `3,960` | **`0.9910`** | **`0.9773`** | **`0.9841`** | `50 / 3,870 / 12 / 28` — `99.10%` precision & `97.73%` recall across year, co-author, DOI-title, and 12-template `R-CONTENT-MISMATCH` errors |
-| **`UNRESOLVED` *(Abstention)*** | `2,160` | **`0.9785`** | **`0.9921`** | **`0.9853`** | `0 / 17 / 0 / 2,143` — `99.21%` recall & `97.85%` precision across `U1` grey-zone (`R-ABSTENTION-BORDER`) & `U2` registry/429 abstentions |
-| **Macro-Average / Total** *(1,000-Bootstrap 95% CI)* | **`18,000`** | **`0.9899`** | **`0.9908`** | **`0.9903`** `[0.9888, 0.9919]` | **Overall Accuracy: `99.20%`** (`0.9920`, `95% CI: [0.9907, 0.9933]`, `SE: ±0.0007`) |
+| **`VERIFIED`** | `6,480` | **`0.9943`** | **`0.9994`** | **`0.9968`** | `6,476 / 4 / 0 / 0` — **`0` legitimate `VERIFIED` papers accused as hallucinated; `0` fabrications marked `VERIFIED`** |
+| **`SUSPECTED_HALLUCINATION`** | `5,400` | **`0.9993`** | **`0.9996`** | **`0.9994`** | `0 / 0 / 5,398 / 2` — `99.96%` recall & `99.93%` precision across plausible same-domain spliced hallucinations |
+| **`METADATA_ERROR`** | `3,960` | **`0.9990`** | **`0.9866`** | **`0.9928`** | `37 / 3,907 / 4 / 12` — `99.90%` precision & `98.66%` recall across year, co-author, DOI-title, and 12-template `R-CONTENT-MISMATCH` errors |
+| **`UNRESOLVED` *(Abstention)*** | `2,160` | **`0.9936`** | **`1.0000`** | **`0.9968`** | `0 / 0 / 0 / 2,160` — `100.00%` recall & `99.36%` precision across `U1` grey-zone (`R-ABSTENTION-BORDER`) & `U2` registry/429 abstentions |
+| **Macro-Average / Total** *(1,000-Bootstrap 95% CI)* | **`18,000`** | **`0.9965`** | **`0.9964`** | **`0.9965`** `[0.9955, 0.9974]` | **Overall Accuracy: `99.67%`** (`0.9967`, `95% CI: [0.9958, 0.9976]`, `SE: ±0.0004`) |
 
 #### Confidence Calibration Performance (Logit-Space Platt Scaling on $N = 18,000$ Test Samples)
 
-Fitted Platt parameters on the `18,000`-sample Validation split: $a = 1.829957$, $b = 1.147329$ ([`data/models/neuro_symbolic_weights.json`](./data/models/neuro_symbolic_weights.json)).
+Fitted Platt parameters on the `18,000`-sample Validation split: $a = 1.891263$, $b = 1.138599$ ([`data/models/neuro_symbolic_weights.json`](./data/models/neuro_symbolic_weights.json)).
 
 | Configuration | Macro-F1 | **ECE** *(Expected Calibration Error)* | **Brier Score** | Acc @ `50%` Cov | Acc @ `70%` Cov | Acc @ `90%` Cov | Acc @ `95%` Cov | Acc @ `100%` Cov |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Neuro-Symbolic (Uncalibrated Raw Confidence)** | `0.9903` | `0.2475` | `0.0905` | `99.61%` | `99.38%` | `99.31%` | `99.31%` | `99.20%` |
-| **Neuro-Symbolic (Platt-Calibrated Confidence)** | **`0.9903`** | **`0.0411`** *(↓ **6.02×**, $\Delta = -0.2066$, $p < 0.001$, CI `[0.0397, 0.0425]`)* | **`0.0108`** *(↓ **8.38×**, $\Delta = -0.0798$, Wilcoxon $p < 10^{-16}$, CI `[0.0097, 0.0118]`)* | **`99.54%`** | **`99.49%`** | **`99.49%`** | **`99.46%`** | **`99.20%`** |
+| **Neuro-Symbolic (Uncalibrated Raw Confidence)** | `0.9965` | `0.2477` | `0.0843` | `99.76%` | `99.64%` | `99.69%` | `99.70%` | `99.67%` |
+| **Neuro-Symbolic (Platt-Calibrated Confidence)** | **`0.9965`** | **`0.0405`** *(↓ **6.12×**, $\Delta = -0.2072$, $p < 0.001$, CI `[0.0394, 0.0415]`)* | **`0.0067`** *(↓ **12.58×**, $\Delta = -0.0775$, Wilcoxon $p < 10^{-16}$, CI `[0.0060, 0.0076]`)* | **`99.60%`** | **`99.67%`** | **`99.73%`** | **`99.74%`** | **`99.67%`** |
 
 #### Out-of-Distribution (OOD) Hard-Guardrail Stress Suite ($N = 2,400$ Samples from `test_papers`) — Empirical Proof Why Neuro-Symbolic Beats Pure ML `B5`
 
-Even though Pure ML `B5` achieves `97.67%` on the 16D continuous in-distribution feature manifold, real-world academic verification requires first-order symbolic guardrails that continuous similarity vectors cannot represent. Evaluated strictly on `test_papers` (`6 categories × 400 = 2,400` samples, zero Train/Val overlap, zero manual field overrides):
+Even though Pure ML `B5` achieves `97.70%` on the 16D continuous in-distribution feature manifold, real-world academic verification requires first-order symbolic guardrails that continuous similarity vectors cannot represent. Evaluated strictly on `test_papers` (`6 categories × 400 = 2,400` samples, zero Train/Val overlap, zero manual field overrides):
 
 | Real-World Symbolic Guardrail Category ($N = 400$ each) | Gold Label | Guardrail Rule | `B4` (`No Calib.`) | **Pure ML `B5`** | **`Neuro-Symbolic`** | **Gain ($\Delta = \text{NS} - \text{B5}$)** |
 | :--- | :---: | :--- | :---: | :---: | :---: | :---: |
 | **1. Retracted Scholarly Papers (`is_retracted=True`, exact DOI/title/authors)** | `metadata_error` | `R-RETRACTED-PAPER` | `0.00%` | **`0.00%`** *(400 `verified`)* | **`100.00%`** | **`+100.00%`** |
-| **2. Chimeric Spliced DOIs (real contemporary DOI pasted onto fabricated paper)** | `suspected_hallucination` | `R-CHIMERIC-DOI-MISMATCH` | `0.00%` | **`99.75%`** *(1 `unresolved`)* | **`99.75%`** | `0.00%` |
+| **2. Chimeric Spliced DOIs (real contemporary DOI pasted onto fabricated paper)** | `suspected_hallucination` | `R-CHIMERIC-DOI-MISMATCH` | `0.00%` | **`99.00%`** *(3 `meta`, 1 `unr`)* | **`99.75%`** | `+0.75%` |
 | **3. Fake / Placeholder RFC 2606 URLs (`example.com`, `.invalid`, `fake-*`)** | `suspected_hallucination` | `R-FAKE-URL` | `0.00%` | **`0.00%`** *(200 `verified`, 197 `meta`, 3 `unr`)* | **`100.00%`** | **`+100.00%`** |
 | **4. Regional DOIs without CSL Metadata (`JaLC`, `KISTI`, `CNKI`, `mEDRA`)** | `unresolved` | `R-DOI-RA-NO-CSL` | `0.00%` | `100.00%`* | **`100.00%`** | `0.00%` |
 | **5. Upstream HTTP 429 Rate-Limit Exhaustion (`api_exhausted=True`)** | `unresolved` | `R-RATE-LIMITED-ABSTAIN` | `0.00%` | `100.00%`* | **`100.00%`** | `0.00%` |
 | **6. VN Statutory Authority & Code Mismatches (`parse_vn_legal_reference`, 0 overrides)** | `metadata_error` | `VNLegalVerifier` | `25.00%` | **`45.00%`** *(200 `hal`, 180 `meta`, 20 `ver`)* | **`100.00%`** | **`+55.00%`** |
-| **Overall OOD Stress Suite ($N = 2,400$)** *(McNemar $\chi^2 = 1,020.00, p = 8.07 \times 10^{-224}$)* | **3 Active Labels** | **Symbolic + VNLegal** | `4.17%` | **`57.37%`** *(F1 `0.6235`)* | **`99.96%`** *(F1 `0.9996`)* | **`+42.58%` Acc / `+0.3750` F1** |
+| **Overall OOD Stress Suite ($N = 2,400$)** *(McNemar $\chi^2 = 1,021.00, p = 4.89 \times 10^{-224}$)* | **3 Active Labels** | **Symbolic + VNLegal** | `4.17%` | **`57.33%`** *(F1 `0.6231`)* | **`99.96%`** *(F1 `0.9996`)* | **`+42.63%` Acc / `+0.3765` F1** |
 
 *\*Note: `B5` survives Categories 4 & 5 solely because the symbolic indicator `abstention_zone_indicator` (`vec[15]`) explicitly injects `registered_no_csl` and `api_exhausted` flags; without symbolic rules (`B4`), accuracy collapses to `4.17%` across the 2,400-sample suite.*
 
@@ -439,7 +439,7 @@ Beyond synthetic benchmarks and individual root PDFs, CITRA's structural extract
 | **Document Parsing & NLP** | GROBID 0.9.1 (TEI-XML REST Service), PyMuPDF (`fitz`) + TCVN3/VNI decoder + selective OCR, `pdfplumber`, `python-docx`, BibTeX/RIS parsers, `RapidFuzz`, `defusedxml` |
 | **Neuro-Symbolic & ML Engine** | `sentence-transformers` (`all-MiniLM-L6-v2` + `paraphrase-multilingual-MiniLM-L12-v2` ONNX INT8), `scikit-learn` & `scipy` (`HybridMLScorer` Multinomial Logistic Regression + `PlattCalibrator`), 16D Feature Engineering, `68` Deterministic Symbolic Rules (16 Groups) |
 | **Scholarly Knowledge & APIs** | SQLite FTS5 (`129,137` records / `128,115` unique papers with `82,887` full abstracts), Crossref, OpenAlex, DataCite, Global DOI RA, DOAJ, OpenAIRE/HAL, NCBI/bioRxiv, DBLP, arXiv, OpenLibrary, Europe PMC, Hugging Face, IETF RFC/PyPI, Wikidata/OpenCitations, Serper/SerpApi Scholar, SSRF-safe HTML & Wayback `LinkValidator` |
-| **Testing & DevOps** | Pytest (`2,325` passed / `2,335` backend unit & integration tests), Vitest (`488` passed across `63` files), Playwright E2E (`20` spec suites), Ruff, Mypy, Docker Compose & GitHub Actions CI/CD |
+| **Testing & DevOps** | Pytest (`2,418` passed / `2,428` backend unit & integration tests), Vitest (`488` passed across `63` files), Playwright E2E (`20` spec suites), Ruff, Mypy, Docker Compose & GitHub Actions CI/CD |
 
 ---
 
@@ -450,7 +450,7 @@ essay-integrity-checker/
 ├── docker-compose.yml                  # Orchestrates web (:5173), api (:8000), and grobid (:8070)
 ├── docker-compose.prod.yml             # Production Nginx + TLS + FastAPI + GROBID deployment stack
 ├── Dockerfile                          # Python 3.11 + FastAPI + Sentence-BERT/ONNX backend image
-├── pyproject.toml                      # Python package metadata (v3.90.6), Ruff/Pytest config & `essay-check` CLI
+├── pyproject.toml                      # Python package metadata (v3.90.7), Ruff/Pytest config & `essay-check` CLI
 ├── CLAUDE.md                           # AI / Developer architectural quick-reference
 ├── README.md                           # Project documentation (this file)
 ├── src/
@@ -625,14 +625,14 @@ In local/development environments (`APP_ENV=development`), the database automati
 
 ### Running the Automated Test Suite & 120,000-Sample Benchmark
 
-The repository includes **2,325 passing backend unit & integration tests** (across a `2,335`-test suite), **488 frontend Vitest tests across 63 suites**, and **20 Playwright end-to-end browser suites** covering extraction, style detection, federated retrieval, SSRF-safe link validation, 16D feature matching, 68 symbolic rules, Platt calibration, CIS calculation, RBAC/billing security, Tailwind v3.4 + `<500 kB` bundle hygiene, and responsive Light/Dark UI:
+The repository includes **2,418 passing backend unit & integration tests** (across a `2,428`-test suite), **488 frontend Vitest tests across 63 suites**, and **20 Playwright end-to-end browser suites** covering extraction, style detection, federated retrieval, SSRF-safe link validation, 16D feature matching, 68 symbolic rules, Platt calibration, CIS calculation, RBAC/billing security, Tailwind v3.4 + `<500 kB` bundle hygiene, and responsive Light/Dark UI:
 
 ```bash
 # Lint & static type check backend, tests, and scripts (0 errors)
 .venv/bin/python -m ruff check src/ tests/ scripts/
 .venv/bin/python -m mypy src/integrity_checker
 
-# Run the complete backend test suite (2,325 passed, 0 failed)
+# Run the complete backend test suite (2,418 passed, 0 failed)
 .venv/bin/python -m pytest tests/ -q
 
 # Re-train & evaluate the 120,000-sample paper- & title-disjoint Neuro-Symbolic benchmark
