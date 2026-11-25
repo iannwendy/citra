@@ -17,7 +17,7 @@ Following Empirical Software Engineering evaluation standards~\cite{wohlin2012ex
 
 \subsection{Automated Test Suites and Requirements Traceability Matrix}
 
-Software verification spans three automated test layers summarized in Table~\ref{tab:test-suites}: 2,410+ passing backend \texttt{pytest} unit and integration tests (with environment-gated live-network skips and 0 failures), 488 passing frontend \texttt{Vitest} tests across 63 suites, and 20 \texttt{Playwright} end-to-end browser specification suites across desktop, tablet, and mobile viewports. In addition, an offline retrieval test over 500 stratified ACL Anthology queries achieved $99.80\%$ recall ($499/500$) and $100.0\%$ precision at $87.62\text{\,ms}$ mean latency. Table~\ref{tab:rtm} provides the bidirectional Requirements Traceability Matrix (RTM) linking the functional and non-functional specifications from Chapter~\ref{chap:overview} to their implementing packages and verification evidence.
+Software verification spans three automated test layers summarized in Table~\ref{tab:test-suites}: 2,430+ passing backend \texttt{pytest} unit and integration tests (with environment-gated live-network skips and 0 failures), 494 passing frontend \texttt{Vitest} tests across 63 suites, and 20 \texttt{Playwright} end-to-end browser specification suites across desktop, tablet, and mobile viewports. In addition, an offline retrieval test over 500 stratified ACL Anthology queries achieved $99.80\%$ recall ($499/500$) and $100.0\%$ precision at $87.62\text{\,ms}$ mean latency. Table~\ref{tab:rtm} provides the bidirectional Requirements Traceability Matrix (RTM) linking the functional and non-functional specifications from Chapter~\ref{chap:overview} to their implementing packages and verification evidence.
 
 {\setlength{\tabcolsep}{3.5pt}
 \begin{longtable}{|L{0.23}|L{0.25}|L{0.52}|}
@@ -36,9 +36,9 @@ Software verification spans three automated test layers summarized in Table~\ref
 \endfoot
 \hline
 \endlastfoot
-\textbf{Backend (\texttt{pytest})} & \textbf{2,410+ passed (0 failed)} & Multi-format extraction, 12 styles, \texttt{VNLegalVerifier}, 7-method linker, FTS5 + 15 APIs, SSRF-safe URL/HTML checks, 68 symbolic rules, Platt calibration, CIS, RBAC/IDOR, migrations \texttt{0001}--\texttt{0013}, and crash recovery. \\
+\textbf{Backend (\texttt{pytest})} & \textbf{2,430+ passed (0 failed)} & Multi-format extraction, 12 styles, \texttt{VNLegalVerifier}, 7-method linker, FTS5 + 15 APIs, SSRF-safe URL/HTML checks, 68 symbolic rules, Platt calibration, CIS, RBAC/IDOR, migrations \texttt{0001}--\texttt{0013}, and crash recovery. \\
 \hline
-\textbf{Frontend (\texttt{Vitest})} & \textbf{488 passed (63 suites, 0 failed)} & Auth/OAuth flows, progressive-disclosure drawers, 6 diagnostic report views, Citation Network DAG, Remediation modal, Classroom/Admin telemetry, and $<251\text{\,kB}$ chunk guards. \\
+\textbf{Frontend (\texttt{Vitest})} & \textbf{494 passed (63 suites, 0 failed)} & Auth/OAuth flows, progressive-disclosure drawers, 6 diagnostic report views, Citation Network DAG, Remediation modal, Classroom/Admin telemetry, SSE Step~1 handoff, and $<251\text{\,kB}$ chunk guards. \\
 \hline
 \textbf{Browser E2E (\texttt{Playwright})} & \textbf{20 spec suites (132+ scenarios)} & Zero horizontal overflow across 5 viewports $\times$ Light/Dark $\times$ EN/VI, SSE upload, split-pane inspection, teacher override, and 404/error recovery. \\
 \hline
@@ -78,7 +78,7 @@ Software verification spans three automated test layers summarized in Table~\ref
 \hline
 \texttt{FR-15}, \texttt{FR-16} & \texttt{api/\allowbreak routes/\allowbreak teacher.py}, \texttt{routes/system.py}, \texttt{ClassDetailPage.tsx}, \texttt{SystemHealthPage.tsx} & Transactional override, cohort analytics, \& circuit-breaker tests & Pass ($100\%$) \\
 \hline
-\texttt{NFR-01}, \texttt{NFR-02}, \texttt{NFR-07}--\texttt{10} & Full 8-layer pipeline, Docker Compose, \& Vite build (\texttt{web/}) & Latency/RSS ($P_{90}=1.33\text{\,s}$, $1.03\text{\,GB}$), WCAG E2E, $2{,}920+$ tests, chunk \& container health checks & Pass ($100\%$) \\
+\texttt{NFR-01}, \texttt{NFR-02}, \texttt{NFR-07}--\texttt{10} & Full 8-layer pipeline, Docker Compose, \& Vite build (\texttt{web/}) & Latency/RSS ($P_{90}=1.33\text{\,s}$, $1.03\text{\,GB}$), zero-swap GROBID prod benchmark, WCAG E2E, $2{,}945+$ tests, chunk \& container health checks & Pass ($100\%$) \\
 \hline
 \end{longtable}
 }
@@ -496,7 +496,37 @@ HTTP \texttt{POST /api/essays} & \textbf{50} & \textbf{50 / 50} & 1530.2 / 1948.
 \end{longtable}
 }
 
-\rqanswer{RQ5}{CITRA processes a 50-page capstone report in $1.33\text{\,s}$ ($P_{90}$ warm-cache; $9.41\text{\,s}$ cold WAN) within a $1.03\text{\,GB}$ peak RAM budget, achieves a $19.41\times$ warm-cache speedup, and sustains 50 simultaneous uploads with zero SQLite lock or HTTP 5xx errors.}
+To validate live production memory behavior on long theses without disk-cache assistance, Table~\ref{tab:nfr-grobid-prod} compares the legacy $3\text{\,GiB}$ GROBID container (\texttt{-Xmx1280m}, \texttt{concurrency=10}, \texttt{teiCoordinates} enabled) against the tuned $4\text{\,GiB}$ production deployment (\texttt{-Xmx768m}, \texttt{concurrency=2}, \texttt{pdfalto=1024\,MB}, \texttt{teiCoordinates} omitted) on the live Google Compute Engine VM (\texttt{e2-custom-medium-6144}, 2 vCPU, $5.8\text{\,GiB}$ RAM) using this 117-page ($10.63\text{\,MB}$) graduation report with TEI caching disabled. Rebalancing the container budget above GROBID's $3.1\text{\,GiB}$ native Wapiti working set eliminates cgroup swap entirely ($2.19\text{\,GiB} \rightarrow 0\text{\,B}$), cuts major page faults by $99.74\%$ ($91{,}718 \rightarrow 239$), accelerates uncached GROBID parsing by $2.04\times$ cold ($95.53\text{\,s} \rightarrow 46.93\text{\,s}$) and $5.48\times$ warm ($17.44\text{\,s}$), and sustains two simultaneous 117-page theses in $31.31\text{\,s}$ total wall time with $100\%$ extraction parity ($46$ references, $73$ in-text citations) and $885\text{\,MiB}$ of host RAM still available.
+
+{\setlength{\tabcolsep}{3.5pt}
+\begin{longtable}{|L{0.28}|C{0.15}|C{0.14}|C{0.14}|C{0.14}|C{0.15}|}
+\caption{Live production GCE VM benchmark of uncached GROBID parsing on a 117-page ($10.63\text{\,MB}$) thesis before and after memory and pool optimization.}\label{tab:nfr-grobid-prod}\\
+\hline
+\textbf{Production Configuration} & \textbf{GROBID Time} & \textbf{Swap Peak} & \textbf{Major Faults} & \textbf{TEI Size} & \textbf{Refs / Cits} \\
+\hline
+\endfirsthead
+\multicolumn{6}{c}{\itshape Table \thetable\ (continued from previous page)}\\
+\hline
+\textbf{Production Configuration} & \textbf{GROBID Time} & \textbf{Swap Peak} & \textbf{Major Faults} & \textbf{TEI Size} & \textbf{Refs / Cits} \\
+\hline
+\endhead
+\hline
+\multicolumn{6}{r}{\itshape Continued on next page}\\
+\endfoot
+\hline
+\endlastfoot
+Legacy \texttt{3G} (\texttt{-Xmx1280m}, pool 10) & 95.53\,s & 2.19\,GiB & 91,718 & 236.3\,kB & 46 / 73 \\
+\hline
+\textbf{Tuned \texttt{4G} --- Cold JIT (uncached)} & \textbf{46.93\,s} ($2.04\times$) & \textbf{0\,B} & \textbf{239} & \textbf{227.3\,kB} & \textbf{46 / 73} \\
+\hline
+\textbf{Tuned \texttt{4G} --- Warm JIT (uncached)} & \textbf{17.44\,s} ($5.48\times$) & \textbf{0\,B} & \textbf{239} & \textbf{227.3\,kB} & \textbf{46 / 73} \\
+\hline
+\textbf{Tuned \texttt{4G} --- 2$\times$ Concurrent (234\,pp.)} & \textbf{31.31\,s wall} & \textbf{0\,B} & \textbf{239} & \textbf{227.3\,kB} & \textbf{46 / 73 ($\times 2$)} \\
+\hline
+\end{longtable}
+}
+
+\rqanswer{RQ5}{CITRA processes a 50-page capstone report in $1.33\text{\,s}$ ($P_{90}$ warm-cache; $9.41\text{\,s}$ cold WAN) within a $1.03\text{\,GB}$ API peak RAM budget, achieves a $19.41\times$ warm-cache speedup, eliminates GROBID swap thrashing on the 2-vCPU production VM ($95.53\text{\,s} \rightarrow 17.44\text{\,s}$ warm uncached on a 117-page thesis with $0\text{\,B}$ swap and $99.74\%$ fewer major page faults), and sustains 50 simultaneous uploads with zero SQLite lock or HTTP 5xx errors.}
 
 \section{Threats to Validity}
 \label{sec:difficulties}
@@ -521,4 +551,4 @@ To guard against Type I errors from multiple baseline comparisons and skewed err
 
 \section{Chapter Summary}
 
-This chapter verified \textbf{CITRA} (\texttt{v3.90.9}) across 2,920+ automated checks, a full Requirements Traceability Matrix, and five empirical research questions, demonstrating $99.67\%$ in-distribution accuracy ($\text{ECE} = 0.0405$), $99.96\%$ OOD symbolic accuracy, $100.00\%$ six-domain E2E gold accuracy, and zero-error 50-user burst scalability. Chapter~\ref{chap:conclusion} summarizes achievements, current limitations, and future research directions.
+This chapter verified \textbf{CITRA} (\texttt{v3.90.9}) across 2,945+ automated checks, a full Requirements Traceability Matrix, and five empirical research questions, demonstrating $99.67\%$ in-distribution accuracy ($\text{ECE} = 0.0405$), $99.96\%$ OOD symbolic accuracy, $100.00\%$ six-domain E2E gold accuracy, zero-swap production GROBID scaling, and zero-error 50-user burst scalability. Chapter~\ref{chap:conclusion} summarizes achievements, current limitations, and future research directions.

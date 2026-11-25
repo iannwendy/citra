@@ -31,7 +31,7 @@ Mọi chỉnh sửa trong `FinalReport_TDTU_VN/` (Tiếng Việt) và `../FinalR
 | **Tên hình (`Caption hình`)** | **12 pt** | **Chữ thường, nghiêng (`\mdseries\itshape`)** — cả nhãn `Hình X.Y:` lẫn nội dung tên hình đều cỡ `12 pt`, không in đậm, in nghiêng | **Giữa, dưới hình** (`position=below, justification=centering`) |
 | **Tên đoạn mã (`Listing`)** | **12 pt** | **Chữ thường, nghiêng** | **Giữa, trên đoạn mã** (`captionpos=t`) |
 
-> **Quy tắc phạm vi:** Cờ `\tdtudatatabletrue` (bật tại đầu `NoiDungChinh.tex`) tự động áp cỡ **12 pt** cho toàn bộ 32 bảng dữ liệu (`longtable` / `table`) từ Chương 1 đến Chương 6. Các bảng không viền dùng để căn lề chữ ký phần đầu (`LoiCamOn.tex`, `LoiCamDoan.tex`, `CamKet.tex`) và bảng 2 cột `P{0.22}P{0.78}` trong `DanhMucTuVietTat.tex` giữ nguyên cỡ **13 pt** của văn bản chính.
+> **Quy tắc phạm vi:** Cờ `\tdtudatatabletrue` (bật tại đầu `NoiDungChinh.tex`) tự động áp cỡ **12 pt** cho toàn bộ 33 bảng dữ liệu (`longtable` / `table`) từ Chương 1 đến Chương 6. Các bảng không viền dùng để căn lề chữ ký phần đầu (`LoiCamOn.tex`, `LoiCamDoan.tex`, `CamKet.tex`) và bảng 2 cột `P{0.22}P{0.78}` trong `DanhMucTuVietTat.tex` giữ nguyên cỡ **13 pt** của văn bản chính.
 
 ### 2.2 Quy tắc Đánh số, Đầu đề Tự thân & Tham chiếu Nội văn
 - **Đánh số gắn với số chương:** Đánh số theo chương và thứ tự xuất hiện: `Bảng 4.1`, `Hình 3.2`, `Phương trình (2.1)`.

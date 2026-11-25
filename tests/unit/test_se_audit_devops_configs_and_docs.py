@@ -651,10 +651,15 @@ class TestOps10ToOps14ConfigsDocsAndThesisParity:
             "2,203",
             "2.203",
             "472 ",
+            "488 ",
             "62 suites",
             "62 bộ",
+            "2,410+",
             "2,689",
             "2.689",
+            "2,920+",
+            "JAVA_OPTS=-Xmx2g",
+            "JDK_JAVA_OPTIONS=",
         )
 
         for thesis_dir in ("FinalReport_TDTU", "FinalReport_TDTU_VN"):
@@ -690,7 +695,9 @@ class TestOps10ToOps14ConfigsDocsAndThesisParity:
             ch1 = (REPO_ROOT / thesis_dir / "chapter1_rewritten.tex").read_text(encoding="utf-8")
             ch5 = (REPO_ROOT / thesis_dir / "chapter5_rewritten.tex").read_text(encoding="utf-8")
             phu = (REPO_ROOT / thesis_dir / "PhuLuc.tex").read_text(encoding="utf-8")
-            assert "2,410+" in ch1 and "488" in ch1 and "63" in ch1
-            assert "2,410+" in ch5 and "488" in ch5 and "63" in ch5 and "2,920+" in ch5
-            assert "488" in phu and "63" in phu
+            assert "2,430+" in ch1 and "494" in ch1 and "63" in ch1
+            assert "2,430+" in ch5 and "494" in ch5 and "63" in ch5 and "2,945+" in ch5
+            assert "494" in phu and "63" in phu
+            assert "grobid-entrypoint.sh" in phu and "-Xmx768m" in phu and "memory: 4G" in phu
+            assert "tab:nfr-grobid-prod" in ch5 and "95.53" in ch5 and "17.44" in ch5
             assert "VNPay v2.1.0" in phu

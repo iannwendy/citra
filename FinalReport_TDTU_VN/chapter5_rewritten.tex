@@ -17,7 +17,7 @@ Tuân thủ các chuẩn mực đánh giá trong Kỹ thuật Phần mềm Thự
 
 \subsection{Các bộ kiểm thử tự động và Ma trận truy vết yêu cầu}
 
-Quy trình kiểm định phần mềm bao phủ ba tầng kiểm thử tự động được tổng hợp tại Bảng~\ref{tab:test-suites}: 2,410+ ca kiểm thử đơn vị và tích hợp \texttt{pytest} vượt qua ở phía backend (gồm các ca bỏ qua có điều kiện môi trường mạng trực tiếp và 0 ca thất bại), 488 ca kiểm thử \texttt{Vitest} vượt qua trên 63 bộ kiểm thử frontend, cùng 20 bộ đặc tả kiểm thử đầu-cuối trên trình duyệt bằng \texttt{Playwright} trải rộng trên khung nhìn máy tính để bàn, máy tính bảng và thiết bị di động. Bên cạnh đó, bài kiểm thử truy hồi ngoại tuyến trên 500 truy vấn phân tầng thuộc ACL Anthology đạt độ phủ (recall) $99.80\%$ ($499/500$) và độ chuẩn xác (precision) $100.0\%$ với độ trễ trung bình $87.62\text{\,ms}$. Bảng~\ref{tab:rtm} trình bày Ma trận truy vết yêu cầu (RTM) hai chiều, liên kết trực tiếp các đặc tả chức năng và phi chức năng ở Chương~\ref{chap:overview} với các gói mã nguồn hiện thực và bằng chứng kiểm định tương ứng.
+Quy trình kiểm định phần mềm bao phủ ba tầng kiểm thử tự động được tổng hợp tại Bảng~\ref{tab:test-suites}: 2,430+ ca kiểm thử đơn vị và tích hợp \texttt{pytest} vượt qua ở phía backend (gồm các ca bỏ qua có điều kiện môi trường mạng trực tiếp và 0 ca thất bại), 494 ca kiểm thử \texttt{Vitest} vượt qua trên 63 bộ kiểm thử frontend, cùng 20 bộ đặc tả kiểm thử đầu-cuối trên trình duyệt bằng \texttt{Playwright} trải rộng trên khung nhìn máy tính để bàn, máy tính bảng và thiết bị di động. Bên cạnh đó, bài kiểm thử truy hồi ngoại tuyến trên 500 truy vấn phân tầng thuộc ACL Anthology đạt độ phủ (recall) $99.80\%$ ($499/500$) và độ chuẩn xác (precision) $100.0\%$ với độ trễ trung bình $87.62\text{\,ms}$. Bảng~\ref{tab:rtm} trình bày Ma trận truy vết yêu cầu (RTM) hai chiều, liên kết trực tiếp các đặc tả chức năng và phi chức năng ở Chương~\ref{chap:overview} với các gói mã nguồn hiện thực và bằng chứng kiểm định tương ứng.
 
 {\setlength{\tabcolsep}{3.5pt}
 \begin{longtable}{|L{0.23}|L{0.25}|L{0.52}|}
@@ -36,9 +36,9 @@ Quy trình kiểm định phần mềm bao phủ ba tầng kiểm thử tự đ�
 \endfoot
 \hline
 \endlastfoot
-\textbf{Backend (\texttt{pytest})} & \textbf{2,410+ đạt (0 lỗi)} & Trích xuất đa định dạng, 12 chuẩn trích dẫn, \texttt{VNLegal\allowbreak Verifier}, bộ liên kết 7 phương pháp, FTS5 + 15 API, kiểm tra URL/HTML chống SSRF, 68 luật ký hiệu, hiệu chỉnh Platt, điểm CIS, RBAC/IDOR, di trú CSDL \texttt{0001}--\texttt{0013} và phục hồi sau sự cố. \\
+\textbf{Backend (\texttt{pytest})} & \textbf{2,430+ đạt (0 lỗi)} & Trích xuất đa định dạng, 12 chuẩn trích dẫn, \texttt{VNLegal\allowbreak Verifier}, bộ liên kết 7 phương pháp, FTS5 + 15 API, kiểm tra URL/HTML chống SSRF, 68 luật ký hiệu, hiệu chỉnh Platt, điểm CIS, RBAC/IDOR, di trú CSDL \texttt{0001}--\texttt{0013} và phục hồi sau sự cố. \\
 \hline
-\textbf{Frontend (\texttt{Vitest})} & \textbf{488 đạt (63 bộ, 0 lỗi)} & Luồng xác thực Auth/OAuth, ngăn kéo hiển thị phân lớp, 6 chế độ xem báo cáo chẩn đoán, đồ thị DAG mạng trích dẫn, hộp thoại khắc phục lỗi, giám sát Lớp học/Quản trị và giới hạn gói mã $<251\text{\,kB}$. \\
+\textbf{Frontend (\texttt{Vitest})} & \textbf{494 đạt (63 bộ, 0 lỗi)} & Luồng xác thực Auth/OAuth, ngăn kéo hiển thị phân lớp, 6 chế độ xem báo cáo chẩn đoán, đồ thị DAG mạng trích dẫn, hộp thoại khắc phục lỗi, giám sát Lớp học/Quản trị, bàn giao SSE Bước~1 và giới hạn gói mã $<251\text{\,kB}$. \\
 \hline
 \textbf{Trình duyệt E2E (\texttt{Play\allowbreak wright})} & \textbf{20 bộ đặc tả (132+ kịch bản)} & Không tràn ngang trên 5 khung nhìn $\times$ Sáng/Tối $\times$ EN/VI, tải tệp qua SSE, kiểm tra chia đôi màn hình, giảng viên ghi đè kết quả và phục hồi lỗi 404/ngoại lệ. \\
 \hline
@@ -78,7 +78,7 @@ Quy trình kiểm định phần mềm bao phủ ba tầng kiểm thử tự đ�
 \hline
 \texttt{FR-15}, \texttt{FR-16} & \texttt{api/\allowbreak routes/\allowbreak teacher.py}, \texttt{routes/\allowbreak system.py}, \texttt{Class\allowbreak Detail\allowbreak Page.tsx}, \texttt{System\allowbreak Health\allowbreak Page.tsx} & Kiểm thử ghi đè giao dịch, thống kê lớp học \& cầu dao ngắt mạch (circuit-breaker) & Đạt ($100\%$) \\
 \hline
-\texttt{NFR-01}, \texttt{NFR-02}, \texttt{NFR-07}--\texttt{10} & Toàn bộ đường ống 8 tầng, Docker Compose \& bản dựng Vite (\texttt{web/}) & Độ trễ/RSS ($P_{90}=1.33\text{\,s}$, $1.03\text{\,GB}$), E2E chuẩn WCAG, $2{,}920+$ ca kiểm thử, kiểm tra gói mã \& sức khỏe container & Đạt ($100\%$) \\
+\texttt{NFR-01}, \texttt{NFR-02}, \texttt{NFR-07}--\texttt{10} & Toàn bộ đường ống 8 tầng, Docker Compose \& bản dựng Vite (\texttt{web/}) & Độ trễ/RSS ($P_{90}=1.33\text{\,s}$, $1.03\text{\,GB}$), đo kiểm GROBID vận hành 0-swap, E2E chuẩn WCAG, $2{,}945+$ ca kiểm thử, kiểm tra gói mã \& sức khỏe container & Đạt ($100\%$) \\
 \hline
 \end{longtable}
 }
@@ -496,7 +496,37 @@ HTTP \texttt{POST /\allowbreak api/\allowbreak essays} & \textbf{50} & \textbf{5
 \end{longtable}
 }
 
-\rqanswer{RQ5}{CITRA xử lý một báo cáo đồ án tốt nghiệp dài 50 trang trong $1.33\text{\,s}$ ($P_{90}$ khi ấm bộ nhớ đệm; $9.41\text{\,s}$ qua mạng WAN lạnh) với mức RAM đỉnh chỉ $1.03\text{\,GB}$, đạt tốc độ tăng tốc $19.41\times$ nhờ bộ nhớ đệm ấm và chịu tải ổn định 50 lượt tải bài đồng thời mà không phát sinh bất kỳ lỗi khóa SQLite hay lỗi HTTP 5xx nào.}
+Nhằm kiểm chứng hành vi bộ nhớ thực tế trên môi trường vận hành với luận văn dài khi không sử dụng bộ nhớ đệm đĩa, Bảng~\ref{tab:nfr-grobid-prod} so sánh cấu hình bộ chứa GROBID cũ $3\text{\,GiB}$ (\texttt{-Xmx1280m}, \texttt{concurrency=10}, bật \texttt{teiCoordinates}) với cấu hình vận hành tối ưu $4\text{\,GiB}$ (\texttt{-Xmx768m}, \texttt{concurrency=2}, \texttt{pdfalto=1024\,MB}, tắt \texttt{teiCoordinates}) trên máy chủ ảo Google Compute Engine trực tiếp (\texttt{e2-custom-medium-6144}, 2 vCPU, $5.8\text{\,GiB}$ RAM) bằng chính báo cáo đồ án tốt nghiệp 117 trang ($10.63\text{\,MB}$) ở trạng thái tắt đệm TEI. Việc cân bằng lại hạn mức bộ nhớ vượt trên tập làm việc $3.1\text{\,GiB}$ của các mô hình Wapiti gốc giúp triệt tiêu hoàn toàn swap cgroup ($2.19\text{\,GiB} \rightarrow 0\text{\,B}$), giảm $99.74\%$ lỗi trang cứng ($91{,}718 \rightarrow 239$), tăng tốc bước phân tích GROBID không đệm gấp $2.04\times$ ở lượt nguội ($95.53\text{\,s} \rightarrow 46.93\text{\,s}$) và $5.48\times$ ở lượt ấm ($17.44\text{\,s}$), đồng thời xử lý đồng thời hai luận văn 117 trang trong tổng thời gian thực $31.31\text{\,s}$ với độ tương đương trích xuất $100\%$ ($46$ tài liệu tham khảo, $73$ trích dẫn nội văn) trong khi máy chủ vẫn còn dư $885\text{\,MiB}$ RAM khả dụng.
+
+{\setlength{\tabcolsep}{3.5pt}
+\begin{longtable}{|L{0.28}|C{0.15}|C{0.14}|C{0.14}|C{0.14}|C{0.15}|}
+\caption{Đo kiểm thực tế trên máy chủ GCE vận hành đối với bước phân tích GROBID không đệm trên luận văn 117 trang ($10.63\text{\,MB}$) trước và sau khi tối ưu bộ nhớ và nhóm tiến trình.}\label{tab:nfr-grobid-prod}\\
+\hline
+\textbf{Cấu hình vận hành} & \textbf{Thời gian GROBID} & \textbf{Đỉnh Swap} & \textbf{Lỗi trang cứng} & \textbf{Kích thước TEI} & \textbf{TLTK / Nội văn} \\
+\hline
+\endfirsthead
+\multicolumn{6}{c}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
+\hline
+\textbf{Cấu hình vận hành} & \textbf{Thời gian GROBID} & \textbf{Đỉnh Swap} & \textbf{Lỗi trang cứng} & \textbf{Kích thước TEI} & \textbf{TLTK / Nội văn} \\
+\hline
+\endhead
+\hline
+\multicolumn{6}{r}{\itshape Xem tiếp trang sau}\\
+\endfoot
+\hline
+\endlastfoot
+Cấu hình cũ \texttt{3G} (\texttt{-Xmx1280m}, pool 10) & 95.53\,s & 2.19\,GiB & 91,718 & 236.3\,kB & 46 / 73 \\
+\hline
+\textbf{Tối ưu \texttt{4G} --- JIT nguội (không đệm)} & \textbf{46.93\,s} ($2.04\times$) & \textbf{0\,B} & \textbf{239} & \textbf{227.3\,kB} & \textbf{46 / 73} \\
+\hline
+\textbf{Tối ưu \texttt{4G} --- JIT ấm (không đệm)} & \textbf{17.44\,s} ($5.48\times$) & \textbf{0\,B} & \textbf{239} & \textbf{227.3\,kB} & \textbf{46 / 73} \\
+\hline
+\textbf{Tối ưu \texttt{4G} --- 2$\times$ Song song (234\,tr.)} & \textbf{31.31\,s thực} & \textbf{0\,B} & \textbf{239} & \textbf{227.3\,kB} & \textbf{46 / 73 ($\times 2$)} \\
+\hline
+\end{longtable}
+}
+
+\rqanswer{RQ5}{CITRA xử lý một báo cáo đồ án tốt nghiệp dài 50 trang trong $1.33\text{\,s}$ ($P_{90}$ khi ấm bộ nhớ đệm; $9.41\text{\,s}$ qua mạng WAN lạnh) với mức RAM đỉnh của API chỉ $1.03\text{\,GB}$, đạt tốc độ tăng tốc $19.41\times$ nhờ bộ nhớ đệm ấm, triệt tiêu hoàn toàn hiện tượng swap thrashing của GROBID trên máy chủ vận hành 2 vCPU ($95.53\text{\,s} \rightarrow 17.44\text{\,s}$ không đệm ở lượt ấm trên luận văn 117 trang với $0\text{\,B}$ swap và giảm $99.74\%$ lỗi trang cứng), và chịu tải ổn định 50 lượt tải bài đồng thời mà không phát sinh bất kỳ lỗi khóa SQLite hay lỗi HTTP 5xx nào.}
 
 \section{Các mối đe dọa đến tính hợp lệ của thực nghiệm}
 \label{sec:difficulties}
@@ -521,4 +551,4 @@ Tính hợp lệ khái niệm xem xét liệu các độ đo đánh giá có ph�
 
 \section{Tóm tắt chương}
 
-Chương này đã kiểm định toàn diện hệ thống \textbf{CITRA} (\texttt{v3.90.9}) thông qua 2,920+ kiểm tra tự động, Ma trận truy vết yêu cầu đầy đủ và năm câu hỏi nghiên cứu thực nghiệm, chứng minh độ chính xác trong phân phối đạt $99.67\%$ ($\text{ECE} = 0.0405$), độ chính xác ký hiệu ngoài phân phối (OOD) đạt $99.96\%$, độ chính xác đầu-cuối trên bộ chuẩn vàng sáu lĩnh vực đạt $100.00\%$, cùng khả năng chịu tải đột biến 50 người dùng đồng thời không phát sinh lỗi. Chương~\ref{chap:conclusion} sẽ tổng kết các kết quả đạt được, những hạn chế hiện tại và hướng phát triển tiếp theo của đồ án tốt nghiệp.
+Chương này đã kiểm định toàn diện hệ thống \textbf{CITRA} (\texttt{v3.90.9}) thông qua 2,945+ kiểm tra tự động, Ma trận truy vết yêu cầu đầy đủ và năm câu hỏi nghiên cứu thực nghiệm, chứng minh độ chính xác trong phân phối đạt $99.67\%$ ($\text{ECE} = 0.0405$), độ chính xác ký hiệu ngoài phân phối (OOD) đạt $99.96\%$, độ chính xác đầu-cuối trên bộ chuẩn vàng sáu lĩnh vực đạt $100.00\%$, khả năng mở rộng GROBID vận hành không swap, cùng khả năng chịu tải đột biến 50 người dùng đồng thời không phát sinh lỗi. Chương~\ref{chap:conclusion} sẽ tổng kết các kết quả đạt được, những hạn chế hiện tại và hướng phát triển tiếp theo của đồ án tốt nghiệp.

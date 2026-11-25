@@ -80,22 +80,31 @@ services:
   grobid:
     image: grobid/grobid:0.9.1-crf
     container_name: essay-check-grobid
+    ulimits:
+      core: 0
     ports:
       - "8070:8070"
+    entrypoint:
+      - /bin/sh
+      - /opt/grobid/citra-grobid-entrypoint.sh
     environment:
-      - JAVA_OPTS=-Xmx2g -XX:-UseContainerSupport
-      - JDK_JAVA_OPTIONS=-Xmx2g -XX:-UseContainerSupport
+      - JAVA_OPTS=-Xms256m -Xmx768m -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:G1PeriodicGCInterval=60000 -XX:G1PeriodicGCSystemLoadThreshold=0.5 -XX:MaxHeapFreeRatio=30 -XX:MinHeapFreeRatio=15 -XX:+ExitOnOutOfMemoryError
+      - GROBID_CONCURRENCY=2
+      - GROBID_POOL_MAX_WAIT=30
+      - GROBID_PDFALTO_MEMORY_MB=1024
+      - GROBID_MODEL_PRELOAD=true
     restart: unless-stopped
     deploy:
       resources:
         limits:
-          memory: 3G
+          memory: 4G
         reservations:
           memory: 2G
     networks:
       - essay-check-net
     volumes:
       - grobid-cache:/opt/grobid/grobid-home/cache
+      - ./scripts/grobid-entrypoint.sh:/opt/grobid/citra-grobid-entrypoint.sh:ro
     healthcheck:
       test:
         - CMD-SHELL
@@ -201,7 +210,7 @@ Kho mã nguồn hệ thống (\texttt{v3.90.9}) phân tách rõ ràng các gói 
     \item[\texttt{evaluation/}] Bộ sinh và thực thi tập chuẩn đánh giá 120,000 mẫu phân tách độc lập theo bài báo (paper-disjoint), thang mô hình cơ sở (\texttt{B0}--\texttt{B5}), bộ kiểm thử rào chắn ngoài phân phối (OOD) 2,400 mẫu, bộ đánh giá chuẩn vàng đầu-cuối (E2E) 120 tài liệu tham khảo, cùng các kiểm định thống kê bắt cặp McNemar, Holm--Bonferroni, Clopper--Pearson và bootstrap.
     \item[\texttt{export/}] Các bộ xuất báo cáo an toàn (PDF, DOCX, CSV, JSON, BibTeX, RIS), mô-đun định dạng \texttt{bibliography\_formatter.py} và công cụ tự động sửa lỗi danh mục tài liệu tham khảo trực tiếp trên bản thảo \texttt{.docx} (\texttt{docx\_exporter.py}).
     \item[\texttt{db/}, \texttt{billing/} \& \texttt{api/}] Mười lăm mô hình SQLAlchemy ORM, mười ba bản di trú lược đồ có kiểm tra toàn vẹn mã băm SHA-256 (\texttt{0001}--\texttt{0013}), tinh chỉnh thích ứng SQLite WAL, bộ điều khiển tiếp nhận tải \texttt{PipelineAdmissionController}, cơ chế khôi phục tiến trình treo, trình xử lý thanh toán Stripe/VNPay và hệ thống định tuyến FastAPI dưới tiền tố \texttt{/api/*}.
-    \item[\texttt{web/}] Ứng dụng đơn trang (\textbf{CITRA}) xây dựng trên React 18.3 và TypeScript 5.8, được kiểm thử tự động bởi 488 ca kiểm thử đơn vị/thành phần bằng Vitest (63 bộ đặc tả) và 20 bộ kịch bản kiểm thử đầu-cuối Playwright E2E.
+    \item[\texttt{web/}] Ứng dụng đơn trang (\textbf{CITRA}) xây dựng trên React 18.3 và TypeScript 5.8, được kiểm thử tự động bởi 494 ca kiểm thử đơn vị/thành phần bằng Vitest (63 bộ đặc tả) và 20 bộ kịch bản kiểm thử đầu-cuối Playwright E2E.
 \end{description}
 
 \section*{Phụ lục E. Nhật ký thực hiện đồ án và Phân công đóng góp}
