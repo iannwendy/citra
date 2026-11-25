@@ -89,6 +89,7 @@ describe('VerificationProgressContext — Cross-Tab & Reload Progress Persistenc
   afterEach(() => {
     batchTiming.pollIntervalMs = 2000;
     singlePollTiming.pollIntervalMs = 2000;
+    singlePollTiming.handoffGraceMs = 600;
     sessionStorage.clear();
   });
 
@@ -342,5 +343,233 @@ describe('VerificationProgressContext — Cross-Tab & Reload Progress Persistenc
     expect(screen.getByTestId('processing-filename-badge').textContent).toContain(
       'Reloaded_Thesis.pdf',
     );
+  });
+
+  it('opens /api/essays/{id}/events exactly once during UploadPage -> ProcessingPage handoff (no aborted 499 background SSE)', async () => {
+    const encoder = new TextEncoder();
+    const sseRequests: Array<{ url: string; aborted: boolean }> = [];
+
+    const origFetch = globalThis.fetch;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+      if (url.includes('/api/essays/88/events')) {
+        const record = { url, aborted: false };
+        sseRequests.push(record);
+        init?.signal?.addEventListener('abort', () => {
+          record.aborted = true;
+        });
+        const stream = new ReadableStream<Uint8Array>({
+          start(controller) {
+            const frame = makeStatus({
+              status: 'processing',
+              step: 'parsing',
+              step_index: 0,
+              message: 'Analyzing 117-page PDF layout with GROBID...',
+            });
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(frame)}\n\n`));
+          },
+        });
+        return new Response(stream, {
+          status: 200,
+          headers: { 'Content-Type': 'text/event-stream; charset=utf-8' },
+        });
+      }
+      return origFetch(input, init);
+    });
+
+    vi.spyOn(api, 'uploadEssay').mockResolvedValue({
+      essay_id: 88,
+      filename: 'Handoff_Thesis.pdf',
+      num_pages: 117,
+      num_citations: 0,
+      summary: { status: 'processing' },
+    } as never);
+    vi.spyOn(api, 'getEssay').mockResolvedValue({
+      essay_id: 88,
+      filename: 'Handoff_Thesis.pdf',
+    } as never);
+
+    const user = makeUser('user', 'pro');
+    const { container } = renderWithProviders(<TestWorkspaceRoutes />, {
+      user,
+      initialRoute: '/upload',
+    });
+
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(fileInput, {
+      target: { files: [makePdf('Handoff_Thesis.pdf')] },
+    });
+
+    const uploadBtn = await screen.findByRole('button', { name: /Bắt đầu xác minh/i });
+    fireEvent.click(uploadBtn);
+
+    expect(await screen.findByTestId('processing-filename-badge')).toBeDefined();
+    await waitFor(() => {
+      expect(sseRequests.length).toBe(1);
+    });
+    // Wait past a short settle window — MUST remain exactly 1 SSE request with zero aborted handoff requests
+    await new Promise((r) => setTimeout(r, 80));
+    expect(sseRequests.length).toBe(1);
+    expect(sseRequests[0].aborted).toBe(false);
+  });
+
+  it('keeps active background SSE alive when filename metadata updates and activates background tracking if user leaves UploadPage mid-upload', async () => {
+    singlePollTiming.handoffGraceMs = 40;
+    const encoder = new TextEncoder();
+    const sseRequests: Array<{ url: string; aborted: boolean }> = [];
+
+    let resolveUpload!: (val: unknown) => void;
+    vi.spyOn(api, 'uploadEssay').mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveUpload = resolve;
+        }) as never,
+    );
+
+    const origFetch = globalThis.fetch;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+      if (url.includes('/api/essays/95/events')) {
+        const record = { url, aborted: false };
+        sseRequests.push(record);
+        init?.signal?.addEventListener('abort', () => {
+          record.aborted = true;
+        });
+        const stream = new ReadableStream<Uint8Array>({
+          start(controller) {
+            const frame = makeStatus({
+              status: 'processing',
+              step: 'extracting',
+              step_index: 2,
+              message: 'Extracting citations...',
+            });
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(frame)}\n\n`));
+          },
+        });
+        return new Response(stream, {
+          status: 200,
+          headers: { 'Content-Type': 'text/event-stream; charset=utf-8' },
+        });
+      }
+      return origFetch(input, init);
+    });
+
+    const user = makeUser('user', 'pro');
+    const { container } = renderWithProviders(<TestWorkspaceRoutes />, {
+      user,
+      initialRoute: '/upload',
+    });
+
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(fileInput, {
+      target: { files: [makePdf('MidUpload_Away.pdf')] },
+    });
+    fireEvent.click(await screen.findByRole('button', { name: /Bắt đầu xác minh/i }));
+
+    // Navigate away to Dashboard BEFORE uploadEssay resolves!
+    fireEvent.click(screen.getByRole('link', { name: /Bảng điều khiển/i }));
+    expect(await screen.findByTestId('mock-dashboard-view')).toBeDefined();
+
+    // Now resolve upload in background -> UploadPage is unmounted, so background SSE MUST start immediately!
+    resolveUpload({
+      essay_id: 95,
+      filename: 'MidUpload_Away.pdf',
+      num_pages: 10,
+      num_citations: 0,
+      summary: { status: 'processing' },
+    });
+
+    await waitFor(() => {
+      expect(sseRequests.length).toBe(1);
+      expect(screen.getByTestId('sidebar-single-progress-badge')).toBeDefined();
+    });
+    expect(sseRequests[0].aborted).toBe(false);
+  });
+
+  it('recovers background SSE after handoffGraceMs if ProcessingPage never mounts and preserves active SSE across filename updates', async () => {
+    singlePollTiming.handoffGraceMs = 45;
+    const encoder = new TextEncoder();
+    const sseRequests: Array<{ url: string; aborted: boolean }> = [];
+
+    const origFetch = globalThis.fetch;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+      if (url.includes('/api/essays/96/events')) {
+        const record = { url, aborted: false };
+        sseRequests.push(record);
+        init?.signal?.addEventListener('abort', () => {
+          record.aborted = true;
+        });
+        const stream = new ReadableStream<Uint8Array>({
+          start(controller) {
+            const frame = makeStatus({
+              status: 'processing',
+              step: 'linking',
+              step_index: 3,
+              message: 'Linking citations...',
+            });
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(frame)}\n\n`));
+          },
+        });
+        return new Response(stream, {
+          status: 200,
+          headers: { 'Content-Type': 'text/event-stream; charset=utf-8' },
+        });
+      }
+      return origFetch(input, init);
+    });
+
+    vi.spyOn(api, 'uploadEssay').mockResolvedValue({
+      essay_id: 96,
+      filename: 'ID #96',
+      num_pages: 8,
+      num_citations: 0,
+      summary: { status: 'processing' },
+    } as never);
+    // Simulate delayed filename hydration resolving AFTER background SSE is already open
+    let resolveEssayMeta!: (val: unknown) => void;
+    vi.spyOn(api, 'getEssay').mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveEssayMeta = resolve;
+        }) as never,
+    );
+
+    const user = makeUser('user', 'pro');
+    // Route /verification/processing/:id to a stub WITHOUT ProcessingPage so handoff never registers
+    const { container } = renderWithProviders(
+      <AppLayout>
+        <Routes>
+          <Route path="/upload" element={<UploadPage />} />
+          <Route
+            path="/verification/processing/:id"
+            element={<div data-testid="stub-no-processing-mount">Stub</div>}
+          />
+        </Routes>
+      </AppLayout>,
+      { user, initialRoute: '/upload' },
+    );
+
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(fileInput, {
+      target: { files: [makePdf('GraceFallback.pdf')] },
+    });
+    fireEvent.click(await screen.findByRole('button', { name: /Bắt đầu xác minh/i }));
+
+    expect(await screen.findByTestId('stub-no-processing-mount')).toBeDefined();
+
+    // After handoffGraceMs (45ms) expires without ProcessingPage mounting, background SSE kicks in!
+    await waitFor(() => {
+      expect(sseRequests.length).toBe(1);
+    });
+    expect(sseRequests[0].aborted).toBe(false);
+
+    // Hydrate filename metadata while background SSE is live -> MUST NOT abort or reopen SSE!
+    if (resolveEssayMeta) {
+      resolveEssayMeta({ essay_id: 96, filename: 'GraceFallback_Hydrated.pdf' });
+    }
+    await new Promise((r) => setTimeout(r, 60));
+    expect(sseRequests.length).toBe(1);
+    expect(sseRequests[0].aborted).toBe(false);
   });
 });

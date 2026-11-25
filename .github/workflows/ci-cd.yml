@@ -331,6 +331,7 @@ jobs:
             echo ">>> [1/4] Syncing /opt/citra with origin/main..."
             sudo chown -R "$USER":1000 /opt/citra
             cd /opt/citra
+            PREV_COMMIT=$(git rev-parse HEAD 2>/dev/null || true)
             git remote set-url origin "$REPO_GIT_URL"
             git fetch origin main
             git reset --hard origin/main
@@ -365,42 +366,86 @@ jobs:
             echo ">>> [3/4] Pulling pre-built images from ghcr.io and rolling out containers in-place..."
             CURRENT_GROBID_IMG=$(sudo docker inspect --format="{{.Config.Image}}" essay-check-grobid 2>/dev/null || true)
             CURRENT_GROBID_RUNNING=$(sudo docker inspect --format="{{.State.Running}}" essay-check-grobid 2>/dev/null || true)
-            if [ "$CURRENT_GROBID_IMG" != "grobid/grobid:0.9.1-crf" ] || [ "$CURRENT_GROBID_RUNNING" != "true" ]; then
-              echo ">>> Updating GROBID container ($CURRENT_GROBID_IMG -> grobid/grobid:0.9.1-crf) and clearing stale TEI cache..."
-              sudo rm -f /opt/citra/data/cache/grobid/*.tei.xml 2>/dev/null || true
-              sudo docker compose -f docker-compose.prod.yml pull grobid
-              sudo docker compose -f docker-compose.prod.yml up -d --force-recreate grobid
-              sudo docker rmi lfoppiano/grobid:0.8.0 2>/dev/null || true
+            GROBID_NEEDS_PULL=0
+            GROBID_FORCE_RECREATE=0
+            if [ -z "$CURRENT_GROBID_IMG" ] || [ "$CURRENT_GROBID_IMG" != "grobid/grobid:0.9.1-crf" ]; then
+              GROBID_NEEDS_PULL=1
+              GROBID_FORCE_RECREATE=1
+            fi
+            if [ "$GROBID_FORCE_RECREATE" -eq 0 ] && [ "$CURRENT_GROBID_RUNNING" = "true" ] && [ -f /opt/citra/scripts/grobid-entrypoint.sh ]; then
+              HOST_EP_SHA=$(sha256sum /opt/citra/scripts/grobid-entrypoint.sh 2>/dev/null | awk '{print $1}' || true)
+              CONT_EP_SHA=$(sudo docker exec essay-check-grobid sha256sum /opt/grobid/citra-grobid-entrypoint.sh 2>/dev/null | awk '{print $1}' || true)
+              if [ -n "$HOST_EP_SHA" ] && [ "$HOST_EP_SHA" != "$CONT_EP_SHA" ]; then
+                echo ">>> GROBID entrypoint script content changed; scheduling in-place GROBID recreate..."
+                GROBID_FORCE_RECREATE=1
+              fi
             fi
 
             sudo docker image prune -af >/dev/null 2>&1 || true
+            if [ "$GROBID_NEEDS_PULL" -eq 1 ]; then
+              sudo docker compose -f docker-compose.prod.yml pull grobid || {
+                [ -n "$PREV_COMMIT" ] && git reset --hard "$PREV_COMMIT" || true
+                exit 1
+              }
+            fi
             sudo GHCR_OWNER="$GHCR_OWNER" CITRA_IMAGE_TAG="$CITRA_IMAGE_TAG" \
-              docker compose -f docker-compose.prod.yml pull api web
+              docker compose -f docker-compose.prod.yml pull api web || {
+                [ -n "$PREV_COMMIT" ] && git reset --hard "$PREV_COMMIT" || true
+                exit 1
+              }
             if [ -f /opt/citra/.env ]; then
               sudo sed -i "/^GHCR_OWNER=/d;/^CITRA_IMAGE_TAG=/d" /opt/citra/.env
               ensure_trailing_newline /opt/citra/.env
               printf "GHCR_OWNER=%s\nCITRA_IMAGE_TAG=%s\n" "$GHCR_OWNER" "$CITRA_IMAGE_TAG" | sudo tee -a /opt/citra/.env >/dev/null
             fi
-            sudo GHCR_OWNER="$GHCR_OWNER" CITRA_IMAGE_TAG="$CITRA_IMAGE_TAG" \
-              docker compose -f docker-compose.prod.yml up -d --no-build --remove-orphans api web
+
+            if [ -n "$CURRENT_GROBID_IMG" ] && [ "$CURRENT_GROBID_IMG" != "grobid/grobid:0.9.1-crf" ]; then
+              echo ">>> GROBID image changed ($CURRENT_GROBID_IMG -> grobid/grobid:0.9.1-crf); clearing stale TEI cache..."
+              sudo rm -f /opt/citra/data/cache/grobid/*.tei.xml 2>/dev/null || true
+            fi
+
+            ROLLOUT_OK=1
+            if [ "$GROBID_FORCE_RECREATE" -eq 1 ]; then
+              sudo docker compose -f docker-compose.prod.yml up -d --no-build --force-recreate grobid || ROLLOUT_OK=0
+              if [ "$GROBID_NEEDS_PULL" -eq 1 ]; then
+                sudo docker rmi lfoppiano/grobid:0.8.0 2>/dev/null || true
+              fi
+            else
+              sudo docker compose -f docker-compose.prod.yml up -d --no-build grobid || ROLLOUT_OK=0
+            fi
+            if [ "$ROLLOUT_OK" -eq 1 ]; then
+              sudo GHCR_OWNER="$GHCR_OWNER" CITRA_IMAGE_TAG="$CITRA_IMAGE_TAG" \
+                docker compose -f docker-compose.prod.yml up -d --no-build --remove-orphans api web || ROLLOUT_OK=0
+            fi
 
             echo ">>> [4/4] Verifying container health (API, GROBID & Web) on 127.0.0.1:8000 and https://citra.io.vn (up to 120s)..."
             HEALTHY=0
-            for i in $(seq 1 60); do
-              if curl -sf http://127.0.0.1:8070/api/isalive >/dev/null \
-                 && curl -sf http://127.0.0.1:8000/api/health | grep -q "\"available\":true" \
-                 && curl -sf https://citra.io.vn/api/health >/dev/null; then
-                HEALTHY=1
-                echo "Production deployment verified healthy (GROBID 0.9.1-crf + GHCR API/Web:$CITRA_IMAGE_TAG) on https://citra.io.vn (attempt $i)!"
-                break
-              fi
-              sleep 2
-            done
+            if [ "$ROLLOUT_OK" -eq 1 ]; then
+              for i in $(seq 1 60); do
+                if curl -sf http://127.0.0.1:8070/api/isalive >/dev/null \
+                   && curl -sf http://127.0.0.1:8000/api/health | grep -q "\"available\":true" \
+                   && curl -sf https://citra.io.vn/api/health >/dev/null; then
+                  HEALTHY=1
+                  echo "Production deployment verified healthy (GROBID 0.9.1-crf + GHCR API/Web:$CITRA_IMAGE_TAG) on https://citra.io.vn (attempt $i)!"
+                  break
+                fi
+                sleep 2
+              done
+            fi
 
-            sudo docker compose -f docker-compose.prod.yml ps
+            sudo docker compose -f docker-compose.prod.yml ps || true
             if [ "$HEALTHY" -ne 1 ]; then
               echo "ERROR: Production healthcheck failed after rollout!"
-              sudo docker compose -f docker-compose.prod.yml logs --tail=50 grobid api web
+              sudo docker compose -f docker-compose.prod.yml logs --tail=50 grobid api web || true
+              if [ -n "$PREV_COMMIT" ] && [ "$PREV_COMMIT" != "$(git rev-parse HEAD 2>/dev/null || true)" ]; then
+                echo ">>> Restoring /opt/citra compose & scripts to previous verified commit: $PREV_COMMIT..."
+                git reset --hard "$PREV_COMMIT" || true
+                if [ "$GROBID_FORCE_RECREATE" -eq 1 ] || ! curl -sf http://127.0.0.1:8070/api/isalive >/dev/null; then
+                  sudo docker compose -f docker-compose.prod.yml up -d --no-build --force-recreate grobid || true
+                else
+                  sudo docker compose -f docker-compose.prod.yml up -d --no-build grobid || true
+                fi
+              fi
               if [ -n "$PREV_TAG" ] && [ "$PREV_TAG" != "$CITRA_IMAGE_TAG" ]; then
                 echo ">>> Rolling back api & web to previous verified image tag: $PREV_TAG..."
                 if [ -f /opt/citra/.env ]; then

@@ -3,7 +3,7 @@
 
 \section{Summary of Achievements Against Objectives}
 
-This graduation project designed, implemented, and empirically evaluated \textbf{CITRA} (\textit{Essay Integrity Checker v3.90.7}), an explainable neuro-symbolic software platform for automated Citation Integrity Scoring (CIS), fabricated reference detection, and bibliography remediation. Table~\ref{tab:obj-summary} maps the delivered software artifacts and empirical results directly back to the six research objectives defined in Section~\ref{sec:objectives}.
+This graduation project designed, implemented, and empirically evaluated \textbf{CITRA} (\textit{Essay Integrity Checker v3.90.8}), an explainable neuro-symbolic software platform for automated Citation Integrity Scoring (CIS), fabricated reference detection, and bibliography remediation. Table~\ref{tab:obj-summary} maps the delivered software artifacts and empirical results directly back to the six research objectives defined in Section~\ref{sec:objectives}.
 
 {\setlength{\tabcolsep}{3.5pt}
 \begin{longtable}{|C{0.14}|L{0.32}|L{0.54}|}
@@ -42,7 +42,7 @@ Figure~\ref{fig:verdict-paths} synthesizes the core architectural safeguard gove
 \begin{figure}[H]
     \centering
     \includegraphics[width=\textwidth,keepaspectratio]{picture/figures/fig6_1_verdict_paths.png}
-    \caption[Guarded neuro-symbolic decision tree separating refutation from abstention]{Guarded neuro-symbolic decision tree in CITRA (\texttt{v3.90.7}) separating evidence-backed refutation (\texttt{suspected\_hallucination}) from provenance-aware abstention (\texttt{unresolved}).}
+    \caption[Guarded neuro-symbolic decision tree separating refutation from abstention]{Guarded neuro-symbolic decision tree in CITRA (\texttt{v3.90.8}) separating evidence-backed refutation (\texttt{suspected\_hallucination}) from provenance-aware abstention (\texttt{unresolved}).}
     \label{fig:verdict-paths}
 \end{figure}
 
@@ -58,7 +58,7 @@ Three empirical lessons emerge from the experiments in Chapter~\ref{chap:results
 \section{System Limitations}
 \label{sec:limitations}
 
-Despite strong empirical performance, version \texttt{3.90.7} has four concrete engineering limitations:
+Despite strong empirical performance, version \texttt{3.90.8} has four concrete engineering limitations:
 \begin{itemize}
     \item \textbf{L1 (Paywalled Full-Text Claim Blindness):} Semantic claim alignment compares inline sentences against titles and open abstracts. When a student cites a specific figure, theorem, or discussion paragraph inside a closed-access article whose abstract omits that detail, \textbf{CITRA} cannot verify body-level entailment.
     \item \textbf{L2 (Domain Skew in the Offline Corpus):} Because $98.42\%$ of \texttt{local\_papers.db} originates from the ACL Anthology and CS arXiv, fully air-gapped deployments without Internet access experience reduced Tier-0 recall on biomedical, humanities, and Vietnamese domestic journal articles.

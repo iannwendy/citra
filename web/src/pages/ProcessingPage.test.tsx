@@ -358,3 +358,262 @@ describe('ProcessingPage real-time elapsed timer', () => {
     ctrlRef.current?.close();
   });
 });
+
+describe('ProcessingPage Step 1 sub-stage telemetry & ReasoningStream invariants', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it('appends Step 1 sub-stage SSE lines monotonically without shrinking on Step 2 and localizes in EN/VI', async () => {
+    await i18n.changeLanguage('en');
+    vi.useFakeTimers();
+
+    const encoder = new TextEncoder();
+    const ctrlRef: { current: ReadableStreamDefaultController<Uint8Array> | null } = {
+      current: null,
+    };
+
+    const sseStream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        ctrlRef.current = controller;
+        const frame1: EssayStatus = {
+          status: 'processing',
+          queue_position: null,
+          step: 'parsing',
+          step_index: 0,
+          total_steps: 8,
+          message: 'Extracted text from 117 pages · Checking GROBID layout cache...',
+          citations_found: 0,
+          references_found: 0,
+          linked: 0,
+          sources_queried: {},
+          elapsed_seconds: 0.4,
+          finished_at: null,
+          error: null,
+        };
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(frame1)}\n\n`));
+      },
+    });
+
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(sseStream, {
+        status: 200,
+        headers: { 'Content-Type': 'text/event-stream; charset=utf-8' },
+      }),
+    );
+    vi.spyOn(api, 'getEssay').mockResolvedValue(null);
+
+    renderWithProviders(
+      <Routes>
+        <Route path="/verification/processing/:id" element={<ProcessingPage />} />
+      </Routes>,
+      {
+        user: makeUser('user'),
+        initialRoute: '/verification/processing/124',
+      },
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(
+      screen.getByText('[01/08] PYMUPDF · Extracted text (117 pages) · Checking GROBID cache'),
+    ).toBeDefined();
+
+    // Next Step 1 sub-stage arrives: Analyzing layout with GROBID
+    await act(async () => {
+      const frame2: EssayStatus = {
+        status: 'processing',
+        queue_position: null,
+        step: 'parsing',
+        step_index: 0,
+        total_steps: 8,
+        message: 'Analyzing 117-page PDF layout with GROBID...',
+        citations_found: 0,
+        references_found: 0,
+        linked: 0,
+        sources_queried: {},
+        elapsed_seconds: 1.2,
+        finished_at: null,
+        error: null,
+      };
+      ctrlRef.current?.enqueue(encoder.encode(`data: ${JSON.stringify(frame2)}\n\n`));
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(
+      screen.getByText('[01/08] GROBID · Analyzing TEI-XML structure (117 pages)…'),
+    ).toBeDefined();
+
+    // Advance to Step 2 — previous Step 1 sub-stage lines MUST stay in ReasoningStream (monotonic prefix)
+    await act(async () => {
+      const frame3: EssayStatus = {
+        status: 'processing',
+        queue_position: null,
+        step: 'style_detection',
+        step_index: 1,
+        total_steps: 8,
+        message: 'Detecting citation style...',
+        citations_found: 0,
+        references_found: 0,
+        linked: 0,
+        sources_queried: {},
+        elapsed_seconds: 6.5,
+        finished_at: null,
+        error: null,
+      };
+      ctrlRef.current?.enqueue(encoder.encode(`data: ${JSON.stringify(frame3)}\n\n`));
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    // Stepper catch-up (220ms) + ReasoningStream step animation (360ms)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(250);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(450);
+    });
+    expect(
+      screen.getByText('[01/08] PYMUPDF · Extracted text (117 pages) · Checking GROBID cache'),
+    ).toBeDefined();
+    expect(
+      screen.getByText('[01/08] GROBID · Analyzing TEI-XML structure (117 pages)…'),
+    ).toBeDefined();
+    expect(
+      screen.getByText('[02/08] STYLE ENGINE · Citation format & delimiter classification'),
+    ).toBeDefined();
+
+    // Switching language to Vietnamese re-renders stored sub-messages cleanly in Vietnamese
+    await act(async () => {
+      await i18n.changeLanguage('vi');
+    });
+    expect(
+      screen.getByText('[01/08] GROBID · Đang phân tích cấu trúc TEI-XML (117 trang)…'),
+    ).toBeDefined();
+
+    ctrlRef.current?.close();
+  });
+
+  it('does not misattribute a later-step message as a Step 1 sub-stage during initial stepper animation', async () => {
+    await i18n.changeLanguage('en');
+    vi.useFakeTimers();
+
+    // Backend is already at step="linking" with a message that happens to contain "analyzing" & "grobid"
+    vi.spyOn(api, 'getEssayStatus').mockResolvedValue({
+      status: 'processing',
+      queue_position: null,
+      step: 'linking',
+      step_index: 3,
+      total_steps: 8,
+      message: 'Analyzing 40-page PDF layout with GROBID...',
+      citations_found: 50,
+      references_found: 30,
+      linked: 28,
+      sources_queried: {},
+      elapsed_seconds: 5.0,
+      finished_at: null,
+      error: null,
+    });
+
+    renderWithProviders(
+      <Routes>
+        <Route path="/verification/processing/:id" element={<ProcessingPage />} />
+      </Routes>,
+      {
+        user: makeUser('user'),
+        initialRoute: '/verification/processing/125',
+      },
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    // Even though effectiveStepIndex starts at 0 during stepper catch-up, snap.step !== 'parsing'
+    // so it must NOT be recorded as a Step 1 sub-stage line!
+    expect(
+      screen.queryByText('[01/08] GROBID · Analyzing TEI-XML structure (40 pages)…'),
+    ).toBeNull();
+  });
+
+  it('uses singular English grammar for 1 page / 1 reference and distinguishes REGEX vs FALLBACK tags', async () => {
+    await i18n.changeLanguage('en');
+    vi.useFakeTimers();
+
+    const encoder = new TextEncoder();
+    const ctrlRef: { current: ReadableStreamDefaultController<Uint8Array> | null } = {
+      current: null,
+    };
+
+    const sseStream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        ctrlRef.current = controller;
+        const frame1: EssayStatus = {
+          status: 'processing',
+          queue_position: null,
+          step: 'parsing',
+          step_index: 0,
+          total_steps: 8,
+          message: 'Extracted text from 1 page · Using regex parser...',
+          citations_found: 0,
+          references_found: 0,
+          linked: 0,
+          sources_queried: {},
+          elapsed_seconds: 0.2,
+          finished_at: null,
+          error: null,
+        };
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(frame1)}\n\n`));
+      },
+    });
+
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(sseStream, {
+        status: 200,
+        headers: { 'Content-Type': 'text/event-stream; charset=utf-8' },
+      }),
+    );
+    vi.spyOn(api, 'getEssay').mockResolvedValue(null);
+
+    renderWithProviders(
+      <Routes>
+        <Route path="/verification/processing/:id" element={<ProcessingPage />} />
+      </Routes>,
+      {
+        user: makeUser('user'),
+        initialRoute: '/verification/processing/126',
+      },
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(
+      screen.getByText('[01/08] REGEX · Running regex structural parser (1 page)'),
+    ).toBeDefined();
+
+    await act(async () => {
+      const frame2: EssayStatus = {
+        status: 'processing',
+        queue_position: null,
+        step: 'parsing',
+        step_index: 0,
+        total_steps: 8,
+        message: 'GROBID parsed 1 reference · Extracting & merging citations...',
+        citations_found: 0,
+        references_found: 0,
+        linked: 0,
+        sources_queried: {},
+        elapsed_seconds: 0.9,
+        finished_at: null,
+        error: null,
+      };
+      ctrlRef.current?.enqueue(encoder.encode(`data: ${JSON.stringify(frame2)}\n\n`));
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(
+      screen.getByText('[01/08] MERGE · GROBID parsed 1 reference · Merging citations'),
+    ).toBeDefined();
+
+    ctrlRef.current?.close();
+  });
+});

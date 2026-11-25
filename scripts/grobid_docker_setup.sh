@@ -17,14 +17,15 @@
 #
 # Requirements:
 #     - Docker installed and daemon running
-#     - ~1.5 GB free RAM (GROBID allocates 1.5 GB heap by default)
+#     - ~4 GB free RAM (GROBID 0.9.1-crf Wapiti native models ~3.1 GB + 768 MB JVM heap)
 #     - Ports 8070-8071 free on host (GROBID server + admin)
 #
 # Environment variables (optional):
-#     GROBID_IMAGE    Docker image to use (default: grobid/grobid:0.9.1-crf)
-#     GROBID_HOST_PORT   Host port for GROBID server (default: 8070)
-#     GROBID_CONTAINER_NAME  Container name (default: essay-check-grobid)
-#     GROBID_MEMORY    JVM heap limit (default: 1280m)
+#     GROBID_IMAGE             Docker image to use (default: grobid/grobid:0.9.1-crf)
+#     GROBID_HOST_PORT         Host port for GROBID server (default: 8070)
+#     GROBID_CONTAINER_NAME    Container name (default: essay-check-grobid)
+#     GROBID_MEMORY            JVM heap limit (default: 768m)
+#     GROBID_CONTAINER_MEMORY  Docker container RAM cap (default: 4g)
 # =====================================================================
 
 set -euo pipefail
@@ -33,7 +34,8 @@ set -euo pipefail
 GROBID_IMAGE="${GROBID_IMAGE:-grobid/grobid:0.9.1-crf}"
 GROBID_HOST_PORT="${GROBID_HOST_PORT:-8070}"
 GROBID_CONTAINER_NAME="${GROBID_CONTAINER_NAME:-essay-check-grobid}"
-GROBID_MEMORY="${GROBID_MEMORY:-1280m}"
+GROBID_MEMORY="${GROBID_MEMORY:-768m}"
+GROBID_CONTAINER_MEMORY="${GROBID_CONTAINER_MEMORY:-4g}"
 GROBID_HEALTH_TIMEOUT="${GROBID_HEALTH_TIMEOUT:-120}"  # seconds
 
 # --- Colors (only if stdout is a tty) ---
@@ -141,11 +143,11 @@ cmd_start() {
         docker_cmd run -d \
             --rm \
             --ulimit core=0 \
+            --memory "$GROBID_CONTAINER_MEMORY" \
             --name "$GROBID_CONTAINER_NAME" \
             -p "${GROBID_HOST_PORT}:8070" \
             -p 8071:8071 \
-            -e JAVA_OPTS="-Xmx${GROBID_MEMORY} -XX:+UseG1GC" \
-            -e JDK_JAVA_OPTIONS="-Xmx${GROBID_MEMORY} -XX:+UseG1GC" \
+            -e JAVA_OPTS="-Xms256m -Xmx${GROBID_MEMORY} -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:+ExitOnOutOfMemoryError" \
             "$GROBID_IMAGE"
     fi
 

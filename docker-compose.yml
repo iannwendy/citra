@@ -17,22 +17,31 @@ services:
   grobid:
     image: grobid/grobid:0.9.1-crf
     container_name: essay-check-grobid
+    ulimits:
+      core: 0
     ports:
       - "8070:8070"  # GROBID API
+    entrypoint:
+      - /bin/sh
+      - /opt/grobid/citra-grobid-entrypoint.sh
     environment:
-      - JAVA_OPTS=-Xmx1280m -XX:-UseContainerSupport -XX:ActiveProcessorCount=4
-      - JDK_JAVA_OPTIONS=-Xmx1280m -XX:-UseContainerSupport -XX:ActiveProcessorCount=4
+      - JAVA_OPTS=-Xms256m -Xmx768m -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:G1PeriodicGCInterval=60000 -XX:G1PeriodicGCSystemLoadThreshold=0.5 -XX:MaxHeapFreeRatio=30 -XX:MinHeapFreeRatio=15 -XX:+ExitOnOutOfMemoryError
+      - GROBID_CONCURRENCY=2
+      - GROBID_POOL_MAX_WAIT=30
+      - GROBID_PDFALTO_MEMORY_MB=1024
+      - GROBID_MODEL_PRELOAD=true
     restart: unless-stopped
     deploy:
       resources:
         limits:
-          memory: 3G
+          memory: 4G
         reservations:
           memory: 2G
     networks:
       - essay-check-net
     volumes:
       - grobid-cache:/opt/grobid/grobid-home/cache
+      - ./scripts/grobid-entrypoint.sh:/opt/grobid/citra-grobid-entrypoint.sh:ro
     healthcheck:
       # Grobid image has no curl/wget (and `sh` is dash, no /dev/tcp) — probe
       # with bash's /dev/tcp instead.

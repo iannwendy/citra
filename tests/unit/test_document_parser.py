@@ -475,3 +475,120 @@ class TestPdfPlumberFallback:
 
         mock_plumber.parse.assert_not_called()
         assert parsed.document.metadata.get("is_scanned_pdf") is True
+
+
+class TestStep1SubProgressCallbacks:
+    """Track 3: DocumentParser.parse(..., progress_callback=...) emits accurate Step 1 sub-stages."""
+
+    def test_live_grobid_success_emits_ordered_sub_stages(self, tmp_path: Path):
+        pdf = tmp_path / "thesis.pdf"
+        pdf.write_bytes(b"%PDF-1.4\n%fake\n")
+
+        parser = DocumentParser(
+            config=_make_settings(grobid_enabled=True),
+            mupdf_parser=_MockMuPdfParser(_make_text_doc()),  # type: ignore[arg-type]
+            grobid_post_fn=_make_post_fn(text=SAMPLE_TEI, status_code=200),
+        )
+        events: list[str] = []
+        parsed = parser.parse(str(pdf), use_service_manager=False, progress_callback=events.append)
+
+        assert parsed.has_grobid is True
+        assert any("Checking GROBID layout cache" in m for m in events)
+        assert any("Analyzing 2-page PDF layout with GROBID" in m for m in events)
+        assert any("GROBID parsed 1 reference" in m for m in events)
+
+    def test_cached_grobid_hit_emits_cache_message(self, tmp_path: Path, monkeypatch):
+        pdf = tmp_path / "cached.pdf"
+        pdf.write_bytes(b"%PDF-1.4\n%fake\n")
+
+        fake_mgr = MagicMock()
+        fake_mgr.get_from_cache.return_value = SAMPLE_TEI
+        monkeypatch.setattr(
+            "integrity_checker.extraction.document_parser.get_grobid_manager",
+            lambda: fake_mgr,
+        )
+
+        parser = DocumentParser(
+            config=_make_settings(grobid_enabled=True),
+            mupdf_parser=_MockMuPdfParser(_make_text_doc()),  # type: ignore[arg-type]
+        )
+        events: list[str] = []
+        parsed = parser.parse(str(pdf), use_service_manager=True, progress_callback=events.append)
+
+        assert parsed.has_grobid is True
+        assert any("Loaded cached GROBID layout" in m for m in events)
+        assert not any("Analyzing 2-page PDF layout with GROBID" in m for m in events)
+        assert any("GROBID parsed 1 reference" in m for m in events)
+
+    def test_grobid_fallback_disabled_docx_and_scanned_empty_emit_branch_accurate_messages(
+        self, tmp_path: Path
+    ):
+        # 1. GROBID failure fallback
+        pdf = tmp_path / "fail.pdf"
+        pdf.write_bytes(b"%PDF-1.4\n%fake\n")
+        parser_fail = DocumentParser(
+            config=_make_settings(grobid_enabled=True),
+            mupdf_parser=_MockMuPdfParser(_make_text_doc()),  # type: ignore[arg-type]
+            grobid_post_fn=_make_post_fn(text="", status_code=500),
+        )
+        fail_events: list[str] = []
+        parser_fail.parse(str(pdf), use_service_manager=False, progress_callback=fail_events.append)
+        assert any("regex parser" in m.lower() for m in fail_events)
+
+        # 2. GROBID disabled
+        parser_disabled = DocumentParser(
+            config=_make_settings(grobid_enabled=False),
+            mupdf_parser=_MockMuPdfParser(_make_text_doc()),  # type: ignore[arg-type]
+        )
+        disabled_events: list[str] = []
+        parser_disabled.parse(str(pdf), progress_callback=disabled_events.append)
+        assert any("Using regex parser" in m for m in disabled_events)
+
+        # 3. DOCX branch
+        docx = tmp_path / "paper.docx"
+        docx.write_bytes(b"PK\x03\x04fake")
+        docx_doc = _make_text_doc()
+        docx_doc.parser_used = "docx"
+        mock_docx = MagicMock()
+        mock_docx.parse.return_value = docx_doc
+        parser_docx = DocumentParser(
+            config=_make_settings(grobid_enabled=True),
+            docx_parser=mock_docx,
+        )
+        docx_events: list[str] = []
+        parser_docx.parse(str(docx), progress_callback=docx_events.append)
+        assert any("Segmenting sections" in m for m in docx_events)
+
+        # 4. Scanned empty PDF (must NOT also emit "GROBID disabled" or overwrite grobid_status)
+        scanned = tmp_path / "scanned_empty.pdf"
+        scanned.write_bytes(b"%PDF-1.4\n%fake\n")
+        scanned_doc = Document(
+            file_path=str(scanned),
+            num_pages=3,
+            pages=[Page(page_num=i, text="", has_text_layer=False) for i in range(1, 4)],
+            metadata={"is_scanned_pdf": True},
+            parser_used="mupdf",
+        )
+        parser_scanned = DocumentParser(
+            config=_make_settings(grobid_enabled=False),
+            mupdf_parser=_MockMuPdfParser(scanned_doc),  # type: ignore[arg-type]
+        )
+        scanned_events: list[str] = []
+        parsed_scanned = parser_scanned.parse(str(scanned), progress_callback=scanned_events.append)
+        assert parsed_scanned.grobid_status == "unavailable"
+        assert any("Scanned PDF detected" in m for m in scanned_events)
+        assert not any("GROBID disabled in config" in w for w in parsed_scanned.parser_warnings)
+
+    def test_raising_progress_callback_never_breaks_parsing(self, tmp_path: Path):
+        pdf = tmp_path / "cb_err.pdf"
+        pdf.write_bytes(b"%PDF-1.4\n%fake\n")
+
+        def broken_cb(_msg: str) -> None:
+            raise RuntimeError("callback exploded")
+
+        parser = DocumentParser(
+            config=_make_settings(grobid_enabled=False),
+            mupdf_parser=_MockMuPdfParser(_make_text_doc()),  # type: ignore[arg-type]
+        )
+        parsed = parser.parse(str(pdf), progress_callback=broken_cb)
+        assert len(parsed.sections) >= 1

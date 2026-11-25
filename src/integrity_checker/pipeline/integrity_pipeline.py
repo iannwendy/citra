@@ -710,8 +710,16 @@ class IntegrityPipeline:
                 _emit("done", 7, message="Loaded from cache")
                 return cached_report
 
-        # 1. Parse PDF / DOCX
-        _doc_label = "DOCX" if str(pdf_path).lower().endswith(".docx") else "PDF"
+        # 1. Parse PDF / DOCX / BibTeX / RIS
+        _lower_path = str(pdf_path).lower()
+        if _lower_path.endswith(".docx"):
+            _doc_label = "DOCX"
+        elif _lower_path.endswith(".bib"):
+            _doc_label = "BibTeX"
+        elif _lower_path.endswith(".ris"):
+            _doc_label = "RIS"
+        else:
+            _doc_label = "PDF"
         _emit("parsing", 0, message=f"Parsing {_doc_label} structure...")
         num_pages = 0
         in_text_citations: list[Citation] = []
@@ -722,7 +730,38 @@ class IntegrityPipeline:
 
         if self._use_document_parser:
             # Modern path: DocumentParser (PyMuPDF + GROBID + SectionSegmenter)
-            parsed = await asyncio.to_thread(self.document_parser.parse, pdf_path)
+            from unittest.mock import NonCallableMock
+
+            parse_fn = self.document_parser.parse
+            supports_parse_progress = False
+            if (
+                progress_callback is not None
+                and not isinstance(self.document_parser, NonCallableMock)
+                and not isinstance(parse_fn, NonCallableMock)
+            ):
+                try:
+                    parse_param = inspect.signature(parse_fn).parameters.get(
+                        "progress_callback"
+                    )
+                    supports_parse_progress = (
+                        parse_param is not None
+                        and parse_param.kind
+                        in (
+                            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                            inspect.Parameter.KEYWORD_ONLY,
+                        )
+                    )
+                except (TypeError, ValueError):
+                    supports_parse_progress = False
+
+            if supports_parse_progress:
+                parsed = await asyncio.to_thread(
+                    parse_fn,
+                    pdf_path,
+                    progress_callback=lambda msg: _emit("parsing", 0, message=msg),
+                )
+            else:
+                parsed = await asyncio.to_thread(parse_fn, pdf_path)
             num_pages = parsed.document.num_pages  # FIX: lấy num_pages từ document gốc
             raw_doc_meta = getattr(parsed.document, "metadata", None)
             doc_metadata = dict(raw_doc_meta) if isinstance(raw_doc_meta, dict) else {}

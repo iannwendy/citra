@@ -729,3 +729,79 @@ async def test_db_fallback_and_status_refresh_live_elapsed_seconds_for_active_pe
         status_payload = resp.json()
         assert status_payload["elapsed_seconds"] >= 5.0
 
+
+async def test_step1_sub_stage_messages_persist_in_web_only_mode_and_stream_over_sse(
+    clean_db,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Step 1 sub-stage message updates persist to SQLite _progress_snapshot for web_only SSE readers."""
+    monkeypatch.setenv("CITRA_WORKER_MODE", "web_only")
+    owner, owner_token = _create_user_with_token(clean_db, username="step1_sub_user")
+    essay = EssayRecord(filename="big_thesis.pdf", num_pages=117, user_id=owner.id, job_status="processing")
+    clean_db.add(essay)
+    clean_db.commit()
+    essay_id = essay.id
+
+    tracker = get_tracker()
+    tracker.init(essay_id)
+    tracker.update(
+        essay_id,
+        step="parsing",
+        step_index=0,
+        message="Analyzing 117-page PDF layout with GROBID...",
+    )
+
+    # DB fallback snapshot (used by web_only processes) MUST contain the updated Step 1 message
+    db_snap = tracker.load_db_fallback_snapshot(essay_id)
+    assert db_snap is not None
+    assert db_snap["step"] == "parsing"
+    assert db_snap["step_index"] == 0
+    assert db_snap["message"] == "Analyzing 117-page PDF layout with GROBID..."
+
+    # Subsequent Step 1 sub-stage update also persists
+    tracker.update(
+        essay_id,
+        step="parsing",
+        step_index=0,
+        message="GROBID parsed 46 references · Extracting & merging citations...",
+    )
+    db_snap2 = tracker.load_db_fallback_snapshot(essay_id)
+    assert db_snap2 is not None
+    assert db_snap2["message"] == "GROBID parsed 46 references · Extracting & merging citations..."
+
+    # Also verify web_only SSE stream emits the latest Step 1 sub-stage snapshot and closes
+    # cleanly once the worker marks the SQLite EssayRecord completed.
+    monkeypatch.setattr(essays_route, "SSE_POLL_INTERVAL_SECONDS", 0.03, raising=False)
+    app = create_app()
+
+    async def _finish_in_sqlite() -> None:
+        await asyncio.sleep(0.08)
+        sess = get_session()
+        try:
+            row = sess.get(EssayRecord, essay_id)
+            assert row is not None
+            row.job_status = "completed"
+            row.cis_json = json.dumps(
+                {"score": 100.0, "components": {}, "num_citations": 1, "num_unresolved": 0}
+            )
+            sess.commit()
+        finally:
+            sess.close()
+
+    finisher = asyncio.create_task(_finish_in_sqlite())
+    frames: list[dict[str, Any]] = []
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as ac:
+        resp = await ac.get(
+            f"/api/essays/{essay_id}/events",
+            headers={"Authorization": f"Bearer {owner_token}"},
+        )
+        assert resp.status_code == 200
+        frames.extend(_parse_sse_data_frames(resp.text))
+    await finisher
+
+    assert len(frames) >= 2
+    assert frames[0]["step"] == "parsing"
+    assert frames[0]["message"] == "GROBID parsed 46 references · Extracting & merging citations..."
+    assert frames[-1]["status"] == "completed"
+

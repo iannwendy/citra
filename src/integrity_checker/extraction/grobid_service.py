@@ -91,7 +91,8 @@ class GrobidServiceManager:
     # Docker container settings
     _container_name: str = "essay-check-grobid"
     _image: str = "grobid/grobid:0.9.1-crf"
-    _memory: str = "2g"
+    _memory: str = "768m"
+    _container_memory_limit: str = "4g"
     _health_timeout: int = 120  # seconds
 
     def __post_init__(self) -> None:
@@ -424,10 +425,9 @@ class GrobidServiceManager:
                 name=self._container_name,
                 ports={"8070/tcp": ("127.0.0.1", 8070)},
                 environment={
-                    "JAVA_OPTS": f"-Xmx{self._memory} -XX:+UseG1GC",
-                    "JDK_JAVA_OPTIONS": f"-Xmx{self._memory} -XX:+UseG1GC",
+                    "JAVA_OPTS": f"-Xms256m -Xmx{self._memory} -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:+ExitOnOutOfMemoryError",
                 },
-                mem_limit=self._memory,
+                mem_limit=self._container_memory_limit,
                 remove=False,  # Giữ container để reuse
             )
 
@@ -554,13 +554,20 @@ class GrobidServiceManager:
         Returns:
             Path to cache file.
         """
-        from integrity_checker.extraction.grobid_parser import compute_sha256
+        from integrity_checker.extraction.grobid_parser import (
+            compute_sha256,
+            compute_sha256_hash,
+        )
 
         settings = get_settings()
         cache_dir = settings.paths.grobid_output_dir
         cache_dir.mkdir(parents=True, exist_ok=True)
 
         sha = compute_sha256(pdf_path)
+        tei_coords = str(getattr(self.config, "tei_coordinates", "") or "").strip()
+        if tei_coords:
+            coords_sig = compute_sha256_hash(tei_coords)[:8]
+            return cache_dir / f"{sha}.coords-{coords_sig}.tei.xml"
         return cache_dir / f"{sha}.tei.xml"
 
     def get_from_cache(self, pdf_path: str) -> str | None:
@@ -639,11 +646,14 @@ class GrobidServiceManager:
             return 0
 
         if pdf_path:
-            cache_path = self.get_cache_path(pdf_path)
-            if cache_path.exists():
-                cache_path.unlink()
-                return 1
-            return 0
+            from integrity_checker.extraction.grobid_parser import compute_sha256
+
+            sha = compute_sha256(pdf_path)
+            removed = 0
+            for variant in cache_dir.glob(f"{sha}*.tei.xml"):
+                variant.unlink()
+                removed += 1
+            return removed
 
         # Invalidate all
         count = 0

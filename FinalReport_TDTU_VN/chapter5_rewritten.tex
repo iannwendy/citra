@@ -3,7 +3,7 @@
 
 \section{Thiết kế Thực nghiệm và Môi trường Kiểm định}
 
-Tuân thủ các chuẩn mực đánh giá trong Kỹ thuật Phần mềm Thực nghiệm~\cite{wohlin2012experimentation}, chương này đánh giá toàn diện hệ thống \textbf{CITRA} (\texttt{v3.90.7}) thông qua các bộ kiểm thử tự động ở mức đơn vị, tích hợp và trình duyệt, đối chiếu truy vết yêu cầu, cùng các bài đo kiểm định lượng có kiểm soát xoay quanh năm Câu hỏi Nghiên cứu (\textbf{RQ1}--\textbf{RQ5}).
+Tuân thủ các chuẩn mực đánh giá trong Kỹ thuật Phần mềm Thực nghiệm~\cite{wohlin2012experimentation}, chương này đánh giá toàn diện hệ thống \textbf{CITRA} (\texttt{v3.90.8}) thông qua các bộ kiểm thử tự động ở mức đơn vị, tích hợp và trình duyệt, đối chiếu truy vết yêu cầu, cùng các bài đo kiểm định lượng có kiểm soát xoay quanh năm Câu hỏi Nghiên cứu (\textbf{RQ1}--\textbf{RQ5}).
 
 \subsection{Các câu hỏi nghiên cứu}
 
@@ -21,7 +21,7 @@ Quy trình kiểm định phần mềm bao phủ ba tầng kiểm thử tự đ�
 
 {\setlength{\tabcolsep}{3.5pt}
 \begin{longtable}{|L{0.23}|L{0.25}|L{0.52}|}
-\caption{Các bộ kiểm thử phần mềm tự động được thực thi trên phiên bản \texttt{3.90.7}.}\label{tab:test-suites}\\
+\caption{Các bộ kiểm thử phần mềm tự động được thực thi trên phiên bản \texttt{3.90.8}.}\label{tab:test-suites}\\
 \hline
 \textbf{Tầng kiểm định} & \textbf{Kết quả thực thi} & \textbf{Phạm vi phân hệ được kiểm định} \\
 \hline
@@ -327,7 +327,7 @@ Tỷ lệ độ tin cậy cao ($\hat{p} \ge 0.50$) & 92.82\% & \textbf{99.99\%} 
 \endlastfoot
 Kho PDF pháp luật VN (Cơ sở trước v3.80) & 30 & 27 / 30 (90.0\%) & 164 (15 Luật) & 109 / 235 (46.4\%) \\
 \hline
-\textbf{Kho PDF pháp luật VN} (\textbf{CITRA v3.90.7}) & \textbf{30} & \textbf{30 / 30 (100.0\%)} & \textbf{258 (91 Luật)} & \textbf{403 / 416 (96.9\%)} \\
+\textbf{Kho PDF pháp luật VN} (\textbf{CITRA v3.90.8}) & \textbf{30} & \textbf{30 / 30 (100.0\%)} & \textbf{258 (91 Luật)} & \textbf{403 / 416 (96.9\%)} \\
 \hline
 \textbf{Bộ chẩn đoán 12 chuẩn ($12 \times 5$)} & \textbf{60} & \textbf{60 / 60 (100.0\%)} & \textbf{397 / 397 (100.0\%)} & \textbf{60 / 60 PDF (100\%)} \\
 \hline
@@ -370,7 +370,7 @@ Kho PDF pháp luật VN (Cơ sở trước v3.80) & 30 & 27 / 30 (90.0\%) & 164 
 \end{longtable}
 }
 
-Các Hình~\ref{fig:demo-debugger}--\ref{fig:demo-consistency} minh họa trực tiếp các giao diện chẩn đoán của \textbf{CITRA} (\texttt{v3.90.7}) khi chạy trên bản thảo báo cáo đồ án tốt nghiệp Kỹ thuật Phần mềm có cài lỗi kiểm thử (gồm 6 mục tài liệu tham khảo và 28 lượt trích dẫn trong bài). Hình~\ref{fig:demo-debugger} đặt cạnh nhau cảnh báo ảo giác do DOI lai ghép (bên trái) và bảng đối chiếu trực quan sai lệch năm xuất bản (\texttt{2021} so với chuẩn gốc \texttt{2019}, bên phải). Hình~\ref{fig:demo-trace-context} hiển thị vết suy diễn logic 5 bước tích hợp gióng hàng khái niệm song ngữ \texttt{VI}$\leftrightarrow$\texttt{EN} qua mô hình ONNX INT8 (bên trái) cùng luồng ngữ cảnh trích dẫn trực tiếp trong Trình kiểm tra tài liệu (bên phải). Hình~\ref{fig:demo-consistency} minh họa giao diện Kiểm tra tính nhất quán hai chiều trong bài viết, giúp tách riêng các ký hiệu trích dẫn mồ côi trong văn bản và các tài liệu nằm trong danh mục nhưng chưa từng được trích dẫn.
+Các Hình~\ref{fig:demo-debugger}--\ref{fig:demo-consistency} minh họa trực tiếp các giao diện chẩn đoán của \textbf{CITRA} (\texttt{v3.90.8}) khi chạy trên bản thảo báo cáo đồ án tốt nghiệp Kỹ thuật Phần mềm có cài lỗi kiểm thử (gồm 6 mục tài liệu tham khảo và 28 lượt trích dẫn trong bài). Hình~\ref{fig:demo-debugger} đặt cạnh nhau cảnh báo ảo giác do DOI lai ghép (bên trái) và bảng đối chiếu trực quan sai lệch năm xuất bản (\texttt{2021} so với chuẩn gốc \texttt{2019}, bên phải). Hình~\ref{fig:demo-trace-context} hiển thị vết suy diễn logic 5 bước tích hợp gióng hàng khái niệm song ngữ \texttt{VI}$\leftrightarrow$\texttt{EN} qua mô hình ONNX INT8 (bên trái) cùng luồng ngữ cảnh trích dẫn trực tiếp trong Trình kiểm tra tài liệu (bên phải). Hình~\ref{fig:demo-consistency} minh họa giao diện Kiểm tra tính nhất quán hai chiều trong bài viết, giúp tách riêng các ký hiệu trích dẫn mồ côi trong văn bản và các tài liệu nằm trong danh mục nhưng chưa từng được trích dẫn.
 
 \begin{figure}[H]
     \centering
@@ -521,4 +521,4 @@ Tính hợp lệ khái niệm xem xét liệu các độ đo đánh giá có ph�
 
 \section{Tóm tắt chương}
 
-Chương này đã kiểm định toàn diện hệ thống \textbf{CITRA} (\texttt{v3.90.7}) thông qua 2,920+ kiểm tra tự động, Ma trận truy vết yêu cầu đầy đủ và năm câu hỏi nghiên cứu thực nghiệm, chứng minh độ chính xác trong phân phối đạt $99.67\%$ ($\text{ECE} = 0.0405$), độ chính xác ký hiệu ngoài phân phối (OOD) đạt $99.96\%$, độ chính xác đầu-cuối trên bộ chuẩn vàng sáu lĩnh vực đạt $100.00\%$, cùng khả năng chịu tải đột biến 50 người dùng đồng thời không phát sinh lỗi. Chương~\ref{chap:conclusion} sẽ tổng kết các kết quả đạt được, những hạn chế hiện tại và hướng phát triển tiếp theo của đồ án tốt nghiệp.
+Chương này đã kiểm định toàn diện hệ thống \textbf{CITRA} (\texttt{v3.90.8}) thông qua 2,920+ kiểm tra tự động, Ma trận truy vết yêu cầu đầy đủ và năm câu hỏi nghiên cứu thực nghiệm, chứng minh độ chính xác trong phân phối đạt $99.67\%$ ($\text{ECE} = 0.0405$), độ chính xác ký hiệu ngoài phân phối (OOD) đạt $99.96\%$, độ chính xác đầu-cuối trên bộ chuẩn vàng sáu lĩnh vực đạt $100.00\%$, cùng khả năng chịu tải đột biến 50 người dùng đồng thời không phát sinh lỗi. Chương~\ref{chap:conclusion} sẽ tổng kết các kết quả đạt được, những hạn chế hiện tại và hướng phát triển tiếp theo của đồ án tốt nghiệp.

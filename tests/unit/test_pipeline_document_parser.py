@@ -350,3 +350,108 @@ class TestPipelineWithDocumentParser:
         assert "{" not in msg
         assert "'local_db'" not in msg
         assert msg == "Compared 3 source hits across 2 databases (ACL FTS5: 2 · OpenAlex: 1)"
+
+    @pytest.mark.asyncio
+    async def test_pipeline_forwards_step1_sub_progress_for_real_document_parser_and_preserves_mocks(
+        self, tmp_path
+    ):
+        """Real DocumentParser receives Step 1 progress_callback while MagicMock(spec=DocumentParser)
+        is invoked with a single positional arg when progress_callback is None."""
+        from integrity_checker.config import Settings
+        from integrity_checker.extraction.base import Page
+        from integrity_checker.extraction.document_parser import DocumentParser
+        from integrity_checker.logic.cis import CISCalculator
+
+        pdf = tmp_path / "real_subprogress.pdf"
+        pdf.write_bytes(b"%PDF-1.4\n%fake\n")
+
+        text_doc = Document(
+            file_path=str(pdf),
+            num_pages=2,
+            pages=[
+                Page(page_num=1, text="Intro citing Smith (2020).", has_text_layer=True),
+                Page(page_num=2, text="References\nSmith, J. (2020). Title. Venue.", has_text_layer=True),
+            ],
+            parser_used="mupdf",
+        )
+        mock_mupdf = MagicMock()
+        mock_mupdf.parse.return_value = text_doc
+
+        real_parser = DocumentParser(
+            config=Settings(extraction={"grobid": {"enabled": False}}),
+            mupdf_parser=mock_mupdf,
+        )
+
+        mock_orchestrator = MagicMock()
+
+        async def mock_retrieve(citation):
+            from integrity_checker.models.source import SourceCandidate, SourceResult
+
+            return SourceResult(
+                citation_raw=citation.raw_text,
+                candidates=[SourceCandidate(source_name="test", found=False)],
+                sources_queried=["test"],
+                sources_succeeded=[],
+                sources_failed={"test": "mock"},
+            )
+
+        mock_orchestrator.retrieve = mock_retrieve
+        mock_checker = MagicMock()
+        mock_verdict = MagicMock()
+        mock_verdict.label.value = "unresolved"
+        mock_verdict.confidence = 0.0
+        mock_verdict.features.title_sim_fuzzy = 0.0
+        mock_verdict.features.title_sim_semantic = 0.0
+        mock_verdict.features.author_jaccard = 0.0
+        mock_verdict.features.year_distance = 0
+        mock_verdict.features.doi_exact_match = False
+        mock_verdict.features.source_consensus = 0
+        mock_verdict.reasoning = "mock"
+        mock_verdict.triggered_rules = []
+        mock_verdict.mismatched_fields = []
+        mock_checker.check.side_effect = lambda cit, _res, **_kw: (
+            setattr(mock_verdict, "citation", cit) or mock_verdict
+        )
+
+        pipeline = IntegrityPipeline(
+            document_parser=real_parser,
+            use_document_parser=True,
+            orchestrator=mock_orchestrator,
+            checker=mock_checker,
+            cis_calc=CISCalculator(),
+        )
+        emitted: list[tuple[str, int, dict]] = []
+        await pipeline.run_async(
+            str(pdf),
+            essay_id=101,
+            progress_callback=lambda step, idx, stats: emitted.append((step, idx, stats)),
+        )
+        step1_msgs = [e[2]["message"] for e in emitted if e[0] == "parsing"]
+        assert step1_msgs[0] == "Parsing PDF structure..."
+        assert any("Using regex parser" in m for m in step1_msgs)
+
+        # Spec'd MagicMock with progress_callback=None must still receive exact 1-arg call
+        spec_mock = MagicMock(spec=DocumentParser)
+        spec_mock.parse.return_value = ParsedDocument(
+            document=Document(file_path="/fake/ref.bib", num_pages=1, pages=[]),
+            body_citations=[],
+            references=[],
+        )
+        pipeline_spec = IntegrityPipeline(
+            document_parser=spec_mock,
+            use_document_parser=True,
+            orchestrator=mock_orchestrator,
+            checker=mock_checker,
+            cis_calc=CISCalculator(),
+        )
+        await pipeline_spec.run_async("/fake/ref.bib", essay_id=102)
+        spec_mock.parse.assert_called_once_with("/fake/ref.bib")
+
+        # BibTeX label check with callback
+        bib_events: list[tuple[str, int, dict]] = []
+        await pipeline_spec.run_async(
+            "/fake/ref.bib",
+            essay_id=103,
+            progress_callback=lambda step, idx, stats: bib_events.append((step, idx, stats)),
+        )
+        assert bib_events[0][2]["message"] == "Parsing BibTeX structure..."

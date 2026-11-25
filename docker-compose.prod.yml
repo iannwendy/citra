@@ -17,6 +17,8 @@ services:
     container_name: essay-check-grobid
     security_opt:
       - no-new-privileges:true
+    ulimits:
+      core: 0
     logging:
       driver: "json-file"
       options:
@@ -24,20 +26,30 @@ services:
         max-file: "3"
     ports:
       - "127.0.0.1:8070:8070"
+    entrypoint:
+      - /bin/sh
+      - /opt/grobid/citra-grobid-entrypoint.sh
     environment:
-      - JAVA_OPTS=-Xmx1280m -XX:-UseContainerSupport
-      - JDK_JAVA_OPTIONS=-Xmx1280m -XX:-UseContainerSupport
+      # GROBID 0.9.1-crf native Wapiti CRF models occupy ~3.1 GiB off-heap RAM; keep
+      # JVM heap compact (-Xmx768m) with G1 periodic heap shrink + ExitOnOutOfMemoryError
+      # inside a 4G container so total working set stays swap-free on 2-vCPU / 6GB VM.
+      - JAVA_OPTS=-Xms256m -Xmx768m -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:G1PeriodicGCInterval=60000 -XX:G1PeriodicGCSystemLoadThreshold=0.5 -XX:MaxHeapFreeRatio=30 -XX:MinHeapFreeRatio=15 -XX:+ExitOnOutOfMemoryError
+      - GROBID_CONCURRENCY=2
+      - GROBID_POOL_MAX_WAIT=30
+      - GROBID_PDFALTO_MEMORY_MB=1024
+      - GROBID_MODEL_PRELOAD=true
     restart: unless-stopped
     deploy:
       resources:
         limits:
-          memory: 3G
+          memory: 4G
         reservations:
-          memory: 1536M
+          memory: 3G
     networks:
       - essay-check-net
     volumes:
       - grobid-cache:/opt/grobid/grobid-home/cache
+      - ./scripts/grobid-entrypoint.sh:/opt/grobid/citra-grobid-entrypoint.sh:ro
     healthcheck:
       test:
         - CMD-SHELL
@@ -80,6 +92,10 @@ services:
       - APP_DEBUG=false
       - APP_LOG_LEVEL=${APP_LOG_LEVEL:-WARNING}
       - CITRA_WORKER_MODE=${CITRA_WORKER_MODE:-inline}
+      # Pinned directly to match GROBID_CONCURRENCY=2 on the 2-vCPU / 6GB VM
+      # (immune to higher values copied from .env.example into /opt/citra/.env).
+      - MAX_CONCURRENT_PIPELINES=2
+      - MAX_CONCURRENT_GROBID=2
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set to a strong secret in production}
       - GROBID_URL=http://grobid:8070
       - DATABASE_URL=${DATABASE_URL:-sqlite:///./data/app.db}
@@ -97,7 +113,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 2560M
+          memory: 2048M
         reservations:
           memory: 1G
     # Inline worker mode holds process-local ProgressTracker SSE state & ~1 GB SBERT/ONNX models
@@ -142,6 +158,10 @@ services:
       api:
         condition: service_started
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 128M
     networks:
       - essay-check-net
 

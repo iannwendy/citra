@@ -330,6 +330,7 @@ class ProgressTracker:
             prev_status = state.status
             prev_step = state.step
             prev_qpos = state.queue_position
+            prev_message = state.message
             for key, value in fields.items():
                 if hasattr(state, key):
                     setattr(state, key, value)
@@ -341,6 +342,7 @@ class ProgressTracker:
                 state.status != prev_status
                 or state.step != prev_step
                 or state.queue_position != prev_qpos
+                or (state.step == STEP_KEYS[0] and state.message != prev_message)
                 or "finished_at" in fields
                 or "error" in fields
                 or "quota_charged" in fields

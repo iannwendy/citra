@@ -83,14 +83,37 @@ from integrity_checker.retrieval.tech_standard_client import TechStandardClient
 
 
 def test_bug_thesis_01_grobid_docker_jvm_heap_leaves_native_headroom() -> None:
-    repo_root = Path(__file__).resolve().parents[2]
-    compose_txt = (repo_root / "docker-compose.yml").read_text(encoding="utf-8")
-    setup_sh = (repo_root / "scripts" / "grobid_docker_setup.sh").read_text(encoding="utf-8")
+    import re
 
-    # Within a 3G container limit, -Xmx2g starves native Wapiti CRF + pdfalto (~1.2G) -> OOM 137.
-    assert "-Xmx1280m" in compose_txt
-    assert "JAVA_OPTS=-Xmx2g" not in compose_txt
-    assert 'GROBID_MEMORY:-1280m' in setup_sh
+    repo_root = Path(__file__).resolve().parents[2]
+    dev_compose = (repo_root / "docker-compose.yml").read_text(encoding="utf-8")
+    prod_compose = (repo_root / "docker-compose.prod.yml").read_text(encoding="utf-8")
+    setup_sh = (repo_root / "scripts" / "grobid_docker_setup.sh").read_text(encoding="utf-8")
+    entrypoint_sh = repo_root / "scripts" / "grobid-entrypoint.sh"
+
+    assert entrypoint_sh.is_file(), "Missing scripts/grobid-entrypoint.sh config wrapper"
+
+    # GROBID 0.9.1-crf Wapiti native CRF models consume ~3.1 GiB RSS; keep JVM heap bounded
+    # (512m..1280m, never -Xmx2g) inside a >=4G container so native + heap fit with zero swap.
+    for name, txt in (
+        ("docker-compose.yml", dev_compose),
+        ("docker-compose.prod.yml", prod_compose),
+    ):
+        assert "-Xmx2g" not in txt, f"{name} must not use -Xmx2g"
+        assert "JDK_JAVA_OPTIONS" not in txt, f"{name} must not duplicate JVM flags via JDK_JAVA_OPTIONS"
+        m_xmx = re.search(r"-Xmx(\d+)m", txt)
+        assert m_xmx is not None, f"{name} missing -Xmx<N>m heap cap for GROBID"
+        heap_mb = int(m_xmx.group(1))
+        assert 512 <= heap_mb <= 1280, f"{name} GROBID heap {heap_mb}m outside safe [512, 1280] MB range"
+        assert "-XX:+ExitOnOutOfMemoryError" in txt, f"{name} missing -XX:+ExitOnOutOfMemoryError"
+        assert "./scripts/grobid-entrypoint.sh:/opt/grobid/citra-grobid-entrypoint.sh:ro" in txt, (
+            f"{name} missing read-only grobid-entrypoint.sh mount"
+        )
+        assert "memory: 4G" in txt, f"{name} GROBID container limit must be >= 4G for 0.9.1-crf native models"
+
+    assert "GROBID_MEMORY:-768m" in setup_sh
+    assert "GROBID_CONTAINER_MEMORY:-4g" in setup_sh
+    assert "-Xmx2g" not in setup_sh
 
 
 def test_bug_thesis_01_orphan_recovery_skips_jobs_started_after_boot_or_active_in_tracker(

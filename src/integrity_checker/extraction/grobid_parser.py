@@ -220,6 +220,8 @@ def call_grobid_fulltext(
     pdf_path: str,
     config: GrobidConfig,
     http_post_fn=None,    # injectable cho testing
+    *,
+    max_attempts: int | None = None,
 ) -> str:
     """Gọi GROBID /api/processFulltextDocument trả về TEI XML string.
 
@@ -228,66 +230,166 @@ def call_grobid_fulltext(
         config: GrobidConfig.
         http_post_fn: optional callable(url, files, data, timeout) -> Response
                       để inject trong tests. Mặc định dùng requests.
+        max_attempts: optional retry cap (mặc định 3 cho live HTTP, 1 cho injected mock).
 
     Returns:
         TEI XML string. Rỗng nếu lỗi.
     """
+    import time
+
+    try:
+        import requests as _req  # type: ignore[import-untyped]
+    except ImportError:
+        _req = None
+
+    try:
+        from urllib3.exceptions import ReadTimeoutError as _Urllib3ReadTimeout
+    except ImportError:
+        _Urllib3ReadTimeout = None  # type: ignore[assignment,misc]
+
     url = f"{config.url.rstrip('/')}/api/processFulltextDocument"
     timeout = config.timeout_seconds
 
     is_default_http = http_post_fn is None
     if http_post_fn is None:
-        try:
-            import requests  # type: ignore[import-untyped]
-        except ImportError:
+        if _req is None:
             logger.warning("requests not installed — GROBID disabled")
             return ""
 
-        def _default_post(url, files, data, timeout):
-            return requests.post(url, files=files, data=data, timeout=timeout)
+        _requests_mod = _req
+
+        def _default_post(post_url, files, data, timeout):
+            req_timeout: float | tuple[float, float] = timeout
+            if isinstance(timeout, (int, float)) and not isinstance(timeout, bool):
+                read_t = max(1.0, float(timeout))
+                connect_t = min(10.0, read_t)
+                req_timeout = (connect_t, read_t)
+            return _requests_mod.post(
+                post_url, files=files, data=data, timeout=req_timeout
+            )
 
         http_post_fn = _default_post
 
-    max_attempts = 3 if is_default_http else 1
+    attempts_limit = (
+        max(1, int(max_attempts))
+        if max_attempts is not None
+        else (3 if is_default_http else 1)
+    )
     consol_header = _resolve_consolidate_header(getattr(config, "consolidate_header", None))
-    data = {
+    data: dict[str, str] = {
         "consolidateHeader": consol_header,
         "consolidateCitations": "0",
         "includeRawCitations": "1",
-        "teiCoordinates": "figure,head,biblStruct,snote,formula",
     }
+    raw_tei_coords = getattr(config, "tei_coordinates", "")
+    if raw_tei_coords is None or isinstance(raw_tei_coords, bool):
+        tei_coords = ""
+    elif isinstance(raw_tei_coords, (list, tuple, set)):
+        coord_items = [
+            str(item).strip()
+            for item in raw_tei_coords
+            if item is not None and not isinstance(item, bool) and str(item).strip()
+        ]
+        if isinstance(raw_tei_coords, set):
+            coord_items.sort()
+        tei_coords = ",".join(coord_items)
+    else:
+        tei_coords = str(raw_tei_coords).strip()
+        if tei_coords.lower() in {"false", "none", "null", "0", "off"}:
+            tei_coords = ""
+    if tei_coords:
+        data["teiCoordinates"] = tei_coords
     filename = Path(pdf_path).name if pdf_path else "document.pdf"
 
-    for attempt in range(1, max_attempts + 1):
+    read_timeout_list: list[type[BaseException]] = []
+    if _req is not None:
+        read_timeout_list.append(_req.exceptions.ReadTimeout)
+    if _Urllib3ReadTimeout is not None:
+        read_timeout_list.append(_Urllib3ReadTimeout)
+    read_timeout_errors: tuple[type[BaseException], ...] = tuple(read_timeout_list)
+
+    retryable_conn_list: list[type[BaseException]] = [
+        ConnectionResetError,
+        BrokenPipeError,
+        ConnectionRefusedError,
+        ConnectionAbortedError,
+    ]
+    if _req is not None:
+        retryable_conn_list.extend(
+            [_req.exceptions.ConnectTimeout, _req.exceptions.ConnectionError]
+        )
+    retryable_conn_errors: tuple[type[BaseException], ...] = tuple(retryable_conn_list)
+    ssl_error_cls = _req.exceptions.SSLError if _req is not None else None
+    other_timeout_list: list[type[BaseException]] = [TimeoutError]
+    if _req is not None:
+        other_timeout_list.append(_req.exceptions.Timeout)
+    other_timeout_errors: tuple[type[BaseException], ...] = tuple(other_timeout_list)
+
+    for attempt in range(1, attempts_limit + 1):
+        should_retry = False
         try:
             with _get_grobid_semaphore(), open(pdf_path, "rb") as f:
                 files = {"input": (filename, f, "application/pdf")}
                 response = http_post_fn(url, files=files, data=data, timeout=timeout)
-            if response.status_code == 200:
-                return response.text
-            if response.status_code in {502, 503, 504} and attempt < max_attempts:
-                import time
-
-                time.sleep(1.0 * attempt)
-                continue
-            logger.warning("GROBID returned %d", response.status_code)
+                try:
+                    status_code = response.status_code
+                    if status_code == 200:
+                        return response.text
+                    if status_code in {502, 503, 504} and attempt < attempts_limit:
+                        should_retry = True
+                    else:
+                        logger.warning("GROBID returned %d for %s", status_code, filename)
+                        return ""
+                finally:
+                    close_fn = getattr(response, "close", None)
+                    if callable(close_fn):
+                        close_fn()
+        except (FileNotFoundError, PermissionError, IsADirectoryError) as exc:
+            logger.warning("GROBID call failed (unreadable PDF %s): %s", filename, exc)
+            return ""
+        except read_timeout_errors as exc:
+            # Never retry full ReadTimeout — retrying a 120s timeout queues stacked copies
+            # inside GROBID while attempt #1 may still be running Wapiti/pdfalto.
+            logger.warning(
+                "GROBID read timed out after %ss for %s (skipping retries, falling back to regex): %s",
+                timeout,
+                filename,
+                exc,
+            )
+            return ""
+        except retryable_conn_errors as exc:
+            if ssl_error_cls is not None and isinstance(exc, ssl_error_cls):
+                logger.warning("GROBID TLS/SSL error for %s: %s", filename, exc)
+                return ""
+            if attempt >= attempts_limit:
+                logger.warning("GROBID connection failed after %d attempts for %s: %s", attempt, filename, exc)
+                return ""
+            logger.info(
+                "GROBID transient connection error on attempt %d/%d (%s), retrying...",
+                attempt,
+                attempts_limit,
+                exc,
+            )
+            should_retry = True
+        except other_timeout_errors as exc:
+            logger.warning(
+                "GROBID timed out after %ss for %s (skipping retries, falling back to regex): %s",
+                timeout,
+                filename,
+                exc,
+            )
             return ""
         except OSError as exc:
-            # Missing local file or transient connection reset/disconnect
-            if isinstance(exc, FileNotFoundError) or attempt >= max_attempts:
-                logger.warning("GROBID call failed: %s", exc)
-                return ""
-            import time
-
-            logger.info("GROBID transient error on attempt %d/%d (%s), retrying...", attempt, max_attempts, exc)
-            time.sleep(1.0 * attempt)
+            # Non-transient RequestException subclasses (InvalidURL, MissingSchema, HTTPError,
+            # TooManyRedirects) inherit from OSError/IOError, as do local disk errors (ENOSPC/EIO).
+            # Transient socket/connect failures were already handled above — fail fast here.
+            logger.warning("GROBID I/O or HTTP client error for %s: %s", filename, exc)
+            return ""
         except Exception as exc:
-            if attempt >= max_attempts:
-                logger.warning("GROBID call failed: %s", exc)
-                return ""
-            import time
+            logger.warning("GROBID call failed for %s: %s", filename, exc)
+            return ""
 
-            logger.info("GROBID transient error on attempt %d/%d (%s), retrying...", attempt, max_attempts, exc)
+        if should_retry:
             time.sleep(1.0 * attempt)
     return ""
 

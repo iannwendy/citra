@@ -200,6 +200,28 @@ class GrobidConfig(BaseModel):
             "appendix",
         ]
     )
+    # Opt-in comma-separated TEI coordinate targets (e.g. "biblStruct,head").
+    # Empty by default so GROBID skips unused bbox serialization on large PDFs.
+    tei_coordinates: str = ""
+
+    @field_validator("tei_coordinates", mode="before")
+    @classmethod
+    def _coerce_tei_coordinates(cls, v: Any) -> str:
+        if v is None or isinstance(v, bool):
+            return ""
+        if isinstance(v, (list, tuple, set)):
+            items = [
+                str(item).strip()
+                for item in v
+                if item is not None and not isinstance(item, bool) and str(item).strip()
+            ]
+            if isinstance(v, set):
+                items.sort()
+            return ",".join(items)
+        s = str(v).strip()
+        if s.lower() in {"false", "none", "null", "0", "off"}:
+            return ""
+        return s
 
 
 class ExtractionConfig(BaseModel):

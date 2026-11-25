@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
@@ -16,7 +16,6 @@ import {
   Globe,
 } from 'lucide-react';
 import { api, type Class } from '../api/client';
-import { useAuth } from '@/contexts/AuthContext';
 import { useVerificationProgress } from '@/contexts/VerificationProgressContext';
 import { useRole } from '@/hooks/useRole';
 import { getQuotaView } from '@/lib/quotaDisplay';
@@ -78,7 +77,7 @@ function formatUploadMimeAndParser(
 
 export function UploadPage() {
   const { t, i18n } = useTranslation();
-  const { refreshUser } = useAuth();
+  const isMountedRef = useRef(true);
   const {
     activeSingleCheck,
     isSingleCheckInFlight,
@@ -117,7 +116,14 @@ export function UploadPage() {
   const lang = i18n.language?.startsWith('vi') ? 'vi' : 'en';
   const quotaView = getQuotaView(quota, lang, { isAdmin });
 
-  useEffect(() => registerUploadPageMount(), [registerUploadPageMount]);
+  useEffect(() => {
+    isMountedRef.current = true;
+    const unregister = registerUploadPageMount();
+    return () => {
+      isMountedRef.current = false;
+      unregister();
+    };
+  }, [registerUploadPageMount]);
 
   useEffect(() => {
     api
@@ -278,9 +284,11 @@ export function UploadPage() {
     setError(null);
     try {
       const response = await startSingleUpload(file, selectedClassId);
-      await refreshUser();
-      navigate(`/verification/processing/${response.essay_id}`);
+      if (isMountedRef.current) {
+        navigate(`/verification/processing/${response.essay_id}`);
+      }
     } catch (e) {
+      if (!isMountedRef.current) return;
       const errMsg = e instanceof Error ? e.message : t('upload.uploadFailed');
       setError(errMsg);
       setUploading(false);

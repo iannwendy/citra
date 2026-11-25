@@ -130,6 +130,122 @@ class TestOps02AndOps08CiCdPipelineHardening:
         )
         assert proc.returncode == 0, f"SSH deploy heredoc failed bash -n:\n{proc.stderr}"
 
+        # Track 1 hardening: capture PREV_COMMIT, detect entrypoint bind-mount drift, guard rollout
+        # with ROLLOUT_OK (so set -e never skips rollback), and restore PREV_COMMIT on failure.
+        assert "PREV_COMMIT=" in ci_text
+        assert "ROLLOUT_OK=1" in ci_text
+        assert "grobid-entrypoint.sh" in ci_text
+        assert "sha256sum" in ci_text
+        assert "PREV_COMMIT" in rollback_tail
+
+    def test_grobid_entrypoint_patches_yaml_idempotently_and_fails_fast_on_drift(
+        self, tmp_path: Path
+    ) -> None:
+        """scripts/grobid-entrypoint.sh passes sh -n, patches exact YAML blocks idempotently,
+        ignores comments/sibling sections, and fails fast on invalid env vars or schema drift."""
+        import os
+
+        entrypoint = REPO_ROOT / "scripts" / "grobid-entrypoint.sh"
+        assert entrypoint.is_file()
+
+        syntax_proc = subprocess.run(
+            ["/bin/sh", "-n", str(entrypoint)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert syntax_proc.returncode == 0, f"grobid-entrypoint.sh failed sh -n:\n{syntax_proc.stderr}"
+
+        # Fixture with top-level scalars, commented headers, and sibling `concurrency:` keys
+        fixture_yaml = (
+            "version: 0.9.1\n"
+            "server: # dropwizard\n"
+            "  concurrency: 99\n"
+            "  memoryLimitMb: 9999\n"
+            "grobid: # engine block\n"
+            "  # concurrency: 50\n"
+            "  concurrency: 10 # default pool\n"
+            "  poolMaxWait: 1\n"
+            "  modelPreload: false\n"
+            "  pdf: # pdf processing\n"
+            "    pdfalto: # binary\n"
+            "      path: pdfalto\n"
+            "      memoryLimitMb: 6096\n"
+            "    otherTool:\n"
+            "      memoryLimitMb: 4096\n"
+            "logging: # trailing section\n"
+            "  concurrency: 77\n"
+        )
+        cfg_file = tmp_path / "grobid.yaml"
+        cfg_file.write_text(fixture_yaml, encoding="utf-8")
+
+        base_env = {
+            **os.environ,
+            "GROBID_CONFIG_PATH": str(cfg_file),
+            "GROBID_PATCH_ONLY": "1",
+            "GROBID_CONCURRENCY": "2",
+            "GROBID_POOL_MAX_WAIT": "30",
+            "GROBID_PDFALTO_MEMORY_MB": "1024",
+            "GROBID_MODEL_PRELOAD": "true",
+        }
+
+        # Run #1: patches target keys without touching sibling blocks or comments
+        r1 = subprocess.run(
+            ["/bin/sh", str(entrypoint)],
+            env=base_env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert r1.returncode == 0, f"Entrypoint run #1 failed:\n{r1.stderr}"
+        patched1 = yaml.safe_load(cfg_file.read_text(encoding="utf-8"))
+        assert patched1["server"]["concurrency"] == 99
+        assert patched1["server"]["memoryLimitMb"] == 9999
+        assert patched1["grobid"]["concurrency"] == 2
+        assert patched1["grobid"]["poolMaxWait"] == 30
+        assert patched1["grobid"]["modelPreload"] is True
+        assert patched1["grobid"]["pdf"]["pdfalto"]["memoryLimitMb"] == 1024
+        assert patched1["grobid"]["pdf"]["otherTool"]["memoryLimitMb"] == 4096
+        assert patched1["logging"]["concurrency"] == 77
+        assert (tmp_path / "grobid.yaml.orig").is_file()
+
+        # Run #2 (restart idempotency with updated env): reads from .orig cleanly
+        r2 = subprocess.run(
+            ["/bin/sh", str(entrypoint)],
+            env={**base_env, "GROBID_CONCURRENCY": "3", "GROBID_MODEL_PRELOAD": "false"},
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert r2.returncode == 0, f"Entrypoint run #2 failed:\n{r2.stderr}"
+        patched2 = yaml.safe_load(cfg_file.read_text(encoding="utf-8"))
+        assert patched2["grobid"]["concurrency"] == 3
+        assert patched2["grobid"]["modelPreload"] is False
+
+        # Invalid env values (0, leading-zero octals 00/08) -> non-zero exit
+        for bad_val in ("0", "00", "08", "-1", "abc"):
+            r_bad_env = subprocess.run(
+                ["/bin/sh", str(entrypoint)],
+                env={**base_env, "GROBID_CONCURRENCY": bad_val},
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            assert r_bad_env.returncode != 0, f"Expected failure for GROBID_CONCURRENCY={bad_val!r}"
+
+        # Schema drift (missing required key) -> non-zero exit
+        broken_cfg = tmp_path / "broken.yaml"
+        broken_cfg.write_text("grobid:\n  concurrency: 10\n", encoding="utf-8")
+        r_drift = subprocess.run(
+            ["/bin/sh", str(entrypoint)],
+            env={**base_env, "GROBID_CONFIG_PATH": str(broken_cfg)},
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert r_drift.returncode != 0
+        assert "patch mismatch" in r_drift.stderr
+
     def test_prod_compose_web_depends_on_api_service_started(self) -> None:
         prod_cfg = yaml.safe_load(
             (REPO_ROOT / "docker-compose.prod.yml").read_text(encoding="utf-8")

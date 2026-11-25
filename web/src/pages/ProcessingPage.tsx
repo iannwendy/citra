@@ -170,11 +170,87 @@ function formatLiveSourceName(key: string): string {
   );
 }
 
+function formatStep1SubStageLine(
+  rawMessage: string | null | undefined,
+  lang: 'vi' | 'en',
+): string | null {
+  const clean = (rawMessage ?? '').replace(/[\r\n]+/g, ' ').trim();
+  if (!clean) return null;
+
+  const lower = clean.toLowerCase();
+  if (
+    lower === 'starting analysis...' ||
+    lower === 'parsing document...' ||
+    lower === 'processing...' ||
+    /^parsing (?:pdf|docx|bibtex|ris) structure\.{0,3}$/.test(lower)
+  ) {
+    return null;
+  }
+
+  const pageMatch = clean.match(/(\d+)\s*(?:-|\s*)pages?/i);
+  const pageCount = pageMatch ? Number(pageMatch[1]) : null;
+  const refMatch = clean.match(/(\d+)\s+references?/i);
+  const refCount = refMatch ? Number(refMatch[1]) : null;
+  const fmtPagesEn = (n: number) => `${n} ${n === 1 ? 'page' : 'pages'}`;
+  const fmtRefsEn = (n: number) => `${n} ${n === 1 ? 'reference' : 'references'}`;
+
+  if (lower.includes('loaded cached grobid')) {
+    return lang === 'vi'
+      ? `[01/08] CACHE · Tải bố cục GROBID từ bộ nhớ đệm${pageCount ? ` (${pageCount} trang)` : ''}`
+      : `[01/08] CACHE · Loaded cached GROBID layout${pageCount ? ` (${fmtPagesEn(pageCount)})` : ''}`;
+  }
+
+  if (lower.includes('checking grobid layout cache')) {
+    return lang === 'vi'
+      ? `[01/08] PYMUPDF · Đã trích xuất văn bản${pageCount ? ` (${pageCount} trang)` : ''} · Kiểm tra cache GROBID`
+      : `[01/08] PYMUPDF · Extracted text${pageCount ? ` (${fmtPagesEn(pageCount)})` : ''} · Checking GROBID cache`;
+  }
+
+  if (lower.includes('analyzing') && lower.includes('grobid')) {
+    return lang === 'vi'
+      ? `[01/08] GROBID · Đang phân tích cấu trúc TEI-XML${pageCount ? ` (${pageCount} trang)` : ''}…`
+      : `[01/08] GROBID · Analyzing TEI-XML structure${pageCount ? ` (${fmtPagesEn(pageCount)})` : ''}…`;
+  }
+
+  if (lower.includes('grobid parsed')) {
+    return lang === 'vi'
+      ? `[01/08] MERGE · GROBID bóc tách ${refCount ?? 0} tài liệu TK · Hợp nhất trích dẫn`
+      : `[01/08] MERGE · GROBID parsed ${fmtRefsEn(refCount ?? 0)} · Merging citations`;
+  }
+
+  if (lower.includes('falling back to regex') || lower.includes('using regex parser')) {
+    const isFallback = lower.includes('grobid') || lower.includes('falling back');
+    if (isFallback) {
+      return lang === 'vi'
+        ? `[01/08] FALLBACK · Chuyển sang bộ phân tích regex${pageCount ? ` (${pageCount} trang)` : ''}`
+        : `[01/08] FALLBACK · Running regex structural parser${pageCount ? ` (${fmtPagesEn(pageCount)})` : ''}`;
+    }
+    return lang === 'vi'
+      ? `[01/08] REGEX · Phân tích cấu trúc bằng bộ quy tắc regex${pageCount ? ` (${pageCount} trang)` : ''}`
+      : `[01/08] REGEX · Running regex structural parser${pageCount ? ` (${fmtPagesEn(pageCount)})` : ''}`;
+  }
+
+  if (lower.includes('scanned pdf detected')) {
+    return lang === 'vi'
+      ? `[01/08] SCAN · Phát hiện PDF ảnh quét${pageCount ? ` (${pageCount} trang)` : ''} · Kiểm tra nhánh dự phòng`
+      : `[01/08] SCAN · Scanned PDF detected${pageCount ? ` (${fmtPagesEn(pageCount)})` : ''} · Running fallback checks`;
+  }
+
+  if (lower.includes('segmenting sections')) {
+    return lang === 'vi'
+      ? `[01/08] DOCX · Đã đọc nội dung${pageCount ? ` (${pageCount} trang)` : ''} · Phân vùng & trích dẫn`
+      : `[01/08] DOCX · Extracted document${pageCount ? ` (${fmtPagesEn(pageCount)})` : ''} · Segmenting sections`;
+  }
+
+  return null;
+}
+
 function buildPipelineReasoningLines(
   status: EssayStatus,
   effectiveStepIndex: number,
   liveSourcesEntries: Array<[string, unknown]>,
   lang: 'vi' | 'en',
+  step1SubLines: string[] = [],
 ): string[] {
   const lines: string[] = [];
 
@@ -183,6 +259,12 @@ function buildPipelineReasoningLines(
       ? '[01/08] GROBID TEI-XML · Bóc tách bố cục & phân vùng tài liệu'
       : '[01/08] GROBID TEI-XML · Structural section & layout segmentation',
   );
+
+  for (const subLine of step1SubLines) {
+    if (subLine && lines[lines.length - 1] !== subLine) {
+      lines.push(subLine);
+    }
+  }
 
   if (effectiveStepIndex >= 1) {
     lines.push(
@@ -348,6 +430,7 @@ export function ProcessingPage() {
       ? statusEntry.snap
       : null;
   const [displayedStepIndex, setDisplayedStepIndex] = useState<number>(0);
+  const [step1SubMessages, setStep1SubMessages] = useState<string[]>([]);
   const [redirecting, setRedirecting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [finalElapsedSeconds, setFinalElapsedSeconds] = useState<number | null>(null);
@@ -358,6 +441,7 @@ export function ProcessingPage() {
 
   useEffect(() => {
     setDisplayedStepIndex(0);
+    setStep1SubMessages([]);
     setRedirecting(false);
     setErrorMsg(null);
     setFinalElapsedSeconds(null);
@@ -408,6 +492,14 @@ export function ProcessingPage() {
         return { essayId, snap: merged };
       });
       syncSingleCheckFromStatus(essayId, snap);
+      if (snap.status === 'processing' && snap.step === 'parsing' && snap.message) {
+        const cleanMsg = snap.message.replace(/[\r\n]+/g, ' ').trim();
+        if (cleanMsg && formatStep1SubStageLine(cleanMsg, 'en') !== null) {
+          setStep1SubMessages((prev) =>
+            prev.includes(cleanMsg) ? prev : [...prev, cleanMsg].slice(-8),
+          );
+        }
+      }
       if (snap.status === 'failed') {
         setRedirecting(false);
         setErrorMsg(snap.error);
@@ -487,6 +579,7 @@ export function ProcessingPage() {
       await api.reanalyzeEssay(essayId);
       refundedRunKeyRef.current = null;
       setDisplayedStepIndex(0);
+      setStep1SubMessages([]);
       setRedirecting(false);
       setErrorMsg(null);
       setFinalElapsedSeconds(null);
@@ -604,6 +697,9 @@ export function ProcessingPage() {
   const ocrRecoveredPages = diagnostics?.ocr_pages_recovered ?? [];
   const legacyEncoding = diagnostics?.legacy_encoding_detected ?? null;
   const legacyPagesCount = diagnostics?.legacy_encoding_pages_count ?? null;
+  const step1SubLines = step1SubMessages
+    .map((msg) => formatStep1SubStageLine(msg, lang))
+    .filter((line): line is string => Boolean(line));
 
   return (
     <div className="citra-cq-page-narrow w-full max-w-4xl mx-auto space-y-6 pb-10 transition-[max-width] duration-300">
@@ -975,6 +1071,7 @@ export function ProcessingPage() {
                       effectiveStepIndex,
                       liveSourcesEntries,
                       lang,
+                      step1SubLines,
                     )}
                     visibleLines={3}
                     lineHeightPx={20}

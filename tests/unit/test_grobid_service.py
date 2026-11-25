@@ -133,7 +133,49 @@ class TestCacheOperations:
                     cache_path = manager.get_cache_path("/test/file.pdf")
                     # Path should end with .tei.xml (not just .xml)
                     assert str(cache_path).endswith(".tei.xml")
+                    assert ".coords-" not in cache_path.name
                     assert cache_path.parent.name == "grobid"
+
+    def test_get_cache_path_includes_coords_fingerprint_when_opted_in(self, tmp_path):
+        """Opting into tei_coordinates namespaces the cache key to avoid serving stale TEI."""
+        from integrity_checker.config import GrobidConfig
+        from integrity_checker.extraction.grobid_service import GrobidServiceManager
+
+        pdf = tmp_path / "sample.pdf"
+        pdf.write_bytes(b"%PDF-1.4 sample")
+
+        mock_settings = MagicMock()
+        mock_settings.paths.grobid_output_dir = tmp_path / "cache" / "grobid"
+
+        with patch("integrity_checker.extraction.grobid_service.get_settings", return_value=mock_settings):
+            mgr_default = GrobidServiceManager(config=GrobidConfig())
+            mgr_coords = GrobidServiceManager(config=GrobidConfig(tei_coordinates="biblStruct"))
+
+            path_default = mgr_default.get_cache_path(str(pdf))
+            path_coords = mgr_coords.get_cache_path(str(pdf))
+
+        assert path_default != path_coords
+        assert ".coords-" not in path_default.name
+        assert ".coords-" in path_coords.name
+        assert path_coords.name.endswith(".tei.xml")
+
+        # Invalidating pdf_path removes BOTH default and coords-namespaced variants
+        path_default.write_text("<TEI>base</TEI>")
+        path_coords.write_text("<TEI>coords</TEI>")
+        with patch("integrity_checker.extraction.grobid_service.get_settings", return_value=mock_settings):
+            removed = mgr_default.invalidate_cache(pdf_path=str(pdf))
+        assert removed == 2
+        assert not path_default.exists()
+        assert not path_coords.exists()
+
+    def test_default_container_memory_and_jvm_heap_defaults(self):
+        """GrobidServiceManager defaults to 4g container limit and 768m JVM heap."""
+        from integrity_checker.config import GrobidConfig
+        from integrity_checker.extraction.grobid_service import GrobidServiceManager
+
+        manager = GrobidServiceManager(config=GrobidConfig())
+        assert manager._memory == "768m"
+        assert manager._container_memory_limit == "4g"
 
     def test_cache_hit(self, tmp_path):
         """Test cache hit returns content."""

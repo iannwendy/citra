@@ -20,6 +20,7 @@ import logging
 import re
 import time
 import tracemalloc
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -167,18 +168,45 @@ class DocumentParser:
 
     # ---------- Public API ----------
 
-    def parse(self, pdf_path: str, use_service_manager: bool = True) -> ParsedDocument:
+    def parse(
+        self,
+        pdf_path: str,
+        use_service_manager: bool = True,
+        *,
+        progress_callback: Callable[[str], None] | None = None,
+    ) -> ParsedDocument:
         """Parse PDF end-to-end → ParsedDocument.
 
         Args:
             pdf_path: absolute path tới PDF.
             use_service_manager: Nếu True, sử dụng GrobidServiceManager để check
                                  health và sử dụng cache.
+            progress_callback: optional callable(message) nhận thông điệp tiến độ
+                               từng pha con trong Step 1 (PyMuPDF → GROBID → merge).
 
         Returns:
             ParsedDocument với sections + citations + grobid (optional).
             Không raise — fail chain được ghi vào ``parser_warnings``.
         """
+        def _notify(msg: str) -> None:
+            if progress_callback is None or not msg:
+                return
+            try:
+                progress_callback(msg)
+            except Exception as cb_err:  # noqa: BLE001 — never break parsing
+                logger.debug("DocumentParser progress_callback ignored: %s", cb_err)
+
+        def _fmt_pages(n: int) -> str:
+            if n <= 0:
+                return "document"
+            return f"{n} page" if n == 1 else f"{n} pages"
+
+        def _fmt_pdf_pages(n: int) -> str:
+            return f"{n}-page PDF" if n > 0 else "PDF"
+
+        def _fmt_refs(n: int) -> str:
+            return f"{n} reference" if n == 1 else f"{n} references"
+
         warnings: list[str] = []
         parser_used = "unknown"
         grobid_status = "unknown"
@@ -275,15 +303,23 @@ class DocumentParser:
                 f"SCANNED_PDF_DETECTED: Document contains {doc_meta['scanned_pages_count']}/{max(1, len(text_doc.pages or []))} scanned/image-only pages "
                 f"(avg {doc_meta['avg_chars_per_page']} chars/page)."
             )
+        page_count = int(getattr(text_doc, "num_pages", 0) or len(text_doc.pages or []))
+        pages_lbl = _fmt_pages(page_count)
+        pdf_pages_lbl = _fmt_pdf_pages(page_count)
+
         if is_scanned_empty_pdf:
             warnings.append(
                 "SCANNED_PDF_NO_TEXT_LAYER: Document has pages but 0 extractable text characters; OCR is required."
             )
             parser_used = "regex"
             grobid_status = "unavailable"
+            _notify(
+                f"Scanned PDF detected ({pages_lbl}, no text layer) · Running fallback checks..."
+            )
 
         # 2. GROBID (optional, skipped for native .docx XML)
         grobid_out: GrobidOutput | None = None
+        emitted_fallback = False
 
         # Try to use GrobidServiceManager for better integration
         grobid_manager = None
@@ -300,11 +336,15 @@ class DocumentParser:
                 logger.debug("GrobidServiceManager not available: %s", exc)
 
         if not is_docx and not is_scanned_empty_pdf and self.config.extraction.grobid.enabled:
+            _notify(f"Extracted text from {pages_lbl} · Checking GROBID layout cache...")
             try:
                 # 1. Try disk cache first (does not require live container health check)
                 cached_tei = grobid_manager.get_from_cache(pdf_path) if grobid_manager else None
                 if cached_tei:
                     logger.info("Using cached TEI XML for: %s", pdf_path)
+                    _notify(
+                        f"Loaded cached GROBID layout ({pages_lbl}) · Parsing TEI-XML..."
+                    )
                     grobid_out = parse_tei(cached_tei)
                     if grobid_out and grobid_out.is_available:
                         grobid_status = "available"
@@ -319,6 +359,7 @@ class DocumentParser:
                     if grobid_available:
                         grobid_status = "available"
                         parser_used = "grobid"
+                        _notify(f"Analyzing {pdf_pages_lbl} layout with GROBID...")
                         grobid_out = self._load_grobid_tei(pdf_path, grobid_manager)
 
                         # Save to cache if successful
@@ -332,6 +373,7 @@ class DocumentParser:
                         # Still try via injected grobid_post_fn (for tests/mock)
                         if self._grobid_post_fn is not None:
                             # Use injected mock/test function
+                            _notify(f"Analyzing {pdf_pages_lbl} layout with GROBID...")
                             grobid_out = self._load_grobid_tei(pdf_path)
                             if grobid_out and grobid_out.is_available:
                                 grobid_status = "available"
@@ -351,6 +393,21 @@ class DocumentParser:
                     if grobid_status == "available":
                         grobid_status = "fallback"
                     parser_used = "regex"
+                    if not emitted_fallback:
+                        emitted_fallback = True
+                        if grobid_status == "fallback":
+                            _notify(
+                                f"GROBID timed out or unavailable · Falling back to regex parser ({pages_lbl})..."
+                            )
+                        else:
+                            _notify(
+                                f"GROBID unavailable · Using regex parser ({pages_lbl})..."
+                            )
+                else:
+                    bib_cnt = len(grobid_out.bibliography or [])
+                    _notify(
+                        f"GROBID parsed {_fmt_refs(bib_cnt)} · Extracting & merging citations..."
+                    )
 
             except Exception as exc:  # noqa: BLE001
                 logger.warning("GROBID failed: %s", exc)
@@ -358,13 +415,20 @@ class DocumentParser:
                 grobid_out = None
                 parser_used = "regex"
                 grobid_status = "error"
+                if not emitted_fallback:
+                    emitted_fallback = True
+                    _notify(
+                        f"GROBID timed out or unavailable · Falling back to regex parser ({pages_lbl})..."
+                    )
         elif is_docx:
             parser_used = "docx"
             grobid_status = "disabled"
-        else:
+            _notify(f"Extracted text from {pages_lbl} · Segmenting sections & citations...")
+        elif not is_scanned_empty_pdf:
             warnings.append("GROBID disabled in config")
             parser_used = "regex"
             grobid_status = "disabled"
+            _notify(f"Extracted text from {pages_lbl} · Using regex parser...")
 
         # 3. Merge
         doc_meta_pre = dict(text_doc.metadata or {})

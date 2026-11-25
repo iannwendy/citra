@@ -36,7 +36,7 @@ export const batchTiming = {
   maxAttempts: 150,
   maxQueuedPolls: 900,
 };
-export const singlePollTiming = { pollIntervalMs: 2000 };
+export const singlePollTiming = { pollIntervalMs: 2000, handoffGraceMs: 600 };
 
 export const STEP_KEY_TO_INDEX: Record<string, number> = {
   parsing: 0,
@@ -358,9 +358,32 @@ export function VerificationProgressProvider({
   const [activeSingleCheck, setActiveSingleCheck] = useState<ActiveSingleCheck | null>(() =>
     userId != null ? readPersistedSingle(userId) : null,
   );
+  const activeSingleFilenameRef = useRef<string | null>(activeSingleCheck?.filename ?? null);
+  activeSingleFilenameRef.current = activeSingleCheck?.filename ?? null;
   const [mountedProcessingEssayId, setMountedProcessingEssayId] = useState<number | null>(null);
+  const [pendingHandoffEssayId, setPendingHandoffEssayId] = useState<number | null>(null);
+  const pendingHandoffEssayIdRef = useRef<number | null>(null);
+  const handoffTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const uploadPageMountedRef = useRef(false);
   const singleGenRef = useRef(0);
+
+  const clearPendingHandoff = useCallback(() => {
+    if (handoffTimerRef.current !== null) {
+      clearTimeout(handoffTimerRef.current);
+      handoffTimerRef.current = null;
+    }
+    pendingHandoffEssayIdRef.current = null;
+    setPendingHandoffEssayId(null);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (handoffTimerRef.current !== null) {
+        clearTimeout(handoffTimerRef.current);
+        handoffTimerRef.current = null;
+      }
+    };
+  }, []);
 
   const [batchFiles, setBatchFiles] = useState<BatchFileItem[]>([]);
   const batchFilesRef = useRef<BatchFileItem[]>([]);
@@ -620,6 +643,7 @@ export function VerificationProgressProvider({
       hydratedUserIdRef.current = null;
       singleGenRef.current += 1;
       batchGenRef.current += 1;
+      clearPendingHandoff();
       abortBatchStreams();
       setActiveSingleCheck(null);
       updateBatchFiles([]);
@@ -690,7 +714,7 @@ export function VerificationProgressProvider({
         hasAutoNavigated: false,
       });
     }
-  }, [abortBatchStreams, userId, pollBatchEssayUntilSettled, t, updateBatchFiles]);
+  }, [abortBatchStreams, clearPendingHandoff, userId, pollBatchEssayUntilSettled, t, updateBatchFiles]);
 
   // Persist Single Check state to sessionStorage
   useEffect(() => {
@@ -720,13 +744,19 @@ export function VerificationProgressProvider({
     };
   }, []);
 
-  const registerProcessingPageMount = useCallback((essayId: number | null) => {
-    if (essayId == null) return noopCleanup;
-    setMountedProcessingEssayId(essayId);
-    return () => {
-      setMountedProcessingEssayId((prev) => (prev === essayId ? null : prev));
-    };
-  }, []);
+  const registerProcessingPageMount = useCallback(
+    (essayId: number | null) => {
+      if (essayId == null) return noopCleanup;
+      setMountedProcessingEssayId(essayId);
+      if (pendingHandoffEssayIdRef.current === essayId) {
+        clearPendingHandoff();
+      }
+      return () => {
+        setMountedProcessingEssayId((prev) => (prev === essayId ? null : prev));
+      };
+    },
+    [clearPendingHandoff],
+  );
 
   const startSingleUpload = useCallback(
     async (file: File, classId: number | null): Promise<{ essay_id: number }> => {
@@ -757,6 +787,24 @@ export function VerificationProgressProvider({
         if (singleGenRef.current === myGen) {
           const initSummary = response.summary;
           const isQueued = initSummary?.status === 'queued';
+          // Hold background SSE briefly when UploadPage is mounted so the immediate
+          // route transition to ProcessingPage owns the single /events stream cleanly
+          // without firing a throwaway aborted (HTTP 499) connection first.
+          if (uploadPageMountedRef.current) {
+            if (handoffTimerRef.current !== null) {
+              clearTimeout(handoffTimerRef.current);
+            }
+            const handedOffId = response.essay_id;
+            pendingHandoffEssayIdRef.current = handedOffId;
+            setPendingHandoffEssayId(handedOffId);
+            handoffTimerRef.current = setTimeout(() => {
+              handoffTimerRef.current = null;
+              if (pendingHandoffEssayIdRef.current === handedOffId) {
+                pendingHandoffEssayIdRef.current = null;
+                setPendingHandoffEssayId(null);
+              }
+            }, singlePollTiming.handoffGraceMs);
+          }
           setActiveSingleCheck({
             essayId: response.essay_id,
             filename: response.filename || file.name,
@@ -909,7 +957,8 @@ export function VerificationProgressProvider({
   const bgPollActive =
     bgPollEssayId !== null &&
     (activeSingleCheck?.status === 'queued' || activeSingleCheck?.status === 'processing') &&
-    mountedProcessingEssayId !== bgPollEssayId;
+    mountedProcessingEssayId !== bgPollEssayId &&
+    pendingHandoffEssayId !== bgPollEssayId;
 
   useEffect(() => {
     if (!bgPollActive || bgPollEssayId === null) return;
@@ -938,7 +987,7 @@ export function VerificationProgressProvider({
           })
           .catch(() => {});
 
-        const displayFilename = activeSingleCheck?.filename || `ID #${bgPollEssayId}`;
+        const displayFilename = activeSingleFilenameRef.current || `ID #${bgPollEssayId}`;
         toast.success(
           t('upload.toastCompletedTitle'),
           t('upload.toastCompletedDesc', { filename: displayFilename }),
@@ -1018,7 +1067,6 @@ export function VerificationProgressProvider({
   }, [
     bgPollActive,
     bgPollEssayId,
-    activeSingleCheck?.filename,
     syncSingleCheckFromStatus,
     acknowledgeSingleCheck,
     onNavigate,
