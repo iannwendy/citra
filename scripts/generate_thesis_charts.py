@@ -16,6 +16,7 @@ from matplotlib.ticker import FuncFormatter
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 REPORT_JSON = REPO_ROOT / "data" / "models" / "neuro_symbolic_benchmark_report.json"
+PERF_JSON = REPO_ROOT / "reports" / "benchmarks" / "pipeline_performance_benchmark.json"
 
 # Q1 Publication Colorblind-Safe Palette (aligned with Q1 chart playbook)
 NAVY = "#1E3A8A"
@@ -35,7 +36,7 @@ plt.rcParams.update(
     {
         "font.family": "sans-serif",
         "font.sans-serif": ["DejaVu Sans", "Arial", "Helvetica"],
-        "font.size": 9.5,
+        "font.size": 9.8,
         "axes.titlesize": 10.8,
         "axes.titleweight": "bold",
         "axes.labelsize": 9.8,
@@ -54,15 +55,14 @@ plt.rcParams.update(
     }
 )
 
-# Exact 10-bin empirical reliability coordinates computed on held-out test split (N=18,000, n>=20 populated bins)
-UNCAL_BIN_CONF = np.array([0.3772, 0.4486, 0.5062, 0.6620, 0.7478, 0.8192, 0.9500])
-UNCAL_BIN_ACC = np.array([0.9940, 0.9954, 0.9924, 0.9991, 0.9913, 0.9956, 1.0000])
-PLATT_BIN_CONF = np.array([0.7791, 0.8723, 0.9738])
-PLATT_BIN_ACC = np.array([0.9512, 0.9982, 0.9969])
-
 
 def load_benchmark() -> dict:
     with REPORT_JSON.open(encoding="utf-8") as fh:
+        return json.load(fh)
+
+
+def load_perf_benchmark() -> dict:
+    with PERF_JSON.open(encoding="utf-8") as fh:
         return json.load(fh)
 
 
@@ -157,19 +157,19 @@ def make_fig5_1(data: dict, lang: str, out_path: Path) -> None:
     im = ax.imshow(row_pct, cmap="YlGnBu", vmin=0.0, vmax=100.0, aspect="auto")
 
     x_lbls = (
-        ["Verified", "Metadata\nError", "Hallucination", "Unresolved"]
+        ["Verified", "Metadata\nError", "Suspected\nHalluc.", "Unresolved"]
         if not is_vn
         else ["Hợp lệ", "Lỗi siêu\ndữ liệu", "Ảo giác", "Chưa\nxác định"]
     )
     y_lbls = (
-        ["Verified\n(6,480)", "Metadata\n(3,960)", "Hallucination\n(5,400)", "Unresolved\n(2,160)"]
+        ["Verified\n(6,480)", "Metadata\n(3,960)", "Halluc.\n(5,400)", "Unresolved\n(2,160)"]
         if not is_vn
         else ["Hợp lệ\n(6,480)", "Lỗi SDL\n(3,960)", "Ảo giác\n(5,400)", "Chưa XĐ\n(2,160)"]
     )
     ax.set_xticks(range(4))
     ax.set_yticks(range(4))
-    ax.set_xticklabels(x_lbls, fontsize=8.2, fontweight="bold")
-    ax.set_yticklabels(y_lbls, fontsize=8.0)
+    ax.set_xticklabels(x_lbls, fontsize=7.8, fontweight="bold")
+    ax.set_yticklabels(y_lbls, fontsize=7.8)
     ax.set_xticks(np.arange(-0.5, 4, 1), minor=True)
     ax.set_yticks(np.arange(-0.5, 4, 1), minor=True)
     ax.tick_params(which="minor", bottom=False, left=False)
@@ -236,13 +236,13 @@ def make_fig5_1(data: dict, lang: str, out_path: Path) -> None:
     ax.bar(x, b5_ood, w, color=AMBER, edgecolor="#78350F", linewidth=0.5, label="B5: 16D MLR", zorder=2)
     ax.bar(x + w, ns_ood, w, color=EMERALD, edgecolor="#064E3B", linewidth=0.5, label="CITRA (Prop.)" if not is_vn else "CITRA (Đề xuất)", zorder=2)
 
-    # Selective non-overlapping numeric annotations
+    # Selective non-overlapping numeric annotations (cleanly centered inside the i.i.d. 1-5 band, zero bar overlap!)
     for i_zero in (0, 2):
-        ax.text(x[i_zero], 2.5, "0%", ha="center", va="bottom", fontsize=7.6, fontweight="bold", color=CORAL)
-    ax.text(x[5] - 0.04, b5_ood[5] + 2.2, "59.8%", ha="center", va="bottom", fontsize=7.4, fontweight="bold", color="#92400E")
-    ax.text(x[5] + w, ns_ood[5] + 2.2, "99.95%", ha="center", va="bottom", fontsize=7.4, fontweight="bold", color=EMERALD_DARK)
-    ax.text(x[6], b5_ood[6] + 2.2, "45%", ha="center", va="bottom", fontsize=7.4, fontweight="bold", color="#92400E")
-    ax.text(x[6] + w, ns_ood[6] + 2.2, "100%", ha="center", va="bottom", fontsize=7.4, fontweight="bold", color=EMERALD_DARK)
+        ax.text(x[i_zero], 2.5, "0%", ha="center", va="bottom", fontsize=7.4, fontweight="bold", color=CORAL)
+    ax.text(x[5] - 0.04, b5_ood[5] + 2.5, "59.8%", ha="center", va="bottom", fontsize=6.4, fontweight="bold", color="#92400E", bbox=dict(boxstyle="round,pad=0.08", facecolor="#ECFDF5", edgecolor="none", alpha=0.92), zorder=5)
+    ax.text(x[5] + w, ns_ood[5] + 2.2, "99.95%", ha="center", va="bottom", fontsize=7.0, fontweight="bold", color=EMERALD_DARK)
+    ax.text(x[6] - 0.02, b5_ood[6] + 2.5, "45%", ha="center", va="bottom", fontsize=6.8, fontweight="bold", color="#92400E", zorder=5)
+    ax.text(x[6] + w, ns_ood[6] + 2.2, "100%", ha="center", va="bottom", fontsize=7.0, fontweight="bold", color=EMERALD_DARK)
 
     ax.set_xticks(x)
     ax.set_xticklabels(cats, fontsize=7.3)
@@ -265,21 +265,28 @@ def make_fig5_1(data: dict, lang: str, out_path: Path) -> None:
     ax.legend(loc="upper center", ncol=3, fontsize=7.7, frameon=True, framealpha=0.95, edgecolor="#CBD5E1", columnspacing=0.9, handlelength=1.4)
 
     # =========================================================================
-    # Panel (d): Exact Empirical 10-Bin Platt Reliability + Selective Inset
+    # Panel (d): Exact Empirical 10-Bin Platt Reliability (loaded from JSON!) + Inset
     # =========================================================================
     ax = axes[1, 1]
+    u_bins = [b for b in data["neuro_symbolic_uncalibrated"]["calibration"]["reliability_bins_10"] if b["n"] >= 20]
+    p_bins = [b for b in data["neuro_symbolic_platt_calibrated"]["calibration"]["reliability_bins_10"] if b["n"] >= 20]
+    u_conf = np.array([b["mean_conf"] for b in u_bins])
+    u_acc = np.array([b["accuracy"] for b in u_bins])
+    p_conf = np.array([b["mean_conf"] for b in p_bins])
+    p_acc = np.array([b["accuracy"] for b in p_bins])
+
     ax.plot([0.32, 1.0], [0.32, 1.0], "--", color="#64748B", lw=1.1, label="Ideal (y = x)" if not is_vn else "Lý tưởng (y = x)")
     ax.fill_between(
-        UNCAL_BIN_CONF,
-        UNCAL_BIN_CONF,
-        UNCAL_BIN_ACC,
+        u_conf,
+        u_conf,
+        u_acc,
         color="#FECACA",
         alpha=0.45,
         label="Uncal. Gap" if not is_vn else "Khoảng lệch",
     )
     ax.plot(
-        UNCAL_BIN_CONF,
-        UNCAL_BIN_ACC,
+        u_conf,
+        u_acc,
         "s-.",
         color=CORAL,
         lw=1.6,
@@ -287,8 +294,8 @@ def make_fig5_1(data: dict, lang: str, out_path: Path) -> None:
         label="Uncal. (ECE 0.2477)" if not is_vn else "Chưa HC (0.2477)",
     )
     ax.plot(
-        PLATT_BIN_CONF,
-        PLATT_BIN_ACC,
+        p_conf,
+        p_acc,
         "o-",
         color=EMERALD,
         lw=1.8,
@@ -297,7 +304,7 @@ def make_fig5_1(data: dict, lang: str, out_path: Path) -> None:
     )
 
     ax.set_xlim(0.32, 1.02)
-    ax.set_ylim(0.32, 1.22)
+    ax.set_ylim(0.32, 1.24)
     ax.set_yticks([0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0])
     ax.set_xlabel("Mean Predicted Confidence" if not is_vn else "Độ tin cậy dự đoán trung bình", fontsize=9.4)
     ax.set_ylabel("Empirical Accuracy" if not is_vn else "Độ chính xác thực nghiệm", fontsize=9.4)
@@ -312,8 +319,8 @@ def make_fig5_1(data: dict, lang: str, out_path: Path) -> None:
     ax.spines["right"].set_visible(False)
     ax.legend(loc="upper center", ncol=2, fontsize=7.4, frameon=True, framealpha=0.95, edgecolor="#CBD5E1", columnspacing=0.8)
 
-    # Selective accuracy vs coverage inset tucked cleanly inside lower-right triangle below y = x
-    ins_box = [0.605, 0.11, 0.375, 0.28] if not is_vn else [0.605, 0.11, 0.375, 0.28]
+    # Selective accuracy vs coverage inset tucked cleanly inside lower-right triangle with generous xlabel clearance!
+    ins_box = [0.60, 0.165, 0.375, 0.27]
     ins = ax.inset_axes(ins_box)
     covs = [50, 70, 90, 95, 100]
     uncal_sel = [99.76, 99.64, 99.69, 99.70, 99.67]
@@ -324,10 +331,10 @@ def make_fig5_1(data: dict, lang: str, out_path: Path) -> None:
     ins.set_ylim(99.53, 99.83)
     ins.set_xticks([50, 75, 100])
     ins.set_yticks([99.56, 99.67, 99.78])
-    ins.tick_params(labelsize=6.4, pad=1.2)
-    ins.set_xlabel("Coverage (%)" if not is_vn else "Độ phủ (%)", fontsize=6.7, labelpad=1.2, fontweight="bold")
-    ins.set_ylabel("Acc. (%)" if not is_vn else "CX (%)", fontsize=6.7, labelpad=1.0, fontweight="bold")
-    ins.set_title("Selective Acc. (%)" if not is_vn else "Độ CX chọn lọc (%)", fontsize=7.0, fontweight="bold", color=NAVY, pad=2.0)
+    ins.tick_params(labelsize=6.4, pad=2.0)
+    ins.set_xlabel("Coverage (%)" if not is_vn else "Độ phủ (%)", fontsize=6.7, labelpad=3.2, fontweight="bold")
+    ins.set_ylabel("Acc. (%)" if not is_vn else "CX (%)", fontsize=6.7, labelpad=1.5, fontweight="bold")
+    ins.set_title("Selective Acc. (%)" if not is_vn else "Độ CX chọn lọc (%)", fontsize=7.0, fontweight="bold", color=NAVY, pad=2.5)
     ins.grid(True, linestyle=":", alpha=0.6)
     ins.annotate("0.99 clip" if not is_vn else "trần 0.99", xy=(50, 99.60), xytext=(59, 99.555), fontsize=6.0, fontweight="bold", color=EMERALD_DARK)
 
@@ -336,13 +343,14 @@ def make_fig5_1(data: dict, lang: str, out_path: Path) -> None:
 
 
 def make_fig5_2(lang: str, out_path: Path) -> None:
-    """Three-panel 350-DPI Q1 NFR scalability figure (9.6 x 3.80 in -> ~6.6-7.6 pt on A4)."""
+    """Three-panel 350-DPI Q1 NFR scalability figure dynamically loaded from pipeline_performance_benchmark.json."""
     is_vn = lang == "vn"
-    fig, axes = plt.subplots(1, 3, figsize=(9.6, 3.80), dpi=350)
-    plt.subplots_adjust(left=0.065, right=0.935, top=0.87, bottom=0.20, wspace=0.44)
+    perf = load_perf_benchmark()
+    fig, axes = plt.subplots(1, 3, figsize=(9.8, 4.05), dpi=350)
+    plt.subplots_adjust(left=0.065, right=0.935, top=0.87, bottom=0.20, wspace=0.45)
 
     # =========================================================================
-    # Panel (a): Warm-Cache Stage Latency (P50 stacked + Total P90 + RSS labels)
+    # Panel (a): Warm-Cache Additive Stage Means + Total P90 + RSS labels
     # =========================================================================
     ax = axes[0]
     scales = (
@@ -350,18 +358,25 @@ def make_fig5_2(lang: str, out_path: Path) -> None:
         if not is_vn
         else ["Bài báo\n12 tr.\n24 TLTK", "Đồ án\n50 tr.\n32 TLTK", "Chuyên khảo\n156 tr.\n87 TLTK"]
     )
-    p50_parse = np.array([182.8, 693.1, 1257.4])
-    p50_link = np.array([39.6, 98.9, 317.0])
-    p50_comp = np.array([268.3, 506.2, 2593.0])
-    p90_tot = np.array([583.4, 1325.1, 4215.3])
-    rss_mb = [836, 843, 1031]
+    m_parse, m_link, m_comp, p90_tot, rss_mb = [], [], [], [], []
+    for tier in perf["scale_benchmarks"]:
+        by_k = {s["step_key"]: s["latency_ms"]["mean"] for s in tier["steps"]}
+        m_parse.append(by_k["parsing"] + by_k["style_detection"] + by_k["extracting"])
+        m_link.append(by_k["linking"] + by_k["retrieving"])
+        m_comp.append(by_k["comparing"] + by_k["checking"] + by_k["scoring"])
+        p90_tot.append(tier["total_latency_ms"]["p90"])
+        rss_mb.append(round(tier["peak_rss_mb"]))
+    m_parse = np.array(m_parse)
+    m_link = np.array(m_link)
+    m_comp = np.array(m_comp)
+    p90_tot = np.array(p90_tot)
 
     x = np.arange(3)
     w = 0.46
-    ax.bar(x, p50_parse, w, color=BLUE, edgecolor="#1E3A8A", lw=0.5, label="Parse + Extract" if not is_vn else "Phân tích + Trích")
-    ax.bar(x, p50_link, w, bottom=p50_parse, color=SKY, edgecolor="#0369A1", lw=0.5, label="Link + Retrieve" if not is_vn else "Liên kết + Truy hồi")
-    ax.bar(x, p50_comp, w, bottom=p50_parse + p50_link, color=EMERALD, edgecolor="#065F46", lw=0.5, label="Match + Verify" if not is_vn else "So khớp + Kiểm định")
-    ax.plot(x, p90_tot, "D", color="#B45309", ms=5.6, markeredgecolor="white", markeredgewidth=0.7, zorder=6, label="Total P90" if not is_vn else "Tổng P90")
+    ax.bar(x, m_parse, w, color=BLUE, edgecolor="#1E3A8A", lw=0.5, label="Parse+Style+Extr." if not is_vn else "Phân tích+Trích")
+    ax.bar(x, m_link, w, bottom=m_parse, color=SKY, edgecolor="#0369A1", lw=0.5, label="Link + Retrieve" if not is_vn else "Liên kết + Truy hồi")
+    ax.bar(x, m_comp, w, bottom=m_parse + m_link, color=EMERALD, edgecolor="#065F46", lw=0.5, label="Match+Check+CIS" if not is_vn else "So khớp+Kiểm+CIS")
+    ax.plot(x, p90_tot, "D", color="#B45309", ms=5.8, markeredgecolor="white", markeredgewidth=0.7, zorder=6, label="Total P90" if not is_vn else "Tổng P90")
 
     ax.axhline(2500, color=CORAL, linestyle="--", lw=1.25, zorder=3)
     ax.text(
@@ -369,88 +384,96 @@ def make_fig5_2(lang: str, out_path: Path) -> None:
         2620,
         "NFR-01 SLA\n(50 pp.: ≤2,500 ms)" if not is_vn else "SLA NFR-01\n(50 tr.: ≤2,500 ms)",
         color=CORAL,
-        fontsize=7.0,
+        fontsize=7.3,
         fontweight="bold",
         ha="left",
         va="bottom",
     )
 
     for xi, (p90, rss) in enumerate(zip(p90_tot, rss_mb)):
-        ax.text(xi, p90 + 180, f"P90: {p90:,.0f} ms\n({rss:,} MB)", ha="center", va="bottom", fontsize=7.2, fontweight="bold", color="#0F172A")
+        x_txt = xi + (0.12 if xi == 0 else 0.0)
+        ax.text(x_txt, p90 + 190, f"P90: {p90:,.0f} ms\n({rss:,} MB)", ha="center", va="bottom", fontsize=7.4, fontweight="bold", color="#0F172A")
 
-    ax.set_ylim(0, 5650)
-    ax.set_xlim(-0.55, 2.55)
+    ax.set_ylim(0, 5700)
+    ax.set_xlim(-0.55, 2.58)
     ax.set_xticks(x)
-    ax.set_xticklabels(scales, fontsize=7.6)
+    ax.set_xticklabels(scales, fontsize=8.0)
     ax.yaxis.set_major_formatter(FuncFormatter(lambda v, _: f"{int(v):,}"))
-    ax.set_ylabel("Latency (ms)" if not is_vn else "Độ trễ (ms)", fontsize=9.2)
-    ax.set_title("(a) Warm-Cache Latency & RSS" if not is_vn else "(a) Độ trễ đệm ấm & RSS", fontsize=10.0, color=NAVY, pad=7)
+    ax.set_ylabel("Latency (ms)" if not is_vn else "Độ trễ (ms)", fontsize=9.4)
+    ax.set_title("(a) Warm-Cache Mean & P90" if not is_vn else "(a) Đệm ấm (TB & P90)", fontsize=10.2, color=NAVY, pad=7)
     ax.grid(axis="y", linestyle="--", alpha=0.55)
     ax.set_axisbelow(True)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
-    ax.legend(loc="upper left", fontsize=6.8, frameon=True, framealpha=0.94, edgecolor="#CBD5E1")
+    ax.legend(loc="upper left", fontsize=7.0, frameon=True, framealpha=0.94, edgecolor="#CBD5E1")
 
     # =========================================================================
-    # Panel (b): Cold WAN vs. Warm Cache (12-pp. Article & 50-pp. Capstone, Log)
+    # Panel (b): Cold WAN vs. Warm Cache (dynamically read from JSON; ZERO SLA collision!)
     # =========================================================================
     ax = axes[1]
+    c12 = perf["cold_vs_warm_cache"]
+    c50 = perf["cold_vs_warm_cache_50p"]
     groups = (
         ["12-pp.\nRetrieve", "12-pp.\nTotal E2E", "50-pp.\nRetrieve", "50-pp.\nTotal E2E"]
         if not is_vn
         else ["12 tr.\nTruy hồi", "12 tr.\nTổng E2E", "50 tr.\nTruy hồi", "50 tr.\nTổng E2E"]
     )
-    cold_ms = [8635.8, 9407.6, 10687.8, 12639.1]
-    warm_ms = [12.5, 484.8, 70.7, 2003.9]
+    cold_ms = [c12["cold_retrieving_ms"], c12["cold_total_ms"], c50["cold_retrieving_ms"], c50["cold_total_ms"]]
+    warm_ms = [c12["warm_retrieving_ms"], c12["warm_total_ms"], c50["warm_retrieving_ms"], c50["warm_total_ms"]]
     gains = ["689×↓", "19.4×↓", "151×↓", "6.3×↓"]
 
-    xb = np.arange(4) * 1.26
-    wb = 0.36
+    xb = np.arange(4) * 1.30
+    wb = 0.39
     ax.bar(xb - wb / 2, cold_ms, wb, color=AMBER, edgecolor="#78350F", lw=0.5, label="Cold WAN (Live APIs)" if not is_vn else "WAN lạnh (API thực)")
     ax.bar(xb + wb / 2, warm_ms, wb, color=EMERALD, edgecolor="#064E3B", lw=0.5, label="Warm Cache (FTS5/TEI)" if not is_vn else "Đệm ấm (FTS5/TEI)")
 
     ax.set_yscale("log")
-    ax.set_ylim(2.8, 420000)
-    ax.set_xlim(-0.68, xb[-1] + 0.76)
-    ax.axhline(15000, color=NAVY, linestyle=":", lw=1.25, zorder=3)
+    ax.set_ylim(2.2, 480000)
+    ax.set_xlim(-0.72, xb[-1] + 0.82)
+    ax.axhline(15000, color=NAVY, linestyle=":", lw=1.4, zorder=4)
     ax.text(
-        xb[-1] + 0.65,
-        29000,
+        xb[-1] + 0.72,
+        22000,
         "15s Cold SLA (50 pp.)" if not is_vn else "SLA lạnh 15s (50 tr.)",
         ha="right",
         va="bottom",
-        fontsize=7.2,
+        fontsize=7.6,
         fontweight="bold",
         color=NAVY,
+        bbox=dict(boxstyle="round,pad=0.14", facecolor="#FFFFFF", edgecolor="none", alpha=0.88),
+        zorder=5,
     )
 
     halo = [pe.withStroke(linewidth=2.4, foreground="white")]
     for xi, cm_v, wm_v, g in zip(xb, cold_ms, warm_ms, gains):
-        ax.text(xi - wb / 2 - 0.04, cm_v * 1.12, f"{cm_v/1000:.1f}s", ha="center", va="bottom", fontsize=7.1, fontweight="bold", color="#92400E", path_effects=halo, zorder=5)
+        # Print orange bar values VERTICALLY centered INSIDE top of orange bars -> 100% enclosed, ZERO SLA collision!
+        ax.text(xi - wb / 2, cm_v * 0.36, f"{cm_v/1000:.1f}s", ha="center", va="center", rotation=90, fontsize=7.2, fontweight="bold", color="white", zorder=6)
         w_txt = f"{wm_v:.0f}" if wm_v < 1000 else f"{wm_v/1000:.1f}s"
-        ax.text(xi + wb / 2 + 0.10, wm_v * 1.18, w_txt, ha="center", va="bottom", fontsize=7.0, fontweight="bold", color=EMERALD_DARK, path_effects=halo, zorder=5)
+        w_off = 0.04 if wm_v < 1000 else 0.12
+        ax.text(xi + wb / 2 + w_off, wm_v * 1.28, w_txt, ha="center", va="bottom", fontsize=7.2, fontweight="bold", color=EMERALD_DARK, path_effects=halo, zorder=6)
         ax.text(
             xi,
-            3.6,
+            3.2,
             g,
             ha="center",
             va="bottom",
-            fontsize=6.6,
+            fontsize=7.1,
             fontweight="bold",
             color=NAVY,
-            bbox=dict(boxstyle="round,pad=0.13", facecolor="#EFF6FF", edgecolor="#93C5FD", lw=0.6),
+            bbox=dict(boxstyle="round,pad=0.16", facecolor="#FFFFFF", edgecolor="#93C5FD", lw=0.75),
+            zorder=7,
         )
 
     ax.set_xticks(xb)
-    ax.set_xticklabels(groups, fontsize=7.5)
+    ax.set_xticklabels(groups, fontsize=7.9)
     ax.yaxis.set_major_formatter(FuncFormatter(lambda v, _: f"{int(v):,}" if v >= 1 else ""))
-    ax.set_ylabel("Latency (ms, log)" if not is_vn else "Độ trễ (ms, log)", fontsize=9.0)
-    ax.set_title("(b) Cold WAN vs. Warm Cache" if not is_vn else "(b) WAN lạnh vs. Đệm ấm", fontsize=10.0, color=NAVY, pad=7)
+    ax.set_ylabel("Latency (ms, log)" if not is_vn else "Độ trễ (ms, log)", fontsize=9.2)
+    ax.set_title("(b) Cold WAN vs. Warm Cache" if not is_vn else "(b) WAN lạnh vs. Đệm ấm", fontsize=10.2, color=NAVY, pad=7)
     ax.grid(axis="y", linestyle="--", alpha=0.55)
     ax.set_axisbelow(True)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
-    ax.legend(loc="upper left", fontsize=6.8, frameon=True, framealpha=0.95, edgecolor="#CBD5E1")
+    ax.legend(loc="upper left", fontsize=7.0, frameon=True, framealpha=0.95, edgecolor="#CBD5E1")
 
     # =========================================================================
     # Panel (c): 20/50-User I/O & WAL Burst (Stubbed NLP, Disjoint Regimes)
@@ -474,12 +497,12 @@ def make_fig5_2(lang: str, out_path: Path) -> None:
     ax.set_ylim(0, 6400)
     ax.set_xlim(-0.58, 3.58)
     ax.set_xticks(xc)
-    ax.set_xticklabels(scens, fontsize=7.5)
+    ax.set_xticklabels(scens, fontsize=7.9)
     ax.yaxis.set_major_formatter(FuncFormatter(lambda v, _: f"{int(v):,}"))
-    ax.set_ylabel("Queue / HTTP Time (ms)" if not is_vn else "Thời gian HĐ / HTTP (ms)", fontsize=8.8, color=NAVY)
+    ax.set_ylabel("Queue / HTTP Time (ms)" if not is_vn else "Thời gian HĐ / HTTP (ms)", fontsize=9.0, color=NAVY)
     ax.set_title(
         "(c) I/O & WAL Burst (Stubbed NLP)" if not is_vn else "(c) Tải I/O & WAL (NLP giả lập)",
-        fontsize=10.0,
+        fontsize=10.2,
         color=NAVY,
         pad=7,
     )
@@ -488,32 +511,31 @@ def make_fig5_2(lang: str, out_path: Path) -> None:
     ax.spines["top"].set_visible(False)
 
     ax2 = ax.twinx()
-    # Two disjoint regime segments per Q1 Playbook §2E
-    l1, = ax2.plot([0, 1], [tput[0], tput[1]], "o-", color=EMERALD, lw=1.8, ms=4.8, markeredgecolor="white", markeredgewidth=0.8, label="Throughput" if not is_vn else "Thông lượng", zorder=5)
-    ax2.plot([2, 3], [tput[2], tput[3]], "o-", color=EMERALD, lw=1.8, ms=4.8, markeredgecolor="white", markeredgewidth=0.8, zorder=5)
+    l1, = ax2.plot([0, 1], [tput[0], tput[1]], "o-", color=EMERALD, lw=1.9, ms=5.0, markeredgecolor="white", markeredgewidth=0.8, label="Throughput" if not is_vn else "Thông lượng", zorder=5)
+    ax2.plot([2, 3], [tput[2], tput[3]], "o-", color=EMERALD, lw=1.9, ms=5.0, markeredgecolor="white", markeredgewidth=0.8, zorder=5)
     ax2.set_ylim(0, 49)
     ax2.set_yticks([0, 10, 20, 30, 40])
-    ax2.tick_params(axis="y", colors=EMERALD_DARK, labelsize=8.0)
-    ax2.set_ylabel("Throughput (jobs/s)" if not is_vn else "Thông lượng (tác vụ/s)", fontsize=8.6, color=EMERALD_DARK)
+    ax2.tick_params(axis="y", colors=EMERALD_DARK, labelsize=8.2)
+    ax2.set_ylabel("Throughput (jobs/s)" if not is_vn else "Thông lượng (tác vụ/s)", fontsize=8.8, color=EMERALD_DARK)
     ax2.spines["top"].set_visible(False)
     ax2.spines["right"].set_color(EMERALD_DARK)
 
-    ax2.text(0.0, tput[0] + 2.4, "30.1/s", ha="center", va="bottom", fontsize=7.4, fontweight="bold", color=EMERALD_DARK)
-    ax2.text(2.0, tput[2] + 2.4, "28.7/s", ha="center", va="bottom", fontsize=7.4, fontweight="bold", color=EMERALD_DARK)
-    ax2.text(3.0, tput[3] + 2.4, "24.5/s", ha="center", va="bottom", fontsize=7.4, fontweight="bold", color=EMERALD_DARK)
+    ax2.text(0.0, tput[0] + 2.4, "30.1/s", ha="center", va="bottom", fontsize=7.6, fontweight="bold", color=EMERALD_DARK)
+    ax2.text(2.0, tput[2] + 2.4, "28.7/s", ha="center", va="bottom", fontsize=7.6, fontweight="bold", color=EMERALD_DARK)
+    ax2.text(3.0, tput[3] + 2.4, "24.5/s", ha="center", va="bottom", fontsize=7.6, fontweight="bold", color=EMERALD_DARK)
 
-    # Single coaxial haloed callout arrow for Queue N=50 throughput
+    # Clear whitespace callout box well to the left of the Queue N=50 bar (zero overlap!)
     ann2 = ax2.annotate(
         "11.6/s",
         xy=(1.0, tput[1]),
-        xytext=(0.12, 16.5),
+        xytext=(0.08, 17.5),
         ha="center",
         va="center",
-        fontsize=7.4,
+        fontsize=7.6,
         fontweight="bold",
         color="#065F46",
-        bbox=dict(boxstyle="round,pad=0.18", facecolor="#ECFDF5", edgecolor=EMERALD, lw=0.85),
-        arrowprops=dict(arrowstyle="->", color=EMERALD_DARK, lw=1.3, shrinkB=4),
+        bbox=dict(boxstyle="round,pad=0.20", facecolor="#ECFDF5", edgecolor=EMERALD, lw=0.9),
+        arrowprops=dict(arrowstyle="->", color=EMERALD_DARK, lw=1.35, shrinkB=4),
         zorder=7,
     )
     ann2.arrow_patch.set_path_effects([pe.Stroke(linewidth=3.0, foreground="white"), pe.Normal()])
