@@ -3,146 +3,154 @@
 
 \section{Literature Review}
 
-Automated citation verification builds on three established areas of software engineering and natural language processing (NLP): scholarly document parsing, bibliographic record linkage, and hallucination detection. This section reviews representative approaches in each area and compares existing tools against \textbf{CITRA}.
+Automated citation verification builds on three foundational areas of software engineering and natural language processing (NLP): scholarly document parsing, probabilistic bibliographic record linkage, and hallucination or claim verification. This section reviews representative advances in each area---including 2024--2025 peer-reviewed studies---and presents an objective comparison between existing tool categories and \textbf{CITRA}.
 
 \subsection{Document Parsing and Reference Extraction}
 
-Extracting structured citations from unlabeled PDF files is the first stage of any bibliography checker. Errors introduced during parsing propagate to every downstream module. The standard open-source engine for scientific PDF segmentation is GROBID~\cite{Lopez2009}, which uses linear-chain Conditional Random Fields (CRFs) to convert raw PDF pages into Text Encoding Initiative XML (\texttt{TEI-XML}) documents containing body paragraphs, inline \texttt{<ref type="bibr">} markers, and structured \texttt{<biblStruct>} entries. Although GROBID performs strongly on typeset journal articles, student capstone reports exported from word processors often contain multi-line tables of contents, inconsistent indentation, or Vietnamese legal citations that pure CRF models misclassify or truncate.
+Extracting structured citations from unlabeled PDF files is the first stage of any bibliography auditor; errors introduced during parsing propagate through every downstream layer. The standard open-source engine for scientific PDF segmentation is GROBID~\cite{Lopez2009}, which employs linear-chain Conditional Random Fields (CRFs) to transform raw PDF layouts into Text Encoding Initiative XML (\texttt{TEI-XML}) containing body paragraphs, inline \texttt{<ref type="bibr" target="\#bX">} pointers, and structured \texttt{<biblStruct>} bibliography records. While GROBID excels on typeset journal manuscripts, undergraduate capstone reports exported from word processors often feature multi-line tables of contents, irregular hanging indents, and Vietnamese legal citations that pure CRF models truncate or misclassify.
 
-When structural tags are absent, layout-aware PDF parsers provide a vital fallback. PyMuPDF~\cite{PyMuPDF2024} extracts text blocks rapidly through compiled C bindings, whereas \texttt{pdfplumber}~\cite{Pdfplumber2024} exposes character-level coordinates needed to reconstruct two-column page layouts and hanging indents. \textbf{CITRA} combines GROBID \texttt{0.9.1-crf} with deterministic table-of-contents filtering, regular-expression field enrichment, PyMuPDF/\texttt{pdfplumber} fallback, and native \texttt{python-docx} parsing so that malformed student formatting does not halt verification.
+When structural tags are absent or degraded, layout-aware PDF extractors provide an indispensable fallback. PyMuPDF~\cite{PyMuPDF2024} recovers text blocks rapidly via compiled C bindings, whereas \texttt{pdfplumber}~\cite{Pdfplumber2024} exposes character-level bounding coordinates required to reconstruct two-column reading order and hanging indents. \textbf{CITRA} integrates GROBID \texttt{0.9.1-crf} with deterministic table-of-contents filtering, regular-expression metadata enrichment, PyMuPDF/\texttt{pdfplumber} fallback, and native \texttt{python-docx} parsing so that noisy student formatting does not halt auditing.
 
 \subsection{Bibliographic Record Linkage}
 
-Record linkage determines whether two noisy metadata records refer to the same real-world publication. Fellegi and Sunter~\cite{Fellegi1969} established the probabilistic foundation for entity resolution by showing that combining multiple independent field comparisons (title, author surname, publication year, and venue) yields much lower error rates than matching a single concatenated string. Equally important is asymmetric negative evidence: a direct contradiction between two populated fields (such as a valid DOI resolving to an unrelated title) provides strong proof that a citation is corrupted, whereas a missing venue field merely lowers confidence. This distinction motivates \textbf{CITRA}'s priority-ordered rule hierarchy, which evaluates explicit identifier and retraction contradictions before scoring partial metadata similarity.
+Bibliographic record linkage determines whether two noisy metadata records denote the same underlying publication. Fellegi and Sunter~\cite{Fellegi1969} established the probabilistic framework for entity resolution, demonstrating that combining multiple conditionally informative field comparisons (title, author surname, publication year, and venue) substantially lowers linkage error relative to single-string comparison. Equally critical is the asymmetry of negative evidence: a direct contradiction between populated fields---such as a syntactically valid DOI resolving to an unrelated canonical title---constitutes strong refuting evidence, whereas an omitted venue field merely reduces matching confidence. This asymmetry directly motivates \textbf{CITRA}'s priority-ordered symbolic rule tree, which evaluates explicit identifier and retraction contradictions before scoring partial metadata similarity.
 
 \subsection{Hallucinated Citation Detection versus AI-Text Attribution}
 
-Recent responses to LLM misuse in education follow two fundamentally different paradigms, as contrasted in Figure~\ref{fig:verification-paradigm}. The first paradigm, \emph{stylistic attribution}, trains statistical classifiers or watermark detectors to estimate the probability that prose was generated by an AI model~\cite{Sculley2015}, \cite{Goodfellow2016}. However, Sadasivan et al.~\cite{Sadasivan2023} proved theoretically and empirically that paraphrasing drives stylometric detector accuracy toward random guessing. Krishna et al.~\cite{krishna2023paraphrasing} confirmed that discourse-level paraphrasing evades commercial and watermark-based AI detectors while demonstrating that retrieval-grounded verification remains robust. Furthermore, stylometric detectors inspect only surface token distributions; they cannot tell whether a cited paper actually exists, and class imbalance in real student cohorts inflates false-positive rates~\cite{Chawla2009}.
+Academic responses to LLM misuse follow two fundamentally distinct paradigms, contrasted in Figure~\ref{fig:verification-paradigm}. The first paradigm, \emph{stylometric attribution}, inspects surface token distributions via zero-shot probability curvature detectors such as DetectGPT~\cite{mitchell2023detectgpt} or green-list lexical watermarking~\cite{kirchenbauer2023watermark}. However, Sadasivan et al.~\cite{Sadasivan2023} demonstrated both theoretically and empirically that light paraphrasing drives stylometric detector accuracy toward chance performance, and Krishna et al.~\cite{krishna2023paraphrasing} confirmed that discourse-level paraphrasing defeats both statistical detectors and watermarks while retrieval-grounded checking remains resilient. Moreover, stylometric detectors cannot verify whether a cited work actually exists, and class imbalance in real student cohorts amplifies false-positive accusation rates~\cite{Chawla2009}.
 
-\begin{figure}[H]
+\begin{figure}[!htbp]
     \centering
     \includegraphics[width=\textwidth,keepaspectratio]{picture/figures/fig2_1_verification_paradigm.png}
     \caption[Comparison between stylistic attribution and external bibliographic verification]{Comparison between stylistic attribution of machine-generated text and external bibliographic verification with provenance-aware abstention.}
     \label{fig:verification-paradigm}
 \end{figure}
 
-The second paradigm, \emph{external bibliographic and claim verification}, checks each citation against authoritative registries and compares inline claims against retrieved evidence, following fact-verification frameworks such as FEVER~\cite{thorne2018fever}, SciFact~\cite{wadden2020scifact}, and citation-grounded generation benchmarks such as ALCE~\cite{gao2023alce}. Every flag raised under this paradigm points to concrete external evidence: either multiple live registries confirm that no matching record exists, or a retrieved canonical record exposes a specific metadata or claim discrepancy.
+The second paradigm, \emph{external bibliographic and claim verification}, verifies references against authoritative registries and aligns in-text statements against retrieved source evidence. Early scientific fact-verification benchmarks such as FEVER~\cite{thorne2018fever}, SciCite~\cite{cohan2019scicite}, and SciFact~\cite{wadden2020scifact} modeled citation intent and claim entailment over closed corpora, while ALCE~\cite{gao2023alce} evaluated citation recall and precision in LLM outputs. Recent 2024--2025 studies expose how acute reference hallucination remains even in frontier models: Agrawal et al.~\cite{agrawal2024hallucinating} showed that LLMs struggle to recognize their own fabricated titles without external lookup; Hu et al.~\cite{hu2024refchecker} introduced fine-grained claim-triplet verification (\textsc{RefChecker}); Press et al.~\cite{press2024citeme} demonstrated in \textsc{CiteME} that frontier LLMs misattribute scientific claims at high rates even when citing real papers; and Huang et al.~\cite{huang2025hallucination} synthesized hallucination mitigation taxonomies emphasizing retrieval grounding and calibrated abstention. Under this external verification paradigm, every raised flag cites concrete registry provenance or an explicit semantic discrepancy rather than opaque prose perplexity.
 
 \subsection{Comparison with Existing Systems}
 
-Existing academic integrity platforms, reference managers, and research benchmarks each address only part of the student manuscript verification workflow. Plagiarism checkers such as Turnitin match text overlap against closed repositories but do not detect fabricated references that have zero text overlap with existing literature. Reference managers such as Zotero import clean DOIs for authors but do not audit in-text citation consistency or classroom cohorts. Closed-corpus NLP benchmarks such as SciFact~\cite{wadden2020scifact} verify scientific claims over a fixed set of 5,000 abstracts but do not parse multi-style PDFs or query live registries. Table~\ref{tab:related-work} compares \textbf{CITRA} against five representative system categories across seven technical capabilities.
+Commercial academic integrity platforms, smart citation indexes, reference tools, and NLP benchmarks each solve a valuable subset of scholarly auditing, yet none unifies full student-manuscript citation integrity verification with calibrated abstention and Vietnamese statutory compliance. Text-overlap platforms such as Turnitin and iThenticate maintain vast proprietary student-paper and publisher corpora that remain unmatched for verbatim plagiarism detection, but they cannot flag fabricated citations exhibiting zero lexical overlap with existing literature. Smart citation platforms such as \texttt{scite.ai}~\cite{nicholson2021scite} index over one billion publisher full-text citation statements to classify supporting versus contrasting citation contexts, while ReciteWorks rapidly checks in-text versus bibliography consistency for APA and Harvard authors; however, neither performs open multi-registry provenance auditing with Platt-calibrated abstention or Vietnamese legal verification. Similarly, GROBID~\cite{Lopez2009} emits intra-document TEI \texttt{<ref target>} pointers for clean PDFs but lacks registry verification, whereas Zotero provides desktop reference management and Retraction Watch notices without classroom-scale bipartite auditing. Table~\ref{tab:related-work} provides a balanced capability comparison across seven representative tool categories.
 
-{\setlength{\tabcolsep}{3.5pt}
-\begin{longtable}{|L{0.22}|C{0.11}|C{0.11}|C{0.11}|C{0.12}|C{0.11}|C{0.11}|C{0.11}|}
-\caption{Feature comparison between existing tool categories and CITRA (\texttt{v3.90.9}).}\label{tab:related-work}\\
+{\setlength{\tabcolsep}{3.0pt}
+\begin{table}[!htbp]
+\centering
+\caption{Capability comparison between representative existing tool categories and CITRA (\texttt{v3.90.9}).}\label{tab:related-work}
+\begin{tabular}{|L{0.23}|C{0.11}|C{0.11}|C{0.11}|C{0.11}|C{0.11}|C{0.11}|C{0.11}|}
 \hline
-\textbf{System Category} & \textbf{Multi\-Style PDF} & \textbf{Bipar\-tite Linker} & \textbf{15+ Live APIs} & \textbf{Claim Align.} & \textbf{Safe Abstain} & \textbf{Calib.\ Prob.} & \textbf{VN Legal} \\
+\textbf{System Category} & \textbf{Multi\-Style PDF} & \textbf{Bipar\-tite Linker} & \textbf{Multi\-Registry} & \textbf{Claim Align.} & \textbf{Safe Abstain} & \textbf{Calib.\ Prob.} & \textbf{VN Legal} \\
 \hline
-\endfirsthead
-\multicolumn{8}{c}{\itshape Table \thetable\ (continued from previous page)}\\
-\hline
-\textbf{System Category} & \textbf{Multi\-Style PDF} & \textbf{Bipar\-tite Linker} & \textbf{15+ Live APIs} & \textbf{Claim Align.} & \textbf{Safe Abstain} & \textbf{Calib.\ Prob.} & \textbf{VN Legal} \\
-\hline
-\endhead
-\hline
-\multicolumn{8}{r}{\itshape Continued on next page}\\
-\endfoot
-\hline
-\endlastfoot
-Text Overlap Tools (Turnitin / iThenticate) & Partial & No & No & No & No & No & No \\
+Text Overlap (Turnitin / iThenticate) & Partial & No & No & No & No & No & No \\
 \hline
 AI Style Detectors (GPTZero / Watermarks) & No & No & No & No & No & Partial & No \\
 \hline
-Prompt-Only LLM Checkers & Partial & No & Partial & Partial & No & No & No \\
+Prompt-Only LLM Checkers & Partial & No & No & Partial & No & No & No \\
 \hline
-Reference Managers (Zotero / GROBID) & Yes & No & Partial & No & No & No & No \\
+Smart Citation Tools (\texttt{scite.ai} / ReciteWorks) & Partial & Partial & Partial & Yes (EN) & No & No & No \\
 \hline
-Claim Benchmarks (SciFact / ALCE) & No & No & No & Yes & Partial & No & No \\
+PDF Parsers \& Ref.\ Mgrs.\ (GROBID / Zotero) & Yes & Partial & Partial & No & No & No & No \\
+\hline
+Claim Benchmarks (SciFact / RefChecker) & No & No & No & Yes & Partial & No & No \\
 \hline
 \textbf{CITRA (\texttt{v3.90.9})} & \textbf{Yes (12)} & \textbf{Yes (8)} & \textbf{Yes (15+)} & \textbf{VI$\leftrightarrow$EN} & \textbf{Yes} & \textbf{Platt} & \textbf{Yes} \\
 \hline
-\end{longtable}
+\end{tabular}
+\end{table}
 }
 
 \section{Scholarly Registries and Persistent Identifiers}
 
 \subsection{Federated Bibliographic Sources}
 
-Large-scale bibliometric studies show substantial coverage gaps between individual scholarly databases across disciplines and publication types~\cite{visser2021bibliographic}. Relying on a single API also creates severe rate-limit bottlenecks during classroom submission deadlines. \textbf{CITRA} therefore combines an offline full-text corpus with domain-aware routing across more than fifteen scholarly, technical, and archival registries, as summarized in Table~\ref{tab:sources}.
+Bibliometric coverage comparisons confirm wide disciplinary disparities across scholarly databases~\cite{visser2021bibliographic}, and relying on a single API creates severe rate-limit bottlenecks during institutional submission deadlines. \textbf{CITRA} therefore implements a four-tier offline-first retrieval architecture combining a local SQLite FTS5 Okapi BM25 index~\cite{robertson2009bm25} with domain-routed lookups across public scholarly, technical, and archival APIs, summarized in Table~\ref{tab:sources}. Commercial licensed databases such as Scopus and Web of Science are excluded to preserve zero-cost academic self-hosting; Semantic Scholar is excluded from default synchronous routing due to restrictive unauthenticated API-key rate caps. Optional web search via Serper or SerpAPI (Tier~3) remains disabled by default unless an institution supplies its own API key. For arXiv lookups, the client enforces serialized request spacing ($1.0\,\text{s}$ slot reservation, honoring arXiv's bulk-harvesting guidance~\cite{arxiv-api} for batch workloads).
 
-\begin{longtable}{|L{0.27}|L{0.36}|L{0.37}|}
-\caption{Scholarly registries and validators integrated into the CITRA retrieval layer.}\label{tab:sources}\\
+{\setlength{\tabcolsep}{3.5pt}
+\begin{longtable}{|L{0.23}|L{0.29}|L{0.21}|L{0.27}|}
+\caption{Scholarly registries, access tiers, and validators integrated into CITRA.}\label{tab:sources}\\
 \hline
-\textbf{Source / Validator} & \textbf{Primary Coverage} & \textbf{Role in Pipeline} \\
+\textbf{Source / Validator} & \textbf{Primary Coverage} & \textbf{Access / Rate Policy} & \textbf{Tier \& Pipeline Role} \\
 \hline
 \endfirsthead
-\multicolumn{3}{c}{\itshape Table \thetable\ (continued from previous page)}\\
+\multicolumn{4}{c}{\itshape Table \thetable\ (continued from previous page)}\\
 \hline
-\textbf{Source / Validator} & \textbf{Primary Coverage} & \textbf{Role in Pipeline} \\
+\textbf{Source / Validator} & \textbf{Primary Coverage} & \textbf{Access / Rate Policy} & \textbf{Tier \& Pipeline Role} \\
 \hline
 \endhead
 \hline
-\multicolumn{3}{r}{\itshape Continued on next page}\\
+\multicolumn{4}{r}{\itshape Continued on next page}\\
 \endfoot
 \hline
 \endlastfoot
-\textbf{Local Corpus} (\texttt{local\_papers.db}) & \textbf{129,137 records} (128,115 unique papers; 82,887 abstracts) from ACL Anthology~\cite{acl-anthology} and arXiv & \textbf{Tier 0} sub-100\,ms offline SQLite FTS5 BM25 lookup \\
+\textbf{Local Corpus} (\texttt{local\_papers.db}) & \textbf{129,137 records} (128,115 unique papers; 82,887 abstracts; $98.42\%$ ACL Anthology~\cite{acl-anthology}) & Local disk; zero WAN quota & \textbf{Tier 0} sub-100\,ms offline SQLite FTS5 BM25~\cite{robertson2009bm25} lookup \\
 \hline
-\textbf{Seminal Whitelist} (\texttt{\_KNOWN\_PAPERS}) & \textbf{101} foundational CS, AI, NLP, and deep learning publications & \textbf{Tier 0} instant lookup for heavily cited canonical papers \\
+\textbf{Seminal Whitelist} (\texttt{\_KNOWN\_PAPERS}) & \textbf{101} foundational computer science, AI, NLP, and deep learning articles & In-memory dictionary; zero WAN quota & \textbf{Tier 0} instant canonical lookup for classic citations \\
 \hline
-\textbf{Crossref}~\cite{crossref-tdm} \& \textbf{Retraction Watch} & Peer-reviewed journals, proceedings, book chapters, and retraction notices & \textbf{Tier 1} DOI resolution, Journal Article Tag Suite (JATS) abstract parsing, and \texttt{is\_retracted} screening \\
+\textbf{Crossref}~\cite{crossref-tdm} \& \textbf{Retraction Watch} & Peer-reviewed journals, proceedings, book chapters, and open retraction notices & Public polite pool (\texttt{mailto} header); semaphore-throttled & \textbf{Tier 1} DOI resolution, JATS abstract parsing, \texttt{is\_retracted} screening \\
 \hline
-\textbf{OpenAlex}~\cite{openalex} & Global open scholarly graph spanning journals, preprints, and repositories & \textbf{Tier 1} broad metadata lookup and inverted-index abstract reconstruction \\
+\textbf{OpenAlex}~\cite{openalex} & Open global scholarly graph spanning journals, preprints, and repositories & Public REST API; polite email pool & \textbf{Tier 1} broad metadata lookup and inverted-index abstract recovery \\
 \hline
-\textbf{DataCite}~\cite{datacite} \& \textbf{Global DOI RA}~\cite{doi-handbook} & Zenodo/Figshare/OSF datasets and regional DOI agencies (JaLC, CNKI, KISTI, mEDRA) & \textbf{Tier 1} non-Crossref DOI resolution and \texttt{R-DOI-RA-NO-CSL} safe abstention \\
+\textbf{DataCite}~\cite{datacite} \& \textbf{Global DOI RA}~\cite{doi-handbook} & Zenodo/Figshare/OSF datasets and regional DOI agencies (JaLC, CNKI, KISTI, mEDRA) & Public REST APIs; bounded retries & \textbf{Tier 1} non-Crossref DOI resolution and \texttt{R-DOI-RA-NO-CSL} abstention \\
 \hline
-\textbf{DOAJ}~\cite{doaj} \& \textbf{OpenAIRE / HAL} & Open-access journals (including regional Asian venues), institutional repositories, and preprints & \textbf{Tier 1} open-access journal and institutional repository verification \\
+\textbf{DOAJ}~\cite{doaj} \& \textbf{OpenAIRE / HAL} & Open-access journals (including Asian venues) and institutional repositories & Public REST APIs; circuit-broken & \textbf{Tier 1} open-access journal and repository verification \\
 \hline
-\textbf{DBLP}~\cite{dblp} \& \textbf{arXiv API}~\cite{arxiv-api} & Computer science conferences/workshops and STEM preprints & \textbf{Tier 1} domain-routed CS/AI bibliography and exact \texttt{arXiv} ID lookup \\
+\textbf{DBLP}~\cite{dblp} \& \textbf{arXiv API}~\cite{arxiv-api} & Computer science conferences/workshops and STEM preprints & Public APIs; serialized slot spacing & \textbf{Tier 1/2} domain-routed CS lookup and arXiv metadata enrichment \\
 \hline
-\textbf{Europe PMC}~\cite{europepmc} \& \textbf{NCBI / bioRxiv} & PubMed/MEDLINE biomedical, clinical, psychology, and life-science preprints & \textbf{Tier 1} domain-routed life-science lookup and abstract enrichment \\
+\textbf{Europe PMC}~\cite{europepmc} \& \textbf{NCBI / bioRxiv} & PubMed/MEDLINE biomedical, clinical, and life-science preprints & Public REST APIs; circuit-broken & \textbf{Tier 1/2} domain-routed life-science lookup and abstract enrichment \\
 \hline
-\textbf{OpenLibrary}~\cite{openlibrary} \& \textbf{Google Books} & Textbooks, monographs, ISBN metadata, and multi-edition printings & \textbf{Tier 1} book verification and cross-edition year tolerance \\
+\textbf{OpenLibrary}~\cite{openlibrary} \& \textbf{Google Books} & Textbooks, monographs, ISBN metadata, and multi-edition printings & Public REST APIs; optional API key & \textbf{Tier 2} book verification and cross-edition year tolerance \\
 \hline
-\textbf{Hugging Face, IETF RFC, PyPI \& Wikidata} & ML models/datasets, RFC internet standards, Python packages, and OpenCitations & \textbf{Tier 1} software, technical standard, and open citation verification \\
+\textbf{Hugging Face, IETF RFC, PyPI \& Wikidata} & ML models/datasets, RFC specifications, Python packages, and OpenCitations & Public JSON/REST APIs & \textbf{Tier 2} software, technical standard, and open citation verification \\
 \hline
-\textbf{Serper / SerpAPI Router} & Academic web index fallback & \textbf{Tier 2} optional fallback when Tier 0 and Tier 1 return zero candidates \\
+\textbf{Serper / SerpAPI Router} & Academic web index fallback & Optional paid API key (disabled by default) & \textbf{Tier 3} last-resort fallback when Tiers 0--2 yield zero candidates \\
 \hline
-\textbf{HTTP + Wayback} \texttt{Link\allowbreak Validator}~\cite{openlibrary} & Live HTTP/HTTPS targets and Internet Archive CDX snapshots & \textbf{Parallel} URL liveness, Soft-404 HTML metadata, and archive check \\
+\textbf{HTTP + Wayback} \texttt{Link\allowbreak Validator}~\cite{wayback-cdx} & Live HTTP/HTTPS targets and Internet Archive Wayback CDX snapshots & Pinned-IP SSRF guard; semaphore-capped & \textbf{Parallel} URL liveness, Soft-404 HTML inspection, RFC 2606~\cite{rfc2606} check \\
 \hline
 \end{longtable}
+}
 
-\subsection{DOI Resolution and Retraction Screening}
+\subsection{DOI Resolution, Retraction Screening, and Statutory Provenance}
 
-A Digital Object Identifier (DOI) provides a persistent handle for scholarly objects~\cite{doi-handbook}, yet syntactic validity (\texttt{10.xxxx/...}) does not guarantee legitimacy. Generative models frequently invent unregistered suffixes under real publisher prefixes (such as \texttt{10.1109/}) or copy a real DOI from a high-profile paper onto a fabricated citation. Conversely, legitimate Asian or European journals registered through agencies such as JaLC, CNKI, KISTI, or mEDRA resolve at \texttt{doi.org/ra/} without exposing metadata in Crossref. Querying the Global DOI Registration Agency API allows \textbf{CITRA} to abstain safely on valid regional DOIs while exposing unregistered and chimeric DOIs. Simultaneously, checking Crossref update-to metadata and Retraction Watch flags prevents retracted articles from passing silently as verified sources.
+A Digital Object Identifier (DOI) provides a persistent handle for scholarly objects~\cite{doi-handbook}, yet syntactic validity (\texttt{10.xxxx/...}) does not prove existence. LLMs frequently invent unregistered suffixes under genuine publisher prefixes (such as \texttt{10.1109/}) or splice a real DOI from a landmark paper onto a fabricated title. Conversely, legitimate Asian or European venues registered through agencies such as JaLC, CNKI, KISTI, or mEDRA resolve via \texttt{doi.org/ra/} without publishing CSL metadata in Crossref. Querying the Global DOI RA endpoint enables \textbf{CITRA} to abstain safely on valid regional DOIs while exposing unregistered and chimeric DOIs. Following Crossref's September 2023 open acquisition of the Retraction Watch dataset~\cite{crossref-tdm}, inspecting Crossref \texttt{update-to} relations alongside local retraction records prevents retracted papers from passing as verified sources. For Vietnamese manuscripts citing national legislation, \textbf{CITRA} applies structural and issuing-authority verification grounded in Vietnam's official legal normative taxonomy~\cite{vbpl-vn} rather than querying international DOI registries.
 
 \section{Theoretical Foundations}
 
 \subsection{Lexical and Semantic Title Similarity}
 
-Bibliographic strings vary across citation styles due to subtitle truncation, punctuation differences, hyphenation, and edition markers. \textbf{CITRA} therefore combines lexical string similarity with dense neural embeddings. At the lexical level, RapidFuzz computes token-set ratios (insensitive to word reordering), normalized Levenshtein ratios (sensitive to character typos), and guarded prefix ratios (handling omitted subtitles after colons). At the semantic level, titles are encoded into 384-dimensional vectors using the Transformer architecture~\cite{vaswani2017} distilled via BERT~\cite{bert} and MiniLM~\cite{wang2020minilm} into the Sentence-BERT checkpoint \texttt{all-MiniLM-L6-v2}~\cite{reimers2019sbert}. When Vietnamese prose cites an English source, \textbf{CITRA} activates a quantized ONNX INT8 multilingual encoder (\texttt{paraphrase-multilingual-MiniLM-L12-v2}) trained via multilingual knowledge distillation~\cite{reimers2020multilingual}.
+Bibliographic titles vary across styles due to subtitle omission, punctuation, hyphenation, and edition markers. \textbf{CITRA} combines lexical similarity with dense neural embeddings. Lexically, RapidFuzz computes token-set ratios (invariant to word reordering), normalized Levenshtein ratios (sensitive to character typos), and guarded prefix ratios (tolerant of truncated subtitles after colons). Semantically, titles are encoded into L2-normalized 384-dimensional unit vectors $\mathbf{e}: \mathcal{T} \to \mathbb{S}^{383} \subset \mathbb{R}^{384}$ using the Transformer architecture~\cite{vaswani2017}, pre-trained as BERT~\cite{bert}, compressed via task-agnostic self-attention distillation in MiniLM~\cite{wang2020minilm}, and fine-tuned as a Siamese Sentence-BERT checkpoint (\texttt{all-MiniLM-L6-v2})~\cite{reimers2019sbert}. Whenever bilingual Vietnamese--English alignment is needed in either direction (\texttt{VI}$\leftrightarrow$\texttt{EN}), \textbf{CITRA} activates a quantized ONNX INT8 multilingual encoder (\texttt{paraphrase-multilingual-MiniLM-L12-v2}) trained via multilingual knowledge distillation~\cite{reimers2020multilingual}.
 
 \subsection{Multi-Sentence Context Alignment}
 
-Checking bibliography metadata alone cannot catch \emph{contextual misattribution}, where a student cites a real paper to support an unrelated or opposite claim. However, comparing a single in-text sentence directly against an entire ten-sentence abstract suffers from length dilution because background and conclusion sentences wash out the specific sentence being cited. Given an in-text citation context $c$ and a candidate abstract $A$ segmented into sentences $\{s_1, \dots, s_m\}$, \textbf{CITRA} computes the pooled abstract alignment score $s_{\text{abs}}(c, A)$ defined in Equation~\eqref{eq:abs-pooling}:
+Auditing bibliography metadata alone cannot detect \emph{contextual misattribution}, where a real paper is cited to back an unrelated or contradictory claim. Comparing a single in-text sentence directly against an entire abstract suffers from length dilution because introductory and concluding sentences dilute the specific finding cited. Given an in-text citation context $c \in \mathcal{T}$ and a candidate abstract $A$ segmented into $m \ge 0$ sentences $\{s_1, \dots, s_m\}$ (capped at $m \le 25$), \textbf{CITRA} computes the sentence-pooled abstract alignment $s_{\text{abs}}(c, A)$ defined in Equation~\eqref{eq:abs-pooling}:
 \begin{equation}\label{eq:abs-pooling}
-s_{\text{abs}}(c, A) = \max\Bigl(\cos\bigl(\mathbf{e}(c), \mathbf{e}(A)\bigr),\; 0.65 \max_{1 \le i \le m} \cos\bigl(\mathbf{e}(c), \mathbf{e}(s_i)\bigr) + 0.35 \cos\bigl(\mathbf{e}(c), \mathbf{e}(A)\bigr)\Bigr),
+\begin{split}
+s_{\text{abs}}(c, A) = \max\Bigl(&\cos\bigl(\mathbf{e}(c), \mathbf{e}(A)\bigr),\\
+&0.65 \max_{1 \le i \le m} \cos\bigl(\mathbf{e}(c), \mathbf{e}(s_i)\bigr) + 0.35 \cos\bigl(\mathbf{e}(c), \mathbf{e}(A)\bigr)\Bigr),
+\end{split}
 \end{equation}
-where $\mathbf{e}(\cdot)$ denotes the L2-normalized sentence embedding. Equation~\eqref{eq:abs-pooling} preserves high similarity when a citation targets a single specific finding while retaining whole-abstract context when a citation summarizes the overall paper. The final content alignment combines title similarity ($0.30$), pooled abstract similarity ($0.50$), and full-text snippet similarity ($0.20$, renormalized when full text is absent).
+where $s_{\text{abs}}(c, A) = \cos(\mathbf{e}(c), \mathbf{e}(A))$ in the degenerate case $m = 0$. Equation~\eqref{eq:abs-pooling} preserves strong similarity when a citation targets a single empirical result while maintaining whole-abstract grounding when summarizing an entire study. Content alignment combines title similarity ($0.30$), pooled abstract similarity ($0.50$), and full-text snippet similarity ($0.20$, renormalized when full text is unavailable).
 
 \subsection{Selective Classification and Logit-Space Platt Calibration}
 
-In high-stakes decision support, a classifier must know when to abstain~\cite{chow1970optimum}, \cite{Geifman2017}, and its reported confidence $p$ must match empirical accuracy~\cite{hand2009}, \cite{guo2017}. Static rule confidences cluster at discrete constants and overestimate certainty near decision boundaries. Given the symbolic verdict class $y_{\text{sym}}$ and the 16-dimensional feature vector $\mathbf{x} \in \mathbb{R}^{16}$, \textbf{CITRA} blends the symbolic rule confidence $C_{\text{sym}}$ with the predicted class probability $P_{\text{ML}}(y_{\text{sym}} \mid \mathbf{x})$ of a Multinomial Logistic Regression model using weight $\alpha \in [0, 1]$, as defined in Equation~\eqref{eq:platt-calib}:
-\begin{equation}\label{eq:platt-calib}
-p_{\text{blend}} = \alpha C_{\text{sym}} + (1 - \alpha) P_{\text{ML}}(y_{\text{sym}} \mid \mathbf{x}), \;\;
-P_{\text{cal}} = \operatorname{clip}\!\left(\sigma\Bigl(a \cdot \ln\frac{\tilde{p}}{1 - \tilde{p}} + b\Bigr),\, 0.01,\, 0.99\right),
+In high-stakes academic review, a verifier must know when to abstain~\cite{chow1970optimum}, \cite{Geifman2017} and its reported confidence $P_{\text{cal}}$ must align with empirical accuracy~\cite{niculescu2005}, \cite{guo2017}. Formally, a selective classifier is a pair $(f, g)$, where $f: \mathcal{X} \to \mathcal{Y}$ predicts a verification label and $g: \mathcal{X} \to \{0, 1\}$ is a selection function that accepts a prediction ($g(\mathbf{x}) = 1$) or abstains ($g(\mathbf{x}) = 0$, routing to \texttt{unresolved}). Over an evaluation set $\{(\mathbf{x}_i, y_i)\}_{i=1}^{n}$, empirical coverage $\hat{\phi}(g)$ and selective risk $\hat{R}(f, g)$ are defined in Equation~\eqref{eq:selective-risk}:
+\begin{equation}\label{eq:selective-risk}
+\hat{\phi}(g) = \frac{1}{n}\sum_{i=1}^{n} g(\mathbf{x}_i), \qquad
+\hat{R}(f, g) = \frac{\sum_{i=1}^{n} \mathbb{I}\bigl[f(\mathbf{x}_i) \neq y_i\bigr]\, g(\mathbf{x}_i)}{\sum_{i=1}^{n} g(\mathbf{x}_i)}.
 \end{equation}
-where $\tilde{p} = \min(\max(p_{\text{blend}}, 10^{-4}), 1 - 10^{-4})$ prevents numerical overflow at $0$ or $1$, $\sigma(z) = (1 + e^{-z})^{-1}$ is the logistic sigmoid, and $(a, b)$ are scalar Platt scaling parameters~\cite{platt1999} fitted on a disjoint validation split by minimizing a joint negative log-likelihood and Brier score objective~\cite{brier1950}.
+
+Static symbolic confidences cluster at discrete constants and overestimate certainty near decision boundaries. Given the symbolic verdict $y_{\text{sym}}$ and the 16-dimensional feature vector $\mathbf{x} \in \mathbb{R}^{16}$, \textbf{CITRA} blends the symbolic confidence $C_{\text{sym}}$ with the Multinomial Logistic Regression probability $P_{\text{ML}}(y_{\text{sym}} \mid \mathbf{x})$ via an adaptive weight $\alpha \in [0, 1]$, then applies top-label binary correctness calibration in logit space, as formulated in Equations~\eqref{eq:platt-blend}--\eqref{eq:platt-calib}:
+\begin{align}
+p_{\text{blend}} &= \alpha C_{\text{sym}} + (1 - \alpha) P_{\text{ML}}(y_{\text{sym}} \mid \mathbf{x}), \label{eq:platt-blend}\\
+P_{\text{cal}} &= \operatorname{clip}\!\left(\sigma\!\left(a_{\text{cal}} \ln\frac{\tilde{p}}{1 - \tilde{p}} + b_{\text{cal}}\right),\, 0.01,\, 0.99\right), \label{eq:platt-calib}
+\end{align}
+where $\tilde{p} = \min(\max(p_{\text{blend}}, 10^{-4}), 1 - 10^{-4})$ prevents numerical overflow (with $P_{\text{cal}} = 0$ if $p_{\text{blend}} \le 0$), and $\sigma(u) = (1 + e^{-u})^{-1}$ is the logistic sigmoid. The scalar Platt parameters $(a_{\text{cal}}, b_{\text{cal}})$~\cite{platt1999} are fitted on a disjoint validation split by minimizing a regularized composite objective combining binary negative log-likelihood (NLL) and Brier score~\cite{brier1950}, shown in Equation~\eqref{eq:platt-obj}:
+\begin{equation}\label{eq:platt-obj}
+\mathcal{L}(a_{\text{cal}}, b_{\text{cal}}) = 0.7\,\mathrm{NLL}(a_{\text{cal}}, b_{\text{cal}}) + 0.3\,\mathrm{Brier}(a_{\text{cal}}, b_{\text{cal}}) + 0.05\bigl((a_{\text{cal}} - 1)^2 + b_{\text{cal}}^2\bigr).
+\end{equation}
 
 \subsection{Paper-Disjoint Evaluation Design}
 
-Following Empirical Software Engineering experimentation guidelines~\cite{wohlin2012experimentation} and claim-verification benchmarks~\cite{thorne2018fever}, \cite{wadden2020scifact}, training and evaluating a hybrid verifier requires strict protection against data leakage and dataset artifacts~\cite{gururangan2018annotation}, \cite{poliak2018hypothesis}. If perturbed variants of the same base paper appear in both training and testing splits, a classifier can memorize paper-level feature distributions. Similarly, if non-zero semantic context scores appear only in verified examples, the model learns a trivial shortcut. All quantitative experiments in Chapter~\ref{chap:results} therefore partition base papers strictly before perturbation, retain real Sentence-BERT encodings across all classes without artificial clamping, and evaluate hypotheses using continuity-corrected McNemar tests~\cite{dietterich1998approximate}, Holm--Bonferroni multiple-comparison adjustments~\cite{holm1979simple}, and paired bootstrap resampling~\cite{bergkirkpatrick2012empirical}, \cite{dror2018hitchhiker}.
+Following Empirical Software Engineering experimentation principles~\cite{wohlin2012experimentation} and claim-verification benchmarks~\cite{thorne2018fever}, \cite{wadden2020scifact}, evaluating a hybrid verifier demands rigorous defense against data leakage and annotation artifacts~\cite{gururangan2018annotation}, \cite{poliak2018hypothesis}. Partitioning perturbed variants of the same source article across training and test sets allows classifiers to memorize paper-level feature distributions; clamping semantic context features artificially on non-verified classes creates trivial shortcut cues. All controlled quantitative experiments in Chapter~\ref{chap:results} therefore split source publications strictly prior to perturbation, preserve live Sentence-BERT similarity distributions across all classes, and assess differences via continuity-corrected McNemar tests~\cite{mcnemar1947}, \cite{dietterich1998approximate}, Clopper--Pearson exact binomial intervals~\cite{clopper1934}, Wilcoxon signed-rank tests~\cite{wilcoxon1945}, Holm--Bonferroni multiple-comparison adjustments~\cite{holm1979simple}, and paired bootstrap resampling~\cite{bergkirkpatrick2012empirical}, \cite{dror2018hitchhiker}.
 
 \section{Chapter Summary}
 
-This chapter reviewed the literature on PDF citation parsing, probabilistic record linkage, and hallucinated reference detection, and contrasted \textbf{CITRA} against five categories of existing tools. It also established the multi-registry retrieval rationale and the mathematical formulations for sentence-pooled semantic alignment and logit-space Platt calibration. Chapter~\ref{chap:overview} translates these foundations into formal software requirements, use cases, database schemas, and deployment specifications.
+This chapter reviewed scholarly PDF parsing, probabilistic record linkage, stylometric versus retrieval-grounded hallucination detection (including 2024--2025 studies), and existing verification ecosystems. It established the four-tier federated registry rationale and formalized the mathematical equations for sentence-pooled semantic alignment, selective risk--coverage, and regularized logit-space Platt calibration. Chapter~\ref{chap:overview} translates these foundations into formal software requirements, UML 2.5 behavioral and structural models, the 15-table database schema, and deployment security specifications.
