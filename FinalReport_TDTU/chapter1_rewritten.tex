@@ -26,19 +26,19 @@ Formally, let a submitted academic manuscript in Portable Document Format (\text
     \mathcal{Y} = \{\texttt{verified},\; \texttt{metadata\_error},\; \texttt{suspected\_hallucination},\\
     \texttt{unresolved},\; \texttt{resource}\}.
     \end{gathered}\]
-    \item \textbf{Calibrated integrity scoring and bibliography repair:} Pair each verdict $y_j \in \mathcal{Y}$ with a calibrated confidence probability $P_{\text{cal},j} \in [0.01, 0.99]$ and an auditable rule trace, aggregate document-level evidence into an interpretable score $\mathrm{CIS}(D) \in [0, 100]$, and export repaired bibliographies from authoritative metadata.
+    \item \textbf{Calibrated integrity scoring and bibliography repair:} Pair each verdict $y_j \in \mathcal{Y}$ with a calibrated confidence probability $P_{\text{cal},j} \in \{0\} \cup [0.01, 0.99]$ and an auditable rule trace, aggregate document-level evidence into an interpretable score $\mathrm{CIS}(D) \in [0, 100]$, and export repaired bibliographies from authoritative metadata.
     \item \textbf{Auditable human-in-the-loop review:} Present every verdict, canonical registry match, and logic trace inside a secure, role-based web workspace where authorized instructors can inspect, override, and audit decisions.
 \end{enumerate}
 
 \section{Research Objectives}
 \label{sec:objectives}
 
-To address the problem statement with measurable engineering and empirical criteria, this graduation project establishes six problem-driven objectives mapped directly to the five research questions (\textbf{RQ1}--\textbf{RQ5}) evaluated in Chapter~\ref{chap:results}:
+To address the problem statement with Specific, Measurable, Achievable, Relevant, and Time-bound (SMART) engineering and empirical criteria, this graduation project establishes six problem-driven objectives mapped directly to the five research questions (\textbf{RQ1}--\textbf{RQ5}) evaluated in Chapter~\ref{chap:results}:
 \begin{itemize}
     \item \textbf{OBJ-1 (High-Recall Multi-Format Extraction and Bidirectional Linking --- RQ4):} Engineer a fault-tolerant manuscript parsing and bidirectional linking subsystem capable of achieving $\ge 95\%$ bibliography extraction recall across twelve academic and statutory formatting conventions while detecting all eight structural in-text/bibliography mapping states.
     \item \textbf{OBJ-2 (Domain-Aware Federated Provenance Retrieval --- RQ4, RQ5):} Design a tiered, offline-first retrieval architecture that achieves $\ge 99\%$ offline recall with sub-100\,ms lookup latency on indexed computer science literature while coordinating rate-limited, circuit-broken queries across complementary public scholarly, technical, and archival registries with automated retraction screening and Server-Side Request Forgery (SSRF)-safe link validation.
     \item \textbf{OBJ-3 (Explainable Neuro-Symbolic Verification and Calibration --- RQ1, RQ2, RQ3):} Formulate a hybrid decision engine combining bilingual semantic alignment with discrete symbolic provenance guardrails and calibrated probability estimation, targeting $\ge 99\%$ in-distribution and out-of-distribution (OOD) controlled decision accuracy, $\le 0.1\%$ severe verified-to-hallucination inversion rates, and Expected Calibration Error ($\text{ECE}$) below $0.05$ with provenance-aware selective abstention.
-    \item \textbf{OBJ-4 (Interpretable Integrity Scoring and Automated Remediation --- RQ4):} Define a transparent, bounded $[0, 100]$ Citation Integrity Score (CIS) demonstrating high rank stability (Spearman $\rho \ge 0.98$) under weight perturbations, coupled with automated canonical bibliography export and in-place correction.
+    \item \textbf{OBJ-4 (Interpretable Integrity Scoring and Automated Remediation --- RQ3, RQ4):} Define a transparent, bounded $[0, 100]$ Citation Integrity Score (CIS) demonstrating high rank stability (Spearman $\rho \ge 0.98$) under weight perturbations, coupled with automated canonical bibliography export and in-place correction.
     \item \textbf{OBJ-5 (Production-Ready Role-Based Academic Platform --- RQ5):} Deliver a containerized full-stack web platform (\textbf{CITRA}) supporting Student, Teacher, and Administrator workflows, real-time progress streaming, transactional instructor overrides, and defense-in-depth access control while meeting end-to-end latency ($\le 15\,\text{s}$ per 50-page capstone report) and client bundle ($\le 250\,\text{kB}$ entry chunk) budgets on commodity Central Processing Unit (CPU) hardware.
     \item \textbf{OBJ-6 (Leak-Free Large-Scale Empirical Evaluation --- RQ1--RQ5):} Execute a reproducible, paper-disjoint evaluation protocol combining controlled decision-layer benchmarks (120,000 samples across six baselines \texttt{B0}--\texttt{B5}), OOD guardrail stress tests (2,400 samples), live multi-registry evaluations, real multi-style manuscript audits, and concurrent server load tests with formal statistical significance testing.
 \end{itemize}
@@ -66,7 +66,7 @@ Aligned with \textbf{OBJ-1} through \textbf{OBJ-6}, this graduation project deli
 
 \subsection{Methodological and Empirical Contributions}
 \begin{enumerate}
-    \item \textbf{Explainable Neuro-Symbolic Verification with Logit-Space Platt Calibration:} Integrates Sentence-BERT (SBERT) and quantized Open Neural Network Exchange 8-bit integer (ONNX INT8) bilingual embeddings with Order~0 resource pre-screening, 16 priority-ordered symbolic rule groups (68 distinct \texttt{R-*} rule identifiers), a 16-feature Multinomial Logistic Regression (MLR) scorer ($C = 0.25$), and logit-space Platt scaling.
+    \item \textbf{Explainable Neuro-Symbolic Verification with Logit-Space Platt Calibration:} Integrates Sentence-BERT (SBERT) and quantized Open Neural Network Exchange 8-bit integer (ONNX INT8) bilingual embeddings with Order~0 resource pre-screening, 16 priority-ordered symbolic rule groups (68 distinct runtime \texttt{R-*} rule identifiers: 65 static rules plus 3 dynamically prefixed provenance modifiers), a 16-feature Multinomial Logistic Regression (MLR) scorer ($C = 0.25$), and logit-space Platt scaling.
     \item \textbf{Provenance-Aware Selective Abstention:} Distinguishes confirmed registry refutation (\texttt{suspected\_hallucination}, requiring clean HTTP 200 empty registry responses or exposed chimeric/fabricated identifiers) from transient network throttling (\texttt{HTTP 429}), regional Digital Object Identifier Registration Agencies (DOI RAs) without public Citation Style Language (CSL) metadata (\texttt{R-DOI-RA-NO-CSL}), and borderline similarity ($[0.40, 0.60)$), routing uncertain records safely to \texttt{unresolved}.
     \item \textbf{Reproducible Multi-Layer Empirical Evaluation Suite:} Establishes a zero-overlap 120,000-sample controlled decision-layer benchmark and a 2,400-sample OOD guardrail suite with paired McNemar, Holm--Bonferroni, and bootstrap significance protocols ($99.67\%$ ID accuracy, $\text{ECE} = 0.0405$, $99.96\%$ OOD accuracy), complemented by a live 15-API evaluation on 120 raw references ($89.17\%$ 5-class accuracy; $98.36\%$ verified F1) and a line-by-line audit of real multi-style manuscripts.
 \end{enumerate}
@@ -74,8 +74,8 @@ Aligned with \textbf{OBJ-1} through \textbf{OBJ-6}, this graduation project deli
 \subsection{Systems Engineering Contributions}
 \begin{enumerate}
     \item \textbf{Twelve-Format Extraction and Seven-Method Bidirectional Linker:} Combines GeneRation Of BIbliographic Data (GROBID \texttt{0.9.1-crf}) Text Encoding Initiative XML (TEI-XML) structural pointers with two-column PyMuPDF fallback, deterministic table-of-contents filtering, Vietnamese statutory validation (\texttt{VNLegalVerifier}), and a bipartite linker detecting eight structural mapping states.
-    \item \textbf{Four-Tier Offline-First Retrieval with Pinned-IP SSRF Protection:} Pairs a 129,137-record local SQLite Full-Text Search v5 (FTS5) corpus (128,115 unique papers; 82,887 abstracts) and 101 seminal papers with rate-limited, circuit-broken routing across 15+ public APIs and a DNS-pinned, SSRF-safe HTTP/Wayback validator.
-    \item \textbf{Production-Grade Full-Stack Platform (\textbf{CITRA} \texttt{v3.90.10}):} Implements an asynchronous FastAPI backend (15 SQLAlchemy ORM tables, 13 SHA-256 checksummed migrations \texttt{0001}--\texttt{0013}, \texttt{PipelineAdmissionController}, and transactional CIS recalculation) and a responsive React 18.3 / TypeScript 5.9 web workspace verified by 2,430+ backend pytest tests (2,437 default; 2,446 total), 494 Vitest frontend tests (63 suites), and 20 Playwright end-to-end suites (168 scenarios; 3,099 automated checks overall).
+    \item \textbf{Four-Tier Offline-First Retrieval with Pinned-IP SSRF Protection:} Pairs a 129,137-record local SQLite Full-Text Search v5 (FTS5) evaluation snapshot (128,115 benchmark-eligible unique papers; 82,887 abstracts) and 101 seminal papers with rate-limited, circuit-broken routing across 15+ public APIs and a DNS-pinned, SSRF-safe HTTP/Wayback validator.
+    \item \textbf{Production-Grade Full-Stack Platform (\textbf{CITRA} \texttt{v3.90.10}):} Implements an asynchronous FastAPI backend (15 SQLAlchemy ORM tables, 13 SHA-256 checksummed migrations \texttt{0001}--\texttt{0013}, \texttt{PipelineAdmissionController}, and transactional CIS recalculation) and a responsive React 18.3 / TypeScript 5.9 web workspace verified by 2,437 default backend pytest tests (2,446 total including 9 slow/live-gated tests), 495 Vitest frontend tests (63 suites), and 20 Playwright end-to-end suites (178 scenarios: 174 Chromium E2E + 4 live production-smoke; 3,110 combined default checks, 3,119 total).
 \end{enumerate}
 
 \section{Report Organization}
@@ -84,7 +84,7 @@ This graduation project report is organized into six chapters and five appendice
 
 \begin{table}[!htbp]
 \centering
-\caption{Organization of the graduation project report by chapter and appendix.}\label{tab:outline}
+\caption[Organization of the graduation project report]{Organization of the graduation project report by chapter and appendix.}\label{tab:outline}
 \begin{tabular}{|L{0.24}|L{0.76}|}
 \hline
 \textbf{Part} & \textbf{Summary of Contents} \\

@@ -26,8 +26,15 @@
   morestring=[b]"
 }
 \lstdefinelanguage{yaml}{
-  keywords={version, services, build, image, ports, environment, depends_on, networks, volumes, healthcheck, deploy, replicas, command, container_name, restart, labels, expose},
+  keywords={version, services, build, image, ports, environment, depends_on, networks, volumes, healthcheck, deploy, replicas, command, container_name, restart, labels, expose, ulimits, entrypoint, working_dir, limits, reservations, driver, extra_hosts},
   sensitive=false,
+  comment=[l]{\#},
+  morestring=[b]',
+  morestring=[b]"
+}
+\lstdefinelanguage{dotenv}{
+  keywords={},
+  sensitive=true,
   comment=[l]{\#},
   morestring=[b]',
   morestring=[b]"
@@ -326,8 +333,8 @@
     \vskip 1.5pt \@plus \p@
     \setlength\@tempdima{5.2em}%
     \begingroup
-      \parindent \z@ \rightskip 2.8em
-      \parfillskip -2.8em
+      \parindent \z@ \rightskip 3.6em
+      \parfillskip -3.6em
       \leavevmode
       \advance\leftskip\@tempdima
       \hskip -\leftskip
@@ -343,8 +350,8 @@
     \vskip 1pt \@plus \p@
     \setlength\@tempdima{5.4em}%
     \begingroup
-      \parindent \z@ \rightskip 2.8em
-      \parfillskip -2.8em
+      \parindent \z@ \rightskip 3.6em
+      \parfillskip -3.6em
       \leavevmode
       \advance\leftskip\@tempdima
       \hskip -\leftskip
@@ -371,11 +378,12 @@
   \begin{figure}[!htbp]%
   \centering
   \begin{minipage}{0.98\textwidth}%
+  \raggedright
   \setstretch{1.15}\fontsize{11.5pt}{14pt}\selectfont
+  \def\@currentlabel{#1}\phantomsection\label{#3}%
   \noindent\rule{\textwidth}{1.1pt}\par\vspace{3pt}%
   \noindent\textbf{Thuật toán~#1:} #2\par\vspace{2pt}%
   \noindent\rule{\textwidth}{0.6pt}\par\vspace{4pt}%
-  \def\citraalgolabel{#3}%
 }{%
   \vspace{2pt}\noindent\rule{\textwidth}{1.1pt}%
   \end{minipage}%
