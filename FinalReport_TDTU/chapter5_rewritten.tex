@@ -138,7 +138,7 @@ Figure~\ref{fig:benchmark-charts} summarizes quantitative findings across \textb
 \begin{figure}[!htbp]
     \centering
     \includegraphics[width=\textwidth,keepaspectratio]{picture/figures/fig5_1_benchmark_charts.png}
-    \caption[Four-panel quantitative plots across ablation, confusion matrix, OOD guardrails, and Platt calibration]{Quantitative evaluation plots rendered at print-native scale: (a)~in-distribution ablation ($N=18{,}000$), (b)~held-out four-class confusion matrix, (c)~OOD guardrail evaluation ($N=2{,}400$; $\dagger$: discrete flag outside \texttt{B5}'s 16D vector; $*$: abstention indicator \texttt{vec[15]} supplied to \texttt{B5}; $\ddagger$: 10 unique VN statutory templates $\times 40$), and (d)~exact 10-bin Platt reliability curve ($n \ge 20$ populated bins plotted; 4 sparse Platt samples with $n \le 2$/bin omitted; $\text{ECE}: 0.2477 \rightarrow 0.0405$) with selective coverage--accuracy inset.}
+    \caption[Four-panel quantitative plots across ablation, confusion matrix, OOD guardrails, and Platt calibration]{Quantitative evaluation plots rendered at print-native scale: (a)~in-distribution ablation ($N=18{,}000$), (b)~held-out four-class confusion matrix, (c)~OOD guardrail evaluation ($N=2{,}400$; $\dagger$: discrete flag outside \texttt{B5}'s 16D vector; $*$: abstention indicator \texttt{vec[15]} supplied to \texttt{B5}; $\ddagger$: 10 unique VN statutory templates $\times 40$), and (d)~exact 10-bin Platt reliability curve ($n \ge 20$ populated bins plotted; omitting 4 sparse Platt samples with $n \le 2$/bin and 4 uncalibrated samples in one $n=4$ bin; $\text{ECE}: 0.2477 \rightarrow 0.0405$) with selective coverage--accuracy inset.}
     \label{fig:benchmark-charts}
 \end{figure}
 
@@ -354,7 +354,7 @@ VN Legal Corpus (Real, Pre-v3.80) & 30 & 27 / 30 (90.0\%) & 164 (15 Legal) & 109
 \end{table}
 }
 
-Figures~\ref{fig:demo-debugger}--\ref{fig:demo-consistency} render the seeded \texttt{v3.90.10} diagnostic UI views on the 6-reference capstone audit fixture ($\text{CIS} = 75.08 / 100$ under verdict-level \texttt{CISCalculator}, displayed as \texttt{75.1\%} on the report header and \texttt{75/100} on the dashboard with one uncited entry \texttt{[6]}; $75.50$ when all 6 references are cited) at full printable width with navigation sidebars cropped for readability. Note that the UI summary badge \textit{Verified (4)} aggregates 3 scholarly \texttt{verified} works plus 1 verified \texttt{resource} entry, whereas Table~\ref{tab:samples} and \texttt{CISCalculator} isolate scholarly counts separately. Figure~\ref{fig:demo-debugger} highlights the chimeric AlphaFold2 DOI hallucination (with its canonical Crossref record resolved side by side) and the publication-year \texttt{metadata\_error} diff (\texttt{2021} vs.\ canonical \texttt{2019}). Figure~\ref{fig:demo-trace-context} shows the 5-stage Logic Trace header with expanded Stages~1--2/3 (ONNX INT8 \texttt{VI}$\leftrightarrow$\texttt{EN} concept alignment) alongside the inline Document Inspector context stream, while Figure~\ref{fig:demo-consistency} isolates orphan inline markers and uncited bibliography entries.
+Figures~\ref{fig:demo-debugger}--\ref{fig:demo-consistency} render the seeded \texttt{v3.90.10} diagnostic UI views on the 6-reference capstone audit fixture ($\text{CIS} = 75.08 / 100$ under verdict-level \texttt{CISCalculator}, displayed as \texttt{75.1\%} on the report header and \texttt{75/100} on the dashboard with one uncited entry \texttt{[6]}; $75.50$ when all 6 references are cited) at full printable width with navigation sidebars cropped for readability. Note that the UI summary badge \textit{Verified (4)} aggregates 3 scholarly \texttt{verified} works plus 1 verified \texttt{resource} entry, whereas Table~\ref{tab:samples} and \texttt{CISCalculator} isolate scholarly counts separately. Figure~\ref{fig:demo-debugger} highlights the chimeric AlphaFold2 DOI hallucination (with its canonical Crossref record resolved side by side) and the publication-year \texttt{metadata\_error} diff (\texttt{2021} vs.\ canonical \texttt{2019}). Figure~\ref{fig:demo-trace-context} shows the 5-stage Logic Trace header with expanded Stages~1--2 (ONNX INT8 \texttt{VI}$\leftrightarrow$\texttt{EN} concept alignment) alongside the inline Document Inspector context stream, while Figure~\ref{fig:demo-consistency} isolates orphan inline markers and uncited bibliography entries.
 
 \begin{figure}[!htbp]
     \centering
@@ -366,8 +366,8 @@ Figures~\ref{fig:demo-debugger}--\ref{fig:demo-consistency} render the seeded \t
 
 \begin{figure}[!htbp]
     \centering
-    \fboxsep=0pt\fboxrule=0.4pt\fbox{\includegraphics[width=0.94\textwidth,keepaspectratio]{picture/figures/07-logic-trace.png}}\\[6pt]
-    \fboxsep=0pt\fboxrule=0.4pt\fbox{\includegraphics[width=0.94\textwidth,keepaspectratio]{picture/figures/09-document-inspector.png}}
+    \fboxsep=0pt\fboxrule=0.4pt\fbox{\includegraphics[width=0.94\textwidth,height=0.40\textheight,keepaspectratio]{picture/figures/07-logic-trace.png}}\\[6pt]
+    \fboxsep=0pt\fboxrule=0.4pt\fbox{\includegraphics[width=0.94\textwidth,height=0.40\textheight,keepaspectratio]{picture/figures/09-document-inspector.png}}
     \caption[Logic Trace cross-lingual alignment and inline Document Inspector views]{5-stage Logic Trace header with expanded initial stages displaying ONNX INT8 \texttt{VI}$\leftrightarrow$\texttt{EN} concept bridging (top) and the Document Inspector inline context stream (bottom).}
     \label{fig:demo-trace-context}
 \end{figure}

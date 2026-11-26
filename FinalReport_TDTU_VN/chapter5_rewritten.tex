@@ -138,7 +138,7 @@ Hình~\ref{fig:benchmark-charts} tổng hợp kết quả định lượng xuyê
 \begin{figure}[!htbp]
     \centering
     \includegraphics[width=\textwidth,keepaspectratio]{picture/figures/fig5_1_benchmark_charts.png}
-    \caption[Biểu đồ bốn khung đánh giá loại bỏ thành phần, ma trận nhầm lẫn, rào chắn OOD và hiệu chỉnh Platt]{Các biểu đồ định lượng dựng ở tỷ lệ in chuẩn A4: (a)~thực nghiệm loại bỏ thành phần trong phân phối ($N=18{,}000$), (b)~ma trận nhầm lẫn bốn nhãn độc lập, (c)~kiểm thử rào chắn ký hiệu OOD ($N=2{,}400$; $\dagger$: cờ rời rạc ngoài véc-tơ 16D của \texttt{B5}; $*$: bit từ chối \texttt{vec[15]} cấp cho \texttt{B5}; $\ddagger$: 10 mẫu luật VN duy nhất $\times 40$), và (d)~đường cong độ tin cậy Platt 10 khoảng chia chính xác (vẽ các khoảng có $n \ge 20$; ẩn 4 mẫu Platt thưa có $n \le 2$/khoảng; $\text{ECE}: 0.2477 \rightarrow 0.0405$) kèm biểu đồ phụ độ bao phủ -- độ chính xác có chọn lọc.}
+    \caption[Biểu đồ bốn khung đánh giá loại bỏ thành phần, ma trận nhầm lẫn, rào chắn OOD và hiệu chỉnh Platt]{Các biểu đồ định lượng dựng ở tỷ lệ in chuẩn A4: (a)~thực nghiệm loại bỏ thành phần trong phân phối ($N=18{,}000$), (b)~ma trận nhầm lẫn bốn nhãn độc lập, (c)~kiểm thử rào chắn ký hiệu OOD ($N=2{,}400$; $\dagger$: cờ rời rạc ngoài véc-tơ 16D của \texttt{B5}; $*$: bit từ chối \texttt{vec[15]} cấp cho \texttt{B5}; $\ddagger$: 10 mẫu luật VN duy nhất $\times 40$), và (d)~đường cong độ tin cậy Platt 10 khoảng chia chính xác (vẽ các khoảng có $n \ge 20$; ẩn 4 mẫu Platt thưa có $n \le 2$/khoảng và 4 mẫu chưa hiệu chỉnh ở 1 khoảng $n=4$; $\text{ECE}: 0.2477 \rightarrow 0.0405$) kèm biểu đồ phụ độ bao phủ -- độ chính xác có chọn lọc.}
     \label{fig:benchmark-charts}
 \end{figure}
 
@@ -354,7 +354,7 @@ Kho pháp luật VN (Thực, trước v3.80) & 30 & 27 / 30 (90.0\%) & 164 (15 L
 \end{table}
 }
 
-Các Hình~\ref{fig:demo-debugger}--\ref{fig:demo-consistency} trình bày giao diện chẩn đoán tiếng Việt \texttt{v3.90.10} trên bộ mẫu đồ án cài sẵn 6 TLTK ($\text{CIS} = 75.08 / 100$ theo \texttt{CISCalculator} mức kết luận, hiển thị \texttt{75.1\%} trên đầu trang báo cáo và \texttt{75/100} trên bảng điều khiển khi có 1 mục chưa trích dẫn \texttt{[6]}; $75.50$ khi đủ cả 6 liên kết), cắt thanh điều hướng trái để rõ nét trên khổ A4. Lưu ý thẻ tổng hợp \textit{Đã xác minh (4)} trên UI gộp 3 công trình học thuật \texttt{verified} cùng 1 mục \texttt{resource} hợp lệ, trong khi Bảng~\ref{tab:samples} và \texttt{CISCalculator} tách riêng hai nhóm này. Hình~\ref{fig:demo-debugger} đối chiếu cảnh báo ảo giác DOI lai ghép AlphaFold2 (hiển thị kèm bản ghi Crossref gốc) và bảng sai lệch năm xuất bản (\texttt{2021} so với chuẩn \texttt{2019}). Hình~\ref{fig:demo-trace-context} hiển thị tiêu đề Logic Trace 5 giai đoạn kèm các bước đầu mở rộng (cầu nối \texttt{VI}$\leftrightarrow$\texttt{EN} ONNX INT8) cùng luồng ngữ cảnh Trình kiểm tra tài liệu, còn Hình~\ref{fig:demo-consistency} phân tách trích dẫn mồ côi và mục chưa được trích dẫn.
+Các Hình~\ref{fig:demo-debugger}--\ref{fig:demo-consistency} trình bày giao diện chẩn đoán tiếng Việt \texttt{v3.90.10} trên bộ mẫu đồ án cài sẵn 6 TLTK ($\text{CIS} = 75.08 / 100$ theo \texttt{CISCalculator} mức kết luận, hiển thị \texttt{75.1\%} trên đầu trang báo cáo và \texttt{75/100} trên bảng điều khiển khi có 1 mục chưa trích dẫn \texttt{[6]}; $75.50$ khi đủ cả 6 liên kết), cắt thanh điều hướng trái để rõ nét trên khổ A4. Lưu ý thẻ tổng hợp \textit{Hợp lệ (4)} trên UI gộp 3 công trình học thuật \texttt{verified} cùng 1 mục \texttt{resource} hợp lệ, trong khi Bảng~\ref{tab:samples} và \texttt{CISCalculator} tách riêng hai nhóm này. Hình~\ref{fig:demo-debugger} đối chiếu cảnh báo ảo giác DOI lai ghép AlphaFold2 (hiển thị kèm bản ghi Crossref gốc) và bảng sai lệch năm xuất bản (\texttt{2021} so với chuẩn \texttt{2019}). Hình~\ref{fig:demo-trace-context} hiển thị tiêu đề Logic Trace 5 giai đoạn kèm các bước đầu mở rộng (cầu nối \texttt{VI}$\leftrightarrow$\texttt{EN} ONNX INT8) cùng luồng ngữ cảnh Trình kiểm tra tài liệu, còn Hình~\ref{fig:demo-consistency} phân tách trích dẫn mồ côi và mục chưa được trích dẫn.
 
 \begin{figure}[!htbp]
     \centering
@@ -366,8 +366,8 @@ Các Hình~\ref{fig:demo-debugger}--\ref{fig:demo-consistency} trình bày giao 
 
 \begin{figure}[!htbp]
     \centering
-    \fboxsep=0pt\fboxrule=0.4pt\fbox{\includegraphics[width=0.94\textwidth,keepaspectratio]{picture/figures/07-logic-trace.png}}\\[6pt]
-    \fboxsep=0pt\fboxrule=0.4pt\fbox{\includegraphics[width=0.94\textwidth,keepaspectratio]{picture/figures/09-document-inspector.png}}
+    \fboxsep=0pt\fboxrule=0.4pt\fbox{\includegraphics[width=0.94\textwidth,height=0.40\textheight,keepaspectratio]{picture/figures/07-logic-trace.png}}\\[6pt]
+    \fboxsep=0pt\fboxrule=0.4pt\fbox{\includegraphics[width=0.94\textwidth,height=0.40\textheight,keepaspectratio]{picture/figures/09-document-inspector.png}}
     \caption[Vết suy diễn Logic Trace 5 bước song ngữ và Trình kiểm tra tài liệu trực tiếp]{Tiêu đề Logic Trace 5 giai đoạn kèm các bước đầu mở rộng hiển thị cầu nối khái niệm \texttt{VI}$\leftrightarrow$\texttt{EN} ONNX INT8 (trên) và luồng ngữ cảnh trực tiếp trong Trình kiểm tra tài liệu (dưới).}
     \label{fig:demo-trace-context}
 \end{figure}

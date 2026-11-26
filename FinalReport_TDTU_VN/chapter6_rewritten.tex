@@ -6,13 +6,22 @@
 Đồ án tốt nghiệp đã thiết kế, hiện thực và đánh giá thực nghiệm \textbf{CITRA} (\textit{v3.90.10}) --- nền tảng phần mềm lai Nơ-ron -- Ký hiệu có khả năng giải thích phục vụ chấm điểm tự động tính toàn vẹn trích dẫn (CIS), phát hiện tài liệu tham khảo bịa đặt và chuẩn hóa danh mục tham khảo. Bảng~\ref{tab:obj-summary} đối chiếu trực tiếp sản phẩm kỹ thuật và kết quả thực nghiệm với sáu mục tiêu SMART đặt ra tại Mục~\ref{sec:objectives}. Xuyên suốt tám tầng xử lý, cơ chế bảo vệ cốt lõi tổng hợp tại Hình~\ref{fig:decision-flow} (Chương~\ref{chap:architecture}) duy trì kỷ luật nguồn gốc nghiêm ngặt: cáo buộc ảo giác bắt buộc phải có bằng chứng bác bỏ cấu trúc tường minh (tên miền giả RFC 2606~\cite{rfc2606}, DOI bịa đặt/lai ghép, năm tương lai phi lý) hoặc phản hồi HTTP 200 rỗng sạch từ nhiều cơ sở dữ liệu trực tuyến, trong khi cạn hạn mức mạng, DOI khu vực không có CSL và tương đồng giáp ranh ($[0.40, 0.60)$) được định tuyến tất định sang \texttt{unresolved} để giảng viên thẩm định.
 
 {\setlength{\tabcolsep}{3.5pt}\renewcommand{\arraystretch}{1.12}
-\begin{table}[!htbp]
-\centering
-\caption{Tổng hợp kết quả đạt được đối chiếu với sáu mục tiêu nghiên cứu của đồ án.}\label{tab:obj-summary}
-\begin{tabular}{|C{0.14}|L{0.31}|L{0.55}|}
+\begin{longtable}{|C{0.14}|L{0.31}|L{0.55}|}
+\caption{Tổng hợp kết quả đạt được đối chiếu với sáu mục tiêu nghiên cứu của đồ án.}\label{tab:obj-summary}\\
 \hline
 \textbf{Mục tiêu} & \textbf{Năng lực mục tiêu} & \textbf{Kết quả kỹ thuật và thực nghiệm đạt được} \\
 \hline
+\endfirsthead
+\multicolumn{3}{c}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
+\hline
+\textbf{Mục tiêu} & \textbf{Năng lực mục tiêu} & \textbf{Kết quả kỹ thuật và thực nghiệm đạt được} \\
+\hline
+\endhead
+\hline
+\multicolumn{3}{r}{\itshape Xem tiếp trang sau}\\
+\endfoot
+\hline
+\endlastfoot
 \textbf{OBJ-1} & \textbf{Trích xuất đa định dạng và liên kết hai chiều} & Kết hợp lai GROBID \texttt{0.9.1-crf} + PyMuPDF + \texttt{python-docx} hỗ trợ \textbf{12 định dạng} (gồm luật VN) và bộ liên kết 7 phương pháp (\textbf{97.7\%--100\%} nhận diện danh mục trên 310 PDF; \textbf{70.1\%--96.9\%} liên kết thuần PyMuPDF). \\
 \hline
 \textbf{OBJ-2} & \textbf{Truy hồi liên hợp nhận biết miền chuyên ngành} & Chỉ mục SQLite FTS5 \textbf{129,137 bản ghi} (\textbf{99.80\%} độ phủ trên 500 truy vấn ACL, \textbf{87.6\,ms}) + 4 tầng \textbf{15+ API trực tuyến}, Retraction Watch~\cite{crossref-rw2023}, đệm singleflight và kiểm tra SSRF ghim IP. \\
@@ -25,8 +34,7 @@
 \hline
 \textbf{OBJ-6} & \textbf{Đánh giá thực nghiệm quy mô lớn chống rò rỉ} & \textbf{99.67\%} ID có kiểm soát ($N=18\text{K}$), \textbf{99.95\%} OOD i.i.d.\ ($N=2\text{K}$), \textbf{89.17\%} trực tuyến 15 API ($N=120$; F1 hợp lệ \textbf{98.36\%}; \textbf{100\%} ngoại tuyến), \textbf{12.64\,s} WAN lạnh 50\,tr., GROBID 0-swap GCE (\textbf{95.53\,s $\rightarrow$ 17.44\,s}) và \textbf{50/50} tải I/O. \\
 \hline
-\end{tabular}
-\end{table}
+\end{longtable}
 }
 
 \section{Tổng hợp các phát hiện thực nghiệm trọng tâm}

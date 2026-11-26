@@ -46,7 +46,7 @@
 \begin{figure}[!htbp]
     \centering
     \includegraphics[width=\textwidth,keepaspectratio]{picture/figures/fig4_1_architecture.png}
-    \caption[Eight-layer software architecture and graceful degradation contracts]{Eight-layer software architecture of CITRA (\texttt{v3.90.10}) showing typed inter-layer contracts and graceful degradation fallbacks.}
+    \caption[Eight-layer software architecture and degradation contracts]{Eight-layer software architecture of CITRA (\texttt{v3.90.10}) showing typed inter-layer contracts and graceful degradation fallbacks.}
     \label{fig:architecture}
 \end{figure}
 
@@ -146,9 +146,9 @@ Internal structural integrity requires a coherent bipartite graph between inline
 \item Build lookup indices on $\mathcal{B}$: $I_{\text{tei}}$ (\texttt{xml:id}), $I_{\text{doi}}$ (normalized DOI), $I_{\text{arxiv}}$ (canonical arXiv ID), $I_{\text{num}}$ (ordinal), and $I_{\text{ay}}$ (surname, year, suffix).
 \item $\mathcal{L} \leftarrow \emptyset$; $\mathcal{C}_{\text{cited}} \leftarrow \emptyset$.
 \item \textbf{for each} $m \in \mathcal{M}$ \textbf{do}
-\item \quad Try in strict priority order: (a)~$I_{\text{tei}}[m]$ ($0.98$); (b)~$I_{\text{doi}}[m]$ ($0.95$); (c)~$I_{\text{arxiv}}[m]$ ($0.95$); (d)~$I_{\text{num}}[m]$ ($0.90$); (e)~$I_{\text{ay}}[m]$ ($0.90$); (f)~fuzzy word-set Jaccard / \texttt{difflib} match $\ge \tau_{\text{fuzz}} = 0.80$ (assigning default $\text{conf} = 0.65$).
+\item \quad Try in strict priority order: (a)~$I_{\text{tei}}[m]$ ($0.98$); (b)~$I_{\text{doi}}[m]$ ($0.95$); (c)~$I_{\text{arxiv}}[m]$ ($0.95$); (d)~$I_{\text{num}}[m]$ ($0.90$); (e)~$I_{\text{ay}}[m]$ ($0.90$); (f)~fuzzy word-set Jaccard / \texttt{difflib} match $s \ge \tau_{\text{fuzz}} = 0.80$ ($\text{conf} = 0.65\,s$).
 \item \quad \textbf{if} single target $r^*$ found \textbf{then} set $\text{status} \leftarrow \texttt{in\_text\_mismatch}$ if $m$ and $r^*$ disagree on year/surname, else \texttt{matched}; append $(m, r^*, \text{status})$ to $\mathcal{L}$ and add $r^*$ to $\mathcal{C}_{\text{cited}}$.
-\item \quad \textbf{else if} tied candidates $\{r_1, r_2, \dots\}$ found \textbf{then} append $(m, r_1, \texttt{ambiguous\_mapping}, \text{conf}=0.50)$ to $\mathcal{L}$.
+\item \quad \textbf{else if} tied candidates $\{r_1, r_2, \dots\}$ found \textbf{then} append $(m, r_j, \texttt{ambiguous\_mapping}, \text{conf}=0.50)$ for each tied $r_j$ (or $r_1$ at $0.65\,s$ on fuzzy tie) to $\mathcal{L}$.
 \item \quad \textbf{else} append $(m, \bot, \texttt{missing\_reference}, \text{method}=\texttt{no\_keys}, \text{conf}=0.0)$ to $\mathcal{L}$.
 \item Detect duplicate pairs $\mathcal{D} \leftarrow \texttt{DuplicateDetector}(\mathcal{B})$ (exact DOI/arXiv or similarity $\ge 0.92$) and exclude non-canonical duplicates $\mathcal{D}_{\text{non-canon}}$ from uncited flagging.
 \item $\mathcal{U} \leftarrow (\mathcal{B} \setminus \mathcal{C}_{\text{cited}}) \setminus \mathcal{D}_{\text{non-canon}}$ (tag each $r \in \mathcal{U}$ as \texttt{uncited\_reference}); \textbf{return} $(\mathcal{L}, \mathcal{U}, \mathcal{D})$.
@@ -330,7 +330,7 @@ Figure~\ref{fig:matching} illustrates the dual-encoder pipeline in \texttt{Seman
 \begin{figure}[!htbp]
     \centering
     \includegraphics[width=\textwidth,keepaspectratio]{picture/figures/fig4_6_neurosymbolic.png}
-    \caption[Neuro-symbolic verification engine and logit-space Platt calibration]{Neuro-symbolic verification architecture fusing the 16-group symbolic rule engine (68 \texttt{R-*} IDs) with the 16-feature Multinomial Logistic Regression scorer and logit-space Platt calibrator.}
+    \caption[Neuro-symbolic engine and logit-space Platt calibration]{Neuro-symbolic verification architecture fusing the 16-group symbolic rule engine (68 \texttt{R-*} IDs) with the 16-feature Multinomial Logistic Regression scorer and logit-space Platt calibrator.}
     \label{fig:neurosymbolic}
 \end{figure}
 
@@ -399,7 +399,7 @@ Two provenance safeguards prevent overconfident false accusations. First, Group 
 
 \subsection{16-Feature Logistic Regression, Formal Algorithm, and Platt Calibration}
 
-To convert discrete symbolic outcomes into calibrated probabilities, \texttt{HybridMLScorer.extract\_feature\_vector()} constructs $\mathbf{x} \in \mathbb{R}^{16}$ from ten base signals ($x_1 = t_{\text{fuzz}}$, $x_2 = t_{\text{sem}}$, $x_3 = t_{\max} = \max(t_{\text{fuzz}}, t_{\text{sem}})$, $x_4 = a_J$ [\texttt{author\_jaccard}], $x_5 = y_m = 0$ if $|\Delta y| \ge 50$ else $\exp(-0.5\min(|\Delta y|, 10))$, $x_6 = d_{\text{ok}} \in \{0, 1\}$, $x_7 = \min(\text{consensus}, 4)/4$, $x_8 = v_{\text{sim}}$, $x_9 = s_{\text{content}}$ if $(\text{aligned} \land s_{\text{content}} \ge 0.45 \land \neg\texttt{contradiction\_risk})$, $-0.6$ if $(\texttt{contradiction\_risk} \lor (\neg\text{aligned} \land 0 < s_{\text{content}} < 0.46))$, else $0$, $x_{10} = h_{\text{cand}} \in \{0, 1\}$) and six interaction features formalized in Equation~\eqref{eq:ml-interactions}:
+To convert discrete symbolic outcomes into calibrated probabilities, \texttt{HybridMLScorer.extract\_feature\_vector()} constructs $\mathbf{x} \in \mathbb{R}^{16}$ from ten base signals ($x_1 = t_{\text{fuzz}}$, $x_2 = t_{\text{sem}}$, $x_3 = t_{\max} = \max(t_{\text{fuzz}}, t_{\text{sem}})$, $x_4 = a_J$ [\texttt{author\_jaccard}], $x_5 = y_m = 0$ if $|\Delta y| \ge 50$ else $\exp(-0.5\min(|\Delta y|, 10))$, $x_6 = d_{\text{ok}} \in \{0, 1\}$, $x_7 = \min(\text{consensus}, 4)/4$, $x_8 = v_{\text{sim}}$, $x_9 = s_{\text{content}}$ if $(\text{aligned} \land s_{\text{content}} \ge 0.45 \land \neg\texttt{contradiction\_risk})$, $-0.6$ if $(\neg\text{aligned} \land (\texttt{contradiction\_risk} \lor 0 < s_{\text{content}} < 0.46))$, else $0$, $x_{10} = h_{\text{cand}} \in \{0, 1\}$) and six interaction features formalized in Equation~\eqref{eq:ml-interactions}:
 \begin{equation}\label{eq:ml-interactions}
 \begin{aligned}
 x_{11} &= t_{\max}\, a_J, & x_{12} &= t_{\max}\, y_m, \\
@@ -488,16 +488,16 @@ Figures~\ref{fig:ui-landing}--\ref{fig:ui-portals} display the live \texttt{v3.9
 
 \begin{figure}[!htbp]
     \centering
-    \fboxsep=0pt\fboxrule=0.4pt\fbox{\includegraphics[width=0.94\textwidth,keepaspectratio]{picture/figures/03-dashboard-light.png}}\\[6pt]
-    \fboxsep=0pt\fboxrule=0.4pt\fbox{\includegraphics[width=0.94\textwidth,keepaspectratio]{picture/figures/04-batch-upload.png}}
+    \fboxsep=0pt\fboxrule=0.4pt\fbox{\includegraphics[width=0.94\textwidth,height=0.40\textheight,keepaspectratio]{picture/figures/03-dashboard-light.png}}\\[6pt]
+    \fboxsep=0pt\fboxrule=0.4pt\fbox{\includegraphics[width=0.94\textwidth,height=0.40\textheight,keepaspectratio]{picture/figures/04-batch-upload.png}}
     \caption[Student verification dashboard and concurrent batch upload workspace]{Student verification dashboard (\texttt{/dashboard}, top) and multi-format concurrent batch verification queue (\texttt{/batch-upload}, bottom), cropped to main workspace panels for print legibility.}
     \label{fig:ui-workspace}
 \end{figure}
 
 \begin{figure}[!htbp]
     \centering
-    \fboxsep=0pt\fboxrule=0.4pt\fbox{\includegraphics[width=0.94\textwidth,keepaspectratio]{picture/figures/10-teacher-classroom.png}}\\[6pt]
-    \fboxsep=0pt\fboxrule=0.4pt\fbox{\includegraphics[width=0.94\textwidth,keepaspectratio]{picture/figures/11-admin-system-health.png}}
+    \fboxsep=0pt\fboxrule=0.4pt\fbox{\includegraphics[width=0.94\textwidth,height=0.39\textheight,keepaspectratio]{picture/figures/10-teacher-classroom.png}}\\[6pt]
+    \fboxsep=0pt\fboxrule=0.4pt\fbox{\includegraphics[width=0.94\textwidth,height=0.39\textheight,keepaspectratio]{picture/figures/11-admin-system-health.png}}
     \caption[Teacher cohort analytics classroom and Administrator system health console]{Teacher classroom cohort analytics (\texttt{/teacher/classes/1}, top) and Administrator system health monitor showing GROBID and upstream API circuit breakers (\texttt{/admin/system}, bottom).}
     \label{fig:ui-portals}
 \end{figure}

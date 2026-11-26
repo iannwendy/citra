@@ -6,13 +6,22 @@
 This graduation project designed, implemented, and empirically evaluated \textbf{CITRA} (\textit{v3.90.10}), an explainable neuro-symbolic software platform for automated Citation Integrity Scoring (CIS), fabricated reference detection, and bibliography remediation. Table~\ref{tab:obj-summary} maps the delivered artifacts and verified experimental outcomes directly against the six SMART objectives defined in Section~\ref{sec:objectives}. Across all verification layers, the core architectural safeguard summarized in Figure~\ref{fig:decision-flow} (Chapter~\ref{chap:architecture}) enforces strict provenance discipline: substantive hallucination accusations require either positive structural refutation (RFC 2606 fake domains~\cite{rfc2606}, fabricated/chimeric DOIs, impossible future years) or clean HTTP 200 empty responses across multiple live registries, whereas network exhaustion, regional non-CSL DOIs, and borderline similarities ($[0.40, 0.60)$) route deterministically to \texttt{unresolved} for instructor review.
 
 {\setlength{\tabcolsep}{3.5pt}\renewcommand{\arraystretch}{1.12}
-\begin{table}[!htbp]
-\centering
-\caption{Summary of graduation project achievements mapped against project research objectives.}\label{tab:obj-summary}
-\begin{tabular}{|C{0.14}|L{0.31}|L{0.55}|}
+\begin{longtable}{|C{0.14}|L{0.31}|L{0.55}|}
+\caption{Summary of graduation project achievements mapped against project research objectives.}\label{tab:obj-summary}\\
 \hline
 \textbf{Objective} & \textbf{Target Capability} & \textbf{Delivered Engineering \& Empirical Outcome} \\
 \hline
+\endfirsthead
+\multicolumn{3}{c}{\itshape Table \thetable\ (continued from previous page)}\\
+\hline
+\textbf{Objective} & \textbf{Target Capability} & \textbf{Delivered Engineering \& Empirical Outcome} \\
+\hline
+\endhead
+\hline
+\multicolumn{3}{r}{\itshape Continued on next page}\\
+\endfoot
+\hline
+\endlastfoot
 \textbf{OBJ-1} & \textbf{Multi-format extraction \& bidirectional linking} & Hybrid GROBID \texttt{0.9.1-crf} + PyMuPDF + \texttt{python-docx} across \textbf{12 formats} (incl.\ VN laws) and 7-method linker (\textbf{97.7\%--100\%} bib.\ detection on 310 PDFs; \textbf{70.1\%--96.9\%} PyMuPDF-only linking). \\
 \hline
 \textbf{OBJ-2} & \textbf{Domain-aware federated retrieval} & \textbf{129,137-record} SQLite FTS5 index (\textbf{99.80\%} recall on 500 ACL queries, \textbf{87.6\,ms}) + 4-tier \textbf{15+ live APIs}, Retraction Watch~\cite{crossref-rw2023}, singleflight cache, and pinned-IP SSRF validation. \\
@@ -25,8 +34,7 @@ This graduation project designed, implemented, and empirically evaluated \textbf
 \hline
 \textbf{OBJ-6} & \textbf{Leak-free large-scale evaluation} & \textbf{99.67\%} controlled ID ($N=18\text{K}$), \textbf{99.95\%} i.i.d.\ OOD ($N=2\text{K}$), \textbf{89.17\%} live 15-API ($N=120$; \textbf{98.36\%} verified F1; \textbf{100\%} offline), \textbf{12.64\,s} 50-pp.\ cold WAN, 0-swap GCE GROBID (\textbf{95.53\,s $\rightarrow$ 17.44\,s}), and \textbf{50/50} I/O burst. \\
 \hline
-\end{tabular}
-\end{table}
+\end{longtable}
 }
 
 \section{Synthesis of Key Empirical Findings}

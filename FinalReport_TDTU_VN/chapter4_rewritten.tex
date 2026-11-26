@@ -146,9 +146,9 @@ Tính toàn vẹn cấu trúc đòi hỏi đồ thị hai phía nhất quán gi�
 \item Dựng các chỉ mục tra cứu trên $\mathcal{B}$: $I_{\text{tei}}$ (\texttt{xml:id}), $I_{\text{doi}}$ (DOI chuẩn hóa), $I_{\text{arxiv}}$ (mã arXiv chuẩn), $I_{\text{num}}$ (số thứ tự) và $I_{\text{ay}}$ (họ tác giả, năm, hậu tố).
 \item $\mathcal{L} \leftarrow \emptyset$; $\mathcal{C}_{\text{cited}} \leftarrow \emptyset$.
 \item \textbf{với mỗi} $m \in \mathcal{M}$ \textbf{thực hiện}
-\item \quad Tra cứu theo thứ tự ưu tiên nghiêm ngặt: (a)~$I_{\text{tei}}[m]$ ($0.98$); (b)~$I_{\text{doi}}[m]$ ($0.95$); (c)~$I_{\text{arxiv}}[m]$ ($0.95$); (d)~$I_{\text{num}}[m]$ ($0.90$); (e)~$I_{\text{ay}}[m]$ ($0.90$); (f)~khớp mờ Jaccard tập từ / \texttt{difflib} $\ge \tau_{\text{fuzz}} = 0.80$ (gán mặc định $\text{conf} = 0.65$).
+\item \quad Tra cứu theo thứ tự ưu tiên nghiêm ngặt: (a)~$I_{\text{tei}}[m]$ ($0.98$); (b)~$I_{\text{doi}}[m]$ ($0.95$); (c)~$I_{\text{arxiv}}[m]$ ($0.95$); (d)~$I_{\text{num}}[m]$ ($0.90$); (e)~$I_{\text{ay}}[m]$ ($0.90$); (f)~khớp mờ Jaccard tập từ / \texttt{difflib} $s \ge \tau_{\text{fuzz}} = 0.80$ ($\text{conf} = 0.65\,s$).
 \item \quad \textbf{nếu} tìm thấy duy nhất đích $r^*$ \textbf{thì} đặt $\text{status} \leftarrow \texttt{in\_text\_mismatch}$ nếu $m$ và $r^*$ lệch năm/họ, ngược lại \texttt{matched}; thêm $(m, r^*, \text{status})$ vào $\mathcal{L}$ và $r^*$ vào $\mathcal{C}_{\text{cited}}$.
-\item \quad \textbf{ngược lại nếu} có nhiều đích đồng hạng $\{r_1, r_2, \dots\}$ \textbf{thì} ghi $(m, r_1, \texttt{ambiguous\_mapping}, \text{conf}=0.50)$ vào $\mathcal{L}$.
+\item \quad \textbf{ngược lại nếu} có nhiều đích đồng hạng $\{r_1, r_2, \dots\}$ \textbf{thì} ghi $(m, r_j, \texttt{ambiguous\_mapping}, \text{conf}=0.50)$ cho mỗi $r_j$ đồng hạng (hoặc $r_1$ ở mức $0.65\,s$ khi đồng hạng mờ) vào $\mathcal{L}$.
 \item \quad \textbf{ngược lại} ghi $(m, \bot, \texttt{missing\_reference}, \text{method}=\texttt{no\_keys}, \text{conf}=0.0)$ vào $\mathcal{L}$.
 \item Phát hiện các cặp trùng lặp $\mathcal{D} \leftarrow \texttt{DuplicateDetector}(\mathcal{B})$ (khớp DOI/arXiv hoặc tương đồng $\ge 0.92$) và loại bản sao phụ $\mathcal{D}_{\text{non-canon}}$ khỏi diện phạt chưa trích dẫn.
 \item $\mathcal{U} \leftarrow (\mathcal{B} \setminus \mathcal{C}_{\text{cited}}) \setminus \mathcal{D}_{\text{non-canon}}$ (gán nhãn \texttt{uncited\_reference}); \textbf{trả về} $(\mathcal{L}, \mathcal{U}, \mathcal{D})$.
@@ -399,7 +399,7 @@ Hai cơ chế bảo vệ nguồn gốc ngăn ngừa cáo buộc sai quá tự ti
 
 \subsection{Hồi quy Logistic 16 đặc trưng, thuật toán hình thức và hiệu chỉnh Platt}
 
-Để chuyển đổi kết quả ký hiệu rời rạc thành xác suất hiệu chỉnh mượt, \texttt{HybridMLScorer.extract\_feature\_vector()} tạo véc-tơ $\mathbf{x} \in \mathbb{R}^{16}$ gồm mười tín hiệu cơ sở ($x_1 = t_{\text{fuzz}}$, $x_2 = t_{\text{sem}}$, $x_3 = t_{\max} = \max(t_{\text{fuzz}}, t_{\text{sem}})$, $x_4 = a_J$ [\texttt{author\_jaccard}], $x_5 = y_m = 0$ nếu $|\Delta y| \ge 50$ ngược lại $\exp(-0.5\min(|\Delta y|, 10))$, $x_6 = d_{\text{ok}} \in \{0, 1\}$, $x_7 = \min(\text{consensus}, 4)/4$, $x_8 = v_{\text{sim}}$, $x_9 = s_{\text{content}}$ nếu $(\text{thẳng hàng} \land s_{\text{content}} \ge 0.45 \land \neg\texttt{contradiction\_risk})$, $-0.6$ nếu $(\texttt{contradiction\_risk} \lor (\neg\text{thẳng hàng} \land 0 < s_{\text{content}} < 0.46))$, ngược lại $0$, $x_{10} = h_{\text{cand}} \in \{0, 1\}$) và sáu đặc trưng tương tác tại Phương trình~\eqref{eq:ml-interactions}:
+Để chuyển đổi kết quả ký hiệu rời rạc thành xác suất hiệu chỉnh mượt, \texttt{HybridMLScorer.extract\_feature\_vector()} tạo véc-tơ $\mathbf{x} \in \mathbb{R}^{16}$ gồm mười tín hiệu cơ sở ($x_1 = t_{\text{fuzz}}$, $x_2 = t_{\text{sem}}$, $x_3 = t_{\max} = \max(t_{\text{fuzz}}, t_{\text{sem}})$, $x_4 = a_J$ [\texttt{author\_jaccard}], $x_5 = y_m = 0$ nếu $|\Delta y| \ge 50$ ngược lại $\exp(-0.5\min(|\Delta y|, 10))$, $x_6 = d_{\text{ok}} \in \{0, 1\}$, $x_7 = \min(\text{consensus}, 4)/4$, $x_8 = v_{\text{sim}}$, $x_9 = s_{\text{content}}$ nếu $(\text{thẳng hàng} \land s_{\text{content}} \ge 0.45 \land \neg\texttt{contradiction\_risk})$, $-0.6$ nếu $(\neg\text{thẳng hàng} \land (\texttt{contradiction\_risk} \lor 0 < s_{\text{content}} < 0.46))$, ngược lại $0$, $x_{10} = h_{\text{cand}} \in \{0, 1\}$) và sáu đặc trưng tương tác tại Phương trình~\eqref{eq:ml-interactions}:
 \begin{equation}\label{eq:ml-interactions}
 \begin{aligned}
 x_{11} &= t_{\max}\, a_J, & x_{12} &= t_{\max}\, y_m, \\
@@ -488,16 +488,16 @@ Các Hình~\ref{fig:ui-landing}--\ref{fig:ui-portals} giới thiệu giao diện
 
 \begin{figure}[!htbp]
     \centering
-    \fboxsep=0pt\fboxrule=0.4pt\fbox{\includegraphics[width=0.94\textwidth,keepaspectratio]{picture/figures/03-dashboard-light.png}}\\[6pt]
-    \fboxsep=0pt\fboxrule=0.4pt\fbox{\includegraphics[width=0.94\textwidth,keepaspectratio]{picture/figures/04-batch-upload.png}}
+    \fboxsep=0pt\fboxrule=0.4pt\fbox{\includegraphics[width=0.94\textwidth,height=0.40\textheight,keepaspectratio]{picture/figures/03-dashboard-light.png}}\\[6pt]
+    \fboxsep=0pt\fboxrule=0.4pt\fbox{\includegraphics[width=0.94\textwidth,height=0.40\textheight,keepaspectratio]{picture/figures/04-batch-upload.png}}
     \caption[Bảng điều khiển sinh viên và hàng đợi tải lên hàng loạt đồng thời]{Bảng điều khiển kiểm chứng của sinh viên (\texttt{/dashboard}, trên) và hàng đợi kiểm chứng hàng loạt đa định dạng (\texttt{/batch-upload}, dưới), đã cắt thanh điều hướng trái để bảo đảm độ sắc nét trên khổ A4.}
     \label{fig:ui-workspace}
 \end{figure}
 
 \begin{figure}[!htbp]
     \centering
-    \fboxsep=0pt\fboxrule=0.4pt\fbox{\includegraphics[width=0.94\textwidth,keepaspectratio]{picture/figures/10-teacher-classroom.png}}\\[6pt]
-    \fboxsep=0pt\fboxrule=0.4pt\fbox{\includegraphics[width=0.94\textwidth,keepaspectratio]{picture/figures/11-admin-system-health.png}}
+    \fboxsep=0pt\fboxrule=0.4pt\fbox{\includegraphics[width=0.94\textwidth,height=0.39\textheight,keepaspectratio]{picture/figures/10-teacher-classroom.png}}\\[6pt]
+    \fboxsep=0pt\fboxrule=0.4pt\fbox{\includegraphics[width=0.94\textwidth,height=0.39\textheight,keepaspectratio]{picture/figures/11-admin-system-health.png}}
     \caption[Không gian phân tích lớp học của giảng viên và bảng giám sát hệ thống]{Giao diện phân tích lớp học của giảng viên (\texttt{/teacher/classes/1}, trên) và bảng giám sát hệ thống của quản trị viên hiển thị GROBID cùng các bộ ngắt mạch API (\texttt{/admin/system}, dưới).}
     \label{fig:ui-portals}
 \end{figure}

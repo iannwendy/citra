@@ -354,6 +354,7 @@ Four explicit persistence and security trade-offs are documented for institution
 
 All backend endpoints mount under \texttt{/api} in \texttt{api/\allowbreak{}main.py}~\cite{fastapi}, detailed in Table~\ref{tab:api-surface}. Synchronous SQLite and filesystem calls execute inside worker thread pools so the main \texttt{asyncio} event loop never stalls active SSE streams.
 
+\needspace{7\baselineskip}
 {\setlength{\tabcolsep}{3.5pt}\renewcommand{\arraystretch}{1.16}
 \begin{longtable}{|L{0.31}|L{0.69}|}
 \caption{FastAPI REST and SSE endpoint groups mounted under \texttt{/api} (\texttt{v3.90.10}).}\label{tab:api-surface}\\

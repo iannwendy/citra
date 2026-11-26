@@ -104,7 +104,7 @@ Bibliometric coverage comparisons confirm wide disciplinary disparities across s
 \hline
 \textbf{Serper / SerpAPI Router} & Academic web index fallback & Optional paid API key (disabled by default) & \textbf{Tier 3} last-resort fallback when Tiers 0--2 yield zero candidates \\
 \hline
-\textbf{HTTP + Wayback}\\\texttt{Link\allowbreak{}Validator}~\cite{wayback-cdx} & Live HTTP/HTTPS targets and Internet Archive Wayback CDX snapshots & Pinned-IP SSRF guard; semaphore-capped & \textbf{Parallel} URL liveness, Soft-404 HTML inspection, RFC 2606~\cite{rfc2606} check \\
+\textbf{HTTP + Wayback}~\cite{wayback-cdx}\newline\texttt{LinkValidator} & Live HTTP/HTTPS targets and Internet Archive Wayback CDX snapshots & Pinned-IP SSRF guard; semaphore-capped & \textbf{Parallel} URL liveness, Soft-404 HTML inspection, RFC 2606~\cite{rfc2606} check \\
 \hline
 \end{longtable}
 }
@@ -146,11 +146,11 @@ P_{\text{cal}} &= \begin{cases}
 \operatorname{clip}\!\left(\sigma\!\left(a_{\text{cal}} \ln\dfrac{\tilde{p}}{1 - \tilde{p}} + b_{\text{cal}}\right),\, 0.01,\, 0.99\right), & p_{\text{blend}} > 0,
 \end{cases} \label{eq:platt-calib}
 \end{align}
-where $\tilde{p} = \min(\max(p_{\text{blend}}, 10^{-4}), 1 - 10^{-4})$ prevents numerical overflow and $\sigma(u) = (1 + e^{-u})^{-1}$ is the logistic sigmoid. The scalar Platt parameters $(a_{\text{cal}}, b_{\text{cal}})$~\cite{platt1999} are fitted on a disjoint validation split of size $m$ by minimizing a regularized composite objective combining binary negative log-likelihood (NLL) and Brier score~\cite{brier1950}, shown in Equation~\eqref{eq:platt-obj}:
+where $\tilde{p} = \min(\max(p_{\text{blend}}, 10^{-4}), 1 - 10^{-4})$ prevents numerical overflow and $\sigma(u) = (1 + e^{-u})^{-1}$ is the logistic sigmoid. The scalar Platt parameters $(a_{\text{cal}}, b_{\text{cal}})$~\cite{platt1999} are fitted on a disjoint validation split of size $n_{\text{val}}$ by minimizing a regularized composite objective combining binary negative log-likelihood (NLL) and Brier score~\cite{brier1950}, shown in Equation~\eqref{eq:platt-obj}:
 \begin{equation}\label{eq:platt-obj}
 \mathcal{L}(a_{\text{cal}}, b_{\text{cal}}) = 0.7\,\mathrm{NLL}(a_{\text{cal}}, b_{\text{cal}}) + 0.3\,\mathrm{Brier}(a_{\text{cal}}, b_{\text{cal}}) + 0.05\bigl((a_{\text{cal}} - 1)^2 + b_{\text{cal}}^2\bigr),
 \end{equation}
-where for each validation sample $i \in \{1, \dots, m\}$, $z_i = \mathbb{I}[y_{\text{sym},i} = y_i] \in \{0, 1\}$ indicates top-label correctness, $\hat{p}_i = \sigma\bigl(a_{\text{cal}}\ln(\tilde{p}_i / (1 - \tilde{p}_i)) + b_{\text{cal}}\bigr)$ is the calibrated correctness probability, $\mathrm{NLL} = -\frac{1}{m}\sum_{i=1}^{m}[z_i\ln\hat{p}_i + (1 - z_i)\ln(1 - \hat{p}_i)]$, and $\mathrm{Brier} = \frac{1}{m}\sum_{i=1}^{m}(\hat{p}_i - z_i)^2$.
+where for each validation sample $i \in \{1, \dots, n_{\text{val}}\}$, $z_i = \mathbb{I}[y_{\text{sym},i} = y_i] \in \{0, 1\}$ indicates top-label correctness, $\hat{p}_i = \sigma\bigl(a_{\text{cal}}\ln(\tilde{p}_i / (1 - \tilde{p}_i)) + b_{\text{cal}}\bigr)$ is the calibrated correctness probability, $\mathrm{NLL} = -\frac{1}{n_{\text{val}}}\sum_{i=1}^{n_{\text{val}}}[z_i\ln\hat{p}_i + (1 - z_i)\ln(1 - \hat{p}_i)]$, and $\mathrm{Brier} = \frac{1}{n_{\text{val}}}\sum_{i=1}^{n_{\text{val}}}(\hat{p}_i - z_i)^2$.
 
 \subsection{Paper-Disjoint Evaluation Design}
 

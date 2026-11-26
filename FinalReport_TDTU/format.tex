@@ -8,6 +8,7 @@
 
 \usepackage{graphicx,float}
 \usepackage[section]{placeins}
+\newcommand{\needspace}[1]{\par\ifdim\dimexpr\pagegoal-\pagetotal\relax<#1\relax\newpage\fi}
 \usepackage{longtable}
 \usepackage{rotating}
 \usepackage{pdflscape}
@@ -27,6 +28,7 @@
 }
 \lstdefinelanguage{yaml}{
   keywords={version, services, build, image, ports, environment, depends_on, networks, volumes, healthcheck, deploy, replicas, command, container_name, restart, labels, expose, ulimits, entrypoint, working_dir, limits, reservations, driver, extra_hosts},
+  alsoletter={-./},
   sensitive=false,
   comment=[l]{\#},
   morestring=[b]',
