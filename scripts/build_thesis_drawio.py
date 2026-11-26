@@ -448,17 +448,17 @@ class DiagramBuilder:
 
 
 def build_fig2_1(vn: bool) -> DiagramBuilder:
-    d = DiagramBuilder("p21", "fig2_1_verification_paradigm", 800, 576)
+    d = DiagramBuilder("p21", "fig2_1_verification_paradigm", 800, 586)
     t = lambda en, vi: vi if vn else en
 
     # Top Input Strip
     inp = d.card(
         196,
-        14,
+        12,
         420,
         54,
         t("Submitted Academic Manuscript", "Bản thảo học thuật đầu vào"),
-        t("PDF / DOCX / BibTeX / RIS  ·  Inline + Bibliography", "PDF / DOCX / BibTeX / RIS · Nội văn + Danh mục TLTK"),
+        t("PDF / DOCX / BibTeX / RIS  ·  Inline + Bibliography", "PDF / DOCX / BibTeX / RIS · Nội văn + Danh mục tham khảo"),
         icon_key="doc_pdf",
         fill="#EFF6FF",
         stroke="#1E3A8A",
@@ -466,14 +466,14 @@ def build_fig2_1(vn: bool) -> DiagramBuilder:
         title_color="#1E3A8A",
     )
 
-    # Band A: Paradigms 1 & 2 (shifted right x=46 so left corridor x=22 stays 100% clear!)
-    d.box(46, 104, 740, 144, "", fill="#FFF1F2", stroke="#E11D48", sw=1.4, dashed=1)
+    # Band A: Paradigm 2 (Stylometric Attribution — strictly aligned with Ch. 1 §1.2 & Ch. 2 §2.1.3!)
+    band_a = d.box(46, 108, 740, 146, "", fill="#FFF1F2", stroke="#E11D48", sw=1.4, dashed=1)
     d.text(
         58,
-        110,
+        114,
         716,
         24,
-        t("Paradigms 1–2: Surface Stylometry & Neural AI-Text Detectors (Fragile)", "Hướng 1–2: Phân tích văn phong & Bộ phát hiện văn bản AI (Kém ổn định)"),
+        t("Paradigm 2 (Stylometric Attribution): Surface AI-Text Detectors (Fragile)", "Hướng 2 (Quy kết văn phong): Bộ phát hiện văn bản AI (Kém ổn định)"),
         font_size=14,
         font_color="#9F1239",
         bold=True,
@@ -481,7 +481,7 @@ def build_fig2_1(vn: bool) -> DiagramBuilder:
     )
     a1 = d.card(
         60,
-        144,
+        148,
         212,
         88,
         t("Token Stylometry", "Đặc trưng văn phong"),
@@ -493,7 +493,7 @@ def build_fig2_1(vn: bool) -> DiagramBuilder:
     )
     a2 = d.card(
         310,
-        144,
+        148,
         212,
         88,
         t("Black-Box P(AI)", "Mô hình hộp đen P(AI)"),
@@ -505,7 +505,7 @@ def build_fig2_1(vn: bool) -> DiagramBuilder:
     )
     a3 = d.card(
         560,
-        144,
+        148,
         212,
         88,
         t("Unverifiable Flag", "Cảnh báo thiếu chứng cứ"),
@@ -518,14 +518,14 @@ def build_fig2_1(vn: bool) -> DiagramBuilder:
     d.edge(a1, a2, ex=1, ey=0.5, nx=0, ny=0.5, stroke="#E11D48")
     d.edge(a2, a3, ex=1, ey=0.5, nx=0, ny=0.5, stroke="#E11D48")
 
-    # Band B: Paradigm 3 (CITRA Evidence-Backed Neuro-Symbolic Verification)
-    d.box(46, 276, 740, 286, "", fill="#F0FDF4", stroke="#059669", sw=1.6)
+    # Band B: Paradigm 3 (External Verification — CITRA Neuro-Symbolic Verification)
+    d.box(46, 282, 740, 290, "", fill="#F0FDF4", stroke="#059669", sw=1.6)
     d.text(
         58,
-        282,
+        288,
         716,
         24,
-        t("Paradigm 3: CITRA Evidence-Backed Neuro-Symbolic Verification", "Hướng 3: CITRA — Xác minh trích dẫn thực chứng Neuro-Symbolic"),
+        t("Paradigm 3 (External Verification): CITRA Neuro-Symbolic Verification", "Hướng 3 (Kiểm chứng nguồn ngoài): CITRA Nơ-ron – Ký hiệu thực chứng"),
         font_size=14,
         font_color="#065F46",
         bold=True,
@@ -533,11 +533,11 @@ def build_fig2_1(vn: bool) -> DiagramBuilder:
     )
     b1 = d.card(
         60,
-        316,
+        322,
         212,
         98,
         t("1. Parse &amp; Link", "1. Trích xuất &amp; Liên kết"),
-        t("GROBID TEI + PyMuPDF<br/>11 styles + VN Legal", "GROBID TEI + PyMuPDF<br/>11 chuẩn + Luật VN"),
+        t("GROBID TEI + PyMuPDF<br/>11 formats + VN Legal", "GROBID TEI + PyMuPDF<br/>11 chuẩn + Luật VN"),
         icon_key="tei",
         fill="#FFFFFF",
         stroke="#059669",
@@ -545,7 +545,7 @@ def build_fig2_1(vn: bool) -> DiagramBuilder:
     )
     b2 = d.card(
         310,
-        316,
+        322,
         212,
         98,
         t("2. 15+ Open Registries", "2. 15+ Nguồn mở"),
@@ -557,11 +557,11 @@ def build_fig2_1(vn: bool) -> DiagramBuilder:
     )
     b3 = d.card(
         560,
-        316,
+        322,
         212,
         98,
         t("3. Rules + 16D + Platt", "3. Luật + 16D + Platt"),
-        t("68 symbolic guardrails;<br/>calibrated confidence", "68 rào chắn ký hiệu;<br/>độ tin cậy hiệu chỉnh"),
+        t("68 symbolic rules;<br/>calibrated confidence", "68 mã luật ký hiệu;<br/>độ tin cậy hiệu chỉnh"),
         icon_key="platt_clean",
         fill="#FFFFFF",
         stroke="#059669",
@@ -570,14 +570,14 @@ def build_fig2_1(vn: bool) -> DiagramBuilder:
     d.edge(b1, b2, ex=1, ey=0.5, nx=0, ny=0.5, stroke="#059669")
     d.edge(b2, b3, ex=1, ey=0.5, nx=0, ny=0.5, stroke="#059669")
 
-    # Three explicitly separated epistemic outcomes: Verify vs Refute vs Abstain
+    # Three explicitly separated epistemic outcomes: Verify vs Refute vs Abstain (100% clean EN & VN!)
     o1 = d.card(
         60,
-        456,
+        464,
         212,
-        88,
+        90,
         t("Verify (Supported)", "Xác nhận (Hợp lệ)"),
-        t("VERIFIED / RESOURCE<br/>Canonical proof &amp; CIS", "VERIFIED / RESOURCE<br/>Chứng cứ chuẩn &amp; CIS"),
+        t("VERIFIED / RESOURCE<br/>Canonical proof &amp; CIS", "Hợp lệ / Tài nguyên<br/>Chứng cứ chuẩn &amp; CIS"),
         icon_key="shield_ok",
         fill="#DCFCE7",
         stroke="#047857",
@@ -585,11 +585,11 @@ def build_fig2_1(vn: bool) -> DiagramBuilder:
     )
     o2 = d.card(
         310,
-        456,
+        464,
         212,
-        88,
+        90,
         t("Refute (Flagged)", "Bác bỏ (Cảnh báo)"),
-        t("HALLUCINATION / META<br/>Audit trace &amp; repair", "ẢO GIÁC / LỖI SDL<br/>Vết luật &amp; đề xuất sửa"),
+        t("HALLUCINATION / META<br/>Audit trace &amp; repair", "Ảo giác / Lỗi siêu dữ liệu<br/>Vết luật &amp; đề xuất sửa"),
         icon_key="scale",
         fill="#FEF3C7",
         stroke="#B45309",
@@ -597,33 +597,32 @@ def build_fig2_1(vn: bool) -> DiagramBuilder:
     )
     o3 = d.card(
         560,
-        456,
+        464,
         212,
-        88,
+        90,
         t("Abstain (Review)", "Từ chối phán quyết"),
-        t("UNRESOLVED (429/low)<br/>Instructor override", "CHƯA XĐ (429/thấp)<br/>Giảng viên hậu kiểm"),
+        t("UNRESOLVED (429/low)<br/>Instructor override", "Chưa xác định (429/thấp)<br/>Giảng viên hậu kiểm"),
         icon_key="teacher",
         fill="#EFF6FF",
         stroke="#1D4ED8",
         title_color="#1E3A8A",
     )
 
-    # Clean non-crossing arrows: Red goes straight down to Band A; Green routes outside left corridor x=20 into b1 left edge!
+    # Clean non-crossing arrows: Red terminates at TOP border of Band A (y=108) — ZERO text slicing!
     d.edge(
         inp,
-        a2,
-        t("Prose only", "Chỉ văn bản"),
-        ex=0.52,
+        band_a,
+        "",
+        ex=0.5,
         ey=1,
-        nx=0.5,
+        nx=0.486,
         ny=0,
         orth=False,
         stroke="#E11D48",
-        ox=54,
-        oy=-18,
-        font_color="#9F1239",
-        bold=True,
+        sw=1.7,
     )
+    d.box(416, 74, 108, 24, t("<b>Prose only</b>", "<b>Chỉ văn bản</b>"), fill="#FFF1F2", stroke="#E11D48", sw=1.0, font_size=13, font_color="#9F1239", arc=6)
+
     d.edge(
         inp,
         b1,
@@ -632,62 +631,61 @@ def build_fig2_1(vn: bool) -> DiagramBuilder:
         ey=0.5,
         nx=0,
         ny=0.5,
-        pts=[(20, 41), (20, 365)],
+        pts=[(20, 39), (20, 371)],
         stroke="#059669",
         sw=1.7,
     )
-    # Crisp pill label on the top horizontal green leg (100% clear of all boxes!)
-    d.box(34, 24, 146, 26, t("<b>Full structure</b>", "<b>Cấu trúc đầy đủ</b>"), fill="#ECFDF5", stroke="#059669", sw=1.1, font_size=13, font_color="#065F46", arc=6)
+    d.box(34, 22, 146, 26, t("<b>Full structure</b>", "<b>Cấu trúc đầy đủ</b>"), fill="#ECFDF5", stroke="#059669", sw=1.1, font_size=13, font_color="#065F46", arc=6)
 
     # Outcomes branched cleanly from b3
     d.edge(b3, o3, ex=0.5, ey=1, nx=0.5, ny=0, orth=False, stroke="#1D4ED8")
-    d.edge(b3, o2, ex=0.3, ey=1, nx=0.5, ny=0, pts=[(624, 434), (416, 434)], stroke="#B45309")
-    d.edge(b3, o1, ex=0.15, ey=1, nx=0.5, ny=0, pts=[(592, 428), (166, 428)], stroke="#047857")
+    d.edge(b3, o2, ex=0.3, ey=1, nx=0.5, ny=0, pts=[(624, 442), (416, 442)], stroke="#B45309")
+    d.edge(b3, o1, ex=0.15, ey=1, nx=0.5, ny=0, pts=[(592, 434), (166, 434)], stroke="#047857")
     return d
 
 
 def build_fig3_1(vn: bool) -> DiagramBuilder:
-    """True UML 2.5 Use Case Diagram with hollow-triangle generalizations, Guest, Public Verifier, Billing/Erasure & UML Note."""
-    d = DiagramBuilder("p31", "fig3_1_roles", 800, 740)
+    """True UML 2.5 Use Case Diagram strictly aligned 1:1 with Tables 3.3–3.7 (UC-01..UC-05), «include» + «extend», v3.90.10."""
+    d = DiagramBuilder("p31", "fig3_1_roles", 820, 770)
     t = lambda en, vi: vi if vn else en
 
     # System Boundary
-    d.box(164, 14, 446, 712, "", fill="#F8FAFC", stroke="#1E3A8A", sw=1.8, rounded=1, arc=4)
+    d.box(164, 12, 462, 744, "", fill="#F8FAFC", stroke="#1E3A8A", sw=1.8, rounded=1, arc=4)
     d.text(
         174,
-        20,
-        426,
+        18,
+        442,
         26,
-        t("CITRA Verification Platform (v3.90.9)", "Nền tảng xác minh trích dẫn CITRA (v3.90.9)"),
+        t("CITRA Verification Platform (v3.90.10)", "Nền tảng kiểm chứng trích dẫn CITRA (v3.90.10)"),
         font_size=15,
         font_color="#1E3A8A",
         bold=True,
     )
 
-    # Left Primary Actors (UML stick figures + bold 13px labels)
+    # Tight actor anchor box for left corridor + full actor height so bottom generalization arrows land BELOW text labels!
     def actor(ax: float, ay: float, label: str, ikey: str = "actor_navy") -> str:
-        aid = d.box(ax, ay, 122, 76, "", fill="none", stroke="none", sw=0)
-        d.icon(ikey, ax + 43, ay + 2, 36, 46)
-        d.text(ax, ay + 48, 122, 28, label, font_size=13, bold=True, font_color="#0F172A")
+        aid = d.box(ax + 35, ay, 56, 78, "", fill="none", stroke="none", sw=0)
+        d.icon(ikey, ax + 45, ay + 1, 36, 46)
+        d.text(ax, ay + 48, 126, 30, label, font_size=13, bold=True, font_color="#0F172A")
         return aid
 
-    act_auth = actor(22, 80, t("Authenticated\nUser", "Người dùng\nđã xác thực"), "actor_navy")
-    act_stu = actor(22, 246, t("Student", "Sinh viên"), "actor_teal")
-    act_tea = actor(22, 392, t("Teacher", "Giảng viên"), "actor_amber")
-    act_adm = actor(22, 526, t("Admin", "Quản trị viên"), "actor_navy")
-    act_gst = actor(22, 640, t("Guest", "Khách vãng lai"), "actor_slate")
+    act_auth = actor(18, 86, t("Authenticated\nUser", "Người dùng\nđã xác thực"), "actor_navy")
+    act_stu = actor(18, 286, t("Student", "Sinh viên"), "actor_teal")
+    act_tea = actor(18, 414, t("Teacher", "Giảng viên"), "actor_amber")
+    act_adm = actor(18, 544, t("Admin", "Quản trị viên"), "actor_navy")
+    act_gst = actor(18, 668, t("Guest", "Khách"), "actor_slate")
 
-    # True UML 2.5 Hollow-Triangle Generalizations (NO «inherits» label!)
+    # True UML 2.5 Hollow-Triangle Generalizations clear of text labels!
     d.edge(act_stu, act_auth, "", ex=0.5, ey=0, nx=0.5, ny=1, orth=False, end_arrow="block", end_fill=0, stroke="#1E3A8A", sw=1.6)
     d.edge(
         act_tea,
         act_auth,
         "",
         ex=0,
-        ey=0.5,
+        ey=0.30,
         nx=0,
-        ny=0.5,
-        pts=[(10, 430), (10, 118)],
+        ny=0.30,
+        pts=[(14, 437), (14, 109)],
         end_arrow="block",
         end_fill=0,
         stroke="#1E3A8A",
@@ -695,82 +693,106 @@ def build_fig3_1(vn: bool) -> DiagramBuilder:
     )
     d.edge(act_adm, act_tea, "", ex=0.5, ey=0, nx=0.5, ny=1, orth=False, end_arrow="block", end_fill=0, stroke="#1E3A8A", sw=1.6)
 
-    # Use Cases inside System Boundary — clean 2-col spacing so «include» sits in open air!
-    uc1 = d.ellipse(178, 56, 186, 56, t("UC-01: Upload &amp;\nStream SSE", "UC-01: Tải lên &amp;\nLuồng SSE"), fill="#EFF6FF", stroke="#1D4ED8")
-    uc_core = d.ellipse(444, 56, 152, 56, t("Parse, Retrieve &amp;\nVerify (8 Layers)", "Trích xuất, Truy hồi\n&amp; Xác minh"), fill="#E0F2FE", stroke="#0369A1")
-    uc2 = d.ellipse(178, 122, 206, 52, t("UC-02: Inspect Evidence\n&amp; Export (PDF/BibTeX)", "UC-02: Xem chứng cứ\n&amp; Xuất (PDF/BibTeX)"), fill="#EFF6FF", stroke="#1D4ED8")
-    uc8 = d.ellipse(178, 184, 214, 52, t("UC-08: Billing, Plan &amp;\nErasure (Law 91/2025)", "UC-08: Thanh toán &\nXóa dữ liệu (Luật 91)"), fill="#F5F3FF", stroke="#6D28D9")
+    # Exact 1:1 Use Cases matching Tables 3.3-3.7 (UC-01..UC-05) + unnumbered supporting capabilities
+    uc1 = d.ellipse(178, 54, 194, 54, t("UC-01: Upload &amp;\nStream SSE", "UC-01: Tải lên &amp;\nLuồng SSE"), fill="#EFF6FF", stroke="#1D4ED8", bold=True)
+    uc_core = d.ellipse(454, 54, 158, 54, t("Parse, Retrieve &amp;\nVerify (8 Layers)", "Trích xuất, Truy hồi\n&amp; Kiểm chứng"), fill="#E0F2FE", stroke="#0369A1")
 
-    uc3 = d.ellipse(178, 250, 214, 52, t("UC-03: Batch Upload &amp;\nJoin Classrooms", "UC-03: Tải hàng loạt &\nTham gia lớp học"), fill="#ECFDF5", stroke="#047857")
-    uc4 = d.ellipse(178, 312, 214, 50, t("UC-04: Share Report Link\n&amp; Draft History", "UC-04: Chia sẻ báo cáo &\nLịch sử bản nháp"), fill="#ECFDF5", stroke="#047857")
+    uc2 = d.ellipse(178, 120, 194, 54, t("UC-02: Repair Bib.\n&amp; Export Reports", "UC-02: Chuẩn hóa\nTLTK &amp; Xuất báo cáo"), fill="#EFF6FF", stroke="#1D4ED8", bold=True)
+    uc_docx = d.ellipse(454, 120, 158, 54, t("Export Repaired\nDOCX (Pro/Plus)", "Xuất DOCX đã sửa\n(Gói nâng cao)"), fill="#E0F2FE", stroke="#0369A1")
 
-    uc5 = d.ellipse(178, 384, 188, 58, t("UC-05: Override Verdict\n&amp; Recalculate CIS", "UC-05: Ghi đè nhãn\n&amp; Tính lại CIS"), fill="#FFFBEB", stroke="#B45309", bold=True)
-    uc_aud = d.ellipse(446, 386, 150, 54, t("Write Immutable\nAudit Log", "Ghi nhật ký\nkiểm toán"), fill="#FEF3C7", stroke="#B45309")
-    uc6 = d.ellipse(178, 454, 214, 52, t("UC-06: Manage Classes\n&amp; Cohort Analytics", "UC-06: Quản lý lớp học\n&amp; Thống kê lớp"), fill="#FFFBEB", stroke="#B45309")
+    uc_shr = d.ellipse(178, 186, 224, 48, t("Share Report Link &amp;\nRevision Diff History", "Chia sẻ liên kết &amp;\nSo sánh phiên bản"), fill="#EFF6FF", stroke="#1D4ED8")
+    uc_bil = d.ellipse(178, 244, 224, 48, t("Billing, Plans &amp; Law 91\nPrivacy Erasure", "Thanh toán gói &amp; Xóa\ndữ liệu (Luật 91/2025)"), fill="#F5F3FF", stroke="#6D28D9")
 
-    uc7 = d.ellipse(178, 534, 232, 54, t("UC-07: Monitor 15+ APIs,\nUsers &amp; Promo Codes", "UC-07: Giám sát 15+ API,\nNgười dùng &amp; Mã ưu đãi"), fill="#EEF2FF", stroke="#3730A3")
+    uc_join = d.ellipse(178, 304, 224, 48, t("Batch Upload &amp; Join\nClassroom via Code", "Tải hàng loạt &amp; Tham\ngia lớp qua mã lớp"), fill="#ECFDF5", stroke="#047857")
 
-    uc0 = d.ellipse(178, 646, 232, 58, t("UC-00: Sandbox Check &amp;\nPublic Share View", "UC-00: Kiểm thử mẫu &\nXem liên kết chia sẻ"), fill="#F1F5F9", stroke="#475569")
+    uc3 = d.ellipse(178, 376, 196, 56, t("UC-03: Adjudicate &amp;\nOverride Verdict", "UC-03: Hậu kiểm &amp;\nGhi đè kết luận"), fill="#FFFBEB", stroke="#B45309", bold=True)
+    uc_aud = d.ellipse(454, 378, 158, 52, t("Write Append-Only\nAudit Log &amp; CIS", "Ghi nhật ký kiểm\ntoán &amp; tính lại CIS"), fill="#FEF3C7", stroke="#B45309")
 
-    # UML Note attached cleanly above UC-05
-    nt = d.note(432, 286, 162, 68, t("<b>RBAC Guard:</b><br/>{can_override_<br/>verdicts = true}", "<b>Ràng buộc RBAC:</b><br/>{can_override_<br/>verdicts = true}"))
-    d.edge(nt, uc5, "", ex=0.35, ey=1, nx=0.85, ny=0, orth=False, dashed=1, end_arrow="none", stroke="#CA8A04")
+    uc4 = d.ellipse(178, 444, 224, 52, t("UC-04: Supervise Class\n&amp; Shared Anomalies", "UC-04: Giám sát lớp\n&amp; Trích dẫn ảo lặp"), fill="#FFFBEB", stroke="#B45309", bold=True)
 
-    # «include» relationships cleanly in 80px wide gaps!
+    uc5 = d.ellipse(178, 534, 232, 56, t("UC-05: Monitor 15+ APIs,\nReset Breakers &amp; Admin", "UC-05: Giám sát 15+ API,\nĐặt lại mạch &amp; Quản trị"), fill="#EEF2FF", stroke="#3730A3", bold=True)
+
+    uc_sbx = d.ellipse(178, 632, 224, 48, t("Public Sandbox\nCitation Check", "Kiểm thử trích dẫn\nSandbox công khai"), fill="#F1F5F9", stroke="#475569")
+    uc_pub = d.ellipse(178, 692, 224, 48, t("View Shared Receipt\n&amp; QR Verification", "Xem biên nhận chia sẻ\n&amp; Mã QR công khai"), fill="#F1F5F9", stroke="#475569")
+
+    # UML Note attached cleanly above UC-03
+    nt = d.note(446, 280, 168, 66, t("<b>RBAC Guard:</b><br/>{can_override_<br/>verdicts = true}", "<b>Ràng buộc RBAC:</b><br/>{can_override_<br/>verdicts = true}"))
+    d.edge(nt, uc3, "", ex=0.35, ey=1, nx=0.85, ny=0, orth=False, dashed=1, end_arrow="none", stroke="#CA8A04")
+
+    # Valid UML 2.5 «include» AND «extend» relationships!
     d.edge(uc1, uc_core, "«include»", ex=1, ey=0.5, nx=0, ny=0.5, dashed=1, end_arrow="open", end_fill=0, stroke="#0369A1", oy=-14)
-    d.edge(uc5, uc_aud, "«include»", ex=1, ey=0.5, nx=0, ny=0.5, dashed=1, end_arrow="open", end_fill=0, stroke="#B45309", oy=-14)
+    d.edge(uc_docx, uc2, "«extend»", ex=0, ey=0.5, nx=1, ny=0.5, dashed=1, end_arrow="open", end_fill=0, stroke="#0369A1", oy=-14)
+    d.edge(uc3, uc_aud, "«include»", ex=1, ey=0.5, nx=0, ny=0.5, dashed=1, end_arrow="open", end_fill=0, stroke="#B45309", oy=-14)
 
     # Actor -> Use Case Associations (zero crossings!)
     for src, dst in [
         (act_auth, uc1),
         (act_auth, uc2),
-        (act_auth, uc8),
-        (act_stu, uc3),
-        (act_stu, uc4),
-        (act_tea, uc5),
-        (act_tea, uc6),
-        (act_adm, uc7),
-        (act_gst, uc0),
+        (act_auth, uc_shr),
+        (act_auth, uc_bil),
+        (act_stu, uc_join),
+        (act_tea, uc3),
+        (act_tea, uc4),
+        (act_adm, uc5),
+        (act_gst, uc_sbx),
     ]:
         d.edge(src, dst, "", ex=1, ey=0.5, nx=0, ny=0.5, orth=False, end_arrow="none", stroke="#475569", sw=1.3)
 
-    # Right Secondary Actors («actor» system boxes + Public Verifier)
-    s_grobid = d.card(636, 46, 152, 72, "«actor» GROBID", "0.9.1-crf (TEI)", icon_key="tei", fill="#FFFFFF", stroke="#047857", title_color="#065F46")
-    s_apis = d.card(636, 134, 152, 86, t("«actor» 15+ APIs", "«actor» 15+ API"), "Crossref, OpenAlex,\narXiv, Wayback", icon_key="crossref", fill="#FFFFFF", stroke="#1D4ED8", title_color="#1E3A8A")
-    s_pay = d.card(636, 240, 152, 72, t("«actor» Gateways", "«actor» Cổng TT"), "Stripe / VNPay", icon_key="payment", fill="#FFFFFF", stroke="#6D28D9", title_color="#5B21B6")
-    act_pub = actor(650, 636, t("Public\nVerifier", "Người xem\ncông khai"), "actor_slate")
+    # Right Secondary Actors («actor» system cards + Public Verifier — stacked to prevent crossings!)
+    s_grobid = d.card(654, 46, 152, 72, "«actor» GROBID", "0.9.1-crf (TEI)", icon_key="tei", fill="#FFFFFF", stroke="#047857", title_color="#065F46")
+    s_pay = d.card(654, 232, 152, 72, t("«actor» Gateways", "«actor» Cổng TT"), "Stripe / VNPay", icon_key="payment", fill="#FFFFFF", stroke="#6D28D9", title_color="#5B21B6")
+    s_apis = d.card(654, 434, 152, 86, t("«actor» 15+ APIs", "«actor» 15+ API"), "Crossref, OpenAlex,\narXiv, Wayback", icon_key="crossref", fill="#FFFFFF", stroke="#1D4ED8", title_color="#1E3A8A")
+    act_pub = actor(668, 672, t("Public\nVerifier", "Người kiểm chứng\ncông khai"), "actor_slate")
 
-    d.edge(uc_core, s_grobid, "", ex=1, ey=0.4, nx=0, ny=0.5, orth=False, end_arrow="none", stroke="#047857", sw=1.3)
-    d.edge(uc_core, s_apis, "", ex=1, ey=0.8, nx=0, ny=0.35, orth=False, end_arrow="none", stroke="#1D4ED8", sw=1.3)
-    d.edge(uc8, s_pay, "", ex=1, ey=0.5, nx=0, ny=0.5, pts=[(618, 210), (618, 276)], end_arrow="none", stroke="#6D28D9", sw=1.3)
-    d.edge(uc0, act_pub, "", ex=1, ey=0.5, nx=0, ny=0.5, orth=False, end_arrow="none", stroke="#475569", sw=1.3)
-    d.edge(uc7, s_apis, "", ex=1, ey=0.5, nx=0.5, ny=1, pts=[(624, 561), (624, 228), (712, 228)], end_arrow="none", stroke="#3730A3", sw=1.2)
+    d.edge(uc_core, s_grobid, "", ex=1, ey=0.45, nx=0, ny=0.5, orth=False, end_arrow="none", stroke="#047857", sw=1.3)
+    d.edge(uc_core, s_apis, "", ex=1, ey=0.85, nx=0, ny=0.25, pts=[(638, 100), (638, 455)], end_arrow="none", stroke="#1D4ED8", sw=1.3)
+    d.edge(uc_bil, s_pay, "", ex=1, ey=0.5, nx=0, ny=0.5, orth=False, end_arrow="none", stroke="#6D28D9", sw=1.3)
+    d.edge(uc5, s_apis, "", ex=1, ey=0.5, nx=0.5, ny=1, pts=[(730, 562)], end_arrow="none", stroke="#3730A3", sw=1.3)
+    d.edge(uc_pub, act_pub, "", ex=1, ey=0.5, nx=0, ny=0.5, orth=False, end_arrow="none", stroke="#475569", sw=1.3)
     return d
 
 
 def build_fig3_2(vn: bool) -> DiagramBuilder:
-    """True UML 2.5 Sequence Diagram with 6 separated lifelines + Panels (a) Async SSE & (b) Override Tx."""
-    d = DiagramBuilder("p32", "fig3_2_workflow", 800, 760)
+    """True UML 2.5 Sequence Diagram with Activation Bars, exact live HTTP 200 /events & POST override, UC-03, and 3-operand alt."""
+    d = DiagramBuilder("p32", "fig3_2_workflow", 812, 836)
     t = lambda en, vi: vi if vn else en
 
-    # 6 lifeline centers
-    xs = [68, 198, 330, 464, 598, 728]
-    hdr_y = 14
+    xs = [68, 200, 336, 472, 608, 740]
+    hdr_y = 12
     hdr_h = 54
-    bot_y = 740
+    bot_y = 820
 
     # 1. Background UML Combined Fragment frames
-    d.box(12, 82, 776, 484, "", fill="#F8FAFC", stroke="#1E3A8A", sw=1.5, rounded=1, arc=3)
-    d.box(24, 200, 752, 238, "", fill="#EFF6FF", stroke="#2563EB", sw=1.3, rounded=0)
-    d.box(274, 266, 492, 160, "", fill="#FFFFFF", stroke="#059669", sw=1.2, dashed=1, rounded=0)
-    d.box(24, 448, 752, 108, "", fill="#FEF2F2", stroke="#DC2626", sw=1.3, rounded=0)
-    d.box(12, 578, 776, 156, "", fill="#FFFBEB", stroke="#B45309", sw=1.5, rounded=1, arc=3)
+    d.box(10, 78, 792, 548, "", fill="#F8FAFC", stroke="#1E3A8A", sw=1.5, rounded=1, arc=3)
+    d.box(22, 198, 768, 248, "", fill="#EFF6FF", stroke="#2563EB", sw=1.3, rounded=0)
+    d.box(276, 260, 502, 178, "", fill="#FFFFFF", stroke="#059669", sw=1.2, dashed=1, rounded=0)
+    d.box(22, 456, 768, 162, "", fill="#FEF2F2", stroke="#DC2626", sw=1.3, rounded=0)
+    d.box(10, 636, 792, 180, "", fill="#FFFBEB", stroke="#B45309", sw=1.5, rounded=1, arc=3)
 
     # 2. Vertical dashed lifelines
     for lx in xs:
         d.edge(None, None, "", src_pt=(lx, hdr_y + hdr_h), dst_pt=(lx, bot_y), orth=False, dashed=1, end_arrow="none", stroke="#64748B", sw=1.2)
 
-    # 3. Opaque Lifeline Header Boxes + Fragment Pills (drawn AFTER dashed lifelines to mask cleanly!)
+    # 2b. True UML 2.5 Execution Specification (Activation) Bars on all 6 lifelines!
+    def act_bar(idx: int, y1: float, y2: float, fill: str, stroke: str) -> None:
+        d.box(xs[idx] - 5, y1, 10, y2 - y1, "", fill=fill, stroke=stroke, sw=1.2, rounded=0)
+
+    act_bar(0, 128, 192, "#DBEAFE", "#1E3A8A")
+    act_bar(1, 132, 424, "#CFFAFE", "#0E7490")
+    act_bar(2, 134, 428, "#D1FAE5", "#047857")
+    act_bar(3, 300, 434, "#DCFCE7", "#15803D")
+    act_bar(4, 330, 368, "#FEF3C7", "#B45309")
+    act_bar(5, 152, 174, "#EDE9FE", "#6D28D9")
+    act_bar(5, 412, 434, "#EDE9FE", "#6D28D9")
+    # Activation bars in alt crash + Panel (b) override
+    act_bar(3, 566, 610, "#FEE2E2", "#DC2626")
+    act_bar(5, 574, 598, "#EDE9FE", "#6D28D9")
+    act_bar(0, 682, 804, "#FEF3C7", "#B45309")
+    act_bar(1, 684, 802, "#CFFAFE", "#0E7490")
+    act_bar(2, 704, 798, "#D1FAE5", "#047857")
+    act_bar(5, 734, 776, "#EDE9FE", "#6D28D9")
+
+    # 3. Opaque Lifeline Header Boxes + Fragment Pills
     headers = [
         (t("User /\nBrowser", "Người dùng /\nTrình duyệt"), "#EFF6FF", "#1E3A8A"),
         ("CITRA SPA\n(React 18)", "#ECFEFF", "#0E7490"),
@@ -780,23 +802,28 @@ def build_fig3_2(vn: bool) -> DiagramBuilder:
         ("SQLite WAL\n(app.db)", "#F5F3FF", "#6D28D9"),
     ]
     for lx, (hlbl, hfill, hstr) in zip(xs, headers):
-        d.box(lx - 56, hdr_y, 112, hdr_h, hlbl, fill=hfill, stroke=hstr, sw=1.5, font_size=13, bold=True)
+        d.box(lx - 58, hdr_y, 116, hdr_h, hlbl, fill=hfill, stroke=hstr, sw=1.5, font_size=13, bold=True)
 
-    d.box(16, 86, 410, 26, t("<b>(a) Async Upload, Background Queue &amp; SSE (UC-01)</b>", "<b>(a) Tải lên bất đồng bộ, Hàng đợi &amp; SSE (UC-01)</b>"), fill="#DBEAFE", stroke="#1E3A8A", sw=1.1, font_size=13, align="left", arc=4)
-    d.box(28, 204, 240, 24, t("<b>par</b> [Stream SSE || Run Pipeline]", "<b>par</b> [Luồng SSE || Chạy Pipeline]"), fill="#DBEAFE", stroke="#2563EB", sw=1.0, font_size=13, align="left", arc=3)
-    d.box(278, 270, 240, 24, t("<b>loop</b> [Stages 0..7 + Progress]", "<b>loop</b> [Chặng 0..7 + Tiến độ]"), fill="#DCFCE7", stroke="#059669", sw=1.0, font_size=13, align="left", arc=3)
-    d.box(28, 452, 412, 24, t("<b>alt</b> [Corrupt PDF / HTTP 429 / Worker Crash → CAS Refund]", "<b>alt</b> [PDF lỗi / HTTP 429 / Lỗi tiến trình → Hoàn hạn mức CAS]"), fill="#FEE2E2", stroke="#DC2626", sw=1.0, font_size=13, align="left", arc=3)
-    d.box(16, 582, 434, 26, t("<b>(b) critical</b> [Atomic Instructor Override &amp; CIS Recalc (UC-05)]", "<b>(b) critical</b> [Ghi đè nguyên tử &amp; Tính lại CIS (UC-05)]"), fill="#FEF3C7", stroke="#B45309", sw=1.1, font_size=13, align="left", arc=4)
+    d.box(14, 82, 424, 24, t("<b>(a) Async Upload, Background Queue &amp; SSE (UC-01)</b>", "<b>(a) Tải lên bất đồng bộ, Hàng đợi &amp; SSE (UC-01)</b>"), fill="#DBEAFE", stroke="#1E3A8A", sw=1.1, font_size=13, align="left", arc=4)
+    d.box(26, 202, 248, 22, t("<b>par</b> [Stream SSE || Run Pipeline]", "<b>par</b> [Luồng SSE || Chạy Pipeline]"), fill="#DBEAFE", stroke="#2563EB", sw=1.0, font_size=13, align="left", arc=3)
+    d.box(280, 264, 244, 22, t("<b>loop</b> [Stages 0..7 + Progress]", "<b>loop</b> [Chặng 0..7 + Tiến độ]"), fill="#DCFCE7", stroke="#059669", sw=1.0, font_size=13, align="left", arc=3)
+    d.box(26, 460, 290, 22, t("<b>alt</b> [Upload / Upstream / Crash Faults]", "<b>alt</b> [Lỗi tải lên / Nguồn ngoài / Sập tiến trình]"), fill="#FEE2E2", stroke="#DC2626", sw=1.0, font_size=13, align="left", arc=3)
+    d.box(14, 640, 446, 24, t("<b>(b) critical</b> [Atomic Instructor Override &amp; CIS Recalc (UC-03)]", "<b>(b) critical</b> [Ghi đè nguyên tử &amp; Tính lại CIS (UC-03)]"), fill="#FEF3C7", stroke="#B45309", sw=1.1, font_size=13, align="left", arc=4)
 
-    d.edge(None, None, "", src_pt=(24, 258), dst_pt=(776, 258), orth=False, dashed=1, end_arrow="none", stroke="#2563EB", sw=1.1)
+    # Dashed operand dividers in par and 3-branch alt
+    d.edge(None, None, "", src_pt=(22, 252), dst_pt=(790, 252), orth=False, dashed=1, end_arrow="none", stroke="#2563EB", sw=1.1)
+    d.edge(None, None, "", src_pt=(22, 514), dst_pt=(790, 514), orth=False, dashed=1, end_arrow="none", stroke="#DC2626", sw=1.0)
+    d.edge(None, None, "", src_pt=(22, 558), dst_pt=(790, 558), orth=False, dashed=1, end_arrow="none", stroke="#DC2626", sw=1.0)
 
     def msg(i_from: int, i_to: int, y: float, text: str, *, dashed: int = 0, stroke: str = "#0F172A", open_arrow: bool = False) -> None:
+        sx = xs[i_from] + (5 if i_to > i_from else -5)
+        dx = xs[i_to] + (-5 if i_to > i_from else 5)
         d.edge(
             None,
             None,
             text,
-            src_pt=(xs[i_from], y),
-            dst_pt=(xs[i_to], y),
+            src_pt=(sx, y),
+            dst_pt=(dx, y),
             orth=False,
             dashed=dashed,
             end_arrow="open" if open_arrow else "classic",
@@ -808,98 +835,134 @@ def build_fig3_2(vn: bool) -> DiagramBuilder:
             bold=not dashed,
         )
 
-    msg(0, 1, 140, t("1. Upload PDF", "1. Tải PDF"), stroke="#1E3A8A")
-    msg(1, 2, 140, "POST /api/essays", stroke="#1E3A8A")
-    msg(2, 5, 164, t("2. Atomic CAS quota + INSERT essay", "2. Giữ hạn mức CAS + lưu bài viết"), stroke="#6D28D9")
-    msg(2, 1, 188, t("3. HTTP 202 (essay_id) + spawn BackgroundTasks", "3. HTTP 202 (essay_id) + khởi chạy nền"), dashed=1, stroke="#047857", open_arrow=True)
+    msg(0, 1, 134, t("1a. Upload", "1a. Tải PDF"), stroke="#1E3A8A")
+    msg(1, 2, 134, "1b. POST /api/essays", stroke="#1E3A8A")
+    msg(2, 5, 160, t("2. Atomic CAS quota + INSERT essay", "2. Giữ hạn mức CAS + lưu bài viết"), stroke="#6D28D9")
+    msg(2, 1, 186, t("3. HTTP 200 (essay_id) + schedule BackgroundTasks", "3. HTTP 200 (essay_id) + lập lịch nền"), dashed=1, stroke="#047857", open_arrow=True)
 
-    msg(1, 2, 248, "4. GET /api/essays/{id}/stream (fetch ReadableStream SSE)", stroke="#2563EB")
+    msg(1, 2, 244, "4. GET /api/essays/{id}/events (fetch ReadableStream SSE)", stroke="#2563EB")
 
-    msg(2, 3, 314, t("5. Acquire admission slot (≤3)", "5. Cấp khe hàng đợi (≤3)"), stroke="#047857")
-    msg(3, 4, 342, t("6. TEI parse + 15 APIs (SSRF guard)", "6. GROBID + 15 API (chặn SSRF)"), stroke="#B45309")
-    msg(4, 3, 368, t("7. Candidates + HTML/Wayback meta", "7. Ứng viên + siêu dữ liệu web"), dashed=1, stroke="#B45309", open_arrow=True)
-    msg(3, 1, 394, t("8. ProgressTracker SSE stage frames", "8. Đẩy khung tiến độ SSE"), dashed=1, stroke="#2563EB", open_arrow=True)
-    msg(3, 5, 418, t("9. Persist verdicts, CIS &amp; done status", "9. Lưu phán quyết, CIS &amp; hoàn tất"), stroke="#6D28D9")
+    msg(2, 3, 310, t("5. Acquire slot (≤3 dev / ≤2 prod)", "5. Cấp khe (≤3 dev / ≤2 prod)"), stroke="#047857")
+    msg(3, 4, 336, t("6. TEI parse + 15 APIs (SSRF guard)", "6. GROBID + 15 API (chặn SSRF)"), stroke="#B45309")
+    msg(4, 3, 362, t("7. Candidates + HTML/Wayback meta", "7. Ứng viên + siêu dữ liệu web"), dashed=1, stroke="#B45309", open_arrow=True)
+    msg(3, 2, 386, t("8a. ProgressTracker", "8a. Ghi tiến độ"), dashed=1, stroke="#2563EB", open_arrow=True)
+    msg(2, 1, 398, t("8b. SSE stage frame", "8b. Khung SSE"), dashed=1, stroke="#2563EB", open_arrow=True)
+    msg(3, 5, 424, t("9. Persist citations, verdicts, CIS &amp; done", "9. Lưu trích dẫn, phán quyết, CIS &amp; hoàn tất"), stroke="#6D28D9")
 
-    msg(3, 5, 502, t("Refund CAS: monthly_uploads_used − 1", "Hoàn CAS: monthly_uploads_used − 1"), stroke="#DC2626")
-    msg(2, 0, 536, t("HTTP 400 (corrupt) or SSE error frame + clear banner", "HTTP 400 (tệp hỏng) hoặc khung lỗi SSE + thông báo"), dashed=1, stroke="#DC2626", open_arrow=True)
+    # 3 Explicit alt operands (100% codebase faithful, clear of alt badge!)
+    msg(2, 0, 506, t("[corrupt/invalid] HTTP 400 (pre-CAS; quota untouched)", "[tệp hỏng/sai] HTTP 400 (trước CAS; không trừ hạn mức)"), dashed=1, stroke="#DC2626", open_arrow=True)
+    msg(4, 3, 546, t("[HTTP 429 / GROBID timeout] PyMuPDF fallback or R-RATE-LIMITED-ABSTAIN", "[HTTP 429 / GROBID lỗi] Chuyển PyMuPDF hoặc R-RATE-LIMITED-ABSTAIN"), dashed=1, stroke="#B45309", open_arrow=True)
+    msg(3, 5, 586, t("[crash] CAS refund (quota_charged: 1→0)", "[sập tiến trình] Hoàn CAS (quota_charged: 1→0)"), stroke="#DC2626")
+    msg(2, 1, 608, t("SSE error frame", "Khung lỗi SSE"), dashed=1, stroke="#DC2626", open_arrow=True)
 
-    msg(0, 2, 634, t("10. PATCH /api/verdicts/{id} (teacher/admin RBAC)", "10. PATCH /api/verdicts/{id} (quyền GV/Admin)"), stroke="#B45309")
-    msg(2, 5, 668, t("11. Update verdict (manual_review) + recalc CIS + audit_logs", "11. Cập nhật phán quyết + tính lại CIS + audit_logs"), stroke="#6D28D9")
-    msg(5, 2, 696, t("12. COMMIT atomic SQLite WAL tx", "12. Xác nhận giao dịch WAL nguyên tử"), dashed=1, stroke="#6D28D9", open_arrow=True)
-    msg(2, 0, 720, t("13. HTTP 200 (updated verdict + recalculated CIS)", "13. HTTP 200 (nhãn mới + CIS đã tính lại)"), dashed=1, stroke="#047857", open_arrow=True)
+    # Panel (b) UC-03 Atomic Instructor Override through CITRA SPA -> FastAPI -> SQLite WAL
+    msg(0, 1, 688, t("10a. Submit override", "10a. Gửi ghi đè"), stroke="#B45309")
+    msg(1, 2, 720, "10b. POST /api/essays/{id}/verdicts/{vid}/override", stroke="#B45309")
+    msg(2, 5, 746, t("11. Update verdict (manual_review) + recalc CIS + audit_logs", "11. Cập nhật phán quyết + tính lại CIS + audit_logs"), stroke="#6D28D9")
+    msg(5, 2, 770, t("12. COMMIT atomic SQLite WAL tx", "12. Xác nhận giao dịch WAL nguyên tử"), dashed=1, stroke="#6D28D9", open_arrow=True)
+    msg(2, 0, 798, t("13. HTTP 200 (updated verdict + recalculated CIS)", "13. HTTP 200 (nhãn mới + CIS đã tính lại)"), dashed=1, stroke="#047857", open_arrow=True)
     return d
 
 
 def build_fig3_3(vn: bool) -> DiagramBuilder:
-    """Complete 15-Table Crow's Foot ERD (app.db, migrations 0001..0013) + FTS5 local_papers.db + In-Memory _KNOWN_PAPERS."""
-    d = DiagramBuilder("p33", "fig3_3_data_model", 808, 844)
+    """Complete 15-Table Crow's Foot ERD matching src/integrity_checker/db/models.py 1:1 (ZERO hallucinated tables!)."""
+    d = DiagramBuilder("p33", "fig3_3_data_model", 820, 910)
     t = lambda en, vi: vi if vn else en
 
-    # Band 1: Identity, Auth, Billing & Audit (6 tables) — shifted right x=22 so left corridor x=10 is clean!
-    d.box(22, 8, 774, 314, "", fill="#F8FAFC", stroke="#1E3A8A", sw=1.4, dashed=1)
-    d.text(30, 12, 758, 22, t("app.db (SQLite WAL, Migrations 0001–0013) — Band 1: Identity, Auth, Billing &amp; Audit (6 Tables)", "app.db (SQLite WAL, 0001–0013) — Khối 1: Định danh, Xác thực, Thanh toán &amp; Kiểm toán (6 bảng)"), font_size=13, font_color="#1E3A8A", bold=True, align="left")
+    # Band 1: Identity, Auth & API Keys (4 real ORM tables)
+    d.box(24, 8, 784, 152, "", fill="#F8FAFC", stroke="#1E3A8A", sw=1.4, dashed=1)
+    d.text(32, 12, 768, 22, t("app.db (SQLite WAL, Migrations 0001–0013) — Band 1: Identity, Auth &amp; Security (4 Tables)", "app.db (SQLite WAL, 0001–0013) — Khối 1: Định danh, Xác thực &amp; Bảo mật (4 bảng)"), font_size=13, font_color="#1E3A8A", bold=True, align="left")
 
-    t_users = d.erd_table(32, 42, 210, "1. users", ["<b>PK</b> id · email (UQ)", "google_id · role · plan", "monthly_uploads_used", "usage_reset_at"], hdr_fill="#1E3A8A", stroke="#1E3A8A")
-    t_sess = d.erd_table(300, 42, 206, "2. sessions", ["<b>PK</b> id · <b>FK</b> user_id", "token (UQ, opaque)", "expires_at"], hdr_fill="#1D4ED8", stroke="#1D4ED8")
-    t_audit = d.erd_table(566, 42, 218, "3. audit_logs (Append-Only*)", ["<b>PK</b> id · <b>FK</b> actor_user_id", "action · target_type/id", "*API append-only; CASCADE"], hdr_fill="#B45309", stroke="#B45309")
+    t_users = d.erd_table(36, 40, 210, "1. users", ["<b>PK</b> id · username/email (UQ)", "role · plan_tier · can_override", "monthly_uploads_used · reset", "privacy_consented_at"], hdr_fill="#1E3A8A", stroke="#1E3A8A")
+    t_sess = d.erd_table(292, 42, 156, "2. sessions", ["<b>PK</b> id · <b>FK</b> user_id", "token (UQ, JWT)", "expires_at"], hdr_fill="#1D4ED8", stroke="#1D4ED8")
+    t_auth = d.erd_table(464, 42, 162, "3. auth_tokens", ["<b>PK</b> id · <b>FK</b> user_id", "token_hash (UQ)", "token_type · used_at"], hdr_fill="#1D4ED8", stroke="#1D4ED8")
+    t_keys = d.erd_table(642, 42, 154, "4. api_keys", ["<b>PK</b> id · <b>FK</b> user_id", "key_prefix", "key_hash (UQ) · active"], hdr_fill="#1D4ED8", stroke="#1D4ED8")
 
-    t_bill = d.erd_table(32, 188, 210, "4. billing_transactions", ["<b>PK</b> id · <b>FK</b> user_id", "provider · transaction_id", "amount_vnd · status", "<b>FK</b> promo_code_id"], hdr_fill="#6D28D9", stroke="#6D28D9")
-    t_promo = d.erd_table(300, 188, 206, "5. promo_codes", ["<b>PK</b> id · code (UQ)", "discount_pct · max_uses", "used_count · active"], hdr_fill="#6D28D9", stroke="#6D28D9")
-    t_red = d.erd_table(566, 188, 218, "6. promo_redemptions", ["<b>PK</b> id · <b>FK</b> promo_code_id", "<b>FK</b> user_id", "redeemed_at"], hdr_fill="#7C3AED", stroke="#7C3AED")
+    d.edge(t_users, t_sess, "1:N", ex=1, ey=0.45, nx=0, ny=0.45, start_arrow="ERmandOne", end_arrow="ERzeroToMany", stroke="#1D4ED8", oy=-12)
+    d.edge(t_users, t_auth, "", ex=0.88, ey=1, nx=0.5, ny=1, pts=[(221, 150), (545, 150)], start_arrow="ERmandOne", end_arrow="ERzeroToMany", stroke="#1D4ED8")
+    d.edge(t_users, t_keys, "", ex=0.72, ey=1, nx=0.5, ny=1, pts=[(187, 156), (719, 156)], start_arrow="ERmandOne", end_arrow="ERzeroToMany", stroke="#1D4ED8")
 
-    d.edge(t_users, t_sess, "1 : N", ex=1, ey=0.45, nx=0, ny=0.5, start_arrow="ERmandOne", end_arrow="ERzeroToMany", stroke="#1D4ED8", oy=-13)
-    d.edge(t_users, t_bill, "1 : N", ex=0.5, ey=1, nx=0.5, ny=0, orth=False, start_arrow="ERmandOne", end_arrow="ERzeroToMany", stroke="#6D28D9", ox=26)
-    d.edge(t_promo, t_bill, "0..1 : N", ex=0, ey=0.5, nx=1, ny=0.5, start_arrow="ERzeroToOne", end_arrow="ERzeroToMany", stroke="#6D28D9", oy=-13)
-    d.edge(t_promo, t_red, "1 : N", ex=1, ey=0.5, nx=0, ny=0.5, start_arrow="ERmandOne", end_arrow="ERzeroToMany", stroke="#7C3AED", oy=-13)
-    d.edge(t_users, t_audit, "", ex=1, ey=0.18, nx=0, ny=0.22, pts=[(264, 61), (264, 34), (540, 34), (540, 62)], start_arrow="ERmandOne", end_arrow="ERzeroToMany", stroke="#B45309")
+    # Band 2: Core Verification, Audit & Cache (5 real ORM tables)
+    d.box(24, 174, 784, 286, "", fill="#F0FDF4", stroke="#047857", sw=1.4, dashed=1)
+    d.text(32, 178, 768, 22, t("app.db — Band 2: Verification Pipeline, Audit Trail &amp; Cache (5 Tables)", "app.db — Khối 2: Đường ống kiểm chứng, Nhật ký kiểm toán &amp; Bộ đệm (5 bảng)"), font_size=13, font_color="#065F46", bold=True, align="left")
 
-    # Band 2: Verification, Classrooms & Ops (9 remaining app.db tables = 15 TOTAL!)
-    d.box(22, 336, 774, 372, "", fill="#F0FDF4", stroke="#047857", sw=1.4, dashed=1)
-    d.text(30, 340, 758, 22, t("app.db — Band 2: Verification, Classrooms, Cache &amp; Operations (9 Tables → 15 Total)", "app.db — Khối 2: Xác minh, Lớp học, Bộ đệm &amp; Vận hành (9 bảng → Tổng 15 bảng)"), font_size=13, font_color="#065F46", bold=True, align="left")
+    t_essays = d.erd_table(36, 208, 210, "5. essays", ["<b>PK</b> id · <b>FK</b> user_id, class_id", "filename · job_status", "cis_json · style_profile_json", "quota_charged · job_error"], hdr_fill="#047857", stroke="#047857")
+    t_cit = d.erd_table(298, 208, 222, "6. citations", ["<b>PK</b> id · <b>FK</b> essay_id", "raw_text · citation_type", "mapping_status · confidence", "citation_link_json"], hdr_fill="#059669", stroke="#059669")
+    t_verd = d.erd_table(572, 208, 224, "7. verdicts", ["<b>PK</b> id · <b>FK</b> essay_id", "label · confidence · features", "triggered_rules · is_overridden", "overridden_by"], hdr_fill="#059669", stroke="#059669")
 
-    t_essays = d.erd_table(32, 368, 210, "7. essays", ["<b>PK</b> id · <b>FK</b> user_id", "<b>FK</b> class_id · filename", "cis_score · job_status", "result_json"], hdr_fill="#047857", stroke="#047857")
-    t_verd = d.erd_table(300, 368, 206, "8. verdicts", ["<b>PK</b> id · <b>FK</b> essay_id", "label · original_label", "confidence · rules_json", "overridden_by"], hdr_fill="#059669", stroke="#059669")
-    t_cls = d.erd_table(566, 368, 218, "9. classes", ["<b>PK</b> id · <b>FK</b> teacher_id", "name · join_code (UQ)", "created_at"], hdr_fill="#0F766E", stroke="#0F766E")
+    t_audit = d.erd_table(
+        396,
+        352,
+        214,
+        t("8. audit_logs (API Append*)", "8. audit_logs (Chỉ nối thêm*)"),
+        ["<b>PK</b> id · <b>FK</b> verdict_id", "original_label → new_label", t("user (str) · *CASCADE xóa", "user (str) · *CASCADE xóa") if vn else "user (str) · *CASCADE on erase"],
+        hdr_fill="#B45309",
+        stroke="#B45309",
+    )
+    t_cache = d.erd_table(628, 352, 168, "9. citation_cache", ["<b>PK</b> id · cache_key (UQ)", "source · raw_response", "hit_count · last_hit_at"], hdr_fill="#0369A1", stroke="#0369A1")
 
-    # Generous 48px gap between 10. assignments and 11. submissions so Crow's Foot markers never collide!
-    t_asgn = d.erd_table(32, 508, 160, "10. assignments", ["<b>PK</b> id · <b>FK</b> class_id", "title · due_date", "min_cis"], hdr_fill="#0F766E", stroke="#0F766E")
-    t_subm = d.erd_table(240, 508, 174, "11. submissions", ["<b>PK</b> id · <b>FK</b> assign_id", "<b>FK</b> essay_id, student_id", "submitted_at"], hdr_fill="#0F766E", stroke="#0F766E")
-    t_mem = d.erd_table(434, 508, 158, "12. class_members", ["<b>PK</b> id · <b>FK</b> class_id", "<b>FK</b> student_id", "joined_at"], hdr_fill="#0F766E", stroke="#0F766E")
-    t_cache = d.erd_table(608, 498, 176, "13. citation_cache", ["<b>PK</b> key (doi:/arxiv:/url:)", "source_name · ttl", "payload_json"], hdr_fill="#0369A1", stroke="#0369A1")
+    # Clean internal Band-2 FK edges (zero border overlaps!)
+    d.edge(t_essays, t_cit, "1:N", ex=1, ey=0.45, nx=0, ny=0.45, start_arrow="ERmandOne", end_arrow="ERzeroToMany", stroke="#059669", oy=-12)
+    d.edge(t_essays, t_verd, "1:N", ex=0.5, ey=1, nx=0.18, ny=1, pts=[(141, 332), (612, 332)], start_arrow="ERmandOne", end_arrow="ERzeroToMany", stroke="#059669", oy=-12)
+    d.edge(t_verd, t_audit, "1:N", ex=0.5, ey=1, nx=0.82, ny=0, pts=[(684, 338), (571, 338)], start_arrow="ERmandOne", end_arrow="ERzeroToMany", stroke="#B45309", ox=20, oy=-10)
 
-    t_fb = d.erd_table(32, 616, 364, "14. feedback", ["<b>PK</b> id · <b>FK</b> user_id · category · message · status"], hdr_fill="#475569", stroke="#475569")
-    t_mig = d.erd_table(420, 616, 364, "15. schema_migrations", ["<b>PK</b> version (0001..0013) · applied_at"], hdr_fill="#475569", stroke="#475569")
+    # Clean left-corridor users (1:N) -> essays routed cleanly outside dashed Band 1/2 borders (x=10)!
+    d.edge(t_users, t_essays, "", ex=0, ey=0.5, nx=0, ny=0.42, pts=[(10, 96), (10, 255)], start_arrow="ERmandOne", end_arrow="ERzeroToMany", stroke="#047857")
+    d.box(6, 150, 34, 20, "<b>1:N</b>", fill="#F0FDF4", stroke="#047857", sw=0.8, font_size=13, font_color="#065F46", arc=4)
 
-    d.edge(t_essays, t_verd, "1 : N", ex=1, ey=0.5, nx=0, ny=0.5, start_arrow="ERmandOne", end_arrow="ERzeroToMany", stroke="#059669", oy=-13)
-    d.edge(t_asgn, t_subm, "1 : N", ex=1, ey=0.5, nx=0, ny=0.5, start_arrow="ERmandOne", end_arrow="ERzeroToMany", stroke="#0F766E", oy=-13)
-    d.edge(t_essays, t_subm, "", ex=0.75, ey=1, nx=0.35, ny=0, pts=[(190, 488), (301, 488)], start_arrow="ERmandOne", end_arrow="ERzeroToOne", stroke="#047857")
-    d.edge(t_cls, t_mem, "1 : N", ex=0.2, ey=1, nx=0.8, ny=0, pts=[(610, 484), (560, 484)], start_arrow="ERmandOne", end_arrow="ERzeroToMany", stroke="#0F766E", ox=-24)
-    # Left corridor users -> essays completely outside both dashed boxes (x=10 -> left side of essays!)
-    d.edge(t_users, t_essays, "", ex=0, ey=0.5, nx=0, ny=0.5, pts=[(10, 95), (10, 421)], start_arrow="ERmandOne", end_arrow="ERzeroToMany", stroke="#047857")
+    # Band 3: Classrooms, Billing & Migrations (6 real ORM tables → 15 TOTAL!)
+    d.box(24, 474, 784, 294, "", fill="#FAF5FF", stroke="#6D28D9", sw=1.4, dashed=1)
+    d.text(32, 478, 768, 22, t("app.db — Band 3: Classrooms, Billing, Promos &amp; Migrations (6 Tables → 15 ORM Tables Total)", "app.db — Khối 3: Lớp học, Thanh toán, Ưu đãi &amp; Di trú (6 bảng → Tổng 15 bảng ORM)"), font_size=13, font_color="#5B21B6", bold=True, align="left")
 
-    # Band 3: Offline Retrieval Stores
-    d.box(22, 720, 774, 114, "", fill="#EFF6FF", stroke="#1D4ED8", sw=1.4)
-    d.text(30, 724, 758, 22, t("Offline Tier-0 Retrieval Stores (Separate Read-Only Artifacts — Outside app.db)", "Kho truy hồi ngoại tuyến Tầng 0 (Tách biệt chỉ đọc — Ngoài app.db)"), font_size=13, font_color="#1E3A8A", bold=True, align="left")
+    t_cls = d.erd_table(36, 510, 178, "10. classes", ["<b>PK</b> id · <b>FK</b> teacher_id", "name · join_code (UQ)", "created_at"], hdr_fill="#0F766E", stroke="#0F766E")
+    t_mem = d.erd_table(262, 510, 180, "11. class_memberships", ["<b>PK</b> id · <b>FK</b> class_id", "<b>FK</b> student_id", "joined_at"], hdr_fill="#0F766E", stroke="#0F766E")
+    t_bill = d.erd_table(490, 510, 306, "12. billing_transactions", ["<b>PK</b> id · <b>FK</b> user_id · stripe_session_id (UQ)", "payment_mode · payment_method · status", "amount_usd/vnd · promo_code (str)"], hdr_fill="#6D28D9", stroke="#6D28D9")
+
+    t_promo = d.erd_table(36, 646, 210, "13. promo_codes", ["<b>PK</b> id · code (UQ)", "discount_type/value · is_active", "used_count · <b>FK</b> created_by"], hdr_fill="#6D28D9", stroke="#6D28D9")
+    t_red = d.erd_table(298, 646, 232, "14. promo_redemptions", ["<b>PK</b> id · <b>FK</b> promo_code_id", "<b>FK</b> user_id · <b>FK</b> transaction_id", "code · discount_usd · redeemed_at"], hdr_fill="#7C3AED", stroke="#7C3AED")
+    t_mig = d.erd_table(562, 646, 234, "15. schema_migrations", ["<b>PK</b> version (0001..0013)", "name · checksum (SHA-256)", "execution_ms · applied_at"], hdr_fill="#475569", stroke="#475569")
+
+    d.edge(t_cls, t_mem, "1:N", ex=1, ey=0.5, nx=0, ny=0.5, start_arrow="ERmandOne", end_arrow="ERzeroToMany", stroke="#0F766E", oy=-12)
+    # Route classes (0..1:N) -> essays cleanly up the open left corridor x=62 (100% clear of yellow note at x=98..384!)
+    d.edge(t_cls, t_essays, "", ex=0.14, ey=0, nx=0.12, ny=1, pts=[(61, 468), (61, 336)], start_arrow="ERzeroToOne", end_arrow="ERzeroToMany", stroke="#0F766E")
+    d.box(34, 461, 56, 20, "<b>0..1:N</b>", fill="#F0FDF4", stroke="#0F766E", sw=0.8, font_size=13, font_color="#0F766E", arc=4)
+    d.edge(t_promo, t_red, "1:N", ex=1, ey=0.5, nx=0, ny=0.5, start_arrow="ERmandOne", end_arrow="ERzeroToMany", stroke="#7C3AED", oy=-12)
+    d.edge(t_bill, t_red, "1:N", ex=0.15, ey=1, nx=0.72, ny=0, pts=[(536, 628), (465, 628)], start_arrow="ERmandOne", end_arrow="ERzeroToMany", stroke="#6D28D9", ox=24)
+
+    # Concise FK summary note cleanly right of classes->essays wire (x=98..384, spacious 104px height -> ZERO clipping!)
+    d.note(
+        98,
+        346,
+        286,
+        106,
+        t(
+            "<b>Other 1:N FKs from 1. users:</b><br/>classes (teacher_id), class_memberships,<br/>billing_transactions, promo_codes,<br/>promo_redemptions · DELETE /users/me",
+            "<b>Khóa ngoại 1:N khác từ 1. users:</b><br/>classes (teacher_id), class_memberships,<br/>billing_transactions, promo_codes,<br/>promo_redemptions · DELETE /users/me",
+        ),
+    )
+
+    # Band 4: Offline Tier-0 Retrieval Stores (aligned with Ch. 4 & Ch. 5: 87.6 ms mean < 100 ms!)
+    d.box(24, 782, 784, 118, "", fill="#EFF6FF", stroke="#1D4ED8", sw=1.4)
+    d.text(32, 786, 768, 22, t("Offline Tier-0 Retrieval Stores (Separate Read-Only Artifacts — Outside app.db)", "Kho truy hồi ngoại tuyến Tầng 0 (Tách biệt chỉ đọc — Ngoài app.db)"), font_size=13, font_color="#1E3A8A", bold=True, align="left")
 
     d.cylinder(
-        34,
-        750,
-        364,
-        74,
-        t("<b>local_papers.db</b> (SQLite FTS5 BM25)<br/>129,137 records (98.42% ACL Anthology) · &lt;25 ms", "<b>local_papers.db</b> (SQLite FTS5 BM25)<br/>129,137 bản ghi (98.42% ACL Anthology) · &lt;25 ms"),
+        36,
+        814,
+        374,
+        76,
+        t("<b>local_papers.db</b> (SQLite FTS5 BM25)<br/>129,137 records (98.42% ACL) · 87.6 ms mean", "<b>local_papers.db</b> (SQLite FTS5 BM25)<br/>129,137 bản ghi (98.42% ACL) · TB 87.6 ms"),
         fill="#DCFCE7",
         stroke="#047857",
         size=8,
     )
-    d.icon("sqlite", 42, 776, 26, 26)
-    d.icon("acl", 364, 776, 26, 26)
+    d.icon("sqlite", 44, 840, 26, 26)
+    d.icon("acl", 376, 840, 26, 26)
 
     d.card(
-        420,
-        752,
-        364,
-        70,
+        426,
+        816,
+        370,
+        72,
         t("In-Memory _KNOWN_PAPERS (Python Dict)", "Từ điển bộ nhớ _KNOWN_PAPERS (Python Dict)"),
         t("101 foundational CS/AI/Law entries · &lt;1 ms<br/>Non-DB static memory structure (not SQLite)", "101 công trình kinh điển KHMT/Luật · &lt;1 ms<br/>Cấu trúc bộ nhớ tĩnh (không phải CSDL)"),
         icon_key="python",
@@ -911,57 +974,57 @@ def build_fig3_3(vn: bool) -> DiagramBuilder:
 
 
 def build_fig3_4(vn: bool) -> DiagramBuilder:
-    """True UML 2.5 Deployment Diagram with 3D Node Cubes & Pinned-IP SSRF Egress Guard INSIDE integrity-api."""
-    d = DiagramBuilder("p34", "fig3_4_deployment", 808, 690)
+    """True UML 2.5 Deployment Diagram: exact docker-compose names (integrity-web, essay-check-grobid), volumes, clean SSRF vs Payments."""
+    d = DiagramBuilder("p34", "fig3_4_deployment", 820, 742)
     t = lambda en, vi: vi if vn else en
 
-    # 1. Left Node: Client Device (all inner elements clear 14px left/top bevel!)
-    c_cli = d.cube(12, 168, 160, 174, t("«device»\nClient Browser", "«device»\nTrình duyệt"), fill="#EFF6FF", stroke="#1E3A8A")
-    d.icon("browser", 36, 236, 28, 28)
-    d.icon("tls", 72, 236, 28, 28)
-    d.text(32, 272, 128, 62, t("HTTPS TLS 1.2/1.3<br/>fetch() Stream SSE", "HTTPS TLS 1.2/1.3<br/>fetch() Stream SSE"), font_size=13, align="left")
+    # 1. Left Node: Client Device
+    c_cli = d.cube(10, 152, 154, 170, t("«device»\nClient Browser", "«device»\nTrình duyệt"), fill="#EFF6FF", stroke="#1E3A8A")
+    d.icon("browser", 34, 218, 28, 28)
+    d.icon("tls", 70, 218, 28, 28)
+    d.text(30, 254, 124, 60, t("HTTPS TLS 1.2/1.3<br/>fetch() Stream SSE", "HTTPS TLS 1.2/1.3<br/>fetch() Stream SSE"), font_size=13, align="left")
 
-    # 2. Center Host Cube: Docker Engine on GCE (Docker icon placed cleanly on right-bottom of header strip with spacingRight=50)
+    # 2. Center Host Cube: Docker Engine on GCE (essay-check-net bridge)
     d.cube(
-        200,
+        208,
         12,
-        402,
-        666,
-        t("«executionEnvironment»\nDocker Host (GCE · 2 vCPU · 5.8 GiB)", "«executionEnvironment»\nMáy chủ Docker (GCE · 2 vCPU · 5.8 GiB)"),
+        400,
+        718,
+        t("«executionEnvironment» Docker Host\n(GCE · 2 vCPU · 5.8 GiB · essay-check-net)", "«executionEnvironment» Máy chủ Docker\n(GCE · 2 vCPU · 5.8 GiB · essay-check-net)"),
         fill="#F8FAFC",
         stroke="#0F172A",
         sw=1.8,
     )
-    d.icon("docker", 554, 34, 32, 32)
+    d.icon("docker", 560, 34, 32, 32)
 
-    # Container 1: citra-web
-    n_web = d.cube(222, 82, 356, 114, "«container» citra-web (Nginx 1.27 + SPA)", fill="#ECFEFF", stroke="#0E7490")
-    d.icon("nginx", 242, 126, 26, 26)
-    d.icon("react", 274, 126, 26, 26)
-    d.icon("letsencrypt", 306, 126, 26, 26)
-    d.text(340, 122, 226, 66, t("Ports :80/:443 TLS · Leaky-bucket<br/>rate limit · Proxy /api/* → :8000", "Cổng :80/:443 TLS · Leaky-bucket<br/>Proxy /api/* → :8000"), font_size=13, align="left")
+    # Container 1: integrity-web (exact docker-compose service name!)
+    n_web = d.cube(228, 84, 360, 108, "«container» integrity-web (Nginx 1.27 + SPA)", fill="#ECFEFF", stroke="#0E7490")
+    d.icon("nginx", 248, 126, 26, 26)
+    d.icon("react", 280, 126, 26, 26)
+    d.icon("letsencrypt", 312, 126, 26, 26)
+    d.text(346, 122, 232, 62, t("Ports :80/:443 TLS · Leaky-bucket<br/>proxy_buffering off → :8000", "Cổng :80/:443 TLS · Leaky-bucket<br/>proxy_buffering off → :8000"), font_size=13, align="left")
 
-    # Container 2: integrity-api (with nested Pinned-IP SSRF Egress Guard INSIDE!)
-    n_api = d.cube(222, 224, 356, 250, "«container» integrity-api (FastAPI)", fill="#F0FDF4", stroke="#047857")
-    d.icon("fastapi", 242, 268, 26, 26)
-    d.icon("python", 274, 268, 26, 26)
-    d.icon("onnx", 306, 268, 26, 26)
+    # Container 2: integrity-api (FastAPI + internal SSRF Guard)
+    n_api = d.cube(228, 218, 360, 236, "«container» integrity-api (FastAPI)", fill="#F0FDF4", stroke="#047857")
+    d.icon("fastapi", 248, 260, 26, 26)
+    d.icon("python", 280, 260, 26, 26)
+    d.icon("onnx", 312, 260, 26, 26)
     d.text(
-        340,
-        262,
-        226,
-        82,
-        t("Uvicorn --workers 1 · 0.0.0.0:8000<br/>(host 127.0.0.1:8000) · ≤2 jobs<br/>ONNX SBERT · SQLite WAL mount", "Uvicorn --workers 1 · 0.0.0.0:8000<br/>(máy chủ 127.0.0.1) · ≤2 tác vụ<br/>ONNX SBERT · SQLite WAL"),
+        346,
+        254,
+        232,
+        78,
+        t("Uvicorn --workers 1 · :8000<br/>(prod 127.0.0.1:8000) · ≤2 jobs<br/>ONNX SBERT · X-Accel-Buffering", "Uvicorn --workers 1 · :8000<br/>(prod 127.0.0.1:8000) · ≤2 việc<br/>ONNX SBERT · X-Accel-Buffering"),
         font_size=13,
         align="left",
     )
     n_ssrf = d.card(
-        242,
-        356,
-        318,
-        104,
+        248,
+        344,
+        322,
+        98,
         t("Pinned-IP SSRF Egress Guard", "Lớp chặn SSRF ghim IP đầu ra"),
-        t("SSRFSafeAsyncNetworkBackend:<br/>DNS pin · Block RFC 1918/6598<br/>TLS SNI · follow_redirects=False", "SSRFSafeAsyncNetworkBackend:<br/>Ghim DNS · Chặn RFC 1918/6598<br/>TLS SNI · Chặn chuyển hướng"),
+        t("SSRFSafeAsyncNetworkBackend:<br/>DNS pin · Block RFC 1918/6598<br/>TLS SNI · Untrusted URL/HTML", "SSRFSafeAsyncNetworkBackend:<br/>Ghim DNS · Chặn RFC 1918/6598<br/>TLS SNI · Bảo vệ URL/HTML"),
         icon_key="ssrf_shield",
         fill="#FEF2F2",
         stroke="#DC2626",
@@ -969,48 +1032,62 @@ def build_fig3_4(vn: bool) -> DiagramBuilder:
         title_color="#991B1B",
     )
 
-    # Container 3: grobid
-    n_grob = d.cube(222, 506, 356, 150, "«container» grobid (0.9.1-crf)", fill="#FFFBEB", stroke="#B45309")
-    d.icon("tei", 242, 550, 26, 26)
-    d.icon("java_duke", 274, 550, 26, 26)
+    # Container 3: essay-check-grobid (exact service name, NO worker_only!)
+    n_grob = d.cube(228, 480, 360, 134, "«container» essay-check-grobid (0.9.1-crf)", fill="#FFFBEB", stroke="#B45309")
+    d.icon("tei", 248, 522, 26, 26)
+    d.icon("java_duke", 280, 522, 26, 26)
     d.text(
-        310,
-        544,
-        256,
-        100,
-        t("Internal bind 0.0.0.0:8070 (private)<br/><b>4 GiB limit · -Xmx768m</b><br/>~3.1 GiB native Wapiti · worker_only<br/>concurrency=2 · 0 B swap", "Nội bộ 0.0.0.0:8070 (không mở ngoài)<br/><b>Giới hạn 4 GiB · -Xmx768m</b><br/>~3.1 GiB Wapiti · worker_only<br/>concurrency=2 · 0 B swap"),
+        314,
+        516,
+        262,
+        90,
+        t("Bind 127.0.0.1:8070 (prod) · <b>4 GiB</b><br/><b>-Xmx768m</b> · ~3.1 GiB Wapiti CRF<br/>modelPreload=true · pdfalto=1024 MB<br/>concurrency=2 · 0 B swap", "Cổng 127.0.0.1:8070 (prod) · <b>4 GiB</b><br/><b>-Xmx768m</b> · ~3.1 GiB Wapiti CRF<br/>modelPreload=true · pdfalto=1024 MB<br/>concurrency=2 · 0 B swap"),
         font_size=13,
         align="left",
     )
 
-    # 3. Right External Services (inner content strictly >= x + 22 and clear of cube top bevel!)
-    ex_apis = d.cube(628, 224, 168, 248, t("«external»\n15+ APIs", "«external»\n15+ API"), fill="#EFF6FF", stroke="#1D4ED8")
+    # Persistent Volumes Row inside Docker Host (explicitly fulfilling caption promise!)
+    v_sql = d.cylinder(228, 634, 214, 78, t("<b>«artifact» ./data Volume</b><br/>app.db (WAL) + local_papers.db", "<b>«artifact» Phân vùng ./data</b><br/>app.db (WAL) + local_papers.db"), fill="#DCFCE7", stroke="#047857", size=8)
+    d.icon("sqlite", 236, 662, 24, 24)
+    v_gcache = d.cylinder(454, 634, 134, 78, t("<b>grobid-cache</b><br/>TEI XML Cache", "<b>grobid-cache</b><br/>Đệm TEI XML"), fill="#FEF3C7", stroke="#B45309", size=8)
+
+    # 3. Right External Services
+    ex_apis = d.cube(646, 232, 164, 236, t("«external»\n15+ APIs &amp; URLs", "«external»\n15+ API &amp; URL"), fill="#EFF6FF", stroke="#1D4ED8")
     for idx_i, ik in enumerate(["crossref", "openalex", "arxiv", "dblp", "epmc", "wayback"]):
         row, col = divmod(idx_i, 3)
-        d.icon(ik, 650 + col * 44, 294 + row * 40, 28, 28)
-    d.text(648, 382, 138, 76, t("Crossref, OpenAlex,<br/>arXiv, DBLP, EPMC,<br/>Wayback CDX", "Crossref, OpenAlex,<br/>arXiv, DBLP, EPMC,<br/>Wayback CDX"), font_size=13, align="left")
+        d.icon(ik, 666 + col * 42, 300 + row * 38, 26, 26)
+    d.text(664, 384, 136, 74, t("Crossref, OpenAlex,<br/>arXiv, DBLP, EPMC,<br/>Wayback &amp; Cited URLs", "Crossref, OpenAlex,<br/>arXiv, DBLP, EPMC,<br/>Wayback &amp; URL trích"), font_size=13, align="left")
 
-    ex_pay = d.cube(628, 504, 168, 136, t("«external»\nPayments", "«external»\nThanh toán"), fill="#F5F3FF", stroke="#6D28D9")
-    d.icon("payment", 650, 570, 28, 28)
-    d.text(684, 562, 102, 66, "Stripe REST\nVNPay\nHMAC-512", font_size=13, align="left")
+    ex_pay = d.cube(646, 510, 164, 132, t("«external»\nPayments", "«external»\nThanh toán"), fill="#F5F3FF", stroke="#6D28D9")
+    d.icon("payment", 666, 574, 26, 26)
+    d.text(698, 566, 102, 66, "Stripe REST\nVNPay\nHMAC-SHA512", font_size=13, align="left")
 
-    # Connections
-    d.edge(c_cli, n_web, "HTTPS / SSE", ex=1, ey=0.35, nx=0, ny=0.5, pts=[(186, 229), (186, 139)], stroke="#0E7490", ox=0, oy=-14, bold=True)
+    # Clean Non-Colliding Connections + Opaque Pill Labels Clear of 3D Walls!
+    d.edge(c_cli, n_web, "", ex=1, ey=0.35, nx=0, ny=0.5, pts=[(186, 211), (186, 138)], stroke="#0E7490", sw=1.7)
+    d.box(100, 112, 102, 22, "<b>HTTPS / SSE</b>", fill="#FFFFFF", stroke="#0E7490", sw=0.9, font_size=13, font_color="#0E7490", arc=4)
+
     d.edge(n_web, n_api, "HTTP :8000", ex=0.5, ey=1, nx=0.5, ny=0, orth=False, stroke="#047857", ox=50, bold=True)
     d.edge(n_api, n_grob, "TEI :8070", ex=0.5, ey=1, nx=0.5, ny=0, orth=False, stroke="#B45309", ox=48, bold=True)
-    d.edge(n_ssrf, ex_apis, "HTTPS", ex=1, ey=0.4, nx=0, ny=0.5, stroke="#DC2626", sw=1.7, oy=-14, bold=True)
-    d.edge(n_ssrf, ex_pay, "HTTPS", ex=1, ey=0.8, nx=0, ny=0.5, pts=[(612, 439), (612, 572)], stroke="#6D28D9", ox=0, oy=-14, bold=True)
+    d.edge(n_api, v_sql, "", ex=0.04, ey=0.95, nx=0.1, ny=0, pts=[(218, 442), (218, 624), (249, 624)], dashed=1, stroke="#047857", sw=1.2)
+    d.edge(n_grob, v_gcache, "", ex=0.82, ey=1, nx=0.5, ny=0, orth=False, dashed=1, stroke="#B45309", sw=1.2)
+
+    # SSRF Guard -> 15+ APIs & Untrusted URLs; integrity-api DIRECTLY -> Payments (purple wire at x=636 clears red pill!)
+    d.edge(n_ssrf, ex_apis, "", ex=1, ey=0.5, nx=0, ny=0.68, stroke="#DC2626", sw=1.7)
+    d.box(576, 368, 54, 22, "<b>HTTPS</b>", fill="#FFFFFF", stroke="#DC2626", sw=0.9, font_size=13, font_color="#991B1B", arc=4)
+
+    d.edge(n_api, ex_pay, "", ex=1, ey=0.25, nx=0, ny=0.5, pts=[(636, 277), (636, 576)], stroke="#6D28D9", sw=1.6)
+    d.box(576, 546, 54, 22, "<b>HTTPS</b>", fill="#FFFFFF", stroke="#6D28D9", sw=0.9, font_size=13, font_color="#5B21B6", arc=4)
     return d
 
 
 def build_fig4_1(vn: bool) -> DiagramBuilder:
-    """8-Layer Pipeline Architecture (S-curve 4+4 spacious layout, exact layer boundaries, zero Ch.5 leaks)."""
-    d = DiagramBuilder("p41", "fig4_1_architecture", 800, 650)
+    """8-Layer Pipeline Architecture (zero title crossings, MatchFeatures on connector, DOCX/PDF/JSON/BibTeX/RIS, clean VN)."""
+    d = DiagramBuilder("p41", "fig4_1_architecture", 812, 668)
     t = lambda en, vi: vi if vn else en
 
     inp = d.card(
-        180,
-        14,
+        186,
+        12,
         440,
         54,
         t("Manuscript Input (PDF / DOCX / BibTeX / RIS)", "Tài liệu đầu vào (PDF / DOCX / BibTeX / RIS)"),
@@ -1022,108 +1099,107 @@ def build_fig4_1(vn: bool) -> DiagramBuilder:
         title_color="#1E3A8A",
     )
 
-    d.box(12, 92, 776, 176, "", fill="#F8FAFC", stroke="#2563EB", sw=1.3, dashed=1)
-    d.text(22, 96, 750, 22, t("Phase I: Ingestion, Structural Linking &amp; Multi-Registry Retrieval (Layers 1–4)", "Giai đoạn I: Trích xuất, Liên kết cấu trúc &amp; Truy hồi đa nguồn (Tầng 1–4)"), font_size=13, font_color="#1E3A8A", bold=True, align="left")
+    p1_box = d.box(16, 94, 780, 178, "", fill="#F8FAFC", stroke="#2563EB", sw=1.3, dashed=1)
+    d.text(28, 98, 756, 22, t("Phase I: Ingestion, Structural Linking &amp; Multi-Registry Retrieval (Layers 1–4)", "Giai đoạn I: Trích xuất, Liên kết cấu trúc &amp; Truy hồi đa nguồn (Tầng 1–4)"), font_size=13, font_color="#1E3A8A", bold=True, align="left")
 
-    l1 = d.card(22, 126, 174, 128, t("L1. Parsing", "T1. Trích xuất"), t("GROBID TEI +<br/>PyMuPDF + OCR<br/>11 Styles + VN Law", "GROBID TEI +<br/>PyMuPDF + OCR<br/>11 chuẩn + Luật VN"), icon_key="tei", fill="#FFFFFF", stroke="#1D4ED8", title_color="#1E3A8A")
-    l2 = d.card(216, 126, 174, 128, t("L2. Merging", "T2. Hợp nhất"), t("Donor URL repair,<br/>deduplication &amp;<br/>style consensus", "Sửa URL, khử trùng<br/>&amp; bỏ phiếu chuẩn<br/>trích dẫn"), icon_key="merge", fill="#FFFFFF", stroke="#1D4ED8", title_color="#1E3A8A")
-    l3 = d.card(410, 126, 174, 128, t("L3. Linking", "T3. Liên kết"), t("Bidirectional 7-tier<br/>cascade (tei_link<br/>.. no_keys)", "Liên kết hai chiều<br/>7 bậc (tei_link<br/>.. no_keys)"), icon_key="link", fill="#FFFFFF", stroke="#1D4ED8", title_color="#1E3A8A")
-    l4 = d.card(604, 126, 174, 128, t("L4. Retrieval", "T4. Truy hồi"), t("Tier 0–3 (15+ APIs),<br/>SSRF Link/Wayback<br/>&amp; Abstract Enrich", "Tầng 0–3 (15+ API),<br/>SSRF/Wayback &amp;<br/>Bổ sung tóm tắt"), icon_key="globe", fill="#FFFFFF", stroke="#047857", title_color="#065F46")
+    l1 = d.card(26, 130, 174, 128, t("L1. Parsing", "T1. Trích xuất"), t("GROBID TEI +<br/>PyMuPDF + OCR<br/>11 Formats + VN Law", "GROBID TEI +<br/>PyMuPDF + OCR<br/>11 chuẩn + Luật VN"), icon_key="tei", fill="#FFFFFF", stroke="#1D4ED8", title_color="#1E3A8A")
+    l2 = d.card(220, 130, 174, 128, t("L2. Merging", "T2. Hợp nhất"), t("Donor URL repair,<br/>TOC filter &amp;<br/>style consensus", "Sửa URL, lọc mục lục<br/>&amp; đồng thuận chuẩn<br/>trích dẫn"), icon_key="merge", fill="#FFFFFF", stroke="#1D4ED8", title_color="#1E3A8A")
+    l3 = d.card(414, 130, 174, 128, t("L3. Linking", "T3. Liên kết"), t("Bidirectional 7-tier<br/>cascade (tei_link<br/>.. no_keys)", "Liên kết hai chiều<br/>7 bậc (tei_link<br/>.. no_keys)"), icon_key="link", fill="#FFFFFF", stroke="#1D4ED8", title_color="#1E3A8A")
+    l4 = d.card(608, 130, 174, 128, t("L4. Retrieval", "T4. Truy hồi"), t("Tier 0–3 (15+ APIs),<br/>SSRF Link/Wayback<br/>&amp; Abstract Enrich", "Tầng 0–3 (15+ API),<br/>SSRF/Wayback &amp;<br/>Bổ sung tóm tắt"), icon_key="globe", fill="#FFFFFF", stroke="#047857", title_color="#065F46")
 
-    d.edge(inp, l1, "", ex=0.25, ey=1, nx=0.5, ny=0, pts=[(290, 80), (109, 80)], stroke="#1E3A8A")
+    # Input enters TOP of Phase I container cleanly at x=406 (zero slicing of "Phase I:" title!)
+    d.edge(inp, p1_box, "", ex=0.5, ey=1, nx=0.5, ny=0, orth=False, stroke="#1E3A8A", sw=1.7)
     d.edge(l1, l2, ex=1, ey=0.5, nx=0, ny=0.5, stroke="#1D4ED8")
     d.edge(l2, l3, ex=1, ey=0.5, nx=0, ny=0.5, stroke="#1D4ED8")
     d.edge(l3, l4, ex=1, ey=0.5, nx=0, ny=0.5, stroke="#047857")
 
-    d.box(12, 316, 776, 218, "", fill="#F0FDF4", stroke="#059669", sw=1.3, dashed=1)
-    d.text(22, 320, 750, 22, t("Phase II: Multimodal Matching, Neuro-Symbolic Verification, Scoring &amp; Delivery (Layers 5–8)", "Giai đoạn II: So khớp đa phương thức, Xác minh Neuro-Symbolic, Chấm điểm &amp; Giao diện (Tầng 5–8)"), font_size=13, font_color="#065F46", bold=True, align="left")
+    p2_box = d.box(16, 326, 780, 224, "", fill="#F0FDF4", stroke="#059669", sw=1.3, dashed=1)
+    d.text(28, 330, 756, 22, t("Phase II: Multimodal Matching, Neuro-Symbolic Verification, Scoring &amp; Delivery (Layers 5–8)", "Giai đoạn II: So khớp đa phương thức, Kiểm chứng Nơ-ron–Ký hiệu &amp; Giao diện (Tầng 5–8)"), font_size=13, font_color="#065F46", bold=True, align="left")
 
-    l5 = d.card(22, 364, 170, 152, t("L5. Matching", "T5. So khớp"), t("RapidFuzz + SBERT<br/>Author 1-to-1 +<br/>Venue + Context<br/>→ <b>MatchFeatures</b>", "RapidFuzz + SBERT<br/>Tác giả 1-1 + Nơi CB<br/>+ Ngữ cảnh<br/>→ <b>MatchFeatures</b>"), icon_key="neural", fill="#FFFFFF", stroke="#059669", title_color="#065F46")
-    l6 = d.card(224, 364, 174, 152, t("L6. Verify", "T6. Xác minh"), t("68 Symbolic Rules<br/>+ 16D MLR (α=0.72)<br/>+ Platt Calibration<br/>→ <b>CitationVerdict</b>", "68 Luật ký hiệu<br/>+ 16D MLR (α=0.72)<br/>+ Hiệu chỉnh Platt<br/>→ <b>Phán quyết</b>"), icon_key="scale", fill="#FFFFFF", stroke="#B45309", title_color="#92400E")
-    l7 = d.card(422, 364, 170, 152, t("L7. CIS &amp; Fix", "T7. CIS &amp; Sửa"), t("5-Component Rubric<br/><b>CIS [0–100]</b> +<br/>BibTeX / DOI<br/>Auto-Repair", "5 thành phần điểm<br/><b>CIS [0–100]</b> +<br/>Tự đề xuất sửa<br/>BibTeX / DOI"), icon_key="cis_clean", fill="#FFFFFF", stroke="#1D4ED8", title_color="#1E3A8A")
-    l8 = d.card(614, 364, 164, 152, t("L8. API &amp; UI", "T8. API &amp; UI"), t("FastAPI REST +<br/>ReadableStream<br/>SSE + React 18<br/>(EN / VI)", "FastAPI REST +<br/>ReadableStream<br/>SSE + React 18<br/>(EN / VI)"), icon_key="fastapi", fill="#FFFFFF", stroke="#0E7490", title_color="#0E7490")
+    l5 = d.card(26, 376, 168, 156, t("L5. Matching", "T5. So khớp"), t("RapidFuzz + SBERT<br/>Author 1-1 + Venue<br/>+ Context &amp; VI↔EN<br/>→ <b>MatchFeatures</b>", "RapidFuzz + SBERT<br/>Tác giả + Nơi công bố<br/>+ Ngữ cảnh &amp; VI↔EN<br/>→ <b>MatchFeatures</b>"), icon_key="neural", fill="#FFFFFF", stroke="#059669", title_color="#065F46")
+    l6 = d.card(236, 376, 174, 156, t("L6. Verify", "T6. Kiểm chứng"), t("68 Symbolic Rules<br/>+ 16D MLR (α=0.72)<br/>+ Platt Calibration<br/>→ <b>CitationVerdict</b>", "68 Luật ký hiệu<br/>+ 16D MLR (α=0.72)<br/>+ Hiệu chỉnh Platt<br/>→ <b>Phán quyết</b>"), icon_key="scale", fill="#FFFFFF", stroke="#B45309", title_color="#92400E")
+    l7 = d.card(436, 376, 166, 156, t("L7. CIS &amp; Fix", "T7. CIS &amp; Sửa"), t("5-Component Rubric<br/><b>CIS [0–100]</b> +<br/>BibTeX / DOCX<br/>Auto-Repair", "5 thành phần điểm<br/><b>CIS [0–100]</b> +<br/>Tự chuẩn hóa<br/>BibTeX / DOCX"), icon_key="cis_clean", fill="#FFFFFF", stroke="#1D4ED8", title_color="#1E3A8A")
+    l8 = d.card(626, 376, 156, 156, t("L8. API &amp; UI", "T8. API &amp; UI"), t("FastAPI REST +<br/>ReadableStream<br/>SSE + React 18<br/>(EN / VI)", "FastAPI REST +<br/>ReadableStream<br/>SSE + React 18<br/>(EN / VI)"), icon_key="fastapi", fill="#FFFFFF", stroke="#0E7490", title_color="#0E7490")
 
+    # L4 -> Phase II routed cleanly along far-left corridor (x=6) into left edge of L5 — ZERO text slicing!
     d.edge(
         l4,
         l5,
         t("SourceResult (candidates + abstracts)", "Kết quả nguồn (ứng viên + tóm tắt)"),
         ex=0.5,
         ey=1,
-        nx=0.5,
-        ny=0,
-        pts=[(691, 292), (107, 292)],
+        nx=0,
+        ny=0.5,
+        pts=[(695, 298), (6, 298), (6, 454)],
         stroke="#047857",
         sw=1.7,
         oy=-14,
         bold=True,
         font_color="#065F46",
     )
-    d.edge(l5, l6, "", ex=1, ey=0.5, nx=0, ny=0.5, stroke="#059669", sw=1.6)
-    # Crisp pill sitting cleanly ABOVE the L5->L6 gap with zero border collision!
-    d.box(156, 344, 108, 22, "<b>MatchFeatures</b>", fill="#ECFDF5", stroke="#059669", sw=1.0, font_size=13, font_color="#065F46", arc=6)
+    # Clean compact label x ∈ ℝ¹⁶ fitting 100% inside the 42px L5->L6 gap (zero card overlap!)
+    d.edge(l5, l6, "x", ex=1, ey=0.5, nx=0, ny=0.5, stroke="#059669", sw=1.7, oy=-14, bold=True, font_color="#065F46")
     d.edge(l6, l7, "", ex=1, ey=0.5, nx=0, ny=0.5, stroke="#B45309")
     d.edge(l7, l8, "", ex=1, ey=0.5, nx=0, ny=0.5, stroke="#1D4ED8")
 
     out = d.card(
-        130,
-        566,
-        540,
+        120,
+        584,
+        572,
         68,
-        t("Auditable Verification Report &amp; Classroom Analytics", "Báo cáo xác minh truy vết được &amp; Phân tích lớp học"),
-        t("CIS [0–100] · 5-Class Verdicts · Rule Trace · PDF / JSON / BibTeX Exports", "CIS [0–100] · 5 nhãn phán quyết · Vết luật · Xuất PDF / JSON / BibTeX"),
+        t("Auditable Verification Report &amp; Classroom Analytics", "Báo cáo kiểm chứng truy vết được &amp; Phân tích lớp học"),
+        t("CIS [0–100] · 5-Class Verdicts · Rule Trace · Healed DOCX / PDF / JSON / BibTeX Exports", "CIS [0–100] · 5 nhãn phán quyết · Vết luật · Xuất DOCX đã sửa / PDF / JSON / BibTeX"),
         icon_key="shield_ok",
         fill="#DCFCE7",
         stroke="#047857",
         sw=1.6,
         title_color="#065F46",
     )
-    d.edge(l8, out, "", ex=0.5, ey=1, nx=1, ny=0.5, pts=[(696, 600)], stroke="#047857", sw=1.6)
+    d.edge(l8, out, "", ex=0.5, ey=1, nx=1, ny=0.5, pts=[(704, 618)], stroke="#047857", sw=1.6)
     return d
 
 
 def build_fig4_2(vn: bool) -> DiagramBuilder:
-    """Layer 1 & 2 Ingestion & Extraction (11 CitationFormat subclasses separate from VN Legal Helper; real DOI; Ho/Hồ)."""
-    d = DiagramBuilder("p42", "fig4_2_extraction", 780, 560)
+    """Layer 1 & 2 Ingestion & Extraction — EXACT 11 CitationFormat Protocol implementations from patterns/*.py + VN Legal."""
+    d = DiagramBuilder("p42", "fig4_2_extraction", 780, 566)
     t = lambda en, vi: vi if vn else en
 
-    in_pdf = d.card(80, 16, 260, 58, t("Academic PDF Input", "Tệp PDF học thuật"), t("Digital or Scanned Manuscript", "Bản thảo số hoặc bản quét OCR"), icon_key="doc_pdf", fill="#EFF6FF", stroke="#1E3A8A", title_color="#1E3A8A")
-    in_str = d.card(440, 16, 260, 58, t("Structured Inputs", "Đầu vào có cấu trúc"), "DOCX · BibTeX (.bib) · RIS", icon_key="multifile", fill="#F5F3FF", stroke="#6D28D9", title_color="#5B21B6")
+    in_pdf = d.card(80, 14, 260, 58, t("Academic PDF Input", "Tệp PDF học thuật"), t("Digital or Scanned Manuscript", "Bản thảo số hoặc bản quét OCR"), icon_key="doc_pdf", fill="#EFF6FF", stroke="#1E3A8A", title_color="#1E3A8A")
+    in_str = d.card(440, 14, 260, 58, t("Structured Inputs", "Đầu vào có cấu trúc"), "DOCX · BibTeX (.bib) · RIS", icon_key="multifile", fill="#F5F3FF", stroke="#6D28D9", title_color="#5B21B6")
 
-    # Three Parallel Extractors
-    p1 = d.card(18, 118, 236, 98, "GROBID 0.9.1-crf (TEI)", t("Primary PDF parser; preserves<br/>columns, XML &lt;ref target&gt;", "Bộ phân tích PDF chính;<br/>giữ cột &amp; thẻ &lt;ref target&gt;"), icon_key="tei", fill="#ECFDF5", stroke="#047857", title_color="#065F46")
-    p2 = d.card(272, 118, 236, 98, t("PyMuPDF + Tesseract OCR", "PyMuPDF + OCR Tesseract"), t("Fast native text, donor URLs<br/>&amp; scanned PDF OCR fallback", "Trích văn bản nhanh, sửa URL<br/>&amp; OCR cho trang PDF quét"), icon_key="pymupdf", fill="#FFFBEB", stroke="#B45309", title_color="#92400E")
-    p3 = d.card(526, 118, 236, 98, t("Native Format Readers", "Bộ đọc định dạng gốc"), t("python-docx, BibTeX &amp; RIS<br/>lossless field extraction", "python-docx, BibTeX &amp; RIS<br/>trích trường không mất mát"), icon_key="multifile", fill="#F5F3FF", stroke="#6D28D9", title_color="#5B21B6")
+    p1 = d.card(18, 116, 236, 98, "GROBID 0.9.1-crf (TEI)", t("Primary PDF parser; preserves<br/>columns, XML &lt;ref target&gt;", "Bộ phân tích PDF chính;<br/>giữ cột &amp; thẻ &lt;ref target&gt;"), icon_key="tei", fill="#ECFDF5", stroke="#047857", title_color="#065F46")
+    p2 = d.card(272, 116, 236, 98, t("PyMuPDF + Tesseract OCR", "PyMuPDF + OCR Tesseract"), t("Fast native text, donor URLs<br/>&amp; scanned PDF OCR fallback", "Trích văn bản nhanh, sửa URL<br/>&amp; OCR cho trang PDF quét"), icon_key="pymupdf", fill="#FFFBEB", stroke="#B45309", title_color="#92400E")
+    p3 = d.card(526, 116, 236, 98, t("Native Format Readers", "Bộ đọc định dạng gốc"), t("python-docx, BibTeX &amp; RIS<br/>lossless field extraction", "python-docx, BibTeX &amp; RIS<br/>trích trường không mất mát"), icon_key="multifile", fill="#F5F3FF", stroke="#6D28D9", title_color="#5B21B6")
 
-    d.edge(in_pdf, p1, "", ex=0.3, ey=1, nx=0.5, ny=0, pts=[(158, 94), (136, 94)], stroke="#047857")
-    d.edge(in_pdf, p2, "", ex=0.75, ey=1, nx=0.5, ny=0, pts=[(275, 94), (390, 94)], stroke="#B45309")
-    d.edge(in_str, p3, "", ex=0.5, ey=1, nx=0.5, ny=0, pts=[(570, 94), (644, 94)], stroke="#6D28D9")
+    d.edge(in_pdf, p1, "", ex=0.3, ey=1, nx=0.5, ny=0, pts=[(158, 92), (136, 92)], stroke="#047857")
+    d.edge(in_pdf, p2, "", ex=0.75, ey=1, nx=0.5, ny=0, pts=[(275, 92), (390, 92)], stroke="#B45309")
+    d.edge(in_str, p3, "", ex=0.5, ey=1, nx=0.5, ny=0, pts=[(570, 92), (644, 92)], stroke="#6D28D9")
 
-    # Hybrid Merger Bar
     mrg = d.card(
-        76,
-        258,
-        628,
+        68,
+        256,
+        644,
         74,
-        t("Hybrid DocumentParser Merger &amp; Normalization", "Bộ hợp nhất lai DocumentParser &amp; Chuẩn hóa"),
-        t("Merges GROBID TEI + regex donors · Repairs bled/wrapped DOIs (e.g., doi: 10.1109/CVPR.2016.90)<br/>Filters style placeholders · Preserves VN diacritics (e.g., Ho / Hồ)", "Hợp nhất GROBID TEI + regex · Sửa DOI/URL ngắt dòng (vd: doi: 10.1109/CVPR.2016.90)<br/>Lọc mẫu giả · Bảo toàn dấu tiếng Việt (vd: Ho / Hồ)"),
+        t("Hybrid DocumentParser Merger, TOC Filter &amp; Normalization", "Bộ hợp nhất lai DocumentParser, Lọc mục lục &amp; Chuẩn hóa"),
+        t("Merges GROBID TEI + regex donors · Discards TOC dot-leaders · Repairs wrapped DOIs<br/>Normalizes VNI/TCVN3 → NFC Unicode · Preserves VN diacritics (e.g., Ho / Hồ)", "Hợp nhất GROBID TEI + regex · Lọc mục lục dấu chấm · Sửa DOI/URL ngắt dòng<br/>Chuẩn hóa VNI/TCVN3 → NFC Unicode · Bảo toàn dấu tiếng Việt (vd: Ho / Hồ)"),
         icon_key="merge",
         fill="#EFF6FF",
         stroke="#1E3A8A",
         sw=1.6,
         title_color="#1E3A8A",
     )
-    d.edge(p1, mrg, "", ex=0.5, ey=1, nx=0.15, ny=0, pts=[(136, 238), (170, 238)], stroke="#047857")
+    d.edge(p1, mrg, "", ex=0.5, ey=1, nx=0.15, ny=0, pts=[(136, 236), (165, 236)], stroke="#047857")
     d.edge(p2, mrg, "", ex=0.5, ey=1, nx=0.5, ny=0, orth=False, stroke="#B45309")
-    d.edge(p3, mrg, "", ex=0.5, ey=1, nx=0.85, ny=0, pts=[(644, 238), (610, 238)], stroke="#6D28D9")
+    d.edge(p3, mrg, "", ex=0.5, ey=1, nx=0.85, ny=0, pts=[(644, 236), (615, 236)], stroke="#6D28D9")
 
-    # Explicitly SEPARATE: 11 CitationFormat Subclasses vs VN Legal Helper!
+    # EXACT 11 CitationFormat Protocol implementations matching Table 4.2 & patterns/*.py!
     c11 = d.card(
         18,
-        374,
-        420,
-        104,
-        t("11 CitationFormat Subclasses (Priority 100 → 70)", "11 lớp con CitationFormat (Ưu tiên 100 → 70)"),
-        t("IEEE (100), Nature (95), ACM (88), Vancouver (85), AMA (84),<br/>APA (80), MLA (78), Chicago (75), Turabian (73),<br/>ISO 690 (72), Harvard (70) — Dominant style voting", "IEEE (100), Nature (95), ACM (88), Vancouver (85), AMA (84),<br/>APA (80), MLA (78), Chicago (75), Turabian (73),<br/>ISO 690 (72), Harvard (70) — Bỏ phiếu chuẩn chủ đạo"),
+        372,
+        430,
+        106,
+        t("11 CitationFormat Implementations (Priority 100 → 70)", "11 triển khai giao thức CitationFormat (Ưu tiên 100 → 70)"),
+        t("APA (100), IEEE (90), ACM (88), Harvard (85), Vancouver (80),<br/>Nature (78), CSE (77), ACS (76), AMA (75), Chicago (70),<br/>MLA (70) — Dominant StyleDetector voting", "APA (100), IEEE (90), ACM (88), Harvard (85), Vancouver (80),<br/>Nature (78), CSE (77), ACS (76), AMA (75), Chicago (70),<br/>MLA (70) — Bỏ phiếu chuẩn chủ đạo StyleDetector"),
         icon_key="python",
         fill="#FFFFFF",
         stroke="#1D4ED8",
@@ -1131,60 +1207,57 @@ def build_fig4_2(vn: bool) -> DiagramBuilder:
         title_color="#1E3A8A",
     )
     vnl = d.card(
-        462,
-        374,
-        300,
-        104,
+        466,
+        372,
+        296,
+        106,
         t("VN Legal Helper (Dedicated)", "Bộ tách văn bản Luật VN (Riêng)"),
-        t("Detects Luật, Nghị định, Thông tư,<br/>Quyết định + statutory codes<br/>(separate from 11 style classes)", "Nhận diện Luật, Nghị định, Thông tư,<br/>Quyết định + số hiệu văn bản<br/>(tách biệt khỏi 11 lớp chuẩn)"),
+        t("parse_vn_legal_reference():<br/>Luật, Nghị định, Thông tư,<br/>Quyết định + issuing authority", "parse_vn_legal_reference():<br/>Luật, Nghị định, Thông tư,<br/>Quyết định + cơ quan ban hành"),
         icon_key="scale",
         fill="#FEF3C7",
         stroke="#B45309",
         sw=1.5,
         title_color="#92400E",
     )
-    d.edge(mrg, c11, "", ex=0.3, ey=1, nx=0.5, ny=0, pts=[(264, 352), (228, 352)], stroke="#1D4ED8")
-    d.edge(mrg, vnl, "", ex=0.75, ey=1, nx=0.5, ny=0, pts=[(547, 352), (612, 352)], stroke="#B45309")
+    d.edge(mrg, c11, "", ex=0.3, ey=1, nx=0.5, ny=0, pts=[(261, 350), (233, 350)], stroke="#1D4ED8")
+    d.edge(mrg, vnl, "", ex=0.75, ey=1, nx=0.5, ny=0, pts=[(551, 350), (614, 350)], stroke="#B45309")
 
-    # Output bar
-    out = d.box(100, 504, 580, 42, t("<b>Output:</b> Structured Inline Citations[] + ReferenceList[] + Detected Style → Layer 3 Linking", "<b>Đầu ra:</b> Trích dẫn nội văn[] + Danh mục TLTK[] + Chuẩn nhận diện → Tầng 3 Liên kết"), fill="#DCFCE7", stroke="#047857", sw=1.5, font_size=13)
-    d.edge(c11, out, "", ex=0.5, ey=1, nx=0.35, ny=0, pts=[(228, 490), (303, 490)], stroke="#047857")
-    d.edge(vnl, out, "", ex=0.5, ey=1, nx=0.75, ny=0, pts=[(612, 490), (535, 490)], stroke="#047857")
+    out = d.box(96, 506, 588, 44, t("<b>Output:</b> Structured Inline Citations[] + ReferenceList[] + StyleProfile → Layer 3 Linking", "<b>Đầu ra:</b> Trích dẫn nội văn[] + Danh mục tham khảo[] + StyleProfile → Tầng 3 Liên kết"), fill="#DCFCE7", stroke="#047857", sw=1.5, font_size=13)
+    d.edge(c11, out, "", ex=0.5, ey=1, nx=0.35, ny=0, pts=[(233, 492), (302, 492)], stroke="#047857")
+    d.edge(vnl, out, "", ex=0.5, ey=1, nx=0.75, ny=0, pts=[(614, 492), (537, 492)], stroke="#047857")
     return d
 
 
 def build_fig4_3(vn: bool) -> DiagramBuilder:
-    """Bidirectional Citation Linking (0 crossings, exact live 7-method cascade + manual_review, 1B connected)."""
-    d = DiagramBuilder("p43", "fig4_3_linking", 780, 650)
+    """Bidirectional Citation Linking: exact live Jaccard+difflib, POST override route, collector rail from Tiers 1-6, all 8 statuses."""
+    d = DiagramBuilder("p43", "fig4_3_linking", 800, 678)
     t = lambda en, vi: vi if vn else en
 
-    # Dual top inputs (BOTH 1A and 1B connected explicitly into Index Spine!)
-    i1a = d.card(36, 14, 326, 62, t("1A. Inline Body Markers", "1A. Ký hiệu trích dẫn nội văn"), t("[1], [1–3], [14a, 14b], (Author, 2020a)", "[1], [1–3], [14a, 14b], (Tác giả, 2020a)"), icon_key="doc_pdf", fill="#EFF6FF", stroke="#1E3A8A", title_color="#1E3A8A")
-    i1b = d.card(418, 14, 326, 62, t("1B. Bibliography Entries", "1B. Mục danh mục TLTK"), t("Structured ReferenceList[] + TEI xml:id", "Danh mục TLTK có cấu trúc + TEI xml:id"), icon_key="multifile", fill="#ECFDF5", stroke="#047857", title_color="#065F46")
+    i1a = d.card(36, 12, 336, 60, t("1A. Inline Body Markers", "1A. Ký hiệu trích dẫn nội văn"), t("[1], [1–3], [14a, 14b], (Author, 2020a)", "[1], [1–3], [14a, 14b], (Tác giả, 2020a)"), icon_key="doc_pdf", fill="#EFF6FF", stroke="#1E3A8A", title_color="#1E3A8A")
+    i1b = d.card(428, 12, 336, 60, t("1B. Bibliography Entries", "1B. Mục danh mục tham khảo"), t("Structured ReferenceList[] + TEI xml:id", "Danh mục tham khảo có cấu trúc + TEI xml:id"), icon_key="multifile", fill="#ECFDF5", stroke="#047857", title_color="#065F46")
 
-    spine = d.box(150, 108, 480, 42, t("<b>Dual-Index Spine</b> (TEI ID · DOI · arXiv · Index · Surname+Year)", "<b>Trục chỉ mục kép</b> (TEI ID · DOI · arXiv · Chỉ số · Họ+Năm)"), fill="#DBEAFE", stroke="#1D4ED8", sw=1.6, font_size=13)
-    d.edge(i1a, spine, "", ex=0.5, ey=1, nx=0.25, ny=0, pts=[(199, 92), (270, 92)], stroke="#1E3A8A")
-    d.edge(i1b, spine, "", ex=0.5, ey=1, nx=0.75, ny=0, pts=[(581, 92), (510, 92)], stroke="#047857")
+    spine = d.box(156, 102, 488, 42, t("<b>Dual-Index Spine</b> (TEI ID · DOI · arXiv · Index · Surname+Year)", "<b>Trục chỉ mục kép</b> (TEI ID · DOI · arXiv · Chỉ số · Họ+Năm)"), fill="#DBEAFE", stroke="#1D4ED8", sw=1.6, font_size=13)
+    d.edge(i1a, spine, "", ex=0.5, ey=1, nx=0.25, ny=0, pts=[(204, 88), (278, 88)], stroke="#1E3A8A")
+    d.edge(i1b, spine, "", ex=0.5, ey=1, nx=0.75, ny=0, pts=[(596, 88), (522, 88)], stroke="#047857")
 
-    # 7-Method Cascade (Left-center vertical stack, exact live order & weights!)
     steps = [
         ("1. tei_link", "0.98", t("GROBID &lt;ref target='#bN'&gt; XML pointer", "Con trỏ XML &lt;ref target='#bN'&gt; GROBID"), "#ECFDF5", "#047857"),
         ("2. doi_exact", "0.95", t("Normalized DOI equality match", "Khớp chính xác DOI đã chuẩn hóa"), "#ECFDF5", "#047857"),
         ("3. arxiv_exact", "0.95", t("Live normalized arXiv identifier match", "Khớp trực tiếp mã arXiv đã chuẩn hóa"), "#ECFDF5", "#047857"),
         ("4. numeric_index", "0.90", t("[1], ranges [1–3], composite [14a, 14b]", "[1], dải [1–3], trích dẫn ghép [14a, 14b]"), "#EFF6FF", "#1D4ED8"),
         ("5. author_year", "0.90", t("Normalized surname + year + suffix (2020a)", "Họ chuẩn hóa + năm + hậu tố (2020a)"), "#EFF6FF", "#1D4ED8"),
-        ("6. fuzzy", "0.65", t("RapidFuzz partial title / author fallback", "Dự phòng khớp mờ RapidFuzz tiêu đề/tác giả"), "#FFFBEB", "#B45309"),
-        ("7. no_keys", "0.00", t("No key match → orphan / uncited diagnostic", "Không khớp khóa → mồ côi / chưa trích dẫn"), "#FEF2F2", "#DC2626"),
+        ("6. fuzzy", "0.65", t("Word-set Jaccard + difflib fallback (τ=0.80)", "Dự phòng Jaccard + difflib (ngưỡng τ=0.80)"), "#FFFBEB", "#B45309"),
+        ("7. no_keys", "0.00", t("No key match → orphan / unresolved diagnostic", "Không khớp khóa → mồ côi / chưa xác định"), "#FEF2F2", "#DC2626"),
     ]
     prev_id = spine
     step_ids = []
-    y0 = 172
+    y0 = 166
     for idx, (mname, wt, desc, fl, st) in enumerate(steps):
         sy = y0 + idx * 52
         sid = d.box(
-            36,
+            44,
             sy,
-            496,
+            504,
             40,
             f"<b>{mname}</b> (w={wt})  —  {desc}",
             fill=fl,
@@ -1196,19 +1269,25 @@ def build_fig4_3(vn: bool) -> DiagramBuilder:
         )
         step_ids.append(sid)
         if idx == 0:
-            d.edge(spine, sid, "", ex=0.35, ey=1, nx=0.5, ny=0, pts=[(318, 160), (284, 160)], stroke="#1D4ED8")
+            d.edge(spine, sid, "", ex=0.35, ey=1, nx=0.5, ny=0, pts=[(327, 154), (296, 154)], stroke="#1D4ED8")
         else:
             d.edge(prev_id, sid, "", ex=0.5, ey=1, nx=0.5, ny=0, orth=False, stroke="#64748B", sw=1.2)
         prev_id = sid
 
-    # Separate side callout: manual_review (1.00) via Verdicts API
+    # Left green short-circuit collector rail connecting ALL Tiers 1–6 into Matched Links!
+    for idx in range(6):
+        sy_mid = y0 + idx * 52 + 20
+        d.edge(None, None, "", src_pt=(44, sy_mid), dst_pt=(18, sy_mid), orth=False, end_arrow="none", stroke="#047857", sw=1.3)
+    d.edge(None, None, "", src_pt=(18, y0 + 20), dst_pt=(18, 558), orth=False, end_arrow="none", stroke="#047857", sw=1.5)
+
+    # Separate side callout: manual_review (1.00) with exact live POST route!
     man = d.card(
-        562,
-        244,
-        198,
-        122,
+        572,
+        242,
+        212,
+        134,
         "manual_review\n(w = 1.00)",
-        t("Instructor override<br/>persisted via<br/>PATCH /verdicts/{id}", "Ghi đè giảng viên<br/>lưu bền vững qua<br/>PATCH /verdicts/{id}"),
+        t("Instructor override via<br/>POST /api/essays/{id}/<br/>verdicts/{vid}/override", "Ghi đè giảng viên qua<br/>POST /api/essays/{id}/<br/>verdicts/{vid}/override"),
         icon_key="teacher",
         fill="#FEF9C3",
         stroke="#CA8A04",
@@ -1216,31 +1295,30 @@ def build_fig4_3(vn: bool) -> DiagramBuilder:
         title_color="#854D0E",
     )
 
-    # Bottom 3 Outputs
-    o_ok = d.box(36, 566, 224, 68, t("<b>Matched Links</b><br/>Inline ↔ Reference<br/>(feeds Context Align)", "<b>Liên kết khớp</b><br/>Nội văn ↔ TLTK<br/>(cấp cho So khớp ngữ cảnh)"), fill="#DCFCE7", stroke="#047857", sw=1.5, font_size=13)
-    o_or = d.box(278, 566, 224, 68, t("<b>Orphan Citations</b><br/>Cited in body but<br/>absent from bibliography", "<b>Trích dẫn mồ côi</b><br/>Có trong nội văn nhưng<br/>thiếu ở danh mục TLTK"), fill="#FEF3C7", stroke="#B45309", sw=1.5, font_size=13)
-    o_un = d.box(520, 566, 240, 68, t("<b>Uncited References</b><br/>In bibliography but<br/>0 body citations → s_link", "<b>TLTK chưa trích dẫn</b><br/>Có ở danh mục nhưng<br/>0 lần gọi → tính s_link"), fill="#FEE2E2", stroke="#DC2626", sw=1.5, font_size=13)
+    # Bottom 3 Diagnostic Buckets explicitly covering ALL 8 CitationMappingStatus states!
+    o_ok = d.box(24, 574, 240, 88, t("<b>Resolved Links (3 states)</b><br/>matched · manual_review<br/>ambiguous_mapping (0.50)", "<b>Liên kết khớp (3 trạng thái)</b><br/>matched · manual_review<br/>ambiguous_mapping (0.50)"), fill="#DCFCE7", stroke="#047857", sw=1.5, font_size=13)
+    o_or = d.box(280, 574, 240, 88, t("<b>Body-Side Faults (3 states)</b><br/>missing_reference · unresolved<br/>in_text_mismatch", "<b>Lỗi nội văn (3 trạng thái)</b><br/>missing_reference · unresolved<br/>in_text_mismatch"), fill="#FEF3C7", stroke="#B45309", sw=1.5, font_size=13)
+    o_un = d.box(536, 574, 248, 88, t("<b>Bib-Side Faults (2 states)</b><br/>uncited_reference<br/>duplicate_reference → s_link", "<b>Lỗi danh mục (2 trạng thái)</b><br/>uncited_reference<br/>duplicate_reference → s_link"), fill="#FEE2E2", stroke="#DC2626", sw=1.5, font_size=13)
 
-    d.edge(step_ids[5], o_ok, "", ex=0.0, ey=0.5, nx=0.1, ny=0, pts=[(16, 452), (16, 548), (58, 548)], stroke="#047857", sw=1.5)
-    d.edge(step_ids[6], o_or, "", ex=0.5, ey=1, nx=0.5, ny=0, pts=[(284, 544), (390, 544)], stroke="#B45309", sw=1.5)
-    d.edge(step_ids[6], o_un, "", ex=0.85, ey=1, nx=0.5, ny=0, pts=[(458, 536), (640, 536)], stroke="#DC2626", sw=1.5)
-    d.edge(man, o_ok, "", ex=0.5, ey=1, nx=0.85, ny=0, pts=[(661, 550), (226, 550)], dashed=1, stroke="#CA8A04", sw=1.4)
+    d.edge(None, o_ok, "", src_pt=(18, 558), nx=0.22, ny=0, pts=[(77, 558)], stroke="#047857", sw=1.6)
+    d.edge(step_ids[6], o_or, "", ex=0.5, ey=1, nx=0.5, ny=0, pts=[(296, 548), (400, 548)], stroke="#B45309", sw=1.5)
+    d.edge(step_ids[6], o_un, "", ex=0.85, ey=1, nx=0.5, ny=0, pts=[(472, 540), (660, 540)], stroke="#DC2626", sw=1.5)
+    d.edge(man, o_ok, "", ex=0.5, ey=1, nx=0.85, ny=0, pts=[(678, 558), (228, 558)], dashed=1, stroke="#CA8A04", sw=1.4)
     return d
 
 
 def build_fig4_4(vn: bool) -> DiagramBuilder:
-    """4-Tier Retrieval Waterfall (ACL Anthology in Tier 0, zero duplicate PyPI, all icons labeled, Pinned-IP SSRF rail)."""
-    d = DiagramBuilder("p44", "fig4_4_retrieval", 800, 690)
+    """4-Tier Retrieval Waterfall: removes '(All Labeled)' leak, Sub-100 ms (87.6 ms mean), connectors into Output bar."""
+    d = DiagramBuilder("p44", "fig4_4_retrieval", 804, 706)
     t = lambda en, vi: vi if vn else en
 
-    # Pre-Screen + Cache
     pre = d.card(
         18,
         12,
-        526,
+        530,
         62,
         t("Pre-Screen Router &amp; SQLite citation_cache (doi:/arxiv:/url:)", "Bộ định tuyến &amp; Bộ đệm SQLite citation_cache (doi:/arxiv:/url:)"),
-        t("Cache hit (&lt;5 ms) short-circuits WAN · Extracts DOI, arXiv, URL, Title+Author keys", "Trúng đệm (&lt;5 ms) bỏ qua WAN · Tách khóa DOI, arXiv, URL, Tiêu đề+Tác giả"),
+        t("Cache hit (&lt;5 ms) skips WAN · Extracts DOI, arXiv, URL &amp; title keys", "Trúng đệm (&lt;5 ms) bỏ qua WAN · Tách khóa DOI, arXiv, URL &amp; tiêu đề"),
         icon_key="sqlite",
         fill="#EFF6FF",
         stroke="#1E3A8A",
@@ -1248,40 +1326,36 @@ def build_fig4_4(vn: bool) -> DiagramBuilder:
         title_color="#1E3A8A",
     )
 
-    # Tier 0 (Offline, ACL Anthology HERE!)
-    t0 = d.box(18, 96, 526, 108, "", fill="#ECFDF5", stroke="#047857", sw=1.5)
-    d.text(28, 100, 506, 24, t("Tier 0: Sub-25 ms Offline Index (Zero Network)", "Tầng 0: Chỉ mục ngoại tuyến &lt;25 ms (Không cần mạng)"), font_size=14, font_color="#065F46", bold=True, align="left")
-    d.card(30, 128, 256, 66, "local_papers.db (FTS5)", t("129,137 records · 98.42% ACL", "129,137 bài · 98.42% ACL"), icon_key="acl", fill="#FFFFFF", stroke="#047857", title_color="#065F46")
-    d.card(298, 128, 234, 66, "_KNOWN_PAPERS (RAM)", t("101 classics · &lt;1 ms", "101 bài kinh điển · &lt;1 ms"), icon_key="python", fill="#FFFFFF", stroke="#047857", title_color="#065F46")
+    t0 = d.box(18, 96, 530, 108, "", fill="#ECFDF5", stroke="#047857", sw=1.5)
+    d.text(28, 100, 510, 24, t("Tier 0: Sub-100 ms Offline Index (87.6 ms mean · Zero Network)", "Tầng 0: Chỉ mục ngoại tuyến &lt;100 ms (TB 87.6 ms · Không cần mạng)"), font_size=14, font_color="#065F46", bold=True, align="left")
+    d.card(30, 128, 258, 66, "local_papers.db (FTS5)", t("129,137 records · 98.42% ACL", "129,137 bài · 98.42% ACL"), icon_key="acl", fill="#FFFFFF", stroke="#047857", title_color="#065F46")
+    d.card(300, 128, 236, 66, "_KNOWN_PAPERS (RAM)", t("101 classics · &lt;1 ms", "101 bài kinh điển · &lt;1 ms"), icon_key="python", fill="#FFFFFF", stroke="#047857", title_color="#065F46")
 
-    # Tier 1: Core Parallel Scholarly APIs (4 labeled icon badges)
-    t1 = d.box(18, 226, 526, 114, "", fill="#EFF6FF", stroke="#1D4ED8", sw=1.5)
-    d.text(28, 230, 506, 24, t("Tier 1: Core Parallel Scholarly Registries (Circuit-Breaker Guarded)", "Tầng 1: 4 API học thuật lõi song song (Có bộ ngắt mạch)"), font_size=14, font_color="#1E3A8A", bold=True, align="left")
+    t1 = d.box(18, 226, 530, 114, "", fill="#EFF6FF", stroke="#1D4ED8", sw=1.5)
+    d.text(28, 230, 510, 24, t("Tier 1: Core Parallel Scholarly Registries (Circuit-Breaker Guarded)", "Tầng 1: 4 API học thuật lõi song song (Có bộ ngắt mạch)"), font_size=14, font_color="#1E3A8A", bold=True, align="left")
     t1_items = [("crossref", "Crossref"), ("openalex", "OpenAlex"), ("datacite", "DataCite"), ("doi", "DOI RA")]
     for idx, (ik, lbl) in enumerate(t1_items):
-        bx = 30 + idx * 126
+        bx = 30 + idx * 127
         d.box(bx, 260, 116, 68, "", fill="#FFFFFF", stroke="#93C5FD", sw=1.2)
         d.icon(ik, bx + 44, 266, 28, 28)
         d.text(bx + 2, 298, 112, 26, lbl, font_size=13, bold=True)
 
-    # Tier 2 + Tier 2.5 Specialist & Preprint Failover (NO duplicate PyPI!)
-    t2 = d.box(18, 362, 526, 198, "", fill="#FFFBEB", stroke="#B45309", sw=1.5)
-    d.text(28, 366, 506, 24, t("Tier 2: Specialist Failover &amp; Tier 2.5 Preprints (All Labeled)", "Tầng 2: Nguồn chuyên ngành &amp; Tầng 2.5 Bản thảo tiền in"), font_size=14, font_color="#92400E", bold=True, align="left")
-    t2_row1 = [("dblp", "DBLP"), ("epmc", "EuroPMC"), ("doaj", "DOAJ"), ("hal", "HAL")]
+    t2 = d.box(18, 362, 530, 196, "", fill="#FFFBEB", stroke="#B45309", sw=1.5)
+    d.text(28, 366, 510, 24, t("Tier 2: Domain-Specialist Registries &amp; Stage 2.5 Preprints", "Tầng 2: Cơ sở dữ liệu chuyên ngành &amp; Pha 2.5 Tiền ấn phẩm"), font_size=14, font_color="#92400E", bold=True, align="left")
+    t2_row1 = [("dblp", "DBLP"), ("epmc", "EuroPMC"), ("doaj", "DOAJ"), ("hal", "HAL/OpenAIRE")]
     t2_row2 = [("openlib", "OpenLib"), ("pypi", "PyPI"), ("hf", "HF Hub"), ("arxiv", "arXiv (2.5)")]
     for r_i, row_items in enumerate((t2_row1, t2_row2)):
         by = 396 + r_i * 78
         for idx, (ik, lbl) in enumerate(row_items):
-            bx = 30 + idx * 126
+            bx = 30 + idx * 127
             d.box(bx, by, 116, 68, "", fill="#FFFFFF", stroke="#FCD34D", sw=1.2)
             d.icon(ik, bx + 44, by + 6, 28, 28)
             d.text(bx + 2, by + 38, 112, 26, lbl, font_size=13, bold=True)
 
-    # Tier 3: Optional Opt-In Web Search
     t3 = d.box(
         18,
-        582,
-        526,
+        580,
+        530,
         44,
         t("<b>Tier 3 (Optional Opt-In):</b> Serper / SerpAPI — Disabled by default; API-key gated", "<b>Tầng 3 (Tùy chọn bật thêm):</b> Serper / SerpAPI — Tắt mặc định; cần khóa API"),
         fill="#F1F5F9",
@@ -1293,54 +1367,51 @@ def build_fig4_4(vn: bool) -> DiagramBuilder:
         extra="spacingLeft=10;",
     )
 
-    # Right Parallel Rail: Pinned-IP SSRF Link Validation & Abstract Enricher
-    rail = d.box(574, 12, 212, 614, "", fill="#FEF2F2", stroke="#DC2626", sw=1.5)
-    d.text(582, 18, 196, 44, t("Parallel Egress Rail\n(Pinned-IP SSRF)", "Luồng song song\n(Chặn SSRF ghim IP)"), font_size=14, font_color="#991B1B", bold=True)
-    d.icon("ssrf_shield", 666, 68, 30, 30)
+    rail = d.box(578, 12, 212, 612, "", fill="#FEF2F2", stroke="#DC2626", sw=1.5)
+    d.text(586, 18, 196, 44, t("Parallel Egress Rail\n(Pinned-IP SSRF)", "Luồng song song\n(Chặn SSRF ghim IP)"), font_size=14, font_color="#991B1B", bold=True)
+    d.icon("ssrf_shield", 670, 68, 30, 30)
 
-    r1 = d.card(586, 112, 188, 108, "LinkValidator", t("HEAD/GET liveness,<br/>RFC 2606 fake URL,<br/>redirect blocks", "Kiểm tra URL sống,<br/>RFC 2606 URL giả,<br/>chặn chuyển hướng"), icon_key="tls", fill="#FFFFFF", stroke="#DC2626", title_color="#991B1B")
-    r2 = d.card(586, 238, 188, 108, "HTML Meta", t("Scrapes &lt;title&gt; &amp;<br/>citation_title tags<br/>for decoy checks", "Đọc thẻ &lt;title&gt; &amp;<br/>citation_title để<br/>bắt trang mồi nhử"), icon_key="globe", fill="#FFFFFF", stroke="#DC2626", title_color="#991B1B")
-    r3 = d.card(586, 364, 188, 108, "Wayback CDX", t("Internet Archive<br/>fallback for dead<br/>HTTP 404/410 URLs", "Kho Internet Archive<br/>khôi phục liên kết<br/>chết HTTP 404/410"), icon_key="wayback", fill="#FFFFFF", stroke="#B45309", title_color="#92400E")
-    r4 = d.card(586, 490, 188, 118, t("Abstract Enrich", "Bổ sung tóm tắt"), t("Fills missing abstracts<br/>on top pool[:3]<br/>via OpenAlex / EPMC", "Bổ sung tóm tắt cho<br/>3 ứng viên đầu<br/>qua OpenAlex / EPMC"), icon_key="openalex", fill="#ECFDF5", stroke="#047857", title_color="#065F46")
+    d.card(590, 112, 188, 108, "LinkValidator", t("HEAD/GET liveness,<br/>RFC 2606 fake URL,<br/>redirect blocks", "Kiểm tra URL sống,<br/>RFC 2606 URL giả,<br/>chặn chuyển hướng"), icon_key="tls", fill="#FFFFFF", stroke="#DC2626", title_color="#991B1B")
+    d.card(590, 238, 188, 108, "SafeHtmlMeta", t("Reads ≤128 KB head<br/>&lt;title&gt; / JSON-LD<br/>&amp; Soft-404 guard", "Đọc ≤128 KB đầu trang<br/>&lt;title&gt; / JSON-LD<br/>&amp; lọc Soft-404"), icon_key="globe", fill="#FFFFFF", stroke="#DC2626", title_color="#991B1B")
+    d.card(590, 364, 188, 108, "Wayback CDX", t("Internet Archive<br/>fallback for dead<br/>HTTP 404/410 URLs", "Kho Internet Archive<br/>khôi phục liên kết<br/>chết HTTP 404/410"), icon_key="wayback", fill="#FFFFFF", stroke="#B45309", title_color="#92400E")
+    d.card(590, 490, 188, 118, t("Abstract Enrich", "Bổ sung tóm tắt"), t("Fills missing abstracts<br/>on top pool[:3]<br/>via OpenAlex / EPMC", "Bổ sung tóm tắt cho<br/>3 ứng viên đầu<br/>qua OpenAlex / EPMC"), icon_key="openalex", fill="#ECFDF5", stroke="#047857", title_color="#065F46")
 
-    # Vertical waterfall connectors on left
     d.edge(pre, t0, "", ex=0.5, ey=1, nx=0.5, ny=0, orth=False, stroke="#047857")
     d.edge(t0, t1, t("Miss / low sim", "Không trúng"), ex=0.5, ey=1, nx=0.5, ny=0, orth=False, stroke="#1D4ED8", ox=58)
     d.edge(t1, t2, t("Fallback", "Dự phòng"), ex=0.5, ey=1, nx=0.5, ny=0, orth=False, stroke="#B45309", ox=48)
     d.edge(t2, t3, t("If key set", "Nếu bật"), ex=0.5, ey=1, nx=0.5, ny=0, orth=False, dashed=1, stroke="#64748B", ox=46)
     d.edge(pre, rail, "", ex=1, ey=0.5, nx=0, ny=0.05, stroke="#DC2626", sw=1.5)
 
-    # Bottom Output bar
-    d.box(18, 640, 768, 40, t("<b>Output:</b> SourceResult (ranked candidates[], abstracts, url_status, html_meta, api_errors[]) → Layer 5 Matching", "<b>Đầu ra:</b> SourceResult (ứng viên[], tóm tắt, trạng thái URL, html_meta, lỗi API[]) → Tầng 5 So khớp"), fill="#DCFCE7", stroke="#047857", sw=1.5, font_size=13)
+    out_bar = d.box(18, 650, 772, 42, t("<b>Output:</b> SourceResult (ranked candidates[], abstracts, url_status, html_meta, api_errors[]) → Layer 5 Matching", "<b>Đầu ra:</b> SourceResult (ứng viên[], tóm tắt, trạng thái URL, html_meta, lỗi API[]) → Tầng 5 So khớp"), fill="#DCFCE7", stroke="#047857", sw=1.5, font_size=13)
+    d.edge(t3, out_bar, "", ex=0.5, ey=1, nx=0.34, ny=0, orth=False, stroke="#047857", sw=1.5)
+    d.edge(rail, out_bar, "", ex=0.5, ey=1, nx=0.86, ny=0, orth=False, stroke="#DC2626", sw=1.5)
     return d
 
 
 def build_fig4_5(vn: bool) -> DiagramBuilder:
-    """Layer 5 Multimodal Evidence Matching Engine (max(fuzzy, semantic), e(·), 0.65/0.35, vn_en_academic_bridge, Lê/Võ/Đỗ/Hồ/Lý)."""
-    d = DiagramBuilder("p45", "fig4_5_matching", 780, 610)
+    """Layer 5 Multimodal Evidence Matching Engine: exact RapidFuzz token_set_ratio + Levenshtein, clean subscripts & VN."""
+    d = DiagramBuilder("p45", "fig4_5_matching", 792, 614)
     t = lambda en, vi: vi if vn else en
 
-    # Left Dual Inputs
-    in1 = d.card(16, 148, 174, 108, t("Parsed Citation", "Trích dẫn tách"), t("Title, Authors, Year,<br/>Venue, DOI, Context", "Tiêu đề, Tác giả, Năm,<br/>Nơi CB, DOI, Ngữ cảnh"), icon_key="doc_pdf", fill="#EFF6FF", stroke="#1E3A8A", title_color="#1E3A8A")
-    in2 = d.card(16, 344, 174, 108, "SourceCandidate", t("Canonical Metadata<br/>+ Enriched Abstract", "Siêu dữ liệu chuẩn<br/>+ Tóm tắt bổ sung"), icon_key="fts5", fill="#ECFDF5", stroke="#047857", title_color="#065F46")
+    in1 = d.card(14, 148, 178, 108, t("Parsed Citation", "Trích dẫn tách"), t("Title, Authors, Year,<br/>Venue, DOI, Context", "Tiêu đề, Tác giả, Năm,<br/>Nơi công bố, DOI, Ngữ cảnh"), icon_key="doc_pdf", fill="#EFF6FF", stroke="#1E3A8A", title_color="#1E3A8A")
+    in2 = d.card(14, 346, 178, 108, "SourceCandidate", t("Canonical Metadata<br/>+ Enriched Abstract", "Siêu dữ liệu chuẩn<br/>+ Tóm tắt bổ sung"), icon_key="fts5", fill="#ECFDF5", stroke="#047857", title_color="#065F46")
 
-    # 4 Parallel Matching Tracks (Center)
     m1 = d.card(
-        228,
+        234,
         18,
-        350,
+        354,
         122,
         t("1. Dual Title Fidelity", "1. Độ trung thực tiêu đề kép"),
-        t("RapidFuzz WRatio + SBERT e(·) [384-d]<br/>all-MiniLM-L6-v2 / Multilingual ONNX<br/><b>Score = max(fuzzy, semantic)</b>", "RapidFuzz WRatio + SBERT e(·) [384-d]<br/>all-MiniLM-L6-v2 / Đa ngữ ONNX<br/><b>Điểm = max(mờ, ngữ nghĩa)</b>"),
+        t("RapidFuzz token_set_ratio + Levenshtein<br/>+ SBERT e(·) [384-d] (MiniLM / ONNX)<br/><b>Score = max(fuzzy, semantic)</b>", "RapidFuzz token_set_ratio + Levenshtein<br/>+ SBERT e(·) [384-d] (MiniLM / ONNX)<br/><b>Điểm = max(mờ, ngữ nghĩa)</b>"),
         icon_key="multiling",
         fill="#EFF6FF",
         stroke="#1D4ED8",
         title_color="#1E3A8A",
     )
     m2 = d.card(
-        228,
+        234,
         160,
-        350,
+        354,
         122,
         t("2. 1-to-1 Author Reconciliation", "2. Đối chiếu tác giả 1-1"),
         t("Greedy bipartite surname matching;<br/>VN diacritics (<b>Lê, Võ, Đỗ, Hồ, Lý</b>),<br/>particles (Van/De/Du) &amp; et al.", "Khớp họ hai phía 1-1;<br/>dấu tiếng Việt (<b>Lê, Võ, Đỗ, Hồ, Lý</b>),<br/>tiền tố (Van/De/Du) &amp; et al."),
@@ -1350,9 +1421,9 @@ def build_fig4_5(vn: bool) -> DiagramBuilder:
         title_color="#065F46",
     )
     m3 = d.card(
-        228,
+        234,
         302,
-        350,
+        354,
         122,
         t("3. Year, Venue &amp; DOI Signals", "3. Tín hiệu Năm, Nơi công bố &amp; DOI"),
         t("Year Δ tolerance (±1 preprint grace)<br/>VenueNormalizer (aliases &amp; acronyms)<br/>DOI Exact Equality (separate bit)", "Sai lệch năm (±1 bản tiền in)<br/>VenueNormalizer (tên tắt &amp; bí danh)<br/>Khớp DOI chính xác (bit riêng biệt)"),
@@ -1362,21 +1433,20 @@ def build_fig4_5(vn: bool) -> DiagramBuilder:
         title_color="#92400E",
     )
     m4 = d.card(
-        228,
+        234,
         444,
-        350,
-        148,
+        354,
+        150,
         t("4. Semantic Context Alignment", "4. Đối chiếu ngữ cảnh trích dẫn"),
-        t("Hierarchical Sentence Pooling:<br/><b>0.65 · max(s_i) + 0.35 · s_abs</b><br/><b>vn_en_academic_bridge (+0.08)</b><br/>Stance contradiction &amp; lexical guards", "Gộp câu phân cấp:<br/><b>0.65 · max(s_i) + 0.35 · s_abs</b><br/><b>vn_en_academic_bridge (+0.08)</b><br/>Phát hiện mâu thuẫn lập trường"),
+        t("Hierarchical Sentence Pooling:<br/><b>0.65 · max(sᵢ) + 0.35 · s(abs)</b><br/><b>vn_en_academic_bridge (+0.08)</b><br/>Stance contradiction &amp; lexical guards", "Gộp câu phân cấp:<br/><b>0.65 · max(sᵢ) + 0.35 · s(abs)</b><br/><b>vn_en_academic_bridge (+0.08)</b><br/>Phát hiện mâu thuẫn lập trường"),
         icon_key="onnx",
         fill="#F5F3FF",
         stroke="#6D28D9",
         title_color="#5B21B6",
     )
 
-    # Right Output: MatchFeatures + 16D Vector x
     out = d.card(
-        610,
+        622,
         214,
         156,
         178,
@@ -1389,35 +1459,31 @@ def build_fig4_5(vn: bool) -> DiagramBuilder:
         title_color="#065F46",
     )
 
-    # Clean orthogonal bus lines (left fan-out at x=208, right fan-in at x=594)
     for target in (m1, m2, m3, m4):
         tx_y = d._coords[target][1] + d._coords[target][3] / 2
-        d.edge(in1, target, "", ex=1, ey=0.5, nx=0, ny=0.4, pts=[(204, 202), (204, tx_y - 12)], stroke="#1E3A8A", sw=1.2)
-        d.edge(in2, target, "", ex=1, ey=0.5, nx=0, ny=0.6, pts=[(212, 398), (212, tx_y + 12)], stroke="#047857", sw=1.2)
-        d.edge(target, out, "", ex=1, ey=0.5, nx=0, ny=0.5, pts=[(594, tx_y), (594, 303)], stroke="#047857", sw=1.4)
+        d.edge(in1, target, "", ex=1, ey=0.5, nx=0, ny=0.4, pts=[(208, 202), (208, tx_y - 12)], stroke="#1E3A8A", sw=1.2)
+        d.edge(in2, target, "", ex=1, ey=0.5, nx=0, ny=0.6, pts=[(218, 400), (218, tx_y + 12)], stroke="#047857", sw=1.2)
+        d.edge(target, out, "", ex=1, ey=0.5, nx=0, ny=0.5, pts=[(604, tx_y), (604, 303)], stroke="#047857", sw=1.4)
     return d
 
 
 def build_fig4_6(vn: bool) -> DiagramBuilder:
-    """Layer 6 Neuro-Symbolic Verification & Platt Calibration (pure Layer 6, NO Ch.5 metrics, NO 91.4 dial, VN Độ tin cậy)."""
-    d = DiagramBuilder("p46", "fig4_6_neurosymbolic", 780, 560)
+    """Layer 6 Neuro-Symbolic Verification & Platt Calibration — exact Order 0 + Groups 1-16 matching Table 4.6!"""
+    d = DiagramBuilder("p46", "fig4_6_neurosymbolic", 804, 566)
     t = lambda en, vi: vi if vn else en
 
-    # Dual Left Inputs
-    i_ml = d.card(16, 62, 198, 124, "MatchFeatures → x", t("16D vector x ∈ ℝ¹⁶<br/>Title, Author, Year,<br/>Venue, Context, Inter.", "Véc-tơ 16 chiều x ∈ ℝ¹⁶<br/>Tiêu đề, Tác giả, Năm,<br/>Nơi CB, Ngữ cảnh"), icon_key="vec16", fill="#EFF6FF", stroke="#1D4ED8", title_color="#1E3A8A")
-    i_sy = d.card(16, 266, 198, 134, t("Provenance Flags", "Cờ nguồn gốc rời rạc"), t("is_retracted, url_status,<br/>HTTP 429, doi_ra,<br/>VN statutory rules", "is_retracted, url_status,<br/>HTTP 429, doi_ra,<br/>quy tắc pháp luật VN"), icon_key="shield_ok", fill="#FFFBEB", stroke="#B45309", title_color="#92400E")
+    i_ml = d.card(14, 62, 212, 124, "MatchFeatures → x", t("16D vector x ∈ ℝ¹⁶<br/>Title, Author, Year,<br/>Venue, Context, Inter.", "Véc-tơ 16 chiều x ∈ ℝ¹⁶<br/>Tiêu đề, Tác giả, Năm,<br/>Nơi công bố, Ngữ cảnh"), icon_key="vec16", fill="#EFF6FF", stroke="#1D4ED8", title_color="#1E3A8A")
+    i_sy = d.card(14, 268, 212, 134, t("Provenance Flags", "Cờ nguồn gốc rời rạc"), t("is_retracted, url_status,<br/>HTTP 429, doi_ra,<br/>VN statutory rules", "is_retracted, url_status,<br/>HTTP 429, doi_ra,<br/>quy tắc pháp luật VN"), icon_key="shield_ok", fill="#FFFBEB", stroke="#B45309", title_color="#92400E")
 
-    # Top Neural / Statistical Path
-    ml = d.card(256, 62, 232, 124, "HybridMLScorer (MLR)", t("L2 Multinomial Logistic Reg.<br/>C = 0.25 · Balanced weights<br/>→ <b>p_ML(y | x)</b>", "Hồi quy Logistic đa lớp L2<br/>C = 0.25 · Trọng số cân bằng<br/>→ <b>p_ML(y | x)</b>"), icon_key="neural", fill="#EFF6FF", stroke="#1D4ED8", sw=1.6, title_color="#1E3A8A")
+    ml = d.card(270, 62, 230, 124, "HybridMLScorer (MLR)", t("L2 Multinomial Logistic Reg.<br/>C = 0.25 · Balanced weights<br/>→ <b>p_ML(y | x)</b>", "Hồi quy Logistic đa lớp L2<br/>C = 0.25 · Trọng số cân bằng<br/>→ <b>p_ML(y | x)</b>"), icon_key="neural", fill="#EFF6FF", stroke="#1D4ED8", sw=1.6, title_color="#1E3A8A")
 
-    # Bottom Symbolic Guardrail Path
-    sym = d.card(256, 266, 232, 134, t("SymbolicRules (68 R-*)", "Luật ký hiệu (68 R-*)"), t("Order 0 + Groups 1–5:<br/>Deterministic verdicts &amp;<br/>→ <b>y_sym, p_sym, rules[]</b>", "Bậc 0 + Nhóm 1–5:<br/>Phán quyết tất định &amp;<br/>→ <b>y_sym, p_sym, rules[]</b>"), icon_key="scale", fill="#FFFBEB", stroke="#B45309", sw=1.6, title_color="#92400E")
+    # Exact Order 0 + Groups 1–16 (matching Table 4.6 & caption!)
+    sym = d.card(270, 268, 230, 134, t("SymbolicRules (68 R-*)", "Luật ký hiệu (68 R-*)"), t("Order 0 + Groups 1–16:<br/>Deterministic verdicts &amp;<br/>→ <b>y_sym, p_sym, rules[]</b>", "Bậc 0 + Nhóm 1–16:<br/>Phán quyết tất định &amp;<br/>→ <b>y_sym, p_sym, rules[]</b>"), icon_key="scale", fill="#FFFBEB", stroke="#B45309", sw=1.6, title_color="#92400E")
 
-    # Fusion & Platt Calibration (Right column + bottom strip)
     fuse = d.box(
-        530,
+        548,
         134,
-        234,
+        240,
         108,
         t("<b>Monotonic Blend</b><br/>p_blend = α·p_sym + (1−α)·p_ML<br/>(α = 0.72 · Symbolic label y_sym<br/>never inverted by ML)", "<b>Hòa trộn đơn điệu</b><br/>p_blend = α·p_sym + (1−α)·p_ML<br/>(α = 0.72 · Nhãn ký hiệu y_sym<br/>không bị đảo bởi ML)"),
         fill="#F0FDF4",
@@ -1427,12 +1493,12 @@ def build_fig4_6(vn: bool) -> DiagramBuilder:
     )
 
     platt = d.card(
-        530,
+        548,
         282,
-        234,
+        240,
         124,
         "PlattCalibrator",
-        t("z = logit(p_blend)<br/>p_cal = clip(σ(a·z + b),<br/>0.01, 0.99)", "z = logit(p_blend)<br/>p_cal = clip(σ(a·z + b),<br/>0.01, 0.99)"),
+        t("z = logit(p_blend)<br/>p_cal = clip(σ(a·z + b),<br/>0.01, 0.99) − δ_style", "z = logit(p_blend)<br/>p_cal = clip(σ(a·z + b),<br/>0.01, 0.99) − δ_style"),
         icon_key="platt_clean",
         fill="#ECFDF5",
         stroke="#047857",
@@ -1440,14 +1506,13 @@ def build_fig4_6(vn: bool) -> DiagramBuilder:
         title_color="#065F46",
     )
 
-    # Pure Layer 6 Output Card (NO Ch.5 numbers, NO CIS dial!)
     out = d.card(
-        106,
-        448,
-        568,
-        94,
+        110,
+        452,
+        584,
+        96,
         t("Layer 6 Output: CitationVerdict", "Đầu ra Tầng 6: CitationVerdict"),
-        t("<b>label</b> ∈ {VERIFIED, METADATA_ERROR, SUSPECTED_HALLUCINATION, UNRESOLVED, RESOURCE}<br/><b>calibrated_confidence</b> p_cal ∈ [0.01, 0.99]  ·  <b>triggered_rules[]</b> audit trace → Layer 7 CIS", "<b>nhãn</b> ∈ {VERIFIED, METADATA_ERROR, SUSPECTED_HALLUCINATION, UNRESOLVED, RESOURCE}<br/><b>độ tin cậy hiệu chỉnh</b> p_cal ∈ [0.01, 0.99] · <b>vết luật triggered_rules[]</b> → Tầng 7 CIS"),
+        t("<b>label</b> ∈ {VERIFIED, METADATA_ERROR, SUSPECTED_HALLUCINATION, UNRESOLVED, RESOURCE}<br/><b>calibrated_confidence</b> p_cal ∈ {0} ∪ [0.01, 0.99] · <b>triggered_rules[]</b> → Layer 7 CIS", "<b>nhãn</b> ∈ {VERIFIED, METADATA_ERROR, SUSPECTED_HALLUCINATION, UNRESOLVED, RESOURCE}<br/><b>độ tin cậy hiệu chỉnh</b> p_cal ∈ {0} ∪ [0.01, 0.99] · <b>vết luật triggered_rules[]</b> → Tầng 7 CIS"),
         icon_key="shield_ok",
         fill="#DCFCE7",
         stroke="#047857",
@@ -1455,84 +1520,80 @@ def build_fig4_6(vn: bool) -> DiagramBuilder:
         title_color="#065F46",
     )
 
-    # Clean orthogonal connectors (lifted cleanly above horizontal legs)
     d.edge(i_ml, ml, "16D x", ex=1, ey=0.5, nx=0, ny=0.5, stroke="#1D4ED8", oy=-14)
     d.edge(i_sy, sym, t("Flags", "Cờ"), ex=1, ey=0.5, nx=0, ny=0.5, stroke="#B45309", oy=-14)
-    d.edge(i_ml, sym, "", ex=0.5, ey=1, nx=0.25, ny=0, pts=[(115, 226), (314, 226)], dashed=1, stroke="#64748B")
-    d.edge(ml, fuse, "p_ML", ex=1, ey=0.5, nx=0, ny=0.35, pts=[(508, 124), (508, 172)], stroke="#1D4ED8", ox=0, oy=-14)
-    d.edge(sym, fuse, "p_sym", ex=1, ey=0.35, nx=0, ny=0.7, pts=[(508, 313), (508, 210)], stroke="#B45309", ox=0, oy=-14)
+    d.edge(i_ml, sym, "", ex=0.5, ey=1, nx=0.25, ny=0, pts=[(120, 226), (328, 226)], dashed=1, stroke="#64748B")
+    d.edge(ml, fuse, "p_ML", ex=1, ey=0.5, nx=0, ny=0.35, pts=[(524, 124), (524, 172)], stroke="#1D4ED8", ox=0, oy=-14)
+    d.edge(sym, fuse, "p_sym", ex=1, ey=0.35, nx=0, ny=0.7, pts=[(524, 315), (524, 210)], stroke="#B45309", ox=0, oy=-14)
     d.edge(fuse, platt, "p_blend", ex=0.5, ey=1, nx=0.5, ny=0, orth=False, stroke="#059669", ox=42, bold=True)
-    d.edge(platt, out, t("p_cal", "độ tin cậy"), ex=0.5, ey=1, nx=0.8, ny=0, pts=[(647, 428), (560, 428)], stroke="#047857", ox=42, oy=-14, bold=True)
-    d.edge(sym, out, "y_sym, rules[]", ex=0.5, ey=1, nx=0.35, ny=0, pts=[(372, 424), (305, 424)], stroke="#B45309", ox=-54, oy=-14, bold=True)
+    d.edge(platt, out, t("p_cal", "độ tin cậy"), ex=0.5, ey=1, nx=0.8, ny=0, pts=[(668, 432), (577, 432)], stroke="#047857", ox=42, oy=-14, bold=True)
+    d.edge(sym, out, "y_sym, rules[]", ex=0.5, ey=1, nx=0.35, ny=0, pts=[(385, 428), (314, 428)], stroke="#B45309", ox=-54, oy=-14, bold=True)
     return d
 
 
 def build_fig4_7(vn: bool) -> DiagramBuilder:
-    """Guarded Symbolic Decision Flow (relocated to Ch.4 §4.6.1, spacious side gaps, Order 0 VN Legal branch, split Group 1-2, honest footer)."""
-    d = DiagramBuilder("p47", "fig4_7_decision_flow", 820, 748)
+    """Guarded Symbolic Decision Flow strictly aligned with Table 4.6 (Order 0, Groups 1-4, Group 5, Groups 6-16)."""
+    d = DiagramBuilder("p47", "fig4_7_decision_flow", 820, 756)
     t = lambda en, vi: vi if vn else en
 
-    # Start Input (cx = 410)
     st = d.box(235, 12, 350, 42, t("<b>Input:</b> Citation + SourceResult + MatchFeatures", "<b>Đầu vào:</b> Trích dẫn + Kết quả nguồn + MatchFeatures"), fill="#EFF6FF", stroke="#1E3A8A", sw=1.5, font_size=13)
 
-    # Order 0 Diamond (cx = 410, x=290..530; 78px gaps to left & right cards!)
-    d0 = d.diamond(290, 80, 240, 88, t("Order 0: Resource or\nVN Statutory Check?", "Bậc 0: Tài nguyên hay\nVăn bản Luật VN?"))
+    # Order 0: Resource or VN Statutory Check (includes R-VN-LEGAL-FABRICATED!)
+    d0 = d.diamond(286, 78, 248, 90, t("Order 0: Resource or\nVN Statutory Check?", "Bậc 0: Tài nguyên hay\nVăn bản Luật VN?"))
     d.edge(st, d0, "", ex=0.5, ey=1, nx=0.5, ny=0, orth=False, stroke="#1E3A8A")
 
-    o_res = d.card(12, 86, 200, 76, "RESOURCE", t("Valid web/std/dataset<br/>or valid VN statute", "Web/chuẩn hợp lệ<br/>hoặc Luật VN hợp lệ"), icon_key="resource", fill="#E0F2FE", stroke="#0369A1", title_color="#075985")
-    o_vnl = d.card(608, 86, 200, 76, "METADATA_ERROR", t("VNLegalVerifier:<br/>authority/code conflict", "VNLegalVerifier:<br/>sai thẩm quyền/số hiệu"), icon_key="scale", fill="#FEF3C7", stroke="#B45309", title_color="#92400E")
+    o_res = d.card(10, 82, 206, 82, "RESOURCE", t("Valid web/std/dataset<br/>or valid VN statute", "Web/chuẩn hợp lệ<br/>hoặc Luật VN hợp lệ"), icon_key="resource", fill="#E0F2FE", stroke="#0369A1", title_color="#075985")
+    o_vnl = d.card(604, 82, 206, 82, "META / HALLUC.", t("VNLegalVerifier: conflict<br/>or fabricated statute", "VNLegalVerifier: sai thẩm<br/>quyền hoặc bịa văn bản"), icon_key="scale", fill="#FEF3C7", stroke="#B45309", title_color="#92400E")
 
     d.edge(d0, o_res, t("Valid", "Hợp lệ"), ex=0, ey=0.5, nx=1, ny=0.5, orth=False, stroke="#0369A1", oy=-14, bold=True)
-    d.edge(d0, o_vnl, t("VN conflict", "Sai luật"), ex=1, ey=0.5, nx=0, ny=0.5, orth=False, stroke="#B45309", oy=-14, bold=True)
+    d.edge(d0, o_vnl, t("VN fault", "Lỗi luật"), ex=1, ey=0.5, nx=0, ny=0.5, orth=False, stroke="#B45309", oy=-14, bold=True)
 
-    # Group 1–2 Diamond (cx = 410, x=286..534)
-    d12 = d.diamond(286, 214, 248, 92, t("Groups 1–2: Hard\nIntegrity Guardrail?", "Nhóm 1–2: Rào chắn\ntoàn vẹn cứng?"))
-    d.edge(d0, d12, t("Academic", "Học thuật"), ex=0.5, ey=1, nx=0.5, ny=0, orth=False, stroke="#334155", ox=50, bold=True)
+    # Groups 1–4: Hard Guardrails (G1–2, G4) & Known-Paper Fast Path (G3)
+    d14 = d.diamond(280, 214, 260, 96, t("Groups 1–4: Hard Guardrail\nor Known Paper (G3)?", "Nhóm 1–4: Rào chắn cứng\nhay Bài kinh điển (N3)?"))
+    d.edge(d0, d14, t("Academic", "Học thuật"), ex=0.5, ey=1, nx=0.5, ny=0, orth=False, stroke="#334155", ox=50, bold=True)
 
-    o_ret = d.card(12, 220, 200, 80, "METADATA_ERROR", t("is_retracted = True<br/>(R-RETRACTED-PAPER)", "is_retracted = True<br/>(R-RETRACTED-PAPER)"), icon_key="scale", fill="#FEF3C7", stroke="#B45309", title_color="#92400E")
-    o_hal = d.card(608, 220, 200, 80, "HALLUCINATION", t("RFC 2606 URL / Chimeric<br/>DOI / Future Year", "URL RFC 2606 / DOI lai<br/>/ Năm tương lai"), icon_key="alert_red", fill="#FEE2E2", stroke="#DC2626", title_color="#991B1B")
+    o_ret = d.card(10, 218, 206, 88, "VERIF. / META_ERR", t("G3: R-KNOWN-PAPER<br/>G1: R-RETRACTED-PAPER", "N3: R-KNOWN-PAPER<br/>N1: R-RETRACTED-PAPER"), icon_key="scale", fill="#FEF3C7", stroke="#B45309", title_color="#92400E")
+    o_hal = d.card(604, 218, 206, 88, "HALLUCINATION", t("G1–2, G4: Fake URL /<br/>Chimeric DOI / No Record", "N1–2, N4: URL giả /<br/>DOI lai / Không bản ghi"), icon_key="alert_red", fill="#FEE2E2", stroke="#DC2626", title_color="#991B1B")
 
-    d.edge(d12, o_ret, t("Retracted", "Rút bài"), ex=0, ey=0.5, nx=1, ny=0.5, orth=False, stroke="#B45309", oy=-14, bold=True)
-    d.edge(d12, o_hal, t("Fabricated", "Bịa đặt"), ex=1, ey=0.5, nx=0, ny=0.5, orth=False, stroke="#DC2626", oy=-14, bold=True)
+    d.edge(d14, o_ret, t("G3 / Retr.", "N3 / Rút"), ex=0, ey=0.5, nx=1, ny=0.5, orth=False, stroke="#B45309", oy=-14, bold=True)
+    d.edge(d14, o_hal, t("Fabricated", "Bịa đặt"), ex=1, ey=0.5, nx=0, ny=0.5, orth=False, stroke="#DC2626", ox=-6, oy=-14, bold=True)
 
-    # Group 3 Diamond (cx = 410)
-    d3 = d.diamond(286, 358, 248, 90, t("Group 3: API Outage /\nNo-CSL / Low Border?", "Nhóm 3: Lỗi API / Thiếu\nCSL / Vùng biên mờ?"))
-    d.edge(d12, d3, t("Pass", "Qua"), ex=0.5, ey=1, nx=0.5, ny=0, orth=False, stroke="#334155", ox=34, bold=True)
+    # Group 5: Safe Abstention (HTTP 429 / No-CSL / R-FAIL-ALL)
+    d5 = d.diamond(280, 360, 260, 92, t("Group 5: API Outage /\nNo-CSL / Low Border?", "Nhóm 5: Lỗi API / Thiếu\nCSL / Vùng biên mờ?"))
+    d.edge(d14, d5, t("Pass", "Qua"), ex=0.5, ey=1, nx=0.5, ny=0, orth=False, stroke="#334155", ox=34, bold=True)
 
-    o_unr = d.card(608, 363, 200, 80, "UNRESOLVED", t("HTTP 429 · No-CSL DOI<br/>Safe Abstention", "HTTP 429 · DOI thiếu CSL<br/>Từ chối an toàn"), icon_key="teacher", fill="#F1F5F9", stroke="#475569", title_color="#1E293B")
-    d.edge(d3, o_unr, t("Abstain", "Từ chối"), ex=1, ey=0.5, nx=0, ny=0.5, orth=False, stroke="#475569", oy=-14, bold=True)
+    o_unr = d.card(604, 366, 206, 82, "UNRESOLVED", t("HTTP 429 · No-CSL DOI<br/>Safe Abstention (G5)", "HTTP 429 · DOI thiếu CSL<br/>Từ chối an toàn (N5)"), icon_key="teacher", fill="#F1F5F9", stroke="#475569", title_color="#1E293B")
+    d.edge(d5, o_unr, t("Abstain", "Từ chối"), ex=1, ey=0.5, nx=0, ny=0.5, orth=False, stroke="#475569", oy=-14, bold=True)
 
-    # Groups 4–5 Multimodal Fusion & Platt Calibration box
-    g45 = d.card(
-        198,
-        498,
-        424,
+    # Groups 6–16 Multimodal Evidence Scoring + 16D MLR + Platt (wider 472px so [0.01, 0.99] stays cleanly on line 2!)
+    g616 = d.card(
+        174,
+        502,
+        472,
         74,
-        t("Groups 4–5: Multimodal Rules + 16D MLR + Platt", "Nhóm 4–5: Luật đa phương thức + 16D MLR + Platt"),
-        t("Title, Author, Year, Venue, Context + α=0.72 blend + Platt [0.01, 0.99]", "Tiêu đề, Tác giả, Năm, Nơi CB, Ngữ cảnh + α=0.72 + Platt [0.01, 0.99]"),
+        t("Groups 6–16: Multimodal Evidence + 16D MLR + Platt", "Nhóm 6–16: Luật đa phương thức + 16D MLR + Platt"),
+        t("Title, Author, Year, Venue, Context + α=0.72 + Platt [0.01, 0.99]", "Tiêu đề, Tác giả, Năm, Nơi công bố, Ngữ cảnh + α=0.72 + Platt"),
         icon_key="platt_clean",
         fill="#ECFDF5",
         stroke="#047857",
         sw=1.6,
         title_color="#065F46",
     )
-    d.edge(d3, g45, t("Resolved", "Đủ chứng cứ"), ex=0.5, ey=1, nx=0.5, ny=0, orth=False, stroke="#047857", ox=54, bold=True)
+    d.edge(d5, g616, t("Resolved", "Đủ chứng cứ"), ex=0.5, ey=1, nx=0.5, ny=0, orth=False, stroke="#047857", ox=54, bold=True)
 
-    # Final 4 terminal badges
-    f1 = d.box(12, 608, 184, 48, "<b>VERIFIED</b>", fill="#DCFCE7", stroke="#047857", sw=1.6, font_size=13, font_color="#065F46")
-    f2 = d.box(216, 608, 184, 48, "<b>METADATA_ERROR</b>", fill="#FEF3C7", stroke="#B45309", sw=1.6, font_size=13, font_color="#92400E")
-    f3 = d.box(420, 608, 184, 48, "<b>HALLUCINATION</b>", fill="#FEE2E2", stroke="#DC2626", sw=1.6, font_size=13, font_color="#991B1B")
-    f4 = d.box(624, 608, 184, 48, "<b>UNRESOLVED</b>", fill="#F1F5F9", stroke="#475569", sw=1.6, font_size=13, font_color="#1E293B")
+    f1 = d.box(12, 614, 184, 48, "<b>VERIFIED</b>", fill="#DCFCE7", stroke="#047857", sw=1.6, font_size=13, font_color="#065F46")
+    f2 = d.box(216, 614, 184, 48, "<b>METADATA_ERROR</b>", fill="#FEF3C7", stroke="#B45309", sw=1.6, font_size=13, font_color="#92400E")
+    f3 = d.box(420, 614, 184, 48, "<b>HALLUCINATION</b>", fill="#FEE2E2", stroke="#DC2626", sw=1.6, font_size=13, font_color="#991B1B")
+    f4 = d.box(624, 614, 184, 48, "<b>UNRESOLVED</b>", fill="#F1F5F9", stroke="#475569", sw=1.6, font_size=13, font_color="#1E293B")
 
-    d.edge(g45, f1, "", ex=0.15, ey=1, nx=0.5, ny=0, pts=[(262, 590), (104, 590)], stroke="#047857")
-    d.edge(g45, f2, "", ex=0.38, ey=1, nx=0.5, ny=0, pts=[(359, 590), (308, 590)], stroke="#B45309")
-    d.edge(g45, f3, "", ex=0.62, ey=1, nx=0.5, ny=0, pts=[(461, 590), (512, 590)], stroke="#DC2626")
-    d.edge(g45, f4, "", ex=0.85, ey=1, nx=0.5, ny=0, pts=[(558, 590), (716, 590)], stroke="#475569")
+    d.edge(g616, f1, "", ex=0.15, ey=1, nx=0.5, ny=0, pts=[(245, 594), (104, 594)], stroke="#047857")
+    d.edge(g616, f2, "", ex=0.38, ey=1, nx=0.5, ny=0, pts=[(353, 594), (308, 594)], stroke="#B45309")
+    d.edge(g616, f3, "", ex=0.62, ey=1, nx=0.5, ny=0, pts=[(467, 594), (512, 594)], stroke="#DC2626")
+    d.edge(g616, f4, "", ex=0.85, ey=1, nx=0.5, ny=0, pts=[(575, 594), (716, 594)], stroke="#475569")
 
-    # Honest Empirical Safety Footer (100% matching Table 5.5!)
     d.box(
         12,
-        678,
+        686,
         796,
         54,
         t(
