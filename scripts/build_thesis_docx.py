@@ -411,10 +411,9 @@ def _clean_table_body(body: str) -> str:
     body = re.sub(r"\\multicolumn\{(\d+)\}\{\|?l\|?\}", r"\\multicolumn{\1}{l}", body)
     # Remove \dimexpr column specs in multicolumn
     body = re.sub(r"\\multicolumn\{(\d+)\}\{p\{\\dimexpr[^}]*\\relax\}\}", r"\\multicolumn{\1}{l}", body)
-    # Replace \newline inside cells with a space (Pandoc sometimes breaks table rows on \newline)
+    # Replace \newline inside cells cleanly (space after HTTP + Wayback, semicolon elsewhere)
+    body = re.sub(r"\\textbf\{HTTP \+ Wayback\}~\\cite\{wayback-cdx\}\\newline\s*", r"\\textbf{HTTP + Wayback}~\\cite{wayback-cdx} ", body)
     body = body.replace("\\newline", "; ")
-    # Replace \\ inside a single cell (only where NOT at end of row — e.g. HTTP + Wayback\\\texttt...)
-    body = re.sub(r"\\textbf\{HTTP \+ Wayback\}\\\\\\texttt\{LinkValidator\}", r"\\textbf{HTTP + Wayback} \\texttt{LinkValidator}", body)
     # Remove \arraybackslash / \centering inside cells
     body = body.replace("\\arraybackslash", "")
     return body.strip()
@@ -730,6 +729,7 @@ def _preprocess_latex(edition_dir: Path, is_vn: bool) -> str:
     body = _replace_macro_1arg(body, "textsc", lambda x: x.upper())
     body = re.sub(r"\\urlstyle\{[^}]+\}", "", body)
     body = re.sub(r"\\FloatBarrier\b", "", body)
+    body = re.sub(r"\\needspace\{[^}]+\}", "", body)
     body = re.sub(r"\\phantomsection\b", "", body)
     body = re.sub(r"\\tdtudatatable(?:true|false)\b", "", body)
     body = re.sub(r"\\thispagestyle\{[^}]+\}", "", body)
@@ -748,8 +748,9 @@ def _preprocess_latex(edition_dir: Path, is_vn: bool) -> str:
     body = body.replace("\\begin{titlepage}", "\\begin{center}").replace("\\end{titlepage}", "\\end{center}\\newpage")
     body = body.replace("\\vfill", "\n\n")
     body = body.replace("\\,", " ")
-    # Fix \string^ used in TypeScript semver
+    # Fix \string^ used in TypeScript semver & render \setminus cleanly as Unicode U+2216 in Word OMML
     body = body.replace("\\string^", "\\textasciicircum{}")
+    body = body.replace("\\setminus", "\\mathbin{\\text{\u2216}}")
 
     # 9. Re-inject stashed verbatim listings
     for idx, blk in enumerate(stashed_listings):
