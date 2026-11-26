@@ -7,11 +7,11 @@ System requirements were elicited from university capstone project supervision w
 
 \subsection{Functional Requirements}
 
-Every functional requirement is specified as a testable obligation assigned to an explicit external actor (or system process invoked by a specified use case) and priority level (\textbf{Must} or \textbf{Should}). Table~\ref{tab:func-reqs} lists twenty functional requirements organized across six subsystems, covering identity, extraction/linking, federated retrieval, neuro-symbolic verification, classroom supervision, and billing/privacy operations.
+Every functional requirement is specified as a subsystem-level capability decomposed into testable acceptance clauses, assigned to an explicit external actor (or system process invoked by a specified use case) and priority level (\textbf{Must} or \textbf{Should}). Table~\ref{tab:func-reqs} lists twenty functional requirements organized across six subsystems, covering identity, extraction/linking, federated retrieval, neuro-symbolic verification, classroom supervision, and billing/privacy operations.
 
 {\setlength{\tabcolsep}{3.5pt}
 \begin{longtable}{|C{0.10}|L{0.16}|L{0.38}|C{0.11}|L{0.25}|}
-\caption{Functional requirements organized by subsystem (ISO/IEC/IEEE 29148).}\label{tab:func-reqs}\\
+\caption[Functional requirements by subsystem (ISO/IEC/IEEE 29148)]{Functional requirements organized by subsystem (ISO/IEC/IEEE 29148).}\label{tab:func-reqs}\\
 \hline
 \textbf{ID} & \textbf{Actor} & \textbf{Requirement Specification} & \textbf{Prio.} & \textbf{Acceptance Criterion} \\
 \hline
@@ -42,7 +42,7 @@ Every functional requirement is specified as a testable obligation assigned to a
 \hline
 \textbf{\texttt{FR-06}} & System (UC-01) & The system shall detect scanned or legacy-encoded Vietnamese PDFs and invoke selective Optical Character Recognition (OCR) or NFC Unicode normalization. & Should & Scanned pages recorded in document diagnostics metadata. \\
 \hline
-\textbf{\texttt{FR-07}} & System (UC-01) & The system shall link every in-text citation marker to its target bibliography entry and classify each edge into one of eight structural mapping statuses. & \textbf{Must} & Orphans, uncited refs, and year mismatches isolated accurately. \\
+\textbf{\texttt{FR-07}} & System (UC-01) & The system shall link every in-text citation marker to its target bibliography entry and classify each edge into one of eight structural mapping statuses. & \textbf{Must} & \textbf{$100\%$} pass on 7-method linker suite; orphans, uncited refs, and year mismatches isolated. \\
 \hline
 \multicolumn{5}{|l|}{\textbf{Subsystem 3: Federated Retrieval and Identifier Validation}} \\*
 \hline
@@ -60,13 +60,13 @@ Every functional requirement is specified as a testable obligation assigned to a
 \hline
 \textbf{\texttt{FR-13}} & Student / Teacher & The system shall export sanitized reports (JSON on Basic; PDF, DOCX, CSV, JSON on paid tiers) and generate repaired bibliographies in APA, IEEE, TDTU, BibTeX, RIS, and DOCX formats. & Should & Repaired entries reflect canonical registry metadata without macros. \\
 \hline
-\textbf{\texttt{FR-14}} & Student / Public & The system shall issue time-limited cryptographic share links with QR verification receipts for read-only third-party inspection. & Should & Expired or tampered share token returns \textbf{HTTP 404/403}. \\
+\textbf{\texttt{FR-14}} & Student / Public & The system shall issue time-limited cryptographic share links with QR verification receipts for read-only third-party inspection. & Should & Expired or tampered share token returns \textbf{HTTP 403} (\textbf{404} only if essay deleted). \\
 \hline
 \multicolumn{5}{|l|}{\textbf{Subsystem 5: Classroom Cohort Supervision and Platform Administration}} \\*
 \hline
-\textbf{\texttt{FR-15}} & Teacher & The system shall allow teachers to manage classes via join codes, inspect cohort analytics and shared hallucinations, and override verdicts when \texttt{can\_override\_verdicts} is enabled. & \textbf{Must} & Override updates verdict, recalculates CIS, and logs audit entry. \\
+\textbf{\texttt{FR-15}} & Teacher & The system shall allow teachers to manage classes via join codes, inspect cohort analytics and shared hallucinations, and override verdicts when \texttt{can\_override\_verdicts} is enabled. & \textbf{Must} & Join code enrolls students, cohort clusters aggregate accurately, and overrides update CIS + audit log atomically. \\
 \hline
-\textbf{\texttt{FR-16}} & Admin & The system shall allow administrators to manage accounts, promo codes, cache state, upstream circuit breakers, and audit logs. & \textbf{Must} & Circuit-breaker reset and cache clear take effect immediately. \\
+\textbf{\texttt{FR-16}} & Admin & The system shall allow administrators to manage accounts, promo codes, cache state, upstream circuit breakers, and audit logs. & \textbf{Must} & Account/promo edits persist, audit log exports cleanly, and breaker resets / cache clears take immediate effect. \\
 \hline
 \multicolumn{5}{|l|}{\textbf{Subsystem 6: Billing, Personal Data Privacy, Lifecycle, and Public Sandbox}} \\*
 \hline
@@ -74,7 +74,7 @@ Every functional requirement is specified as a testable obligation assigned to a
 \hline
 \textbf{\texttt{FR-18}} & All Roles & The system shall record explicit privacy consent timestamps (Vietnamese Law No.\ 91/2025/QH15) and support transactional self-service account erasure. & \textbf{Must} & \texttt{DELETE /api/users/me} removes user essays, verdicts, and files atomically. \\
 \hline
-\textbf{\texttt{FR-19}} & Student / Teacher & The system shall support manuscript revision diffs, page-level PDF previews, and essay deletion with cascading cleanup. & Should & Diff isolates added/fixed citations; deletion removes child rows cleanly. \\
+\textbf{\texttt{FR-19}} & Student / Teacher & The system shall support manuscript revision diffs, page-level PDF previews, and essay deletion with cascading cleanup. & Should & Diff isolates added/fixed citations, page preview renders PNGs cleanly, and deletion removes child rows. \\
 \hline
 \textbf{\texttt{FR-20}} & Guest & The system shall provide a rate-limited unauthenticated sandbox endpoint for testing single-reference or sample manuscript verification. & Should & Sandbox requests execute safely without persisting user accounts. \\
 \hline
@@ -159,7 +159,7 @@ Tables~\ref{tab:uc01}--\ref{tab:uc05} specify the five primary use cases governi
 \hline
 \textbf{Postconditions} & \texttt{essays}, \texttt{citations}, and \texttt{verdicts} rows are persisted; CIS and style profile are stored. \\
 \hline
-\textbf{Main Success Scenario} & \textbf{1.} Actor selects a \texttt{.pdf}, \texttt{.docx}, \texttt{.bib}, or \texttt{.ris} file (optionally choosing an enrolled class). \newline \textbf{2.} Backend validates magic bytes, PDF structure, size, page limit, and atomically decrements quota via Compare-And-Swap (CAS). \newline \textbf{3.} Backend persists \texttt{EssayRecord(job\_status='queued')}, schedules asynchronous execution immediately via \texttt{BackgroundTasks} (or DB worker queue) inside \texttt{PipelineAdmissionController}, and returns \texttt{HTTP 200} with \texttt{essay\_id}. \newline \textbf{4.} Client streams \texttt{GET /api/essays/\{id\}/events} via \texttt{fetch()} \texttt{ReadableStream} with Bearer JWT to render stages 0--7 in real time. \newline \textbf{5.} Worker completes extraction, linking, retrieval, matching, checking, and scoring, marking \texttt{job\_status='completed'}. \newline \textbf{6.} Client navigates to \texttt{/verification/report/\{id\}}. \\
+\textbf{Main Success Scenario} & \textbf{1.} Actor selects a \texttt{.pdf}, \texttt{.docx}, \texttt{.bib}, or \texttt{.ris} file (optionally choosing an enrolled class). \newline \textbf{2.} Backend validates magic bytes, PDF structure, size, page limit, and atomically decrements quota via Compare-And-Swap (CAS). \newline \textbf{3.} Backend persists \texttt{EssayRecord(job\_status='queued')}, schedules \texttt{\_run\_pipeline\_task} via \texttt{BackgroundTasks} (or DB worker queue) to acquire a \texttt{PipelineAdmissionController} slot asynchronously, and returns \texttt{HTTP 200} with \texttt{essay\_id}. \newline \textbf{4.} Client streams \texttt{GET /api/essays/\{id\}/events} via \texttt{fetch()} \texttt{ReadableStream} with Bearer JWT to render stages 0--7 in real time. \newline \textbf{5.} Worker completes extraction, linking, retrieval, matching, checking, and scoring, marking \texttt{job\_status='completed'}. \newline \textbf{6.} Client navigates to \texttt{/verification/report/\{id\}}. \\
 \hline
 \textbf{Alternative / Exception Flows} & \textbf{2a. Invalid MIME, magic bytes, or corrupt PDF xref:} Backend returns \textbf{HTTP 400}; quota is untouched. \newline \textbf{2b. Monthly quota exhausted:} Backend returns \textbf{HTTP 402}; UI opens plan upgrade modal. \newline \textbf{5a. GROBID or API timeout:} Pipeline falls back to PyMuPDF or emits \texttt{R-RATE-LIMITED-ABSTAIN} (\texttt{unresolved}). \newline \textbf{5b. Unrecoverable crash:} Orphan recovery marks \texttt{failed} and refunds 1 quota unit via CAS. \\
 \hline
@@ -183,7 +183,7 @@ Tables~\ref{tab:uc01}--\ref{tab:uc05} specify the five primary use cases governi
 \hline
 \textbf{Main Success Scenario} & \textbf{1.} Actor clicks \textit{Fix \& Format Citations} on the report header. \newline \textbf{2.} Backend (\texttt{GET /api/essays/\{id\}/remediate}) maps verified and metadata-erroneous citations to canonical registry fields while isolating \texttt{suspected\_hallucination} entries for manual removal. \newline \textbf{3.} Actor selects target style (\texttt{APA 7th}, \texttt{IEEE}, \texttt{TDTU}, \texttt{BibTeX}, or \texttt{RIS}) and previews field-level diffs. \newline \textbf{4.} Actor downloads an in-place repaired \texttt{.docx} (for \texttt{.docx} uploads) or standalone formatted \texttt{.docx} (for \texttt{.pdf} uploads), or exports sanitized JSON/CSV/PDF/DOCX audit reports. \\
 \hline
-\textbf{Alternative / Exception Flows} & \textbf{2a. Suspected hallucination:} System refuses to invent replacement metadata and flags the entry for author deletion. \newline \textbf{4a. Basic tier export gate:} Basic accounts may export \texttt{json}; requesting \texttt{pdf}/\texttt{docx}/\texttt{csv} returns \textbf{HTTP 403} prompting plan upgrade. \\
+\textbf{Alternative / Exception Flows} & \textbf{2a. Suspected hallucination:} System refuses to invent replacement metadata and flags the entry for author deletion. \newline \textbf{4a. Basic tier export/remediation gate:} Basic accounts may export \texttt{json}; requesting \texttt{pdf}/\texttt{docx}/\texttt{csv} reports, \texttt{/remediate}, or \texttt{/export-healed-docx} returns \textbf{HTTP 402 Payment Required} prompting plan upgrade. \\
 \hline
 \end{tabular}
 \end{table}
@@ -203,7 +203,7 @@ Tables~\ref{tab:uc01}--\ref{tab:uc05} specify the five primary use cases governi
 \hline
 \textbf{Postconditions} & Verdict label (and optional mapping status) updated, essay CIS recomputed, and \texttt{audit\_logs} row inserted atomically. \\
 \hline
-\textbf{Main Success Scenario} & \textbf{1.} Teacher inspects a flagged citation in the Reference Inspector or Pending Reviews queue. \newline \textbf{2.} Teacher selects a new verdict label (and/or mapping status) and enters a written justification note. \newline \textbf{3.} Backend (\texttt{POST /api/essays/\{id\}/verdicts/\{vid\}/override}) verifies RBAC, capability flag, and essay-to-verdict ownership. \newline \textbf{4.} Within one DB transaction, backend updates \texttt{VerdictRecord} (setting \texttt{mapping\_method='manual\_review'} on mapping overrides), invokes \texttt{Repository.recalculate\_essay\_cis()} (mirroring \texttt{CISCalculator} weights), updates \texttt{EssayRecord.cis\_json}, and inserts an \texttt{AuditLog} row. \newline \textbf{5.} UI refreshes the CIS score ring and displays the override badge. \\
+\textbf{Main Success Scenario} & \textbf{1.} Teacher inspects a flagged citation in the Reference Inspector or Pending Reviews queue. \newline \textbf{2.} Teacher selects a new verdict label (and/or mapping status) and enters a written justification note. \newline \textbf{3.} Backend (\texttt{POST /api/essays/\{id\}/verdicts/\{vid\}/override}) verifies RBAC, capability flag, and essay-to-verdict ownership. \newline \textbf{4.} Within one DB transaction, backend updates \texttt{VerdictRecord} (setting \texttt{mapping\_method='manual\_review'} on mapping overrides), invokes \texttt{Repository.recalculate\_essay\_cis()} (mirroring \texttt{CISCalculator} weights), updates \texttt{EssayRecord.\allowbreak{}cis\_json}, and inserts an \texttt{AuditLog} row. \newline \textbf{5.} UI refreshes the CIS score ring and displays the override badge. \\
 \hline
 \textbf{Alternative / Exception Flows} & \textbf{3a. Capability flag is False:} Backend aborts with \textbf{HTTP 403 Forbidden}. \newline \textbf{3b. Verdict belongs to another essay (IDOR attempt):} Backend aborts with \textbf{HTTP 404/403}. \\
 \hline
@@ -249,7 +249,7 @@ Tables~\ref{tab:uc01}--\ref{tab:uc05} specify the five primary use cases governi
 \hline
 \textbf{Main Success Scenario} & \textbf{1.} Admin navigates to \texttt{/admin/system}. \newline \textbf{2.} Backend (\texttt{GET /api/system/health}) reports GROBID readiness, SQLite WAL statistics, local corpus size, cache hit rates, verdict distributions, and per-provider circuit-breaker states (\texttt{closed}, \texttt{half\_open}, \texttt{open}). \newline \textbf{3.} After an external outage resolves, Admin triggers \texttt{POST /api/system/circuit-breakers/reset} to restore live routing immediately. \\
 \hline
-\textbf{Alternative / Exception Flows} & \textbf{2a. GROBID container unreachable:} Health monitor marks parser \texttt{degraded (PyMuPDF fallback)} while keeping uploads operational. \\
+\textbf{Alternative / Exception Flows} & \textbf{2a. GROBID container unreachable:} Health monitor reports \texttt{grobid\_available = false} and \texttt{parser\_mode = 'regex'} (or \texttt{services.grobid = 'degraded'} when running but unresponsive) while keeping uploads operational via PyMuPDF fallback. \\
 \hline
 \end{tabular}
 \end{table}
@@ -271,7 +271,7 @@ Figure~\ref{fig:workflow} presents the UML 2.5 Sequence Diagram across six disti
 
 During final submission deadlines, running unbounded Sentence-BERT and GROBID tasks concurrently would exhaust host RAM. \textbf{CITRA} prevents overload through \texttt{PipelineAdmissionController} (\texttt{api/progress.py}), which coordinates slot admission via a thread lock and per-waiter \texttt{asyncio.Event} FIFO queue (\texttt{max\_concurrent = 3} default in development; \texttt{MAX\_CONCURRENT\_PIPELINES = 2} in production \texttt{docker-compose.prod.yml}) while broadcasting live \texttt{queue\_position} updates.
 
-The runtime supports three modes via \texttt{CITRA\_WORKER\_MODE}: \texttt{inline} (single-process FastAPI + background worker, which requires \texttt{uvicorn --workers 1} so the in-memory admission controller and progress tracker remain coherent), \texttt{web\_only} (API nodes enqueue jobs into SQLite and stream SSE updates by polling persisted \texttt{essays.progress\_json} snapshots), and \texttt{worker\_only} (dedicated background consumer polling queued jobs with 30-second \texttt{job\_heartbeat\_at} updates). To guarantee crash resilience, \texttt{api/job\_recovery.py} scans orphaned \texttt{queued} or \texttt{processing} jobs on startup: interrupted jobs below \texttt{MAX\_ORPHAN\_RECOVERY\_ATTEMPTS = 2} are safely re-queued, whereas permanently failed jobs transition to \texttt{failed} and atomically refund upload quota via Compare-And-Swap (\texttt{quota\_charged: 1 $\rightarrow$ 0}).
+The runtime supports three modes via \texttt{CITRA\_WORKER\_MODE}: \texttt{inline} (single-process FastAPI + background worker, which requires \texttt{uvicorn --workers 1} so the in-memory admission controller and progress tracker remain coherent), \texttt{web\_only} (API nodes enqueue jobs into SQLite and stream SSE updates by polling persisted \texttt{\_progress\_snapshot} payloads stored inside \texttt{essays.style\_profile\_json}), and \texttt{worker\_only} (dedicated background consumer polling queued jobs with 30-second \texttt{job\_heartbeat\_at} updates). To guarantee crash resilience, \texttt{api/job\_recovery.py} scans orphaned \texttt{queued} or \texttt{processing} jobs on startup: interrupted jobs below \texttt{MAX\_ORPHAN\_RECOVERY\_ATTEMPTS = 2} are safely re-queued, whereas permanently failed jobs transition to \texttt{failed} and atomically refund upload quota via Compare-And-Swap (\texttt{quota\_charged: 1 $\rightarrow$ 0}).
 
 \section{Persistent Data Model and Storage Architecture}
 
@@ -304,7 +304,7 @@ The persistence layer comprises \textbf{fifteen SQLAlchemy ORM tables} in \textt
 \hline
 \textbf{\texttt{api\_keys}} & \texttt{name}, \texttt{key\_prefix}, SHA-256 \texttt{key\_hash}, \texttt{created\_at}, \texttt{last\_used\_at}, \texttt{is\_active} & \textbf{N-to-1} \texttt{users}; programmatic CLI/API access \\
 \hline
-\textbf{\texttt{essays}} & \texttt{filename}, \texttt{num\_pages}, \texttt{job\_status}, \texttt{job\_attempt\_count}, \texttt{job\_heartbeat\_at}, \texttt{quota\_charged}, \texttt{style\_profile\_json}, \texttt{cis\_json} & \textbf{N-to-1} \texttt{users} \& optional \texttt{classes}; \textbf{1-to-N} citations, verdicts \\
+\textbf{\texttt{essays}} & \texttt{filename}, \texttt{num\_pages}, \texttt{job\_status}, \texttt{job\_error}, \texttt{job\_attempt\_count}, \texttt{job\_heartbeat\_at}, \texttt{quota\_charged}, \texttt{style\_profile\_json}, \texttt{cis\_json} & \textbf{N-to-1} \texttt{users} \& optional \texttt{classes}; \textbf{1-to-N} citations, verdicts \\
 \hline
 \textbf{\texttt{citations}} & Extracted \texttt{in\_text} / \texttt{reference\_list} text, parsed fields, surrounding \texttt{context}, \texttt{mapping\_status}, \texttt{citation\_link\_json} & \textbf{N-to-1} \texttt{essays} (cascade delete) \\
 \hline
@@ -352,9 +352,9 @@ Four explicit persistence and security trade-offs are documented for institution
 
 \subsection{REST and SSE API Surface}
 
-All backend endpoints mount under \texttt{/api} in \texttt{api/\allowbreak main.py}~\cite{fastapi}, detailed in Table~\ref{tab:api-surface}. Synchronous SQLite and filesystem calls execute inside worker thread pools so the main \texttt{asyncio} event loop never stalls active SSE streams.
+All backend endpoints mount under \texttt{/api} in \texttt{api/\allowbreak{}main.py}~\cite{fastapi}, detailed in Table~\ref{tab:api-surface}. Synchronous SQLite and filesystem calls execute inside worker thread pools so the main \texttt{asyncio} event loop never stalls active SSE streams.
 
-{\setlength{\tabcolsep}{3.5pt}
+{\setlength{\tabcolsep}{3.5pt}\renewcommand{\arraystretch}{1.16}
 \begin{longtable}{|L{0.31}|L{0.69}|}
 \caption{FastAPI REST and SSE endpoint groups mounted under \texttt{/api} (\texttt{v3.90.10}).}\label{tab:api-surface}\\
 \hline
@@ -373,13 +373,13 @@ All backend endpoints mount under \texttt{/api} in \texttt{api/\allowbreak main.
 \endlastfoot
 \textbf{\texttt{/api/auth/*}} & \texttt{POST /register}, \texttt{/login}, \texttt{/google} \textbf{(OAuth2)}, \texttt{/logout}, \texttt{/activate}, \texttt{/forgot-password}, \texttt{/reset-password}, \texttt{GET /me}. \\
 \hline
-\textbf{\texttt{/api/essays/*}} & \texttt{POST /essays} (upload), \texttt{GET /essays}, \texttt{/essays/stats}, \texttt{/essays/\{id\}/status}, \texttt{/essays/\{id\}/events} \textbf{(SSE)}, \texttt{/essays/\{id\}/report} (\texttt{json|csv|pdf|docx}), \texttt{/essays/\{id\}/remediate}, \texttt{/essays/\{id\}/export-healed-docx}, \texttt{/essays/\{id\}/revision-diff}, \texttt{/essays/\{id\}/page-preview/\{p\}}, \texttt{POST /essays/\{id\}/share}, \texttt{GET /essays/shared/\{token\}}, \texttt{/essays/sandbox/*}. \\
+\textbf{\texttt{/api/essays/*}} & \texttt{POST /} (upload), \texttt{GET /}, \texttt{/stats}, \texttt{/\{id\}/status}, \texttt{/\{id\}/events} \textbf{(SSE)}, \texttt{/\{id\}/report} (\texttt{json|csv|pdf|docx}), \texttt{/\{id\}/remediate}, \texttt{/\{id\}/export-healed-docx}, \texttt{/\{id\}/revision-diff}, \texttt{/\{id\}/page-preview/\{p\}}, \texttt{POST /\{id\}/share}, \texttt{GET /shared/\{token\}}, \texttt{/sandbox/*}. \\
 \hline
-\texttt{/api/essays/\allowbreak\{id\}/\allowbreak verdicts/*} & \texttt{POST /api/essays/\allowbreak\{id\}/\allowbreak verdicts/\allowbreak\{vid\}/override} (capability-gated teacher override + transactional CIS recalculation). \\
+\textbf{\texttt{/api/essays/\allowbreak{}\{id\}/\allowbreak{}verdicts/*}} & \texttt{POST /\{vid\}/override} (capability-gated teacher override + transactional CIS recalculation). \\
 \hline
 \textbf{\texttt{/api/teacher/*}} & \texttt{GET /dashboard}, \texttt{/classes}, \texttt{POST /classes/join}, \texttt{/classes/\{id\}/regenerate-code}, \texttt{GET /classes/\{id\}/analytics}, \texttt{/classes/\{id\}/pending-reviews}, \texttt{/classes/\{id\}/export.csv}, \texttt{/classes/\{id\}/export.zip}. \\
 \hline
-\textbf{\texttt{/api/users/*}} & Admin \texttt{/users} management; self-service \texttt{PATCH/DELETE /users/me}, \texttt{/users/me/password}, \texttt{/users/me/avatar}, and \texttt{/users/me/api-keys}. \\
+\textbf{\texttt{/api/users/*}} & Admin \texttt{/} management; self-service \texttt{PATCH/DELETE /me}, \texttt{/me/password}, \texttt{/me/avatar}, and \texttt{/me/api-keys}. \\
 \hline
 \textbf{\texttt{/api/billing/*}} & \texttt{GET /plans}, \texttt{/subscription}, \texttt{POST /create-checkout-session}, \textbf{Stripe REST API} (\texttt{/verify-session}) \& \textbf{VNPay v2.1.0 HMAC-SHA512} verification, \texttt{/cancel}, and admin \texttt{/admin/promos}. \\
 \hline
@@ -390,7 +390,7 @@ All backend endpoints mount under \texttt{/api} in \texttt{api/\allowbreak main.
 
 \subsection{Container Deployment Topology and Defense-in-Depth Security}
 
-Figure~\ref{fig:deployment} depicts the UML 2.5 Deployment Topology across development (\texttt{docker-compose.yml}, Appendix~\ref{app:docker}) and hardened production (\texttt{docker-compose.prod.yml}, environment variables in Appendix~\ref{app:config}). Three containers communicate over an isolated Docker bridge network: \texttt{essay-\allowbreak check-\allowbreak grobid} runs \texttt{grobid/grobid:0.9.1-crf} inside a $4\text{\,GiB}$ container budget combining a bounded \texttt{-Xmx768m} G1GC JVM heap with approximately $3.1\text{\,GiB}$ of native off-heap Wapiti CRF models, preventing memory swap thrashing on CPU-only servers. Meanwhile, \texttt{integrity-api} binds Uvicorn/FastAPI on container interface \texttt{0.0.0.0:8000} (published strictly to loopback \texttt{127.0.0.1} on the host in production), and \texttt{integrity-web} serves the compiled SPA via Nginx 1.27 with TLS 1.2/1.3, Content-Security-Policy, HTTP Strict-Transport-Security, leaky-bucket connection limits, and unbuffered SSE proxying (\texttt{X-Accel-Buffering: no}).
+Figure~\ref{fig:deployment} depicts the UML 2.5 Deployment Topology across development (\texttt{docker-compose.yml}, Appendix~\ref{app:docker}) and hardened production (\texttt{docker-compose.prod.yml}, environment variables in Appendix~\ref{app:config}). Three containers communicate over an isolated Docker bridge network: \texttt{essay-\allowbreak{}check-\allowbreak{}grobid} runs \texttt{grobid/grobid:0.9.1-crf} inside a $4\text{\,GiB}$ container budget combining a bounded \texttt{-Xmx768m} G1GC JVM heap with approximately $3.1\text{\,GiB}$ of native off-heap Wapiti CRF models, preventing memory swap thrashing on CPU-only servers. Meanwhile, \texttt{integrity-api} binds Uvicorn/FastAPI on container interface \texttt{0.0.0.0:8000} (published strictly to loopback \texttt{127.0.0.1} on the host in production), and \texttt{integrity-web} serves the compiled SPA via Nginx 1.27 with TLS 1.2/1.3, Content-Security-Policy, HTTP Strict-Transport-Security, leaky-bucket connection limits, and unbuffered SSE proxying (\texttt{proxy\_buffering off}, \texttt{proxy\_cache off}, and \texttt{gzip off}, paired with FastAPI's \texttt{X-Accel-Buffering: no} header).
 
 \begin{figure}[!htbp]
     \centering
@@ -400,12 +400,13 @@ Figure~\ref{fig:deployment} depicts the UML 2.5 Deployment Topology across devel
 \end{figure}
 
 Defense-in-depth security controls span four boundaries:
+{\setlength{\itemsep}{1pt}
 \begin{itemize}
     \item \textbf{Token and Credential Hardening:} Passwords use salted \texttt{bcrypt} hashes; one-time email tokens (\texttt{auth\_tokens.token\_hash}) and personal API keys (\texttt{api\_keys.key\_hash}) store SHA-256 digests, while public share receipts use stateless HMAC-SHA256 signatures. Production startup aborts immediately if \texttt{JWT\_SECRET} remains at its development placeholder.
-    \item \textbf{Internal Pinned-IP SSRF Egress Guard:} Positioned inside \texttt{integrity-api} before any outbound call leaves the trusted boundary, \texttt{LinkValidator} and \texttt{SafeHtml\allowbreak Meta\allowbreak Verifier} resolve hostnames prior to socket connection, block loopback, link-local, RFC 1918 private, IPv6-mapped IPv4, and cloud-metadata ranges (\texttt{169.254.\allowbreak 169.254}), re-validate every HTTP redirect hop, and connect via a custom \texttt{httpx} transport pinned to the verified IP to defeat DNS rebinding.
+    \item \textbf{Internal Pinned-IP SSRF Egress Guard:} Positioned inside \texttt{integrity-api} before any outbound call leaves the trusted boundary, \texttt{LinkValidator} and \texttt{SafeHtml\allowbreak{}Meta\allowbreak{}Verifier} resolve hostnames prior to socket connection, block loopback, link-local, RFC 1918 private, IPv6-mapped IPv4, and cloud-metadata ranges (\texttt{169.254.\allowbreak{}169.254}), re-validate every HTTP redirect hop, and connect via a custom \texttt{httpx} transport pinned to the verified IP to defeat DNS rebinding.
     \item \textbf{Upload and Export Sanitization:} Uploads check PDF (\texttt{\%PDF-}) and ZIP/DOCX (\texttt{PK\textbackslash x03\textbackslash x04}) magic bytes plus structural PDF openability, enforce strict byte/page caps, and neutralize spreadsheet formula prefixes (\texttt{=}, \texttt{+}, \texttt{-}, \texttt{@}) in CSV exports.
-    \item \textbf{Anti-IDOR Ownership and Multi-Layer Throttling:} Every essay, verdict, share-token, and classroom endpoint verifies explicit ownership (\texttt{user\_id} or supervised \texttt{class\_id}) prior to data access. Request pacing uses \texttt{\_SlidingWindowRateLimiter} on authentication and public sandbox endpoints, Nginx leaky-bucket limits at the reverse proxy, and atomic Compare-And-Swap (\texttt{CAS}) monthly quotas plus \texttt{PipelineAdmissionController} on manuscript uploads.
-\end{itemize}
+    \item \textbf{Anti-IDOR Ownership and Multi-Layer Throttling:} Every essay, verdict, share-token, and classroom endpoint verifies explicit ownership (\texttt{user\_id} or supervised \texttt{class\_id}) prior to data access. Request pacing uses \texttt{\_Sliding\allowbreak{}Window\allowbreak{}RateLimiter} on authentication routes, dedicated per-IP/per-user sliding-window buckets (\texttt{\_public\_sandbox\_rate\_buckets} and \texttt{\_sandbox\_verify\_rate\_buckets}) on sandbox endpoints, Nginx leaky-bucket limits at the reverse proxy, and atomic Compare-And-Swap (\texttt{CAS}) monthly quotas plus \texttt{PipelineAdmissionController} on manuscript uploads.
+\end{itemize}}
 
 \section{Chapter Summary}
 

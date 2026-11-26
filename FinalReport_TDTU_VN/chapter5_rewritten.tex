@@ -17,31 +17,32 @@ Tuân thủ chuẩn mực đánh giá Kỹ thuật phần mềm thực nghiệm~
 
 \subsection{Các bộ kiểm thử tự động và ma trận truy vết yêu cầu}
 
-Kiểm định phần mềm bao phủ ba tầng kiểm thử tự động trong Bảng~\ref{tab:test-suites}: \textbf{2,430+} ca kiểm thử \texttt{pytest} backend đạt (\textbf{2,437} mặc định; \textbf{2,446} tổng gồm 9 ca chậm/trực tuyến; 0 lỗi), \textbf{494} ca kiểm thử \texttt{Vitest} frontend trên \textbf{63} bộ đặc tả (0 lỗi) và \textbf{20} bộ kịch bản \texttt{Playwright} E2E gồm \textbf{168} ca \texttt{test()}---tổng cộng \textbf{2,931} ca đơn vị/tích hợp và \textbf{3,099} kiểm tra tự động (\textbf{3,108} gồm ca chậm). Ngoài ra, phép đo truy hồi ngoại tuyến SQLite FTS5 trên 500 truy vấn phân tầng thuộc ACL Anthology đạt độ phủ $99.80\%$ ($499/500$) và độ chuẩn xác $100.0\%$ tại độ trễ trung bình $87.62\text{\,ms}$. Bảng~\ref{tab:rtm} trình bày Ma trận truy vết yêu cầu (RTM) ánh xạ đầy đủ 20 yêu cầu chức năng (\texttt{FR-01}--\texttt{FR-20}) và 10 yêu cầu phi chức năng (\texttt{NFR-01}--\texttt{NFR-10}) sang mã nguồn và bằng chứng kiểm định.
+Kiểm định phần mềm bao phủ ba tầng kiểm thử tự động trong Bảng~\ref{tab:test-suites}: \textbf{2,437} ca kiểm thử \texttt{pytest} backend mặc định đạt (\textbf{2,446} tổng gồm 9 ca chậm/trực tuyến; 0 lỗi), \textbf{495} ca kiểm thử \texttt{Vitest} frontend trên \textbf{63} bộ đặc tả (0 lỗi) và \textbf{20} bộ kịch bản \texttt{Playwright} E2E gồm \textbf{178} ca \texttt{test()} (\textbf{174} E2E Chromium + \textbf{4} kiểm khói trực tiếp)---tổng cộng \textbf{2,932} ca đơn vị/tích hợp và \textbf{3,110} kiểm tra tự động mặc định (\textbf{3,119} gồm ca chậm). Ngoài ra, phép đo truy hồi ngoại tuyến SQLite FTS5 trên 500 truy vấn phân tầng thuộc ACL Anthology đạt độ phủ $99.80\%$ ($499/500$) và độ chuẩn xác $100.0\%$ tại độ trễ trung bình $87.62\text{\,ms}$. Bảng~\ref{tab:rtm} trình bày Ma trận truy vết yêu cầu (RTM) ánh xạ đầy đủ 20 yêu cầu chức năng (\texttt{FR-01}--\texttt{FR-20}) và 10 yêu cầu phi chức năng (\texttt{NFR-01}--\texttt{NFR-10}) sang mã nguồn và bằng chứng kiểm định.
 
 {\setlength{\tabcolsep}{3.5pt}
 \begin{table}[!htbp]
 \centering
-\caption{Các bộ kiểm thử phần mềm tự động thực thi trên phiên bản \texttt{3.90.10}.}\label{tab:test-suites}
+\caption[Các bộ kiểm thử phần mềm tự động (v3.90.10)]{Các bộ kiểm thử phần mềm tự động thực thi trên phiên bản \texttt{3.90.10}.}\label{tab:test-suites}
 \begin{tabular}{|L{0.23}|L{0.26}|L{0.51}|}
 \hline
 \textbf{Tầng kiểm định} & \textbf{Kết quả thực thi} & \textbf{Phạm vi phân hệ kiểm định} \\
 \hline
-\textbf{Backend (\texttt{pytest})} & \textbf{2,430+ đạt} (2,437 mặc định; 2,446 tổng; 0 lỗi) & Trích xuất đa định dạng, 12 chuẩn, \texttt{VNLegalVerifier}, bộ liên kết 7 phương pháp, FTS5 + 15+ API, SSRF ghim IP, 68 luật, Platt, CIS, RBAC/IDOR, di trú \texttt{0001}--\texttt{0013}, thanh toán, xóa quyền riêng tư và phục hồi sự cố. \\
+\textbf{Backend (\texttt{pytest})} & \textbf{2,437 mặc định} (2,446 tổng; 0 lỗi) & Trích xuất đa định dạng, 12 chuẩn, \texttt{VNLegalVerifier}, bộ liên kết 7 phương pháp, FTS5 + 15+ API, SSRF ghim IP, 68 luật, Platt, CIS, RBAC/IDOR, di trú \texttt{0001}--\texttt{0013}, thanh toán, xóa quyền riêng tư và phục hồi sự cố. \\
 \hline
-\textbf{Frontend (\texttt{Vitest})} & \textbf{494 đạt} (63 bộ, 0 lỗi) & Luồng Auth/OAuth, khung mở rộng chi tiết theo cấp độ, 4 thẻ phân tích báo cáo chính, DAG mạng trích dẫn, hộp thoại sửa lỗi, giám sát Lớp/Hệ thống, bàn giao SSE và giới hạn gói mã. \\
+\textbf{Frontend (\texttt{Vitest})} & \textbf{495 đạt} (63 bộ, 0 lỗi) & Luồng Auth/OAuth, khung mở rộng chi tiết theo cấp độ, 4 thẻ phân tích báo cáo chính, DAG mạng trích dẫn, hộp thoại sửa lỗi, giám sát Lớp/Hệ thống, bàn giao SSE và giới hạn gói mã. \\
 \hline
-\textbf{Trình duyệt E2E (\texttt{Playwright})} & \textbf{20 bộ đặc tả} (168 kịch bản) & Không tràn ngang trên 5 khung nhìn $\times$ Sáng/Tối $\times$ EN/VI, tải tệp SSE, kiểm tra chia đôi, ghi đè giảng viên và phục hồi lỗi 404. \\
+\textbf{Trình duyệt E2E (\texttt{Playwright})} & \textbf{20 bộ đặc tả} (178 kịch bản: 174 E2E + 4 smoke) & Không tràn ngang trên 5 khung nhìn $\times$ Sáng/Tối $\times$ EN/VI, tải tệp SSE, kiểm tra chia đôi, ghi đè giảng viên và phục hồi lỗi 404. \\
 \hline
-\textbf{Tổng hợp tự động} & \textbf{3,099 kiểm tra} (2,931 đơn vị/tích hợp + 168 E2E) & Vượt ngưỡng \texttt{NFR-09} ($\ge 2{,}500$ ca kiểm thử tự động, 0 thất bại). \\
+\textbf{Tổng hợp tự động} & \textbf{3,110 kiểm tra mặc định} (3,119 tổng; 2,932 đơn vị + 178 E2E) & Vượt ngưỡng \texttt{NFR-09} ($\ge 2{,}500$ ca kiểm thử tự động, 0 thất bại). \\
 \hline
 \end{tabular}
 \end{table}
 }
+\FloatBarrier
 
 {\setlength{\tabcolsep}{3.5pt}
 \begin{longtable}{|L{0.19}|L{0.33}|L{0.34}|C{0.14}|}
-\caption{Ma trận truy vết yêu cầu (RTM) ánh xạ \texttt{FR-01}--\texttt{FR-20} và \texttt{NFR-01}--\texttt{NFR-10} sang mã nguồn và bằng chứng kiểm định.}\label{tab:rtm}\\
+\caption[Ma trận truy vết yêu cầu (RTM) cho FR-01--FR-20 và NFR-01--NFR-10]{Ma trận truy vết yêu cầu (RTM) ánh xạ \texttt{FR-01}--\texttt{FR-20} và \texttt{NFR-01}--\texttt{NFR-10} sang mã nguồn và bằng chứng kiểm định.}\label{tab:rtm}\\
 \hline
 \textbf{Mã yêu cầu} & \textbf{Mô-đun hiện thực} & \textbf{Bộ kiểm định / Đo kiểm} & \textbf{Trạng thái} \\
 \hline
@@ -56,25 +57,25 @@ Kiểm định phần mềm bao phủ ba tầng kiểm thử tự động trong 
 \endfoot
 \hline
 \endlastfoot
-\texttt{FR-01}, \texttt{FR-02}, \texttt{NFR-06} & \texttt{api/\allowbreak routes/\allowbreak auth.py}, \texttt{routes/\allowbreak users.py}, \texttt{link\_validator.py} & Kiểm thử RBAC/IDOR, ghim IP chống SSRF \& \texttt{bcrypt}/SHA-256 (\texttt{pytest} + \texttt{Playwright}) & Đạt ($100\%$) \\
+\texttt{FR-01}, \texttt{FR-02}, \texttt{NFR-06} & \texttt{api/\allowbreak{}routes/\allowbreak{}auth.py}, \texttt{routes/\allowbreak{}users.py}, \texttt{html\_meta\_verifier.py}, \texttt{link\_validator.py} & Kiểm thử RBAC/IDOR, ghim IP chống SSRF \& \texttt{bcrypt}/SHA-256 (\texttt{pytest} + \texttt{Playwright}) & Đạt ($100\%$) \\
 \hline
-\texttt{FR-03}, \texttt{FR-04}, \texttt{NFR-03}, \texttt{NFR-04} & \texttt{api/\allowbreak routes/\allowbreak essays.py}, \texttt{api/\allowbreak progress.py}, \texttt{api/\allowbreak job\_recovery.py} & Kiểm thử magic-byte, PDF hỏng, hoàn hạn mức CAS \& chịu tải 50 người dùng (Bảng~\ref{tab:nfr-deadline-stress}) & Đạt ($50/50$) \\
+\texttt{FR-03}, \texttt{FR-04}, \texttt{NFR-03}, \texttt{NFR-04} & \texttt{api/\allowbreak{}routes/\allowbreak{}essays.py}, \texttt{api/\allowbreak{}progress.py}, \texttt{api/\allowbreak{}job\_recovery.py} & Kiểm thử magic-byte, PDF hỏng, hoàn hạn mức CAS \& chịu tải 50 người dùng (Bảng~\ref{tab:nfr-deadline-stress}) & Đạt ($50/50$) \\
 \hline
-\texttt{FR-05}, \texttt{FR-06} & \texttt{extraction/\allowbreak document\_parser.py}, \texttt{grobid\_adapter.py}, \texttt{docx\_parser.py}, \texttt{patterns/*} & Kho 310 PDF đa chuẩn \& pháp luật VN + bộ hồi quy 841 PDF (Bảng~\ref{tab:pdf-corpora}) & Đạt ($97.7$--$100\%$) \\
+\texttt{FR-05}, \texttt{FR-06} & \texttt{extraction/\allowbreak{}document\_parser.py}, \texttt{grobid\_adapter.py}, \texttt{docx\_parser.py}, \texttt{patterns/*} & Kho 310 PDF đa chuẩn \& pháp luật VN + bộ hồi quy 841 PDF (Bảng~\ref{tab:pdf-corpora}) & Đạt ($97.7$--$100\%$) \\
 \hline
-\texttt{FR-07} & \texttt{linking/\allowbreak citation\_linker.py}, \texttt{duplicate\_detector.py} & Kiểm thử đơn vị 7 phương pháp (gồm \texttt{arxiv\_exact}, \texttt{manual\_review}) \& E2E nhất quán & Đạt ($100\%$) \\
+\texttt{FR-07} & \texttt{linking/\allowbreak{}citation\_linker.py}, \texttt{duplicate\_detector.py} & Kiểm thử đơn vị 7 phương pháp (gồm \texttt{arxiv\_exact}, \texttt{manual\_review}) \& E2E nhất quán & Đạt ($100\%$) \\
 \hline
-\texttt{FR-08}, \texttt{FR-09} & \texttt{database/\allowbreak local\_db.py}, \texttt{retrieval\_orchestrator.py}, \texttt{html\_meta\_verifier.py} & 500 truy vấn FTS5 ($99.8\%$), 120 TLTK trực tuyến 15 API ($89.17\%$) \& nhóm OOD 1, 3, 4, 5 & Đạt \\
+\texttt{FR-08}, \texttt{FR-09} & \texttt{database/\allowbreak{}local\_db.py}, \texttt{retrieval\_orchestrator.py}, \texttt{html\_meta\_verifier.py} & 500 truy vấn FTS5 ($99.8\%$), 120 TLTK trực tuyến 15 API ($89.17\%$) \& nhóm OOD 1, 3, 4, 5 & Đạt \\
 \hline
-\texttt{FR-10}, \texttt{FR-11}, \texttt{NFR-05} & \texttt{matching/\allowbreak semantic.py}, \texttt{logic/\allowbreak rules.py}, \texttt{calibration.py} & Tập đo kiểm tách rời 120K ($N=18\text{K}$) \& bộ 2.4K OOD (các Bảng~\ref{tab:baselines}--\ref{tab:calibration-results}) & Đạt ($99.67\%$) \\
+\texttt{FR-10}, \texttt{FR-11}, \texttt{NFR-05} & \texttt{matching/\allowbreak{}semantic.py}, \texttt{logic/\allowbreak{}rules.py}, \texttt{calibration.py} & Tập đo kiểm tách rời 120K ($N=18\text{K}$) \& bộ 2.4K OOD (các Bảng~\ref{tab:baselines}--\ref{tab:calibration-results}) & Đạt ($99.67\%$) \\
 \hline
-\texttt{FR-12}, \texttt{FR-13}, \texttt{FR-14} & \texttt{logic/\allowbreak cis.py}, \texttt{docx\_exporter.py}, \texttt{routes/\allowbreak essays.py}, \texttt{SharedReportPage.tsx} & Kiểm thử đơn hình CIS $300 \times 20$ ($\rho = 0.9987$), xuất DOCX, cổng gói Basic \& chia sẻ HMAC & Đạt ($100\%$) \\
+\texttt{FR-12}, \texttt{FR-13}, \texttt{FR-14} & \texttt{logic/\allowbreak{}cis.py}, \texttt{docx\_exporter.py}, \texttt{routes/\allowbreak{}essays.py}, \texttt{SharedReportPage.tsx} & Kiểm thử đơn hình CIS $300 \times 20$ ($\rho = 0.9987$), xuất DOCX, cổng gói Basic \& chia sẻ HMAC & Đạt ($100\%$) \\
 \hline
-\texttt{FR-15}, \texttt{FR-16} & \texttt{api/\allowbreak routes/\allowbreak teacher.py}, \texttt{routes/\allowbreak system.py}, \texttt{ClassDetailPage.tsx}, \texttt{SystemHealthPage.tsx} & Kiểm thử ghi đè giao dịch, thống kê lớp học \& đặt lại bộ ngắt mạch & Đạt ($100\%$) \\
+\texttt{FR-15}, \texttt{FR-16} & \texttt{api/\allowbreak{}routes/\allowbreak{}teacher.py}, \texttt{routes/\allowbreak{}system.py}, \texttt{ClassDetailPage.tsx}, \texttt{SystemHealthPage.tsx} & Kiểm thử ghi đè giao dịch, thống kê lớp học \& đặt lại bộ ngắt mạch & Đạt ($100\%$) \\
 \hline
-\texttt{FR-17}--\texttt{FR-20} & \texttt{api/\allowbreak routes/\allowbreak billing.py}, \texttt{routes/\allowbreak users.py}, \texttt{routes/\allowbreak essays.py} & Stripe REST, VNPay v2.1.0 HMAC-SHA512, xóa dữ liệu Luật 91/2025/QH15, diff \& sandbox & Đạt ($100\%$) \\
+\texttt{FR-17}--\texttt{FR-20} & \texttt{api/\allowbreak{}routes/\allowbreak{}billing.py}, \texttt{routes/\allowbreak{}users.py}, \texttt{routes/\allowbreak{}essays.py} & Stripe REST, VNPay v2.1.0 HMAC-SHA512, xóa dữ liệu Luật 91/2025/QH15, diff \& sandbox & Đạt ($100\%$) \\
 \hline
-\texttt{NFR-01}, \texttt{NFR-02}, \texttt{NFR-07}--\texttt{10} & Toàn bộ 8 tầng, Docker Compose \& bản dựng Vite (\texttt{web/}) & Đệm ấm $1.33\text{\,s}$ / lạnh $12.64\text{\,s}$, RSS $1.03\text{\,GB}$, GROBID 0-swap, WCAG, gói $231.50\text{\,kB}$, 3,099 ca & Đạt ($100\%$) \\
+\texttt{NFR-01}, \texttt{NFR-02}, \texttt{NFR-07}--\texttt{10} & Toàn bộ 8 tầng, Docker Compose \& bản dựng Vite (\texttt{web/}) & Đệm ấm $1.33\text{\,s}$ / lạnh $12.64\text{\,s}$, RSS $1.03\text{\,GB}$, GROBID 0-swap, WCAG, gói $231.50\text{\,kB}$, 3,110 ca & Đạt ($100\%$) \\
 \hline
 \end{longtable}
 }
@@ -137,14 +138,14 @@ Hình~\ref{fig:benchmark-charts} tổng hợp kết quả định lượng xuyê
 \begin{figure}[!htbp]
     \centering
     \includegraphics[width=\textwidth,keepaspectratio]{picture/figures/fig5_1_benchmark_charts.png}
-    \caption[Biểu đồ bốn khung đánh giá loại bỏ thành phần, ma trận nhầm lẫn, rào chắn OOD và hiệu chỉnh Platt]{Các biểu đồ định lượng dựng ở tỷ lệ in chuẩn A4: (a)~thực nghiệm loại bỏ thành phần trong phân phối ($N=18{,}000$), (b)~ma trận nhầm lẫn bốn nhãn độc lập, (c)~kiểm thử rào chắn ký hiệu OOD ($N=2{,}400$; dấu \texttt{*} chỉ bit nguồn gốc cấp cho \texttt{B5}), và (d)~đường cong độ tin cậy Platt kèm biểu đồ phụ độ bao phủ -- độ chính xác có chọn lọc.}
+    \caption[Biểu đồ bốn khung đánh giá loại bỏ thành phần, ma trận nhầm lẫn, rào chắn OOD và hiệu chỉnh Platt]{Các biểu đồ định lượng dựng ở tỷ lệ in chuẩn A4: (a)~thực nghiệm loại bỏ thành phần trong phân phối ($N=18{,}000$), (b)~ma trận nhầm lẫn bốn nhãn độc lập, (c)~kiểm thử rào chắn ký hiệu OOD ($N=2{,}400$; $\dagger$: cờ rời rạc ngoài véc-tơ 16D của \texttt{B5}; $*$: bit từ chối \texttt{vec[15]} cấp cho \texttt{B5}; $\ddagger$: 10 mẫu luật VN duy nhất $\times 40$), và (d)~đường cong độ tin cậy Platt 10 khoảng chia chính xác (vẽ các khoảng có $n \ge 20$; ẩn 4 mẫu Platt thưa có $n \le 2$/khoảng; $\text{ECE}: 0.2477 \rightarrow 0.0405$) kèm biểu đồ phụ độ bao phủ -- độ chính xác có chọn lọc.}
     \label{fig:benchmark-charts}
 \end{figure}
 
 {\setlength{\tabcolsep}{3.5pt}
 \begin{table}[!htbp]
 \centering
-\caption{Thực nghiệm loại bỏ thành phần trong phân phối (ID) và mức ý nghĩa McNemar hiệu chỉnh Holm--Bonferroni ($N = 18{,}000$).}\label{tab:baselines}
+\caption{Thực nghiệm loại bỏ thành phần trong phân phối (sắp xếp theo độ chính xác kiểm thử) và mức ý nghĩa McNemar hiệu chỉnh Holm--Bonferroni ($N = 18{,}000$).}\label{tab:baselines}
 \begin{tabular}{|L{0.23}|L{0.25}|C{0.09}|C{0.09}|C{0.09}|C{0.09}|C{0.16}|}
 \hline
 \textbf{Phương pháp} & \textbf{Cơ chế cốt lõi} & \textbf{Acc.\ (\%)} & \textbf{P (\%)} & \textbf{R (\%)} & \textbf{F1 (\%)} & \textbf{McNemar $p$ hiệu chỉnh} \\
@@ -213,9 +214,9 @@ Nhằm tuân thủ nghiêm ngặt giả định độc lập i.i.d., Bảng~\ref
 \hline
 \textbf{3. URL giả/giữ chỗ RFC 2606}\textsuperscript{$\dagger$} & \texttt{R-FAKE-URL} & 0.00 & 0.00 & \textbf{100.00} \\
 \hline
-\textbf{4. DOI khu vực thiếu siêu dữ liệu CSL} & \texttt{R-DOI-RA-NO-\allowbreak CSL} & 0.00 & 100.00 & \textbf{100.00} \\
+\textbf{4. DOI khu vực thiếu siêu dữ liệu CSL}\textsuperscript{*} & \texttt{R-DOI-RA-NO-\allowbreak{}CSL} & 0.00 & 100.00 & \textbf{100.00} \\
 \hline
-\textbf{5. Cạn hạn mức HTTP 429 thượng nguồn} & \texttt{R-RATE-LIMITED-\allowbreak ABSTAIN} & 0.00 & 100.00 & \textbf{100.00} \\
+\textbf{5. Cạn hạn mức HTTP 429 thượng nguồn}\textsuperscript{*} & \texttt{R-RATE-LIMITED-\allowbreak{}ABSTAIN} & 0.00 & 100.00 & \textbf{100.00} \\
 \hline
 \textbf{Tổng phụ: Nhóm 1--5 i.i.d.\ ($N=2{,}000$)} & \textbf{McNemar $\chi^2=801.0, p < 10^{-175}$} & 0.00 & 59.80 & \textbf{99.95} \\
 \hline
@@ -223,7 +224,7 @@ Nhằm tuân thủ nghiêm ngặt giả định độc lập i.i.d., Bảng~\ref
 \hline
 \textbf{Tổng gộp bộ OOD ($N = 2{,}400$)} & \textbf{Cả 6 nhóm} & 4.17 & 57.33 & \textbf{99.96} \\
 \hline
-\multicolumn{5}{p{\dimexpr\textwidth-2\tabcolsep\relax}}{\scriptsize\textsuperscript{$\dagger$}\texttt{is\_retracted} và \texttt{url\_status} RFC 2606 nằm ngoài 16 đặc trưng liên tục của \texttt{B5}, minh họa mở rộng ký hiệu không cần huấn luyện lại.}
+\multicolumn{5}{p{\dimexpr\textwidth-2\tabcolsep\relax}}{\scriptsize\textsuperscript{$\dagger$}\texttt{is\_retracted} và \texttt{url\_status} RFC 2606 nằm ngoài véc-tơ 16D của \texttt{B5}, minh họa mở rộng ký hiệu không cần huấn luyện lại. \textsuperscript{*}Nhóm 4--5 cung cấp bit chỉ thị từ chối ký hiệu (\texttt{vec[15]}) cho \texttt{B5}, giúp \texttt{B5} đạt $100\%$ trên hai hàng này.}
 \end{tabular}
 \end{table}
 }
@@ -261,7 +262,7 @@ Tỷ lệ độ tin cậy cao ($\hat{p} \ge 0.50$) & 92.82\% & \textbf{99.99\%} 
 \hline
 Độ chính xác toàn tập tại $100\%$ độ phủ & 99.67\% & \textbf{99.67\%} & $0.00$\,pp \\
 \hline
-\multicolumn{4}{l}{\scriptsize\textsuperscript{$\ddagger$}Mức giảm nhẹ tại $50\%$ do bão hòa đồng hạng tại trần $\text{max\_prob}=0.99$ ở $>50\%$ mẫu độ tin cậy cao.}
+\multicolumn{4}{p{\dimexpr\textwidth-2\tabcolsep\relax}}{\scriptsize\textsuperscript{$\ddagger$}Mức giảm nhẹ tại $50\%$ do bão hòa đồng hạng tại trần $\text{max\_prob}=0.99$ ở $>50\%$ mẫu độ tin cậy cao.}
 \end{tabular}
 \end{table}
 
@@ -269,9 +270,9 @@ Tỷ lệ độ tin cậy cao ($\hat{p} \ge 0.50$) & 92.82\% & \textbf{99.99\%} 
 
 \section{RQ4: Kiểm định trực tuyến đa cơ sở dữ liệu và bản thảo thực tế}
 
-Nhằm kiểm chứng khả năng khái quát hóa đầu--cuối ngoài tập đo kiểm tầng quyết định, bốn thực nghiệm bổ trợ đã được thực thi:
+Nhằm kiểm chứng khả năng khái quát hóa đầu--cuối ngoài tập đo kiểm tầng quyết định, ba thực nghiệm bổ trợ đã được thực thi:
 \begin{enumerate}
-    \item \textbf{Bộ chuẩn vàng tham khảo thô đa lĩnh vực ở hai chế độ ($N = 120 + 15$, Bảng~\ref{tab:e2e-gold}):} Khi chạy 120 chuỗi tài liệu tham khảo thô qua sáu lĩnh vực (20 mục mỗi ngành: KHMT/AI, Y sinh, Kinh tế/Tài chính, Kỹ thuật/Vật lý, Tiêu chuẩn kỹ thuật, Pháp luật VN) và bảy chuẩn ở \textbf{Chế độ danh mục ngoại tuyến tất định} (\texttt{--mode offline}, danh mục 37 công trình xác minh tích hợp bộ phân tích + luật), hệ thống đạt \textbf{100.00\% (120/120)} và \textbf{100.00\% (15/15)} ca đối kháng. Quan trọng hơn, chạy trực tiếp chính 120 mục này ở \textbf{Chế độ trực tuyến 15 API} (\texttt{--mode live}, 187.11\,s trên mạng WAN thực, không dùng danh mục nội bộ) đạt \textbf{độ chính xác 5 lớp 89.17\% (107/120; Macro-F1 $= 86.90\%$, $\text{ECE} = 0.0690$, $\text{Brier} = 0.0885$)} và \textbf{89.32\% trên 4 lớp học thuật}, với \textbf{100.00\% độ chuẩn xác / 96.77\% độ phủ (F1 98.36\%)} ở lớp \texttt{verified} (0 bài thật bị gán ảo giác!) và đạt $95.0\%$ tại KHMT/AI, Y sinh, Tiêu chuẩn kỹ thuật ($90.0\%$ Pháp luật VN; $80.0\%$ Kinh tế và Kỹ thuật). Giải phẫu toàn bộ 13 lỗi trực tuyến gồm: (i)~4 DOI khu vực chưa đăng ký (\texttt{E2E-017/037/057/077}) chạm \texttt{R-NONEXISTENT-DOI} khi Crossref giới hạn tần suất; (ii)~5 ca (3 ảo giác + 2 luật VN) chuyển an toàn về \texttt{unresolved} qua \texttt{R-RATE-LIMITED-ABSTAIN} khi bộ ngắt mạch Crossref mở (0 cáo buộc sai); (iii)~2 ca lỗi DOI nặng chuyển sang \texttt{R-CHIMERIC-DOI-MISMATCH}; (iv)~1 bài tạp chí nội địa VN khớp bán phần; và (v)~1 ca lệch nơi công bố scikit-learn.
+    \item \textbf{Bộ chuẩn vàng tham khảo thô đa lĩnh vực ở hai chế độ ($N = 120 + 15$, Bảng~\ref{tab:e2e-gold}):} Khi chạy 120 chuỗi tài liệu tham khảo thô qua sáu lĩnh vực (20 mục mỗi ngành: KHMT/AI, Y sinh, Kinh tế/Tài chính, Kỹ thuật/Vật lý, Tiêu chuẩn kỹ thuật, Pháp luật VN) và bảy chuẩn ở \textbf{Chế độ danh mục ngoại tuyến tất định} (\texttt{--mode offline}, danh mục 37 công trình xác minh tích hợp bộ phân tích + luật), hệ thống đạt \textbf{100.00\% (120/120)} và \textbf{100.00\% (15/15)} ca đối kháng. Quan trọng hơn, chạy trực tiếp chính 120 mục này ở \textbf{Chế độ trực tuyến 15 API} (\texttt{--mode live}, 187.11\,s trên mạng WAN thực, không dùng danh mục nội bộ) đạt \textbf{độ chính xác 5 lớp 89.17\% (107/120; Macro-F1 $= 86.90\%$, $\text{ECE} = 0.0690$, $\text{Brier} = 0.0885$)} và \textbf{89.32\% trên 4 lớp học thuật}, với \textbf{100.00\% độ chuẩn xác / 96.77\% độ phủ (F1 98.36\%)} ở lớp \texttt{verified} (0 bài thật bị gán ảo giác!) và đạt $95.0\%$ tại KHMT/AI, Y sinh, Tiêu chuẩn kỹ thuật ($90.0\%$ Pháp luật VN; $80.0\%$ Kinh tế và Kỹ thuật). Giải phẫu toàn bộ 13 lỗi trực tuyến gồm: (i)~4 mẫu kiểm thử DOI cơ quan khu vực tổng hợp (\texttt{E2E-017/037/057/077}) có hậu tố chưa đăng ký nên phân giải Handle trả về không tồn tại (\texttt{R-NONEXISTENT-DOI}); (ii)~5 ca (3 ảo giác + 2 luật VN) chuyển an toàn về \texttt{unresolved} qua \texttt{R-RATE-LIMITED-ABSTAIN} khi bộ ngắt mạch Crossref mở (0 cáo buộc sai); (iii)~2 ca lỗi DOI nặng chuyển sang \texttt{R-CHIMERIC-DOI-MISMATCH}; (iv)~1 bài tạp chí nội địa VN khớp bán phần; và (v)~1 ca lệch nơi công bố scikit-learn.
     \item \textbf{Kho trích xuất đa chuẩn (250 PDF thực + 60 PDF tổng hợp, Bảng~\ref{tab:pdf-corpora}) \& Quét 841 PDF:} Chạy ở chế độ thuần PyMuPDF (tắt GROBID để tối ưu tốc độ quét lô), CITRA nhận diện $100.0\%$ danh mục và liên kết $96.9\%$ trên 30 PDF pháp luật VN thực, đạt $100.0\%$ ($397/397$) trên 60 PDF chẩn đoán tổng hợp 12 chuẩn và $97.7\%$ ($215/220$, 8,126 TLTK) trên 220 bài báo mở 11 chuẩn. Do thiếu con trỏ TEI \texttt{<ref target>} của GROBID, tỷ lệ khớp liên kết nội văn trên 220 bài mở đa dạng đạt $70.1\%$ ($8{,}954/12{,}770$), với $29.9\%$ chưa khớp tập trung ở ký hiệu chỉ số trên/chú thích chân trang (Nature, AMA, Chicago) mà chế độ lai GROBID khôi phục trong vận hành thực. Đợt quét hồi quy 841 PDF kết thúc với $0$ ngoại lệ chưa bắt.
     \item \textbf{Kiểm toán từng dòng bản thảo thực tế \& Đối chứng API trực tuyến thuần (Bảng~\ref{tab:samples}):} Nhóm tác giả thực hiện kiểm toán đầu--cuối từng dòng trên \textbf{21 PDF đa miền (835 trang, 329 TLTK, 682 trích dẫn nội văn)} ở chế độ vận hành đầy đủ (GROBID + 15+ API trực tuyến) kèm \textbf{6 lượt đối chứng API trực tuyến thuần} (tắt cả \texttt{local\_papers.db} và \texttt{\_KNOWN\_PAPERS}), đạt \textbf{đồng nhất 100\% nhãn và CIS trên cả 6/6 tài liệu}, $0$ lỗi che giấu sai năm nội văn, $0$ URL chết bị gán \texttt{resource}, đồng thời xác minh kiểm thử lô Docker 7 tệp với đếm hạn mức nguyên tử $5/5$ và chặn PDF hỏng bằng HTTP 400 trong $5.5\text{\,ms}$. Bảng~\ref{tab:samples} nêu chín bản thảo tiêu biểu, bao gồm điểm \texttt{CISCalculator} chính xác \textbf{75.50} (\textbf{75.08} khi có 1 mục chưa trích dẫn) của bộ mẫu kiểm thử 6 TLTK và giải trình điểm \textbf{87.50} trên Báo cáo~B (5/5 TLTK hợp lệ nhưng 0 trích dẫn nội văn khiến $s_{\text{link}}$ chặn trần $0.50$, trừ $12.50$ điểm).
 \end{enumerate}
@@ -348,12 +349,12 @@ Kho pháp luật VN (Thực, trước v3.80) & 30 & 27 / 30 (90.0\%) & 164 (15 L
 \hline
 \textbf{Bộ mẫu đồ án cài lỗi} (Minh họa UI) & APA & 6 & \textbf{75.08} & 3 & \textbf{1} & \textbf{1} & 1 / 0 \\
 \hline
-\multicolumn{8}{l}{\scriptsize\textsuperscript{*}Xác nhận đồng nhất 100\% nhãn và CIS ở chế độ API trực tuyến thuần (tắt \texttt{local\_db} và \texttt{\_KNOWN\_PAPERS}).}
+\multicolumn{8}{p{\dimexpr\textwidth-2\tabcolsep\relax}}{\scriptsize\textsuperscript{*}Xác nhận đồng nhất 100\% nhãn và CIS ở chế độ API trực tuyến thuần (tắt \texttt{local\_db} và \texttt{\_KNOWN\_PAPERS}).}
 \end{tabular}
 \end{table}
 }
 
-Các Hình~\ref{fig:demo-debugger}--\ref{fig:demo-consistency} trình bày giao diện chẩn đoán tiếng Việt \texttt{v3.90.10} trên bộ mẫu đồ án 6 TLTK ($\text{CIS} = 75.08 / 100$, hiển thị \texttt{75.1\%} khi có 1 mục chưa trích dẫn \texttt{[6]}; $75.50$ khi đủ cả 6 liên kết), hiển thị toàn chiều rộng trang in sau khi cắt thanh điều hướng trái. Hình~\ref{fig:demo-debugger} đối chiếu cảnh báo ảo giác DOI lai ghép AlphaFold2 (hiển thị kèm bản ghi Crossref gốc) và bảng sai lệch năm xuất bản (\texttt{2021} so với chuẩn \texttt{2019}). Hình~\ref{fig:demo-trace-context} minh họa đầy đủ vết suy diễn logic 5 bước tích hợp đối sánh song ngữ \texttt{VI}$\leftrightarrow$\texttt{EN} ONNX INT8 cùng luồng ngữ cảnh Trình kiểm tra tài liệu, còn Hình~\ref{fig:demo-consistency} phân tách trích dẫn mồ côi và mục chưa được trích dẫn.
+Các Hình~\ref{fig:demo-debugger}--\ref{fig:demo-consistency} trình bày giao diện chẩn đoán tiếng Việt \texttt{v3.90.10} trên bộ mẫu đồ án cài sẵn 6 TLTK ($\text{CIS} = 75.08 / 100$ theo \texttt{CISCalculator} mức kết luận, hiển thị \texttt{75.1\%} trên đầu trang báo cáo và \texttt{75/100} trên bảng điều khiển khi có 1 mục chưa trích dẫn \texttt{[6]}; $75.50$ khi đủ cả 6 liên kết), cắt thanh điều hướng trái để rõ nét trên khổ A4. Lưu ý thẻ tổng hợp \textit{Đã xác minh (4)} trên UI gộp 3 công trình học thuật \texttt{verified} cùng 1 mục \texttt{resource} hợp lệ, trong khi Bảng~\ref{tab:samples} và \texttt{CISCalculator} tách riêng hai nhóm này. Hình~\ref{fig:demo-debugger} đối chiếu cảnh báo ảo giác DOI lai ghép AlphaFold2 (hiển thị kèm bản ghi Crossref gốc) và bảng sai lệch năm xuất bản (\texttt{2021} so với chuẩn \texttt{2019}). Hình~\ref{fig:demo-trace-context} hiển thị tiêu đề Logic Trace 5 giai đoạn kèm các bước đầu mở rộng (cầu nối \texttt{VI}$\leftrightarrow$\texttt{EN} ONNX INT8) cùng luồng ngữ cảnh Trình kiểm tra tài liệu, còn Hình~\ref{fig:demo-consistency} phân tách trích dẫn mồ côi và mục chưa được trích dẫn.
 
 \begin{figure}[!htbp]
     \centering
@@ -367,7 +368,7 @@ Các Hình~\ref{fig:demo-debugger}--\ref{fig:demo-consistency} trình bày giao 
     \centering
     \fboxsep=0pt\fboxrule=0.4pt\fbox{\includegraphics[width=0.94\textwidth,keepaspectratio]{picture/figures/07-logic-trace.png}}\\[6pt]
     \fboxsep=0pt\fboxrule=0.4pt\fbox{\includegraphics[width=0.94\textwidth,keepaspectratio]{picture/figures/09-document-inspector.png}}
-    \caption[Vết suy diễn Logic Trace 5 bước song ngữ và Trình kiểm tra tài liệu trực tiếp]{Vết suy diễn Logic Trace đầy đủ 5 bước hiển thị cầu nối khái niệm \texttt{VI}$\leftrightarrow$\texttt{EN} ONNX INT8 (trên) và luồng ngữ cảnh trực tiếp trong Trình kiểm tra tài liệu (dưới).}
+    \caption[Vết suy diễn Logic Trace 5 bước song ngữ và Trình kiểm tra tài liệu trực tiếp]{Tiêu đề Logic Trace 5 giai đoạn kèm các bước đầu mở rộng hiển thị cầu nối khái niệm \texttt{VI}$\leftrightarrow$\texttt{EN} ONNX INT8 (trên) và luồng ngữ cảnh trực tiếp trong Trình kiểm tra tài liệu (dưới).}
     \label{fig:demo-trace-context}
 \end{figure}
 
@@ -385,41 +386,41 @@ Các Hình~\ref{fig:demo-debugger}--\ref{fig:demo-consistency} trình bày giao 
 
 Các bài đo phi chức năng cục bộ (Bảng~\ref{tab:nfr-step-latency}--\ref{tab:nfr-deadline-stress} và Hình~\ref{fig:nfr-scalability}) được chạy trên phần cứng Apple Silicon ARM64 (\texttt{macOS 26.6.2}, Python \texttt{3.14.6}, thuần CPU, bật Sentence-BERT thật) qua \texttt{scripts/benchmark\_pipeline\_performance.py}, còn Bảng~\ref{tab:nfr-grobid-prod} đo trực tiếp container trên máy chủ ảo Google Compute Engine 2 vCPU, $5.8\text{\,GiB}$ RAM (\texttt{e2-custom-medium-6144}).
 
-Độ trễ $P_{90}$ ở bộ đệm ấm trên $n = 5$ lượt đo (sau 1 lượt làm nóng; lưu ý $P_{99}$ với $n = 5$ phản ánh giá trị cực đại quan sát) tăng tuyến tính từ $0.58\text{\,s}$ (bài báo 12 trang) lên $1.33\text{\,s}$ (đồ án 50 trang, đạt tốt ngưỡng $2.5\text{\,s}$ của \texttt{NFR-01}) và $4.22\text{\,s}$ (chuyên khảo 156 trang), với RSS API tối đa $1{,}030.8\text{\,MB}$ ($\le 1.5\text{\,GB}$ \texttt{NFR-02}) và đỉnh tăng heap cực đại từng chặng ở $11.09\text{\,MB}$ ($\le 25\text{\,MB}$).
+Độ trễ $P_{90}$ ở bộ đệm ấm trên $n = 5$ lượt đo liên tục (sau 1 lượt làm nóng; lưu ý $P_{99}$ với $n = 5$ phản ánh giá trị cực đại quan sát) tăng tuyến tính từ $0.58\text{\,s}$ (bài báo 12 trang) lên $1.33\text{\,s}$ (đồ án 50 trang, đạt tốt ngưỡng $2.5\text{\,s}$ của \texttt{NFR-01}) và $4.22\text{\,s}$ (chuyên khảo 156 trang), với RSS API tối đa $1{,}030.8\text{\,MB}$ ($\le 1.5\text{\,GB}$ \texttt{NFR-02}) và đỉnh tăng heap cực đại từng chặng ở $11.10\text{\,MB}$ ($\le 25\text{\,MB}$).
 
-Để kiểm chứng trực tiếp SLA mạng WAN lạnh của \texttt{NFR-01} trên đúng quy mô đồ án 50 trang, Bảng~\ref{tab:nfr-cold-warm-cache} báo cáo \emph{cả} bài báo 12 trang ($n = 1$: $9.41\text{\,s}$ lạnh $\rightarrow 0.48\text{\,s}$ ấm, tăng tốc truy hồi $688.72\times$) \emph{lẫn} phép đo mới $n = 3$ lượt trên mạng WAN lạnh đối với \textbf{đồ án tốt nghiệp 50 trang} (\texttt{20-theses/109.pdf}, 32/32 truy vấn trực tiếp Crossref+OpenAlex, PyMuPDF + SBERT thật): trung vị độ trễ mạng WAN lạnh đạt \textbf{12.64\,s} ($12{,}639.1\text{\,ms} \le 15\text{\,s}$, đạt \texttt{NFR-01}; chặng truy hồi $10{,}687.8\text{\,ms}$), rút xuống \textbf{2.00\,s} khi ấm bộ đệm (tăng tốc truy hồi \textbf{151.2$\times$}, tổng thể \textbf{6.31$\times$}).
+Để kiểm chứng trực tiếp SLA mạng WAN lạnh của \texttt{NFR-01} trên đúng quy mô đồ án 50 trang, Bảng~\ref{tab:nfr-cold-warm-cache} báo cáo \emph{cả} bài báo 12 trang ($n = 1$: $9.41\text{\,s}$ lạnh $\rightarrow 0.48\text{\,s}$ ấm, tăng tốc truy hồi $688.72\times$) \emph{lẫn} phép đo mới $n = 3$ tiến trình cô lập trên mạng WAN lạnh đối với \textbf{đồ án tốt nghiệp 50 trang} (\texttt{20-theses/109.pdf}, 32/32 truy vấn trực tiếp Crossref+OpenAlex, PyMuPDF + SBERT thật): trung vị độ trễ mạng WAN lạnh đạt \textbf{12.64\,s} ($12{,}639.1\text{\,ms} \le 15\text{\,s}$, đạt \texttt{NFR-01}; chặng truy hồi $10{,}687.8\text{\,ms}$), rút xuống \textbf{2.00\,s} khi ấm bộ đệm (tăng tốc truy hồi \textbf{151.2$\times$}, tổng thể \textbf{6.31$\times$}). Chênh lệch $0.70\text{\,s}$ giữa trung vị ấm $2.00\text{\,s}$ tại Bảng~\ref{tab:nfr-cold-warm-cache} và trung bình $1.31\text{\,s}$ ($P_{90} = 1.33\text{\,s}$) tại Bảng~\ref{tab:nfr-step-latency} xuất phát từ việc khởi chạy tiến trình mới cô lập với đệm trang hệ điều hành nguội cho PyMuPDF/SQLite so với vòng lặp làm nóng liên tục trong cùng tiến trình.
 
 \begin{figure}[!htbp]
     \centering
     \includegraphics[width=\textwidth,keepaspectratio]{picture/figures/fig5_2_nfr_scalability.png}
-    \caption[Độ trễ từng chặng, tăng tốc bộ nhớ đệm thang log và kiểm thử tải đồng thời 50 người dùng]{Các biểu đồ hiệu năng và khả năng mở rộng: (a)~độ trễ bộ đệm ấm theo chặng và RSS so với SLA \texttt{NFR-01}, (b)~so sánh WAN lạnh và bộ đệm ấm theo thang log trên bài báo 12 trang và đồ án 50 trang ($12.64\text{\,s} \le 15\text{\,s}$), và (c)~kiểm thử tải I/O, hàng đợi và SQLite WAL với 20 và 50 người dùng (NLP giả lập).}
+    \caption[Độ trễ từng chặng, tăng tốc bộ nhớ đệm thang log và kiểm thử tải đồng thời 50 người dùng]{Các biểu đồ hiệu năng và khả năng mở rộng: (a)~độ trễ bộ đệm ấm cộng tính theo chặng và RSS so với SLA \texttt{NFR-01}, (b)~so sánh WAN lạnh và bộ đệm ấm theo thang log trên bài báo 12 trang và đồ án 50 trang ($12.64\text{\,s} \le 15\text{\,s}$), và (c)~kiểm thử tải I/O, hàng đợi và SQLite WAL với 20 và 50 người dùng (NLP giả lập).}
     \label{fig:nfr-scalability}
 \end{figure}
 
-{\setlength{\tabcolsep}{3.5pt}
+{\setlength{\tabcolsep}{3.0pt}
 \begin{table}[!htbp]
 \centering
-\caption{Phân vị độ trễ bộ đệm ấm ($n = 5$ sau 1 lượt làm nóng, Apple ARM64 CPU) và mức dùng RAM trên ba quy mô bản thảo.}\label{tab:nfr-step-latency}
-\begin{tabular}{|L{0.22}|L{0.22}|C{0.11}|C{0.11}|C{0.11}|C{0.11}|C{0.12}|}
+\caption{Trung bình độ trễ cộng tính theo chặng, phân vị tổng ($n = 5$ sau 1 lượt làm nóng, Apple ARM64 CPU) và mức dùng RAM trên ba quy mô bản thảo.}\label{tab:nfr-step-latency}
+\begin{tabular}{|L{0.21}|L{0.23}|C{0.11}|C{0.15}|C{0.10}|C{0.10}|C{0.10}|}
 \hline
-\textbf{Quy mô bản thảo} & \textbf{Nhóm chặng} & \textbf{$P_{50}$ (ms)} & \textbf{$P_{90}$ (ms)} & \textbf{$P_{99}$\textsuperscript{*} (ms)} & \textbf{Đỉnh $\Delta$ (MB)} & \textbf{RSS (MB)} \\
+\textbf{Quy mô bản thảo} & \textbf{Nhóm chặng} & \textbf{TB (ms)} & \textbf{$P_{50} / P_{90}$ (ms)} & \textbf{$P_{99}$\textsuperscript{*} (ms)} & \textbf{Đỉnh $\Delta$ (MB)} & \textbf{RSS (MB)} \\
 \hline
-\textbf{Bài báo} (12\,tr., 24\,TLTK) & \texttt{parsing} + \texttt{extract} & 182.8 & 263.7 & 309.7 & 1.52 & 835.7 \\
- & \texttt{link} + \texttt{retrieve} & 39.6 & 48.0 & 52.5 & 0.12 & 835.7 \\
- & \texttt{compare} + \texttt{check} & 268.3 & 274.5 & 276.4 & 0.16 & 835.7 \\
- & \textbf{Tổng (Cả 8 bước)} & \textbf{494.1} & \textbf{583.4} & \textbf{635.5} & \textbf{1.61} & \textbf{835.7} \\
+\textbf{Bài báo} (12\,tr., 24\,TLTK) & Phân tích + chuẩn + trích & 209.7 & --- & --- & 1.61 & 835.7 \\
+ & Liên kết + truy hồi & 42.0 & --- & --- & 0.16 & 835.7 \\
+ & Đối sánh + kiểm + chấm & 268.9 & --- & --- & 0.16 & 835.7 \\
+ & \textbf{Tổng (Cả 8 bước)} & \textbf{520.5} & \textbf{494.1 / 583.4} & \textbf{635.5} & \textbf{1.61} & \textbf{835.7} \\
 \hline
-\textbf{Đồ án} (50\,tr., 32\,TLTK) & \texttt{parsing} + \texttt{extract} & 693.1 & 702.9 & 705.3 & 4.38 & 843.1 \\
- & \texttt{link} + \texttt{retrieve} & 98.9 & 100.4 & 101.0 & 0.25 & 843.2 \\
- & \texttt{compare} + \texttt{check} & 506.2 & 530.6 & 536.1 & 0.22 & 843.2 \\
- & \textbf{Tổng (Cả 8 bước)} & \textbf{1306.9} & \textbf{1325.1} & \textbf{1333.0} & \textbf{4.39} & \textbf{843.4} \\
+\textbf{Đồ án} (50\,tr., 32\,TLTK) & Phân tích + chuẩn + trích & 696.9 & --- & --- & 4.39 & 843.4 \\
+ & Liên kết + truy hồi & 98.2 & --- & --- & 0.26 & 843.4 \\
+ & Đối sánh + kiểm + chấm & 513.3 & --- & --- & 0.22 & 843.4 \\
+ & \textbf{Tổng (Cả 8 bước)} & \textbf{1308.4} & \textbf{1306.9 / 1325.1} & \textbf{1333.0} & \textbf{4.39} & \textbf{843.4} \\
 \hline
-\textbf{Chuyên khảo} (156\,tr., 87\,TLTK) & \texttt{parsing} + \texttt{extract} & 1257.4 & 1273.1 & 1276.2 & 11.09 & 1029.8 \\
- & \texttt{link} + \texttt{retrieve} & 317.0 & 320.8 & 322.2 & 0.24 & 1029.8 \\
- & \texttt{compare} + \texttt{check} & 2593.0 & 2633.8 & 2642.7 & 1.16 & 1029.9 \\
- & \textbf{Tổng (Cả 8 bước)} & \textbf{4159.7} & \textbf{4215.3} & \textbf{4215.6} & \textbf{11.10} & \textbf{1030.8} \\
+\textbf{Chuyên khảo} (156\,tr., 87\,TLTK) & Phân tích + chuẩn + trích & 1261.5 & --- & --- & 11.10 & 1030.8 \\
+ & Liên kết + truy hồi & 317.3 & --- & --- & 0.24 & 1030.8 \\
+ & Đối sánh + kiểm + chấm & 2577.6 & --- & --- & 1.16 & 1030.8 \\
+ & \textbf{Tổng (Cả 8 bước)} & \textbf{4156.5} & \textbf{4159.7 / 4215.3} & \textbf{4215.6} & \textbf{11.10} & \textbf{1030.8} \\
 \hline
-\multicolumn{7}{l}{\scriptsize\textsuperscript{*}$P_{99}$ với $n=5$ xấp xỉ cực đại mẫu; cột Đỉnh $\Delta$ lấy giá trị lớn nhất (\texttt{max}), không cộng dồn các bước con.}
+\multicolumn{7}{p{\dimexpr\textwidth-2\tabcolsep\relax}}{\scriptsize\textsuperscript{*}Trung bình (TB) các nhóm chặng cộng tính nghiêm ngặt bằng TB Tổng ($\pm 0.1\text{\,ms}$ làm tròn; độ lệch chuẩn SD: $67.7$, $16.8$ và $66.6\text{\,ms}$). Các phân vị không cộng tính theo nhóm chặng nên báo cáo trên Tổng ($P_{99}$ với $n=5$ xấp xỉ cực đại mẫu). Cột Đỉnh $\Delta$ lấy cực đại (\texttt{max}) qua các bước con.}
 \end{tabular}
 \end{table}
 }
@@ -434,17 +435,18 @@ Các bài đo phi chức năng cục bộ (Bảng~\ref{tab:nfr-step-latency}--\r
 \hline
 Bài báo 12\,tr.\ --- WAN lạnh ($n=1$) & 76.2 & 243.1 & 8,635.8 & 9,407.6 & $1.00\times$ & $1.00\times$ \\
 \hline
-\textbf{Bài báo 12\,tr.\ --- Đệm ấm} & 96.0 & \textbf{87.1} & \textbf{12.5} & \textbf{484.8} & \textbf{$688.72\times$} & \textbf{$19.41\times$} \\
+\textbf{Bài báo 12\,tr.\ --- Đệm ấm} & 96.0 & \textbf{87.1} & \textbf{12.54}\textsuperscript{*} & \textbf{484.8} & \textbf{$688.72\times$} & \textbf{$19.41\times$} \\
 \hline
-Đồ án 50\,tr.\ --- WAN lạnh ($n=3$ tv.) & 453.3 & 732.6 & 10,687.8 & \textbf{12,639.1} & $1.00\times$ & $1.00\times$ \\
+Đồ án 50\,tr.\ --- WAN lạnh ($n=3$, trung vị) & 453.3 & 732.6 & 10,687.8 & \textbf{12,639.1} & $1.00\times$ & $1.00\times$ \\
 \hline
-\textbf{Đồ án 50\,tr.\ --- Đệm ấm} ($n=3$) & 452.1 & 730.6 & \textbf{70.7} & \textbf{2,003.9} & \textbf{$151.2\times$} & \textbf{$6.31\times$} \\
+\textbf{Đồ án 50\,tr.\ --- Đệm ấm} ($n=3$)\textsuperscript{$\dagger$} & 452.1 & 730.6 & \textbf{70.7} & \textbf{2,003.9} & \textbf{$151.2\times$} & \textbf{$6.31\times$} \\
 \hline
+\multicolumn{7}{p{\dimexpr\textwidth-2\tabcolsep\relax}}{\scriptsize\textsuperscript{*}Hệ số $688.72\times$ tính từ độ trễ chưa làm tròn ($12.539\text{\,ms}$). \textsuperscript{$\dagger$}Lượt ấm tiến trình cô lập (trung vị $2.00\text{\,s}$) gồm đệm trang HĐH nguội so với vòng lặp ấm liên tục ($1.31\text{\,s}$ TB / $1.33\text{\,s}$ $P_{90}$) tại Bảng~\ref{tab:nfr-step-latency}.}
 \end{tabular}
 \end{table}
 }
 
-Bảng~\ref{tab:nfr-deadline-stress} cô lập kiểm thử \textbf{tầng tải lên HTTP multipart, kế toán hạn mức CAS, ghi đồng thời SQLite WAL và hàng đợi FIFO \texttt{Pipeline\allowbreak Admission\allowbreak Controller}} dưới tải đột biến 20 và 50 sinh viên trên tệp PDF mẫu 2 trang / 3 trích dẫn với \textbf{tầng NLP giả lập (stubbed)} nhằm tạo áp lực tối đa lên khóa CSDL và lập lịch hàng đợi. Toàn bộ $50/50$ lượt nộp hoàn tất với $0$ lỗi khóa SQLite và $0$ lỗi HTTP 5xx/429 ($11.57\text{\,bài/s}$ qua hàng đợi; $24.49\text{\,req/s}$ tiếp nhận HTTP). Theo định luật Little, khi chạy đủ AI trên CPU (\texttt{max\_concurrent=3}, $1.33\text{\,s}$ đệm ấm / $12.64\text{\,s}$ WAN lạnh mỗi đồ án 50 trang), thông lượng kiểm chứng thực tế đạt khoảng $\sim 2.2\text{\,bài/s}$ (đệm ấm) hoặc $\sim 0.24\text{\,bài/s}$ (WAN lạnh), còn hàng đợi điều phối hấp thụ êm toàn bộ 50 lượt nộp mà không từ chối yêu cầu.
+Bảng~\ref{tab:nfr-deadline-stress} cô lập kiểm thử \textbf{tầng tải lên HTTP multipart, kế toán hạn mức CAS, ghi đồng thời SQLite WAL và hàng đợi FIFO \texttt{Pipeline\allowbreak{}Admission\allowbreak{}Controller}} dưới tải đột biến 20 và 50 sinh viên trên tệp PDF mẫu 2 trang / 3 trích dẫn với \textbf{tầng NLP giả lập (stubbed)} nhằm tạo áp lực tối đa lên khóa CSDL và lập lịch hàng đợi. Toàn bộ $50/50$ lượt nộp hoàn tất với $0$ lỗi khóa SQLite và $0$ lỗi HTTP 5xx/429 ($11.57\text{\,bài/s}$ qua hàng đợi; $24.49\text{\,req/s}$ tiếp nhận HTTP). Theo định luật Little, khi chạy đủ AI trên CPU (\texttt{max\_concurrent=3}, $1.31$--$2.00\text{\,s}$ đệm ấm / $12.64\text{\,s}$ WAN lạnh mỗi đồ án 50 trang), thông lượng kiểm chứng thực tế đạt khoảng $\sim 1.5$--$2.3\text{\,bài/s}$ (đệm ấm) hoặc $\sim 0.24\text{\,bài/s}$ (WAN lạnh), còn hàng đợi điều phối hấp thụ êm toàn bộ 50 lượt nộp mà không từ chối yêu cầu.
 
 {\setlength{\tabcolsep}{3pt}
 \begin{table}[!htbp]
@@ -466,7 +468,7 @@ HTTP \texttt{POST /\allowbreak api/\allowbreak essays} & \textbf{50} & \textbf{5
 \end{table}
 }
 
-Để xác minh hành vi bộ nhớ thực tế trên máy chủ vận hành với bản thảo dài khi tắt đệm đĩa, Bảng~\ref{tab:nfr-grobid-prod} đối chiếu container GROBID $3\text{\,GiB}$ cũ (\texttt{-Xmx1280m}, \texttt{concurrency=10}, bật \texttt{teiCoordinates}) với cấu hình tối ưu $4\text{\,GiB}$ (\texttt{-Xmx768m}, \texttt{concurrency=2}, \texttt{pdfalto=1024\,MB}, tắt \texttt{teiCoordinates}) trên máy chủ GCE bằng bản thảo 117 trang ($10.63\text{\,MB}$) của chính báo cáo này. Cấp bộ nhớ vượt ngưỡng $3.1\text{\,GiB}$ của mô hình Wapiti gốc xóa sạch swap ($2.19\text{\,GiB} \rightarrow 0\text{\,B}$), giảm $99.74\%$ lỗi trang cứng ($91{,}718 \rightarrow 239$ nền khởi động với $+0$ tăng thêm khi chạy), tăng tốc GROBID không đệm $5.48\times$ ở lượt ấm ($95.53\text{\,s} \rightarrow 17.44\text{\,s}$) và xử lý đồng thời hai luận văn 117 trang trong $31.31\text{\,s}$ trong khi còn dư $885\text{\,MiB}$ RAM. Các yêu cầu phi chức năng còn lại đều đạt định lượng: \texttt{NFR-07} đạt WCAG 2.1 AA và $0\text{\,px}$ tràn lề trên 5 khung nhìn; \texttt{NFR-08} biên dịch gói khởi động $231.50\text{\,kB}$ ($67.50\text{\,kB}$ nén gzip $\le 250\text{\,kB}$); \texttt{NFR-09} chạy $3{,}099$ kiểm tra tự động ($0$ lỗi); và \texttt{NFR-10} khởi động đủ 3 container trong $\le 60\text{\,s}$ ấm ($\le 120\text{\,s}$ nạp mô hình lạnh) với $0$ phụ thuộc GPU.
+Để xác minh hành vi bộ nhớ thực tế trên máy chủ vận hành với bản thảo dài khi tắt đệm đĩa, Bảng~\ref{tab:nfr-grobid-prod} đối chiếu container GROBID $3\text{\,GiB}$ cũ (\texttt{-Xmx1280m}, \texttt{concurrency=10}, bật \texttt{teiCoordinates}) với cấu hình tối ưu $4\text{\,GiB}$ (\texttt{-Xmx768m}, \texttt{concurrency=2}, \texttt{pdfalto=1024\,MB}, tắt \texttt{teiCoordinates}) trên máy chủ GCE bằng bản thảo 117 trang ($10.63\text{\,MB}$) của chính báo cáo này. Cấp bộ nhớ vượt ngưỡng $3.1\text{\,GiB}$ của mô hình Wapiti gốc xóa sạch swap ($2.19\text{\,GiB} \rightarrow 0\text{\,B}$), giảm $99.74\%$ lỗi trang cứng ($91{,}718 \rightarrow 239$ nền khởi động với $+0$ tăng thêm khi chạy), tăng tốc GROBID không đệm $5.48\times$ ở lượt ấm ($95.53\text{\,s} \rightarrow 17.44\text{\,s}$) và xử lý đồng thời hai luận văn 117 trang trong $31.31\text{\,s}$ trong khi còn dư $885\text{\,MiB}$ RAM. Các yêu cầu phi chức năng còn lại đều đạt định lượng: \texttt{NFR-07} đạt WCAG 2.1 AA và $0\text{\,px}$ tràn lề trên 5 khung nhìn; \texttt{NFR-08} biên dịch gói khởi động $231.50\text{\,kB}$ ($67.50\text{\,kB}$ nén gzip $\le 250\text{\,kB}$); \texttt{NFR-09} chạy $3{,}110$ kiểm tra tự động mặc định ($3{,}119$ tổng, $0$ lỗi); và \texttt{NFR-10} khởi động đủ 3 container trong $\le 60\text{\,s}$ ấm ($\le 120\text{\,s}$ nạp mô hình lạnh) với $0$ phụ thuộc GPU.
 
 {\setlength{\tabcolsep}{3.5pt}
 \begin{table}[!htbp]
@@ -497,20 +499,20 @@ Theo khung phân loại của Wohlin và cộng sự~\cite{wohlin2012experimenta
 
 \subsection{Độ giá trị nội tại}
 
-Tập chuẩn 120,000 mẫu sinh biến thể nhiễu theo chương trình bám sát phân loại của tầng kiểm chứng; do đó độ chính xác $99.67\%$ phản ánh \emph{tính nhất quán tầng quyết định có kiểm soát} chứ không đồng nghĩa độ chính xác trực tuyến không nhiễu. Vì vậy, chương đã đối chiếu song song với đánh giá trực tuyến 15 API trên 120 tài liệu tham khảo thô ($89.17\%$), nơi giới hạn tần suất API và DOI khu vực chưa lập chỉ mục giải thích khoảng cách $10.5$ điểm phần trăm. Ở \textbf{RQ2}, Nhóm 1 và 3 cố ý đánh giá cờ nguồn gốc (\texttt{is\_retracted}, \texttt{url\_status}) nằm ngoài 16 đặc trưng của \texttt{B5}, còn Nhóm 6 lặp lại 10 mẫu luật $\times 40$; vì vậy kết quả i.i.d.\ Nhóm 1--5 ($N=2{,}000$) đã được tách riêng. Dù tập \texttt{Train/Val/Test} không trùng bài báo hay tiêu đề và giữ nhúng SBERT thực trên mọi lớp, các chiêu thức lách luật đối kháng nhắm vào vùng biên $[0.40, 0.60)$ vẫn là thách thức cần tiếp tục theo dõi.
+Tập chuẩn 120,000 mẫu sinh biến thể nhiễu theo chương trình bám sát phân loại tầng kiểm chứng; do đó $99.67\%$ phản ánh \emph{tính nhất quán tầng quyết định có kiểm soát} chứ không thay thế độ chính xác trực tuyến. Đối chiếu song song với 120 tài liệu tham khảo thô trực tuyến 15 API ($89.17\%$) cho thấy giới hạn tần suất API và mẫu DOI khu vực tổng hợp giải thích khoảng cách $10.5$ điểm phần trăm. Ở \textbf{RQ2}, Nhóm 1 và 3 cố ý đánh giá cờ nguồn gốc (\texttt{is\_retracted}, \texttt{url\_status}) ngoài 16 đặc trưng của \texttt{B5}, còn Nhóm 4 và 5 cấp bit từ chối ký hiệu (\texttt{vec[15]}) cho \texttt{B5}; Nhóm 6 lặp 10 mẫu luật $\times 40$ nên tách riêng khỏi Nhóm 1--5 i.i.d.\ ($N=2{,}000$). Dù các tập phân tách nghiêm ngặt theo bài báo/tiêu đề với nhúng SBERT thực, chiêu thức đối kháng nhắm vào vùng biên $[0.40, 0.60)$ vẫn là thách thức mở.
 
 \subsection{Độ giá trị ngoại tại}
 
-Thứ nhất, $98.42\%$ ($127{,}102/129{,}137$) kho \texttt{local\_papers.db} xuất phát từ ACL Anthology, làm giảm độ phủ ngoại tuyến ngoài lĩnh vực NLP; khi có mạng, hệ thống dựa vào 15+ API trực tuyến (độ chính xác trực tuyến đạt $80\%$ ở Kinh tế/Kỹ thuật đến $95\%$ ở KHMT/Y sinh). Thứ hai, bộ chuẩn hóa họ tên và văn bản pháp lý chuyên biệt phục vụ tiếng Anh và tiếng Việt; các ngôn ngữ khác sử dụng nhúng đa ngữ tổng quát. Thứ ba, đợt quét 310 PDF chạy thuần PyMuPDF ($70.1\%$ liên kết trên 220 bài mở đa dạng), phản ánh cận dưới khi tắt GROBID. Thứ tư, các kho đóng phí (Scopus, Web of Science) nằm ngoài phạm vi tự triển khai miễn phí.
+Thứ nhất, $98.42\%$ ($127{,}102/129{,}137$) kho \texttt{local\_papers.db} từ ACL Anthology nên độ phủ ngoại tuyến ngoài NLP thấp hơn; triển khai có mạng dựa vào 15+ API trực tuyến ($80\%$ ở Kinh tế/Kỹ thuật đến $95\%$ ở KHMT/Y sinh trên 120 chuỗi thô do tác giả tuyển chọn ở Bảng~\ref{tab:e2e-gold}, bổ trợ bởi 310+21 PDF thực). Thứ hai, chuẩn hóa họ tên và luật pháp chuyên biệt nhắm tới tiếng Anh và tiếng Việt. Thứ ba, quét 310 PDF chạy thuần PyMuPDF ($70.1\%$ liên kết trên 220 bài mở), phản ánh cận dưới khi tắt GROBID. Thứ tư, kho đóng phí (Scopus, Web of Science) nằm ngoài thiết kế miễn phí.
 
 \subsection{Độ giá trị khái niệm}
 
-Bốn mối đe dọa khái niệm được ghi nhận: (i)~tường phí nhà xuất bản che toàn văn nên đối sánh nhận định giới hạn ở tiêu đề và tóm tắt mở; (ii)~trọng số CIS phản ánh chính sách chấm điểm cơ sở đào tạo thay vì hằng số vật lý, đồng thời việc bỏ trống DOI/URL nhận $s_{\text{id}} = 1.00$ và mục \texttt{unresolved} không bị trừ trong $s_{\text{meta}}$ (đòi hỏi giảng viên xem cả \texttt{num\_unresolved} cạnh điểm CIS); (iii)~kiểm toán từng dòng trên 21 PDF (329 TLTK) do nhóm tác giả thực hiện thay vì hai đánh giá viên độc lập mù (chưa có chỉ số Cohen's $\kappa$); và (iv)~\textbf{RQ1} đối chiếu với các mô hình đơn tín hiệu và MLR tuyến tính (\texttt{B5}), chưa so sánh với mô hình cây phi tuyến (XGBoost) hay đối chứng LLM-as-a-Judge~\cite{hu2024refchecker}, \cite{press2024citeme}.
+Bốn mối đe dọa khái niệm gồm: (i)~tường phí che toàn văn nên đối sánh nhận định giới hạn ở tiêu đề và tóm tắt mở; (ii)~trọng số CIS phản ánh chính sách chấm điểm hơn là mô hình khớp thực nghiệm, bỏ trống DOI/URL nhận $s_{\text{id}} = 1.00$ và \texttt{unresolved} không trừ điểm $s_{\text{meta}}$ (cần xem kèm \texttt{num\_unresolved}); (iii)~kiểm toán 21 PDF (329 TLTK) do tác giả thực hiện, chưa có đánh giá viên mù (Cohen's $\kappa$); và (iv)~\textbf{RQ1} chưa đối chiếu XGBoost và LLM-as-a-Judge~\cite{hu2024refchecker}, \cite{press2024citeme}.
 
 \subsection{Độ giá trị kết luận}
 
-Mặc dù các kiểm định \textbf{RQ1}/\textbf{RQ2} áp dụng McNemar hiệu chỉnh liên tục, Holm--Bonferroni, Wilcoxon, bootstrap và Clopper--Pearson, ba giới hạn thống kê cần lưu ý: (i)~cỡ mẫu nhỏ tại Bảng~\ref{tab:nfr-step-latency} ($n = 5$) và Bảng~\ref{tab:nfr-cold-warm-cache} ($n = 3$ WAN lạnh) khiến ước lượng phân vị đuôi ($P_{99}$) chỉ mang tính xấp xỉ; (ii)~cắt trần xác suất $\text{max\_prob} = 0.99$ gây bão hòa đồng hạng làm giảm nhẹ độ chính xác có chọn lọc tại $50\%$ độ phủ ($99.60\%$); và (iii)~Bảng~\ref{tab:nfr-deadline-stress} đo tải I/O, hàng đợi và SQLite WAL với tầng NLP giả lập ($11.57\text{\,bài/s}$), không được nhầm lẫn với thông lượng suy diễn AI đầy đủ trên CPU ($\sim 0.24$--$2.2\text{\,bài/s}$).
+Dù \textbf{RQ1}/\textbf{RQ2} dùng McNemar hiệu chỉnh liên tục, Holm--Bonferroni, Wilcoxon, bootstrap và Clopper--Pearson, ba giới hạn thống kê áp dụng: (i)~cỡ mẫu nhỏ tại Bảng~\ref{tab:nfr-step-latency} ($n = 5$) và Bảng~\ref{tab:nfr-cold-warm-cache} ($n = 3$ WAN lạnh) khiến $P_{99}$ chỉ mang tính xấp xỉ; (ii)~cắt trần $\text{max\_prob} = 0.99$ gây đồng hạng làm giảm nhẹ độ chính xác tại $50\%$ độ phủ ($99.60\%$); và (iii)~Bảng~\ref{tab:nfr-deadline-stress} đo tải I/O, hàng đợi và SQLite WAL với NLP giả lập ($11.57\text{\,bài/s}$), tách biệt với thông lượng AI đầy đủ trên CPU ($\sim 0.24$--$2.3\text{\,bài/s}$).
 
 \section{Tóm tắt chương}
 
-Chương này đã kiểm định \textbf{CITRA} (\texttt{v3.90.10}) qua 3,099 kiểm tra tự động (2,430+ \texttt{pytest} [2,437 mặc định], 494 \texttt{Vitest}, 168 \texttt{Playwright}), ma trận truy vết đủ 20 FR/10 NFR và năm câu hỏi nghiên cứu---chứng minh độ chính xác tầng quyết định $99.67\%$ ($\text{ECE} = 0.0405$), $99.95\%$ OOD độc lập i.i.d., $89.17\%$ trực tuyến 15 API (F1 hợp lệ $98.36\%$; $100.00\%$ ngoại tuyến), $12.64\text{\,s}$ WAN lạnh trên đồ án 50 trang, tối ưu GROBID không swap trên GCE ($95.53\text{\,s} \rightarrow 17.44\text{\,s}$) và chịu tải I/O 50 người dùng không lỗi. Chương~\ref{chap:conclusion} tổng kết kết quả, hạn chế và hướng phát triển tiếp theo.
+Chương này đã kiểm định \textbf{CITRA} (\texttt{v3.90.10}) qua 3,110 kiểm tra mặc định (2,437 mặc định / 2,446 tổng \texttt{pytest}, 495 \texttt{Vitest}, 178 \texttt{Playwright}), RTM 20 FR/10 NFR và năm câu hỏi nghiên cứu---chứng minh $99.67\%$ độ chính xác tầng quyết định ($\text{ECE} = 0.0405$), $99.95\%$ OOD i.i.d., $89.17\%$ trực tuyến 15 API (F1 hợp lệ $98.36\%$; $100.00\%$ ngoại tuyến), $12.64\text{\,s}$ WAN lạnh 50 trang, GROBID 0-swap trên GCE ($95.53\text{\,s} \rightarrow 17.44\text{\,s}$) và 0 lỗi tải I/O 50 người dùng. Chương~\ref{chap:conclusion} tổng kết kết quả, hạn chế và hướng phát triển.
