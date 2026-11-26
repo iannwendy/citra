@@ -7,6 +7,7 @@
 \usepackage[left=3.5cm, right=2cm, top=3.5cm, bottom=3cm]{geometry}
 
 \usepackage{graphicx,float}
+\usepackage[section]{placeins}
 \usepackage{longtable}
 \usepackage{rotating}
 \usepackage{pdflscape}
@@ -14,6 +15,7 @@
 \usepackage{multicol}
 \usepackage{xcolor}
 \usepackage{fontspec}
+\usepackage[protrusion=true,expansion=false]{microtype}
 \usepackage{listings}
 % Define custom languages BEFORE \lstset
 \lstdefinelanguage{docker}{
@@ -80,6 +82,12 @@
 
 % Font setup
 \setmainfont{Times New Roman}
+\setmonofont[Scale=MatchLowercase]{Menlo}
+
+% Typographic hygiene: prevent widows/orphans across pages
+\widowpenalty=10000
+\clubpenalty=10000
+\displaywidowpenalty=10000
 
 % TDTU body-text size.  The standard report class only provides 10/11/12pt
 % options, so changefontsizes is used to make the effective normal text
@@ -247,8 +255,8 @@
     \vskip 3pt \@plus \p@
     \setlength\@tempdima{1.5em}%
     \begingroup
-      \parindent \z@ \rightskip \@pnumwidth
-      \parfillskip -\@pnumwidth
+      \parindent \z@ \rightskip 2.8em
+      \parfillskip -2.8em
       \leavevmode \bfseries
       \advance\leftskip\@tempdima
       \hskip -\leftskip
@@ -264,8 +272,8 @@
     \vskip 1pt \@plus \p@
     \setlength\@tempdima{2.2em}%
     \begingroup
-      \parindent \z@ \rightskip \@pnumwidth
-      \parfillskip -\@pnumwidth
+      \parindent \z@ \rightskip 2.8em
+      \parfillskip -2.8em
       \leavevmode
       \advance\leftskip\@tempdima
       \hskip -\leftskip
@@ -280,8 +288,8 @@
     \vskip 0.5pt \@plus \p@
     \setlength\@tempdima{3.2em}%
     \begingroup
-      \parindent \z@ \rightskip \@pnumwidth
-      \parfillskip -\@pnumwidth
+      \parindent \z@ \rightskip 2.8em
+      \parfillskip -2.8em
       \leavevmode \itshape
       \advance\leftskip 2.2em\relax
       \advance\leftskip\@tempdima
@@ -299,8 +307,8 @@
     \vskip 0.5pt \@plus \p@
     \setlength\@tempdima{4.0em}%
     \begingroup
-      \parindent \z@ \rightskip \@pnumwidth
-      \parfillskip -\@pnumwidth
+      \parindent \z@ \rightskip 2.8em
+      \parfillskip -2.8em
       \leavevmode \itshape
       \advance\leftskip 5.4em\relax
       \advance\leftskip\@tempdima
@@ -318,8 +326,8 @@
     \vskip 1.5pt \@plus \p@
     \setlength\@tempdima{5.2em}%
     \begingroup
-      \parindent \z@ \rightskip \@pnumwidth
-      \parfillskip -\@pnumwidth
+      \parindent \z@ \rightskip 2.8em
+      \parfillskip -2.8em
       \leavevmode
       \advance\leftskip\@tempdima
       \hskip -\leftskip
@@ -335,8 +343,8 @@
     \vskip 1pt \@plus \p@
     \setlength\@tempdima{5.4em}%
     \begingroup
-      \parindent \z@ \rightskip \@pnumwidth
-      \parfillskip -\@pnumwidth
+      \parindent \z@ \rightskip 2.8em
+      \parfillskip -2.8em
       \leavevmode
       \advance\leftskip\@tempdima
       \hskip -\leftskip
@@ -346,6 +354,33 @@
       \nobreak\kern 2pt{\normalcolor #2}\par
     \endgroup
   \fi}
+
+% Macro mục Phụ lục: đánh số A..E chuẩn, gắn đúng \label và hiển thị trên Mục lục
+\newcounter{appsec}
+\renewcommand{\theappsec}{\Alph{appsec}}
+\newcommand{\appsection}[2]{%
+  \refstepcounter{appsec}%
+  \phantomsection
+  \label{#2}%
+  \section*{Phụ lục~\theappsec: #1}%
+  \addcontentsline{toc}{section}{Phụ lục~\theappsec: #1}%
+}
+
+% Khung mã giả học thuật (chuẩn IEEE/ACM, không phụ thuộc gói ngoài)
+\newenvironment{citraalgo}[3]{%
+  \begin{figure}[!htbp]%
+  \centering
+  \begin{minipage}{0.98\textwidth}%
+  \setstretch{1.15}\fontsize{11.5pt}{14pt}\selectfont
+  \noindent\rule{\textwidth}{1.1pt}\par\vspace{3pt}%
+  \noindent\textbf{Thuật toán~#1:} #2\par\vspace{2pt}%
+  \noindent\rule{\textwidth}{0.6pt}\par\vspace{4pt}%
+  \def\citraalgolabel{#3}%
+}{%
+  \vspace{2pt}\noindent\rule{\textwidth}{1.1pt}%
+  \end{minipage}%
+  \end{figure}%
+}
 
 % Custom abbrv environment for abbreviations
 \newenvironment{abbrv}{

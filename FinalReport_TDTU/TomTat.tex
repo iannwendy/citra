@@ -2,17 +2,17 @@
 \pagestyle{empty}
 {\centering
 \thispagestyle{empty}
-\linespread{1.15}\fontsize{16pt}{22pt}\selectfont\textbf{AUTOMATED ESSAY GRADING AND SOURCE HALLUCINATION DETECTION VIA NEURO-SYMBOLIC LOGIC CHECKER}\par}
+\linespread{1.15}\fontsize{16pt}{22pt}\selectfont\textbf{CITRA: A NEURO-SYMBOLIC PLATFORM FOR AUTOMATED CITATION INTEGRITY SCORING AND SOURCE HALLUCINATION DETECTION}\par}
 
-\vspace{0.5\baselineskip}
+\vspace{0.45\baselineskip}
 
 {\centering\linespread{1.15}\fontsize{16pt}{22pt}\selectfont\textbf{ABSTRACT}\par}
 
-\vspace{0.6\baselineskip}
+\vspace{0.55\baselineskip}
 \thispagestyle{empty}
 
-Generative language models accelerate academic writing, yet they frequently fabricate syntactically valid citations pointing to non-existent papers, retracted articles, or corrupted bibliographic metadata. However, existing plagiarism and AI-text detectors inspect surface prose without querying external registries, whereas pure similarity or machine-learning matchers fail on discrete provenance violations and misclassify network rate-limit errors. To address this gap, we present \textbf{CITRA}, a neuro-symbolic verification platform that links in-text claims to bibliography entries across twelve citation styles and queries a 129,137-paper local index alongside fifteen scholarly registries. CITRA integrates bilingual semantic alignment, priority-ordered symbolic rules, multinomial logistic scoring, and Platt probability calibration with selective abstention. We evaluated CITRA on an 18,000-citation paper-disjoint test set from a 120,000-sample benchmark, a 2,400-sample out-of-distribution stress suite, and 310 multi-style academic manuscripts. CITRA achieves 99.67\% accuracy and 99.65\% Macro-F1, cutting classification errors by 85.7\% over the strongest machine-learning baseline ($p < 10^{-72}$) with zero false hallucination accusations across 6,480 genuine citations. Platt calibration lowers expected calibration error by 83.6\% to 0.0405, while symbolic guardrails raise out-of-distribution accuracy from 57.33\% to 99.96\%. Combining symbolic provenance rules with calibrated neural matching delivers reliable, auditable citation verification for academic grading and review.
+Generative language models accelerate academic writing, yet they frequently fabricate syntactically valid citations pointing to non-existent papers, retracted articles, or corrupted bibliographic metadata. Existing plagiarism and AI-text detectors inspect surface prose without querying external registries, whereas pure similarity or machine-learning matchers fail on discrete provenance violations and misclassify network rate-limit errors. To address this gap, we present \textbf{CITRA}, a neuro-symbolic citation integrity platform that links in-text claims to bibliography entries across twelve citation formats and queries a 129,137-record (128,115 unique papers) local full-text index alongside 15+ scholarly and technical registries. CITRA integrates bilingual semantic alignment, priority-ordered symbolic provenance rules, multinomial logistic scoring, and Platt probability calibration with selective abstention. Across an 18,000-citation paper-disjoint decision-layer test set (from a 120,000-sample benchmark), a 2,400-sample out-of-distribution guardrail suite, 120 live multi-registry references, and 310 multi-style manuscripts, CITRA achieves 99.67\% accuracy and 99.65\% Macro-F1 (85.7\% error reduction over the strongest ML baseline, $p < 10^{-72}$, zero verified-to-hallucination inversions across 6,480 genuine records), lowers expected calibration error by 83.6\% to 0.0405, raises out-of-distribution accuracy from 57.33\% to 99.96\%, attains 89.17\% live 5-class accuracy (98.36\% verified F1), and sustains 97.7\%--100\% extraction recall with Spearman $\rho = 0.9987$ CIS rank stability.
 
-\vspace{0.5\baselineskip}
+\vspace{0.45\baselineskip}
 \noindent\textbf{Keywords:} Citation integrity verification, source hallucination detection, neuro-symbolic AI, selective abstention, Platt probability calibration, empirical software engineering.
 \clearpage
