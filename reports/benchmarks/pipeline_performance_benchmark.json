@@ -12,7 +12,7 @@
   "scale_benchmarks": [
     {
       "tier_id": "short_paper_10p",
-      "label_vi": "Bài báo khoa học ngắn (~10 trang)",
+      "label_vi": "B\u00e0i b\u00e1o khoa h\u1ecdc ng\u1eafn (~10 trang)",
       "label_en": "Short Research Article (~10 pp.)",
       "pdf_path": "TDTU_PDF/098_uit_vnuhcm_Vietnamese_Hate_Speech_Detection_in_Gaming_Domain_Edited_Report.pdf",
       "num_pages": 12,
@@ -316,7 +316,7 @@
     },
     {
       "tier_id": "bachelor_thesis_50p",
-      "label_vi": "Khóa luận tốt nghiệp (~50 trang)",
+      "label_vi": "Kh\u00f3a lu\u1eadn t\u1ed1t nghi\u1ec7p (~50 trang)",
       "label_en": "Undergraduate Thesis (~50 pp.)",
       "pdf_path": "20-theses/109.pdf",
       "num_pages": 50,
@@ -620,7 +620,7 @@
     },
     {
       "tier_id": "dissertation_100p",
-      "label_vi": "Luận văn / Đồ án quy mô lớn (100+ trang)",
+      "label_vi": "Lu\u1eadn v\u0103n / \u0110\u1ed3 \u00e1n quy m\u00f4 l\u1edbn (100+ trang)",
       "label_en": "Large Thesis / Dissertation (100+ pp.)",
       "pdf_path": "VN_UNI_PDF_BATCH2/088_ou_hcm_KLTN_IEEE_FULL_PAPER_VN.pdf",
       "num_pages": 156,
@@ -1025,7 +1025,7 @@
   ],
   "cold_vs_warm_cache": {
     "tier_id": "short_paper_10p",
-    "label_vi": "Bài báo khoa học ngắn (~10 trang)",
+    "label_vi": "B\u00e0i b\u00e1o khoa h\u1ecdc ng\u1eafn (~10 trang)",
     "label_en": "Short Research Article (~10 pp.)",
     "pdf_path": "TDTU_PDF/098_uit_vnuhcm_Vietnamese_Hate_Speech_Detection_in_Gaming_Domain_Edited_Report.pdf",
     "num_pages": 12,
@@ -1133,5 +1133,27 @@
       "total_wall_time_ms": 2041.53,
       "throughput_http_uploads_per_sec": 24.49
     }
-  ]
+  ],
+  "cold_vs_warm_cache_50p": {
+    "tier_id": "bachelor_thesis_50p",
+    "label_vi": "\u0110\u1ed3 \u00e1n t\u1ed1t nghi\u1ec7p 50 trang (32 TLTK)",
+    "label_en": "Bachelor Capstone (~50 pp., 32 refs)",
+    "pdf_path": "20-theses/109.pdf",
+    "num_pages": 50,
+    "num_references": 32,
+    "iterations": 3,
+    "aggregation": "median_of_3_isolated_runs",
+    "used_live_wan": true,
+    "cold_parsing_ms": 453.3,
+    "warm_parsing_ms": 452.1,
+    "cold_extracting_ms": 732.6,
+    "warm_extracting_ms": 730.6,
+    "cold_retrieving_ms": 10687.8,
+    "warm_retrieving_ms": 70.7,
+    "cold_total_ms": 12639.1,
+    "warm_total_ms": 2003.9,
+    "retrieval_speedup_x": 151.2,
+    "end_to_end_speedup_x": 6.31,
+    "note": "Isolated fresh-process n=3 median (cold PyMuPDF/SQLite OS page cache); sustained warm-process n=5 median is 1306.9 ms (P90=1325.1 ms) in scale_benchmarks."
+  }
 }

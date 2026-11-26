@@ -592,7 +592,7 @@ export function BatchUploadPage() {
             <Separator orientation="vertical" className="h-4" />
             <span className="font-mono text-xs text-slate-700 dark:text-slate-300 font-semibold">
               {lang === 'vi' ? 'Hàng đợi kiểm tra hàng loạt' : 'Batch Verification Queue'} ·{' '}
-              {files.length} {t('batchUpload.files').toLowerCase()}
+              {files.length} {lang === 'vi' ? 'tệp' : t('batchUpload.files').toLowerCase()}
             </span>
           </div>
 

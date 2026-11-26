@@ -1974,7 +1974,17 @@ def compute_statistical_significance_tests(
     raw_mcnemar_p = {
         k: float(v["mcnemar_test"]["p_value"]) for k, v in pairwise_vs_baselines.items()
     }
+    raw_boot_acc_p = {
+        k: float(v["paired_bootstrap"]["one_sided_p_value_accuracy"])
+        for k, v in pairwise_vs_baselines.items()
+    }
+    raw_boot_f1_p = {
+        k: float(v["paired_bootstrap"]["one_sided_p_value_macro_f1"])
+        for k, v in pairwise_vs_baselines.items()
+    }
     holm_adjusted = _holm_bonferroni_adjust(raw_mcnemar_p)
+    holm_boot_acc = _holm_bonferroni_adjust(raw_boot_acc_p)
+    holm_boot_f1 = _holm_bonferroni_adjust(raw_boot_f1_p)
     family_size = len(raw_mcnemar_p)
     for k, entry in pairwise_vs_baselines.items():
         adj_p = holm_adjusted[k]
@@ -1984,6 +1994,12 @@ def compute_statistical_significance_tests(
             "< 1e-16" if adj_p < 1e-16 else f"{adj_p:.4e}"
         )
         entry["mcnemar_test"]["significant_holm_alpha_0_001"] = bool(adj_p < 0.001)
+        b_adj_acc = round(float(holm_boot_acc[k]), 6)
+        b_adj_f1 = round(float(holm_boot_f1[k]), 6)
+        entry["paired_bootstrap"]["holm_bonferroni_family_size"] = family_size
+        entry["paired_bootstrap"]["holm_bonferroni_adjusted_p_value_accuracy"] = b_adj_acc
+        entry["paired_bootstrap"]["holm_bonferroni_adjusted_p_value_macro_f1"] = b_adj_f1
+        entry["paired_bootstrap"]["holm_bonferroni_display"] = f"{b_adj_f1:.3f}"
 
     # Calibration Paired Bootstrap + Wilcoxon Signed-Rank on Platt-Calibrated vs Uncalibrated
     uncal_arr = np.asarray(uncal_confs, dtype=np.float64)
