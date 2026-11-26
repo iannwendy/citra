@@ -1398,7 +1398,7 @@ function buildLocalizedReasoning(verdict: Verdict, lang: 'vi' | 'en'): string {
             ? 'trung bình'
             : 'thấp';
       telemetryParts.push(
-        `điểm căn chỉnh ngữ cảnh Neural = ${neuralScore} (${levelVi})`
+        `điểm căn chỉnh ngữ cảnh Neural = ${neuralScore} [${levelVi}]`
       );
     }
     if (urlStatus === 'alive') {
@@ -1489,7 +1489,16 @@ function buildLocalizedReasoning(verdict: Verdict, lang: 'vi' | 'en'): string {
         mainText = `Tìm thấy công trình học thuật tương ứng${srcStr}, nhưng phát hiện sai lệch ở trường: ${errFldStr}. Vui lòng đối chiếu và hiệu đính lại theo bản ghi gốc.${telemetrySuffix}`;
       }
     } else if (verdict.label === 'suspected_hallucination') {
-      mainText = `Không tìm thấy bất kỳ công trình học thuật nào khớp với trích dẫn này trên hệ thống 15+ cơ sở dữ liệu học thuật & kỹ thuật (Local ACL FTS5, Crossref, OpenAlex, DataCite, DOAJ, OpenAIRE/HAL, NCBI/bioRxiv, DBLP, arXiv, OpenLibrary, Europe PMC, Hugging Face, IETF RFC, Global DOI RA). Nghi ngờ trích dẫn suy diễn (hallucination) hoặc thông tin không có thật.${telemetrySuffix}`;
+      const isChimeric = (verdict.triggered_rules ?? []).includes(
+        'R-CHIMERIC-DOI-MISMATCH',
+      );
+      const chimSrc = (verdict.matched_sources ?? []).find((s) => s.title);
+      if (isChimeric && chimSrc?.title) {
+        const chimMeta = [chimSrc.authors?.[0], chimSrc.year].filter(Boolean).join(', ');
+        mainText = `Phát hiện DOI lai ghép (R-CHIMERIC-DOI-MISMATCH): mã DOI trích dẫn thực tế trỏ tới công trình «${chimSrc.title}»${chimMeta ? ` (${chimMeta})` : ''}, mâu thuẫn hoàn toàn với tiêu đề, tác giả và nơi công bố trong bài viết.${telemetrySuffix}`;
+      } else {
+        mainText = `Không tìm thấy bất kỳ công trình học thuật nào khớp với trích dẫn này trên hệ thống 15+ cơ sở dữ liệu học thuật & kỹ thuật (Local ACL FTS5, Crossref, OpenAlex, DataCite, DOAJ, OpenAIRE/HAL, NCBI/bioRxiv, DBLP, arXiv, OpenLibrary, Europe PMC, Hugging Face, IETF RFC, Global DOI RA). Nghi ngờ trích dẫn suy diễn (hallucination) hoặc thông tin không có thật.${telemetrySuffix}`;
+      }
     } else {
       const srcStr =
         sources.length > 0
@@ -1601,7 +1610,16 @@ function buildLocalizedReasoning(verdict: Verdict, lang: 'vi' | 'en'): string {
       mainTextEn = `Found a corresponding publication${srcStr}, but detected discrepancies in: ${errFldStr}. Please review against the canonical record.${telemetrySuffixEn}`;
     }
   } else if (verdict.label === 'suspected_hallucination') {
-    mainTextEn = `No matching publication was found across all 15+ scholarly & technical databases (Local ACL FTS5, Crossref, OpenAlex, DataCite, DOAJ, OpenAIRE/HAL, NCBI/bioRxiv, DBLP, arXiv, OpenLibrary, Europe PMC, Hugging Face, IETF RFC, Global DOI RA). Suspected hallucinated or fabricated reference.${telemetrySuffixEn}`;
+    const isChimericEn = (verdict.triggered_rules ?? []).includes(
+      'R-CHIMERIC-DOI-MISMATCH',
+    );
+    const chimSrcEn = (verdict.matched_sources ?? []).find((s) => s.title);
+    if (isChimericEn && chimSrcEn?.title) {
+      const chimMetaEn = [chimSrcEn.authors?.[0], chimSrcEn.year].filter(Boolean).join(', ');
+      mainTextEn = `Chimeric DOI detected (R-CHIMERIC-DOI-MISMATCH): the cited DOI resolves to “${chimSrcEn.title}”${chimMetaEn ? ` (${chimMetaEn})` : ''}, directly contradicting the claimed title, authors, and venue.${telemetrySuffixEn}`;
+    } else {
+      mainTextEn = `No matching publication was found across all 15+ scholarly & technical databases (Local ACL FTS5, Crossref, OpenAlex, DataCite, DOAJ, OpenAIRE/HAL, NCBI/bioRxiv, DBLP, arXiv, OpenLibrary, Europe PMC, Hugging Face, IETF RFC, Global DOI RA). Suspected hallucinated or fabricated reference.${telemetrySuffixEn}`;
+    }
   } else {
     mainTextEn =
       sources.length > 0
@@ -1759,9 +1777,12 @@ function enrichVerdictItem(
     }
   }
 
+  const isChimericDoi = (verdict.triggered_rules ?? []).includes(
+    'R-CHIMERIC-DOI-MISMATCH',
+  );
   const hasCanonicalRecord =
     Boolean(bestSource) &&
-    verdict.label !== 'suspected_hallucination' &&
+    (verdict.label !== 'suspected_hallucination' || isChimericDoi) &&
     (bestSource?.confidence ?? verdict.confidence) >= 0.25;
 
   const isWebResourceMode =

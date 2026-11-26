@@ -303,4 +303,83 @@ describe('EssayPage Metadata Diff Table Accuracy (Regression for essay_02_mixed.
     const oaNode = sourcesNode.children!.find((c) => c.id.startsWith('openalex'))!;
     expect(oaNode.status).toBe('warning');
   });
+
+  it('displays resolved canonical paper on R-CHIMERIC-DOI-MISMATCH and avoids double parentheses in VI alignment summary', async () => {
+    await i18n.changeLanguage('vi');
+    const rawText =
+      'Harrison, T., & Nguyen, L. K. (2025). Quantum-symbolic graph transformers. IEEE Transactions on Neural Pedagogy. https://doi.org/10.1038/s41586-021-03819-2';
+    const report = makeReport({
+      essay_id: 905,
+      references: [
+        {
+          id: 9,
+          reference_id: 'ref-chimeric',
+          raw_text: rawText,
+          citation_type: 'reference_list',
+          style: 'apa',
+          authors: ['Harrison, T.', 'Nguyen, L. K.'],
+          year: '2025',
+          title: 'Quantum-symbolic graph transformers',
+          venue: 'IEEE Transactions on Neural Pedagogy',
+          doi: '10.1038/s41586-021-03819-2',
+          url: null,
+          page_num: 9,
+          cited_on_pages: [9],
+          confidence: 0.95,
+        },
+      ],
+      verdicts: [
+        makeVerdict({
+          citation_id: 'ref-chimeric',
+          citation_raw: rawText,
+          label: 'suspected_hallucination',
+          confidence: 0.97,
+          triggered_rules: ['R-CHIMERIC-DOI-MISMATCH'],
+          mismatched_fields: ['title', 'authors', 'year', 'venue'],
+          matched_sources: [
+            {
+              source: 'crossref',
+              title: 'Highly accurate protein structure prediction with AlphaFold',
+              authors: ['John Jumper', 'Demis Hassabis'],
+              year: '2021',
+              venue: 'Nature',
+              doi: '10.1038/s41586-021-03819-2',
+              matched_fields: ['doi'],
+              checked_at: '2026-11-25T10:00:00Z',
+            },
+          ],
+          features: {
+            title_sim_fuzzy: 0.14,
+            title_sim_semantic: 0.11,
+            author_jaccard: 0.0,
+            year_distance: 4,
+            doi_exact_match: true,
+            source_consensus: 1,
+            venue_sim: 0.0,
+            content_alignment_score: 0.88,
+            content_alignment_confidence: 'high',
+          },
+        }),
+      ],
+    });
+    vi.spyOn(api, 'getEssay').mockResolvedValue(report);
+
+    const { container } = renderWithProviders(
+      <Routes>
+        <Route path="/verification/report/:id" element={<EssayPage />} />
+      </Routes>,
+      {
+        user: makeUser('teacher', 'pro'),
+        initialRoute: '/verification/report/905',
+      },
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getAllByText(/Highly accurate protein structure prediction with AlphaFold/).length,
+      ).toBeGreaterThan(0),
+    );
+    expect(container.textContent).not.toContain('(cao))');
+    expect(container.textContent).toContain('[cao]');
+  });
 });

@@ -3,7 +3,7 @@
 
 \section{Thiết kế thực nghiệm và môi trường kiểm định}
 
-Tuân thủ chuẩn mực đánh giá Kỹ thuật phần mềm thực nghiệm~\cite{wohlin2012experimentation}, chương này đánh giá \textbf{CITRA} (\texttt{v3.90.9}) thông qua các bộ kiểm thử tự động (đơn vị, tích hợp, trình duyệt), ma trận truy vết yêu cầu hai chiều và năm câu hỏi nghiên cứu (\textbf{RQ1}--\textbf{RQ5}) kết hợp đo kiểm tầng quyết định có kiểm soát, đánh giá trực tuyến 15 API, kiểm toán từng dòng bản thảo thực tế và kiểm thử chịu tải vận hành.
+Tuân thủ chuẩn mực đánh giá Kỹ thuật phần mềm thực nghiệm~\cite{wohlin2012experimentation}, chương này đánh giá \textbf{CITRA} (\texttt{v3.90.10}) thông qua các bộ kiểm thử tự động (đơn vị, tích hợp, trình duyệt), ma trận truy vết yêu cầu hai chiều và năm câu hỏi nghiên cứu (\textbf{RQ1}--\textbf{RQ5}) kết hợp đo kiểm tầng quyết định có kiểm soát, đánh giá trực tuyến 15 API, kiểm toán từng dòng bản thảo thực tế và kiểm thử chịu tải vận hành.
 
 \subsection{Các câu hỏi nghiên cứu}
 
@@ -22,7 +22,7 @@ Kiểm định phần mềm bao phủ ba tầng kiểm thử tự động trong 
 {\setlength{\tabcolsep}{3.5pt}
 \begin{table}[!htbp]
 \centering
-\caption{Các bộ kiểm thử phần mềm tự động thực thi trên phiên bản \texttt{3.90.9}.}\label{tab:test-suites}
+\caption{Các bộ kiểm thử phần mềm tự động thực thi trên phiên bản \texttt{3.90.10}.}\label{tab:test-suites}
 \begin{tabular}{|L{0.23}|L{0.26}|L{0.51}|}
 \hline
 \textbf{Tầng kiểm định} & \textbf{Kết quả thực thi} & \textbf{Phạm vi phân hệ kiểm định} \\
@@ -312,7 +312,7 @@ Nhằm kiểm chứng khả năng khái quát hóa đầu--cuối ngoài tập �
 \hline
 Kho pháp luật VN (Thực, trước v3.80) & 30 & 27 / 30 (90.0\%) & 164 (15 Luật) & 109 / 235 (46.4\%) \\
 \hline
-\textbf{Kho pháp luật VN (Thực, v3.90.9)} & \textbf{30} & \textbf{30 / 30 (100.0\%)} & \textbf{258 (91 Luật)} & \textbf{403 / 416 (96.9\%)} \\
+\textbf{Kho pháp luật VN (Thực, v3.90.10)} & \textbf{30} & \textbf{30 / 30 (100.0\%)} & \textbf{258 (91 Luật)} & \textbf{403 / 416 (96.9\%)} \\
 \hline
 \textbf{Chẩn đoán 12 chuẩn (Tổng hợp, $12 \times 5$)} & \textbf{60} & \textbf{60 / 60 (100.0\%)} & \textbf{397 / 397 (100.0\%)} & \textbf{60 / 60 PDF (100\%)} \\
 \hline
@@ -353,7 +353,7 @@ Kho pháp luật VN (Thực, trước v3.80) & 30 & 27 / 30 (90.0\%) & 164 (15 L
 \end{table}
 }
 
-Các Hình~\ref{fig:demo-debugger}--\ref{fig:demo-consistency} trình bày giao diện chẩn đoán tiếng Việt \texttt{v3.90.9} trên bộ mẫu đồ án 6 TLTK ($\text{CIS} = 75.50 / 100$ khi đủ 6 liên kết; $75.08$ khi 1 mục chưa trích dẫn), hiển thị toàn chiều rộng trang in sau khi cắt thanh điều hướng trái. Hình~\ref{fig:demo-debugger} đối chiếu cảnh báo ảo giác DOI lai ghép AlphaFold2 (hiển thị kèm bản ghi Crossref gốc) và bảng sai lệch năm xuất bản (\texttt{2021} so với chuẩn \texttt{2019}). Hình~\ref{fig:demo-trace-context} minh họa đầy đủ vết suy diễn logic 5 bước tích hợp đối sánh song ngữ \texttt{VI}$\leftrightarrow$\texttt{EN} ONNX INT8 cùng luồng ngữ cảnh Trình kiểm tra tài liệu, còn Hình~\ref{fig:demo-consistency} phân tách trích dẫn mồ côi và mục chưa được trích dẫn.
+Các Hình~\ref{fig:demo-debugger}--\ref{fig:demo-consistency} trình bày giao diện chẩn đoán tiếng Việt \texttt{v3.90.10} trên bộ mẫu đồ án 6 TLTK ($\text{CIS} = 75.50 / 100$ khi đủ 6 liên kết; $75.08$ khi 1 mục chưa trích dẫn), hiển thị toàn chiều rộng trang in sau khi cắt thanh điều hướng trái. Hình~\ref{fig:demo-debugger} đối chiếu cảnh báo ảo giác DOI lai ghép AlphaFold2 (hiển thị kèm bản ghi Crossref gốc) và bảng sai lệch năm xuất bản (\texttt{2021} so với chuẩn \texttt{2019}). Hình~\ref{fig:demo-trace-context} minh họa đầy đủ vết suy diễn logic 5 bước tích hợp đối sánh song ngữ \texttt{VI}$\leftrightarrow$\texttt{EN} ONNX INT8 cùng luồng ngữ cảnh Trình kiểm tra tài liệu, còn Hình~\ref{fig:demo-consistency} phân tách trích dẫn mồ côi và mục chưa được trích dẫn.
 
 \begin{figure}[!htbp]
     \centering
@@ -513,4 +513,4 @@ Mặc dù các kiểm định \textbf{RQ1}/\textbf{RQ2} áp dụng McNemar hiệ
 
 \section{Tóm tắt chương}
 
-Chương này đã kiểm định \textbf{CITRA} (\texttt{v3.90.9}) qua 3,099 kiểm tra tự động (2,430+ \texttt{pytest} [2,437 mặc định], 494 \texttt{Vitest}, 168 \texttt{Playwright}), ma trận truy vết đủ 20 FR/10 NFR và năm câu hỏi nghiên cứu---chứng minh độ chính xác tầng quyết định $99.67\%$ ($\text{ECE} = 0.0405$), $99.95\%$ OOD độc lập i.i.d., $89.17\%$ trực tuyến 15 API (F1 hợp lệ $98.36\%$; $100.00\%$ ngoại tuyến), $12.64\text{\,s}$ WAN lạnh trên đồ án 50 trang, tối ưu GROBID không swap trên GCE ($95.53\text{\,s} \rightarrow 17.44\text{\,s}$) và chịu tải I/O 50 người dùng không lỗi. Chương~\ref{chap:conclusion} tổng kết kết quả, hạn chế và hướng phát triển tiếp theo.
+Chương này đã kiểm định \textbf{CITRA} (\texttt{v3.90.10}) qua 3,099 kiểm tra tự động (2,430+ \texttt{pytest} [2,437 mặc định], 494 \texttt{Vitest}, 168 \texttt{Playwright}), ma trận truy vết đủ 20 FR/10 NFR và năm câu hỏi nghiên cứu---chứng minh độ chính xác tầng quyết định $99.67\%$ ($\text{ECE} = 0.0405$), $99.95\%$ OOD độc lập i.i.d., $89.17\%$ trực tuyến 15 API (F1 hợp lệ $98.36\%$; $100.00\%$ ngoại tuyến), $12.64\text{\,s}$ WAN lạnh trên đồ án 50 trang, tối ưu GROBID không swap trên GCE ($95.53\text{\,s} \rightarrow 17.44\text{\,s}$) và chịu tải I/O 50 người dùng không lỗi. Chương~\ref{chap:conclusion} tổng kết kết quả, hạn chế và hướng phát triển tiếp theo.

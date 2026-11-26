@@ -3,7 +3,7 @@
 
 \section{Experimental Design and Verification Setup}
 
-Following Empirical Software Engineering evaluation standards~\cite{wohlin2012experimentation}, this chapter evaluates \textbf{CITRA} (\texttt{v3.90.9}) through automated unit, integration, and browser test suites, bidirectional requirements traceability, and five empirical research questions (\textbf{RQ1}--\textbf{RQ5}) combining controlled decision-layer benchmarks, live multi-registry evaluations, real multi-style manuscript audits, and production systems load tests.
+Following Empirical Software Engineering evaluation standards~\cite{wohlin2012experimentation}, this chapter evaluates \textbf{CITRA} (\texttt{v3.90.10}) through automated unit, integration, and browser test suites, bidirectional requirements traceability, and five empirical research questions (\textbf{RQ1}--\textbf{RQ5}) combining controlled decision-layer benchmarks, live multi-registry evaluations, real multi-style manuscript audits, and production systems load tests.
 
 \subsection{Research Questions}
 
@@ -22,7 +22,7 @@ Software verification spans three automated layers summarized in Table~\ref{tab:
 {\setlength{\tabcolsep}{3.5pt}
 \begin{table}[!htbp]
 \centering
-\caption{Automated software verification suites executed in version \texttt{3.90.9}.}\label{tab:test-suites}
+\caption{Automated software verification suites executed in version \texttt{3.90.10}.}\label{tab:test-suites}
 \begin{tabular}{|L{0.23}|L{0.26}|L{0.51}|}
 \hline
 \textbf{Verification Layer} & \textbf{Execution Result} & \textbf{Verified Subsystem Scope} \\
@@ -312,7 +312,7 @@ To evaluate end-to-end generalization beyond controlled feature-level benchmarks
 \hline
 VN Legal Corpus (Real, Pre-v3.80) & 30 & 27 / 30 (90.0\%) & 164 (15 Legal) & 109 / 235 (46.4\%) \\
 \hline
-\textbf{VN Legal Corpus (Real, v3.90.9)} & \textbf{30} & \textbf{30 / 30 (100.0\%)} & \textbf{258 (91 Legal)} & \textbf{403 / 416 (96.9\%)} \\
+\textbf{VN Legal Corpus (Real, v3.90.10)} & \textbf{30} & \textbf{30 / 30 (100.0\%)} & \textbf{258 (91 Legal)} & \textbf{403 / 416 (96.9\%)} \\
 \hline
 \textbf{12-Style Diagnostic (Synthetic, $12 \times 5$)} & \textbf{60} & \textbf{60 / 60 (100.0\%)} & \textbf{397 / 397 (100.0\%)} & \textbf{60 / 60 PDFs (100\%)} \\
 \hline
@@ -353,7 +353,7 @@ VN Legal Corpus (Real, Pre-v3.80) & 30 & 27 / 30 (90.0\%) & 164 (15 Legal) & 109
 \end{table}
 }
 
-Figures~\ref{fig:demo-debugger}--\ref{fig:demo-consistency} render the live \texttt{v3.90.9} diagnostic views on the 6-reference seeded capstone audit fixture ($\text{CIS} = 75.50 / 100$ when all 6 references are cited; $75.08$ with one uncited entry) at full printable width with navigation sidebars cropped for readability. Figure~\ref{fig:demo-debugger} highlights the chimeric AlphaFold2 DOI hallucination (with its canonical Crossref record resolved side by side) and the publication-year \texttt{metadata\_error} diff (\texttt{2021} vs.\ canonical \texttt{2019}). Figure~\ref{fig:demo-trace-context} shows the complete 5-stage logic trace with ONNX INT8 \texttt{VI}$\leftrightarrow$\texttt{EN} concept alignment alongside the inline Document Inspector context stream, while Figure~\ref{fig:demo-consistency} isolates orphan inline markers and uncited bibliography entries.
+Figures~\ref{fig:demo-debugger}--\ref{fig:demo-consistency} render the live \texttt{v3.90.10} diagnostic views on the 6-reference seeded capstone audit fixture ($\text{CIS} = 75.50 / 100$ when all 6 references are cited; $75.08$ with one uncited entry) at full printable width with navigation sidebars cropped for readability. Figure~\ref{fig:demo-debugger} highlights the chimeric AlphaFold2 DOI hallucination (with its canonical Crossref record resolved side by side) and the publication-year \texttt{metadata\_error} diff (\texttt{2021} vs.\ canonical \texttt{2019}). Figure~\ref{fig:demo-trace-context} shows the complete 5-stage logic trace with ONNX INT8 \texttt{VI}$\leftrightarrow$\texttt{EN} concept alignment alongside the inline Document Inspector context stream, while Figure~\ref{fig:demo-consistency} isolates orphan inline markers and uncited bibliography entries.
 
 \begin{figure}[!htbp]
     \centering
@@ -513,4 +513,4 @@ Although pairwise \textbf{RQ1}/\textbf{RQ2} comparisons apply continuity-correct
 
 \section{Chapter Summary}
 
-This chapter verified \textbf{CITRA} (\texttt{v3.90.9}) across 3,099 automated checks (2,430+ backend \texttt{pytest} [2,437 default], 494 \texttt{Vitest}, 168 \texttt{Playwright}), a complete 20-FR/10-NFR traceability matrix, and five research questions---demonstrating $99.67\%$ controlled decision accuracy ($\text{ECE} = 0.0405$), $99.95\%$ i.i.d.\ OOD accuracy, $89.17\%$ live 15-API raw-reference accuracy ($98.36\%$ verified F1; $100.00\%$ offline), $12.64\text{\,s}$ real 50-page cold-WAN compliance, zero-swap GCE GROBID parsing ($95.53\text{\,s} \rightarrow 17.44\text{\,s}$), and zero-error 50-user I/O burst handling. Chapter~\ref{chap:conclusion} synthesizes achievements, limitations, and future work.
+This chapter verified \textbf{CITRA} (\texttt{v3.90.10}) across 3,099 automated checks (2,430+ backend \texttt{pytest} [2,437 default], 494 \texttt{Vitest}, 168 \texttt{Playwright}), a complete 20-FR/10-NFR traceability matrix, and five research questions---demonstrating $99.67\%$ controlled decision accuracy ($\text{ECE} = 0.0405$), $99.95\%$ i.i.d.\ OOD accuracy, $89.17\%$ live 15-API raw-reference accuracy ($98.36\%$ verified F1; $100.00\%$ offline), $12.64\text{\,s}$ real 50-page cold-WAN compliance, zero-swap GCE GROBID parsing ($95.53\text{\,s} \rightarrow 17.44\text{\,s}$), and zero-error 50-user I/O burst handling. Chapter~\ref{chap:conclusion} synthesizes achievements, limitations, and future work.
