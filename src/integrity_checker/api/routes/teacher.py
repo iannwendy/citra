@@ -1259,10 +1259,13 @@ def get_class_analytics(
                 if 1900 <= yr <= current_year + 1:
                     years_found.append(yr)
 
-            # Triggered rules
+            # Triggered issue rules (exclude verified/resource provenance tags from "Most Common Citation Issues")
             rules = _parse_str_list(getattr(v, "triggered_rules", None))
-            for r_str in rules:
-                rule_counts[r_str] = rule_counts.get(r_str, 0) + 1
+            if lbl not in ("verified", "resource"):
+                for r_str in rules:
+                    if r_str in ("R-LOCAL_DB", "R-LOCAL_DB_ONLY"):
+                        continue
+                    rule_counts[r_str] = rule_counts.get(r_str, 0) + 1
             if lbl == "metadata_error" and "R-INCOMPLETE-METADATA" in rules:
                 verdict_breakdown["incomplete_metadata"] += 1
 

@@ -205,7 +205,7 @@ class CitationFormat(Protocol):
 
     Each citation format (APA, MLA, IEEE, etc.) must implement:
     - name: Format identifier
-    - priority: Lower = higher priority (tried first)
+    - priority: Higher = higher priority (100 = highest, tried first)
     - in_text_patterns: Patterns for in-text citations
     - reference_patterns: Patterns for reference list entries
     - parse_reference_entry(text: str) -> Citation | None
@@ -233,7 +233,7 @@ class CitationFormat(Protocol):
 
     @property
     def priority(self) -> int:
-        """Priority for format resolution. Lower = higher priority."""
+        """Priority for format resolution. Higher = higher priority."""
         ...
 
     @property

@@ -1516,7 +1516,7 @@ function buildLocalizedReasoning(verdict: Verdict, lang: 'vi' | 'en'): string {
   }
   if (neuralScore) {
     telemetryPartsEn.push(
-      `Neural context alignment = ${neuralScore} (${neuralLevel || 'checked'})`
+      `Neural context alignment = ${neuralScore} [${neuralLevel || 'checked'}]`
     );
   }
   if (urlStatus === 'alive') {

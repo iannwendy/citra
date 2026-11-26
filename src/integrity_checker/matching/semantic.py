@@ -1540,7 +1540,7 @@ class SemanticMatcher:
                             best_evidence_score = max_sent_sim
                         else:
                             max_sent_sim = whole_abs_sim
-                        abstract_sim = max(whole_abs_sim, 0.6 * max_sent_sim + 0.4 * whole_abs_sim)
+                        abstract_sim = max(whole_abs_sim, 0.65 * max_sent_sim + 0.35 * whole_abs_sim)
                     else:
                         abstract_sim = whole_abs_sim
                         best_evidence_sentence = truncated_abstract

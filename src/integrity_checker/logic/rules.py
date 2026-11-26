@@ -2135,7 +2135,7 @@ class SymbolicRules:
             triggered_rules = ["R-FAKE-URL"]
             return RuleOutcome(
                 label=ValidationLabel.SUSPECTED_HALLUCINATION,
-                confidence=0.95,
+                confidence=max(0.05, 0.95 - style_penalty),
                 reasoning=(
                     f"URL domain '{fake_pattern}' is a placeholder/fake domain (example.com, "
                     f"test.com, localhost, etc.) and does not belong to a scholarly registry."
@@ -2151,7 +2151,7 @@ class SymbolicRules:
             triggered_rules = ["R-FABRICATED-DOI"]
             return RuleOutcome(
                 label=ValidationLabel.SUSPECTED_HALLUCINATION,
-                confidence=0.9,
+                confidence=max(0.05, 0.9 - style_penalty),
                 reasoning=(
                     f"DOI {citation_doi} matches known fabricated DOI pattern "
                     f"(invalid/fake publisher prefix like 10.1234, 10.9999)."

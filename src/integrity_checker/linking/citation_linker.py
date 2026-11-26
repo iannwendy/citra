@@ -192,6 +192,7 @@ class CitationLinker:
 
         # Index bib citations by different keys
         bib_by_doi = self._index_by_doi(bib_citations)
+        bib_by_arxiv = self._index_by_arxiv(bib_citations)
         bib_by_index = self._index_by_numeric_multi(bib_citations)
         bib_by_composite_label = self._index_by_composite_label(bib_citations)
         bib_by_author_year = self._index_by_author_year(bib_citations)
@@ -252,6 +253,7 @@ class CitationLinker:
                         bib_by_author_year,
                         bib_by_author_year_suffix,
                         bib_citations,
+                        bib_by_arxiv=bib_by_arxiv,
                     )
                     or []
                 )
@@ -662,8 +664,10 @@ class CitationLinker:
         bib_by_author_year: dict[tuple[str, str], list[Citation]],
         bib_by_author_year_suffix: dict[tuple[str, str, str], list[Citation]],
         bib_citations: list[Citation],
+        *,
+        bib_by_arxiv: dict[str, Citation] | None = None,
     ) -> list[CitationLink] | None:
-        """Try matching in priority: TEI_LINK → DOI → NUMERIC → AUTHOR_YEAR → FUZZY.
+        """Try matching in priority: TEI_LINK → DOI → ARXIV → NUMERIC → AUTHOR_YEAR → FUZZY.
 
         TEI_LINK (v1.10 GROBID adapter): Sử dụng grobid_ref_id từ TEI XML
         để map trực tiếp in-text → reference. Đây là authoritative link
@@ -754,7 +758,17 @@ class CitationLinker:
                 bib_by_doi[doi], self.doi_confidence, MappingMethod.DOI_EXACT
             )
 
-        # 2. NUMERIC_INDEX (IEEE / ACS / RSC / APS, including composite 14a/14b/14c)
+        # 2. arXiv exact (version-normalized e.g. 1706.03762v7 -> 1706.03762)
+        if bib_by_arxiv:
+            arxiv_id = self._extract_arxiv_id(cit.raw_text or "") or self._extract_arxiv_id(
+                cit.url or ""
+            )
+            if arxiv_id and arxiv_id in bib_by_arxiv:
+                return _bib_link(
+                    bib_by_arxiv[arxiv_id], self.doi_confidence, MappingMethod.ARXIV_EXACT
+                )
+
+        # 3. NUMERIC_INDEX (IEEE / ACS / RSC / APS, including composite 14a/14b/14c)
         if (
             cit.citation_type == CitationType.NUMERIC
             or is_paren_composite
@@ -1510,6 +1524,31 @@ class CitationLinker:
             doi = (bib.doi or "").strip()
             if doi:
                 out[doi.lower()] = bib
+        return out
+
+    @staticmethod
+    def _extract_arxiv_id(text: str) -> str | None:
+        """Extract version-normalized arXiv identifier (e.g. '1706.03762' or 'hep-th/9901001')."""
+        if not text:
+            return None
+        m = re.search(
+            r"(?:arXiv\s*:\s*|arxiv\.org/(?:abs|pdf)/)(\d{4}\.\d{4,5}|[a-z\-]+(?:\.[A-Z]{2})?/\d{7})(?:v\d+)?",
+            text,
+            re.IGNORECASE,
+        )
+        if not m:
+            return None
+        return m.group(1).lower().rstrip(".")
+
+    def _index_by_arxiv(self, bibs: list[Citation]) -> dict[str, Citation]:
+        out: dict[str, Citation] = {}
+        for bib in bibs:
+            aid = (
+                self._extract_arxiv_id(bib.url or "")
+                or self._extract_arxiv_id(bib.raw_text or "")
+            )
+            if aid and aid not in out:
+                out[aid] = bib
         return out
 
     def _index_by_numeric(self, bibs: list[Citation]) -> dict[int, Citation]:

@@ -508,7 +508,7 @@ _DEFAULT_OUT_OF_SCOPE: list[str] = [
     "AI-generated essay prose detection",
     "Automated academic misconduct adjudication without human review",
     "Treating repeated in-text citations to the same reference as redundant",
-    "OCR for scanned image-only PDFs (future extension)",
+    "Handwritten or severely degraded OCR scans beyond embedded Tesseract vie+eng recovery",
 ]
 
 

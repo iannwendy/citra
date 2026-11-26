@@ -16,7 +16,7 @@ from integrity_checker.db.models import AuditLog, User
 from integrity_checker.db.repository import Repository
 from integrity_checker.linking.statuses import CitationMappingStatus
 from integrity_checker.models.api_schemas import VerdictSchema
-from integrity_checker.models.validation import ValidationLabel
+from integrity_checker.models.validation import MappingMethod, ValidationLabel
 
 router = APIRouter()
 
@@ -430,6 +430,8 @@ def override_verdict(
         updated_features["original_label"] = original_label
     if original_mapping_status and not updated_features.get("original_mapping_status"):
         updated_features["original_mapping_status"] = original_mapping_status
+    if body.new_mapping_status is not None and original_mapping_status != body.new_mapping_status:
+        updated_features["mapping_method"] = MappingMethod.MANUAL_REVIEW.value
     updated_features["overridden_at"] = now_iso
     updated.features = json.dumps(updated_features, ensure_ascii=False)
 

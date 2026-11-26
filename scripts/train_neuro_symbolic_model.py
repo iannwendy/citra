@@ -1871,6 +1871,21 @@ def _mcnemar_continuity_corrected(
     }
 
 
+def _holm_bonferroni_adjust(p_values: dict[str, float]) -> dict[str, float]:
+    """Step-down Holm-Bonferroni FWER adjustment (Holm, 1979)."""
+    m = len(p_values)
+    if m == 0:
+        return {}
+    ordered = sorted(p_values.items(), key=lambda kv: kv[1])
+    adjusted: dict[str, float] = {}
+    running_max = 0.0
+    for rank_idx, (key, raw_p) in enumerate(ordered):
+        adj = min(1.0, max(running_max, raw_p * (m - rank_idx)))
+        running_max = adj
+        adjusted[key] = adj
+    return adjusted
+
+
 def compute_statistical_significance_tests(
     gold_labels: list[str],
     proposed_preds: list[str],
@@ -1954,6 +1969,21 @@ def compute_statistical_significance_tests(
             },
             "mcnemar_test": mcnemar_res,
         }
+
+    # Apply Holm-Bonferroni FWER adjustment across the baseline comparison family (Holm, 1979)
+    raw_mcnemar_p = {
+        k: float(v["mcnemar_test"]["p_value"]) for k, v in pairwise_vs_baselines.items()
+    }
+    holm_adjusted = _holm_bonferroni_adjust(raw_mcnemar_p)
+    family_size = len(raw_mcnemar_p)
+    for k, entry in pairwise_vs_baselines.items():
+        adj_p = holm_adjusted[k]
+        entry["mcnemar_test"]["holm_bonferroni_family_size"] = family_size
+        entry["mcnemar_test"]["holm_bonferroni_adjusted_p_value"] = adj_p
+        entry["mcnemar_test"]["holm_bonferroni_display"] = (
+            "< 1e-16" if adj_p < 1e-16 else f"{adj_p:.4e}"
+        )
+        entry["mcnemar_test"]["significant_holm_alpha_0_001"] = bool(adj_p < 0.001)
 
     # Calibration Paired Bootstrap + Wilcoxon Signed-Rank on Platt-Calibrated vs Uncalibrated
     uncal_arr = np.asarray(uncal_confs, dtype=np.float64)

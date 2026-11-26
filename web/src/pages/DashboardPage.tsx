@@ -176,7 +176,7 @@ export function DashboardPage() {
     {
       idx: '03',
       label: t('dashboard.avgCisScore'),
-      value: stats.avg_cis_score !== null ? `${stats.avg_cis_score}%` : 'N/A',
+      value: stats.avg_cis_score !== null ? `${stats.avg_cis_score}/100` : 'N/A',
       sub: lang === 'vi' ? 'Chỉ số Toàn vẹn Trích dẫn (0–100)' : 'Citation Integrity Score (0–100)',
       icon: TrendingUp,
       color: 'text-amber-600 dark:text-amber-400',
