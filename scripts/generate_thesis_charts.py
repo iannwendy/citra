@@ -236,12 +236,12 @@ def make_fig5_1(data: dict, lang: str, out_path: Path) -> None:
     ax.bar(x, b5_ood, w, color=AMBER, edgecolor="#78350F", linewidth=0.5, label="B5: 16D MLR", zorder=2)
     ax.bar(x + w, ns_ood, w, color=EMERALD, edgecolor="#064E3B", linewidth=0.5, label="CITRA (Prop.)" if not is_vn else "CITRA (Đề xuất)", zorder=2)
 
-    # Selective non-overlapping numeric annotations (cleanly centered inside the i.i.d. 1-5 band, zero bar overlap!)
+    # Selective non-overlapping numeric annotations (cleanly shifted left of adjacent green CITRA bar!)
     for i_zero in (0, 2):
         ax.text(x[i_zero], 2.5, "0%", ha="center", va="bottom", fontsize=7.4, fontweight="bold", color=CORAL)
-    ax.text(x[5] - 0.04, b5_ood[5] + 2.5, "59.8%", ha="center", va="bottom", fontsize=6.4, fontweight="bold", color="#92400E", bbox=dict(boxstyle="round,pad=0.08", facecolor="#ECFDF5", edgecolor="none", alpha=0.92), zorder=5)
+    ax.text(x[5] - 0.14, b5_ood[5] + 2.6, "59.8%", ha="center", va="bottom", fontsize=6.4, fontweight="bold", color="#92400E", bbox=dict(boxstyle="round,pad=0.09", facecolor="#ECFDF5", edgecolor="none", alpha=0.95), zorder=5)
     ax.text(x[5] + w, ns_ood[5] + 2.2, "99.95%", ha="center", va="bottom", fontsize=7.0, fontweight="bold", color=EMERALD_DARK)
-    ax.text(x[6] - 0.02, b5_ood[6] + 2.5, "45%", ha="center", va="bottom", fontsize=6.8, fontweight="bold", color="#92400E", zorder=5)
+    ax.text(x[6] - 0.11, b5_ood[6] + 2.6, "45%", ha="center", va="bottom", fontsize=6.8, fontweight="bold", color="#92400E", bbox=dict(boxstyle="round,pad=0.09", facecolor="#FFFFFF", edgecolor="none", alpha=0.95), zorder=5)
     ax.text(x[6] + w, ns_ood[6] + 2.2, "100%", ha="center", va="bottom", fontsize=7.0, fontweight="bold", color=EMERALD_DARK)
 
     ax.set_xticks(x)
@@ -449,7 +449,7 @@ def make_fig5_2(lang: str, out_path: Path) -> None:
         # Print orange bar values VERTICALLY centered INSIDE top of orange bars -> 100% enclosed, ZERO SLA collision!
         ax.text(xi - wb / 2, cm_v * 0.36, f"{cm_v/1000:.1f}s", ha="center", va="center", rotation=90, fontsize=7.2, fontweight="bold", color="white", zorder=6)
         w_txt = f"{wm_v:.0f}" if wm_v < 1000 else f"{wm_v/1000:.1f}s"
-        w_off = 0.04 if wm_v < 1000 else 0.12
+        w_off = 0.05 if wm_v < 1000 else 0.17
         ax.text(xi + wb / 2 + w_off, wm_v * 1.28, w_txt, ha="center", va="bottom", fontsize=7.2, fontweight="bold", color=EMERALD_DARK, path_effects=halo, zorder=6)
         ax.text(
             xi,

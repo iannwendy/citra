@@ -248,13 +248,14 @@ class DiagramBuilder:
         stroke: str = "#047857",
         sw: float = 1.5,
         size: int = 10,
+        extra: str = "",
         cid: str | None = None,
     ) -> str:
         cid = cid or self._nid("cy")
         style = (
             f"shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size={size};"
             f"fillColor={fill};strokeColor={stroke};strokeWidth={sw};"
-            f"fontFamily={FONT};fontSize=13;fontColor=#0F172A;align=center;verticalAlign=middle;spacingTop=10;"
+            f"fontFamily={FONT};fontSize=13;fontColor=#0F172A;align=center;verticalAlign=middle;spacingTop=10;{extra}"
         )
         el = ET.Element("mxCell", id=cid, value=value, style=style, vertex="1", parent="1")
         ET.SubElement(el, "mxGeometry", x=str(x), y=str(y), width=str(w), height=str(h), **{"as": "geometry"})
@@ -662,9 +663,9 @@ def build_fig3_1(vn: bool) -> DiagramBuilder:
         bold=True,
     )
 
-    # Tight actor anchor box for left corridor + full actor height so bottom generalization arrows land BELOW text labels!
+    # Symmetrical actor anchor box (center x = ax+63) wide enough that right-side edges clear actor text!
     def actor(ax: float, ay: float, label: str, ikey: str = "actor_navy") -> str:
-        aid = d.box(ax + 35, ay, 56, 78, "", fill="none", stroke="none", sw=0)
+        aid = d.box(ax + 12, ay, 102, 78, "", fill="none", stroke="none", sw=0)
         d.icon(ikey, ax + 45, ay + 1, 36, 46)
         d.text(ax, ay + 48, 126, 30, label, font_size=13, bold=True, font_color="#0F172A")
         return aid
@@ -698,7 +699,7 @@ def build_fig3_1(vn: bool) -> DiagramBuilder:
     uc_core = d.ellipse(454, 54, 158, 54, t("Parse, Retrieve &amp;\nVerify (8 Layers)", "Trích xuất, Truy hồi\n&amp; Kiểm chứng"), fill="#E0F2FE", stroke="#0369A1")
 
     uc2 = d.ellipse(178, 120, 194, 54, t("UC-02: Repair Bib.\n&amp; Export Reports", "UC-02: Chuẩn hóa\nTLTK &amp; Xuất báo cáo"), fill="#EFF6FF", stroke="#1D4ED8", bold=True)
-    uc_docx = d.ellipse(454, 120, 158, 54, t("Export Repaired\nDOCX (Pro/Plus)", "Xuất DOCX đã sửa\n(Gói nâng cao)"), fill="#E0F2FE", stroke="#0369A1")
+    uc_docx = d.ellipse(454, 120, 158, 54, t("Export Repaired\nDOCX (Pro/Ultra)", "Xuất DOCX đã sửa\n(Gói nâng cao)"), fill="#E0F2FE", stroke="#0369A1")
 
     uc_shr = d.ellipse(178, 186, 224, 48, t("Share Report Link &amp;\nRevision Diff History", "Chia sẻ liên kết &amp;\nSo sánh phiên bản"), fill="#EFF6FF", stroke="#1D4ED8")
     uc_bil = d.ellipse(178, 244, 224, 48, t("Billing, Plans &amp; Law 91\nPrivacy Erasure", "Thanh toán gói &amp; Xóa\ndữ liệu (Luật 91/2025)"), fill="#F5F3FF", stroke="#6D28D9")
@@ -724,7 +725,7 @@ def build_fig3_1(vn: bool) -> DiagramBuilder:
     d.edge(uc_docx, uc2, "«extend»", ex=0, ey=0.5, nx=1, ny=0.5, dashed=1, end_arrow="open", end_fill=0, stroke="#0369A1", oy=-14)
     d.edge(uc3, uc_aud, "«include»", ex=1, ey=0.5, nx=0, ny=0.5, dashed=1, end_arrow="open", end_fill=0, stroke="#B45309", oy=-14)
 
-    # Actor -> Use Case Associations (zero crossings!)
+    # Actor -> Use Case Associations (exit at upper torso ey=0.32 so lines cleanly clear actor text labels!)
     for src, dst in [
         (act_auth, uc1),
         (act_auth, uc2),
@@ -736,7 +737,7 @@ def build_fig3_1(vn: bool) -> DiagramBuilder:
         (act_adm, uc5),
         (act_gst, uc_sbx),
     ]:
-        d.edge(src, dst, "", ex=1, ey=0.5, nx=0, ny=0.5, orth=False, end_arrow="none", stroke="#475569", sw=1.3)
+        d.edge(src, dst, "", ex=1, ey=0.32, nx=0, ny=0.5, orth=False, end_arrow="none", stroke="#475569", sw=1.3)
 
     # Right Secondary Actors («actor» system cards + Public Verifier — stacked to prevent crossings!)
     s_grobid = d.card(654, 46, 152, 72, "«actor» GROBID", "0.9.1-crf (TEI)", icon_key="tei", fill="#FFFFFF", stroke="#047857", title_color="#065F46")
@@ -777,20 +778,20 @@ def build_fig3_2(vn: bool) -> DiagramBuilder:
     def act_bar(idx: int, y1: float, y2: float, fill: str, stroke: str) -> None:
         d.box(xs[idx] - 5, y1, 10, y2 - y1, "", fill=fill, stroke=stroke, sw=1.2, rounded=0)
 
-    act_bar(0, 128, 192, "#DBEAFE", "#1E3A8A")
-    act_bar(1, 132, 424, "#CFFAFE", "#0E7490")
+    act_bar(0, 134, 192, "#DBEAFE", "#1E3A8A")
+    act_bar(1, 134, 424, "#CFFAFE", "#0E7490")
     act_bar(2, 134, 428, "#D1FAE5", "#047857")
-    act_bar(3, 300, 434, "#DCFCE7", "#15803D")
-    act_bar(4, 330, 368, "#FEF3C7", "#B45309")
-    act_bar(5, 152, 174, "#EDE9FE", "#6D28D9")
-    act_bar(5, 412, 434, "#EDE9FE", "#6D28D9")
-    # Activation bars in alt crash + Panel (b) override
-    act_bar(3, 566, 610, "#FEE2E2", "#DC2626")
-    act_bar(5, 574, 598, "#EDE9FE", "#6D28D9")
-    act_bar(0, 682, 804, "#FEF3C7", "#B45309")
-    act_bar(1, 684, 802, "#CFFAFE", "#0E7490")
-    act_bar(2, 704, 798, "#D1FAE5", "#047857")
-    act_bar(5, 734, 776, "#EDE9FE", "#6D28D9")
+    act_bar(3, 310, 434, "#DCFCE7", "#15803D")
+    act_bar(4, 336, 366, "#FEF3C7", "#B45309")
+    act_bar(5, 160, 178, "#EDE9FE", "#6D28D9")
+    act_bar(5, 424, 440, "#EDE9FE", "#6D28D9")
+    # Activation bars in alt crash + Panel (b) override (each bar starts cleanly AT incoming call y!)
+    act_bar(3, 586, 610, "#FEE2E2", "#DC2626")
+    act_bar(5, 586, 602, "#EDE9FE", "#6D28D9")
+    act_bar(0, 688, 804, "#FEF3C7", "#B45309")
+    act_bar(1, 688, 802, "#CFFAFE", "#0E7490")
+    act_bar(2, 720, 798, "#D1FAE5", "#047857")
+    act_bar(5, 746, 774, "#EDE9FE", "#6D28D9")
 
     # 3. Opaque Lifeline Header Boxes + Fragment Pills
     headers = [
@@ -815,7 +816,7 @@ def build_fig3_2(vn: bool) -> DiagramBuilder:
     d.edge(None, None, "", src_pt=(22, 514), dst_pt=(790, 514), orth=False, dashed=1, end_arrow="none", stroke="#DC2626", sw=1.0)
     d.edge(None, None, "", src_pt=(22, 558), dst_pt=(790, 558), orth=False, dashed=1, end_arrow="none", stroke="#DC2626", sw=1.0)
 
-    def msg(i_from: int, i_to: int, y: float, text: str, *, dashed: int = 0, stroke: str = "#0F172A", open_arrow: bool = False) -> None:
+    def msg(i_from: int, i_to: int, y: float, text: str, *, dashed: int = 0, stroke: str = "#0F172A", open_arrow: bool = False, ox: float = 0.0) -> None:
         sx = xs[i_from] + (5 if i_to > i_from else -5)
         dx = xs[i_to] + (-5 if i_to > i_from else 5)
         d.edge(
@@ -830,6 +831,7 @@ def build_fig3_2(vn: bool) -> DiagramBuilder:
             end_fill=0 if open_arrow else 1,
             stroke=stroke,
             sw=1.5,
+            ox=ox,
             oy=-13,
             font_size=13,
             bold=not dashed,
@@ -857,7 +859,7 @@ def build_fig3_2(vn: bool) -> DiagramBuilder:
 
     # Panel (b) UC-03 Atomic Instructor Override through CITRA SPA -> FastAPI -> SQLite WAL
     msg(0, 1, 688, t("10a. Submit override", "10a. Gửi ghi đè"), stroke="#B45309")
-    msg(1, 2, 720, "10b. POST /api/essays/{id}/verdicts/{vid}/override", stroke="#B45309")
+    msg(1, 2, 720, "10b. POST /api/essays/{id}/verdicts/{vid}/override", stroke="#B45309", ox=102)
     msg(2, 5, 746, t("11. Update verdict (manual_review) + recalc CIS + audit_logs", "11. Cập nhật phán quyết + tính lại CIS + audit_logs"), stroke="#6D28D9")
     msg(5, 2, 770, t("12. COMMIT atomic SQLite WAL tx", "12. Xác nhận giao dịch WAL nguyên tử"), dashed=1, stroke="#6D28D9", open_arrow=True)
     msg(2, 0, 798, t("13. HTTP 200 (updated verdict + recalculated CIS)", "13. HTTP 200 (nhãn mới + CIS đã tính lại)"), dashed=1, stroke="#047857", open_arrow=True)
@@ -912,7 +914,7 @@ def build_fig3_3(vn: bool) -> DiagramBuilder:
 
     # Band 3: Classrooms, Billing & Migrations (6 real ORM tables → 15 TOTAL!)
     d.box(24, 474, 784, 294, "", fill="#FAF5FF", stroke="#6D28D9", sw=1.4, dashed=1)
-    d.text(32, 478, 768, 22, t("app.db — Band 3: Classrooms, Billing, Promos &amp; Migrations (6 Tables → 15 ORM Tables Total)", "app.db — Khối 3: Lớp học, Thanh toán, Ưu đãi &amp; Di trú (6 bảng → Tổng 15 bảng ORM)"), font_size=13, font_color="#5B21B6", bold=True, align="left")
+    d.text(102, 478, 698, 22, t("app.db — Band 3: Classrooms, Billing, Promos &amp; Migrations (6 Tables → 15 ORM Tables Total)", "app.db — Khối 3: Lớp học, Thanh toán, Ưu đãi &amp; Di trú (6 bảng → Tổng 15 bảng ORM)"), font_size=13, font_color="#5B21B6", bold=True, align="left")
 
     t_cls = d.erd_table(36, 510, 178, "10. classes", ["<b>PK</b> id · <b>FK</b> teacher_id", "name · join_code (UQ)", "created_at"], hdr_fill="#0F766E", stroke="#0F766E")
     t_mem = d.erd_table(262, 510, 180, "11. class_memberships", ["<b>PK</b> id · <b>FK</b> class_id", "<b>FK</b> student_id", "joined_at"], hdr_fill="#0F766E", stroke="#0F766E")
@@ -1046,17 +1048,17 @@ def build_fig3_4(vn: bool) -> DiagramBuilder:
         align="left",
     )
 
-    # Persistent Volumes Row inside Docker Host (explicitly fulfilling caption promise!)
-    v_sql = d.cylinder(228, 634, 214, 78, t("<b>«artifact» ./data Volume</b><br/>app.db (WAL) + local_papers.db", "<b>«artifact» Phân vùng ./data</b><br/>app.db (WAL) + local_papers.db"), fill="#DCFCE7", stroke="#047857", size=8)
-    d.icon("sqlite", 236, 662, 24, 24)
-    v_gcache = d.cylinder(454, 634, 134, 78, t("<b>grobid-cache</b><br/>TEI XML Cache", "<b>grobid-cache</b><br/>Đệm TEI XML"), fill="#FEF3C7", stroke="#B45309", size=8)
+    # Persistent Volumes Row inside Docker Host (icon cleanly clear of «artifact» guillemet in EN & VN!)
+    v_sql = d.cylinder(224, 634, 232, 78, t("<b>«artifact» ./data Volume</b><br/>app.db (WAL) + local_papers.db", "<b>«artifact» Phân vùng ./data</b><br/>app.db (WAL) + local_papers.db"), fill="#DCFCE7", stroke="#047857", size=8, extra="spacingLeft=22;")
+    d.icon("sqlite", 230, 665, 20, 20)
+    v_gcache = d.cylinder(464, 634, 126, 78, t("<b>grobid-cache</b><br/>TEI XML Cache", "<b>grobid-cache</b><br/>Đệm TEI XML"), fill="#FEF3C7", stroke="#B45309", size=8)
 
     # 3. Right External Services
     ex_apis = d.cube(646, 232, 164, 236, t("«external»\n15+ APIs &amp; URLs", "«external»\n15+ API &amp; URL"), fill="#EFF6FF", stroke="#1D4ED8")
     for idx_i, ik in enumerate(["crossref", "openalex", "arxiv", "dblp", "epmc", "wayback"]):
         row, col = divmod(idx_i, 3)
         d.icon(ik, 666 + col * 42, 300 + row * 38, 26, 26)
-    d.text(664, 384, 136, 74, t("Crossref, OpenAlex,<br/>arXiv, DBLP, EPMC,<br/>Wayback &amp; Cited URLs", "Crossref, OpenAlex,<br/>arXiv, DBLP, EPMC,<br/>Wayback &amp; URL trích"), font_size=13, align="left")
+    d.text(666, 384, 140, 74, t("Crossref, OpenAlex,<br/>arXiv, DBLP, EPMC,<br/>Wayback &amp; Cited URLs", "Crossref, OpenAlex,<br/>arXiv, DBLP, EPMC,<br/>Wayback &amp; URL nguồn"), font_size=13, align="left")
 
     ex_pay = d.cube(646, 510, 164, 132, t("«external»\nPayments", "«external»\nThanh toán"), fill="#F5F3FF", stroke="#6D28D9")
     d.icon("payment", 666, 574, 26, 26)
@@ -1102,8 +1104,8 @@ def build_fig4_1(vn: bool) -> DiagramBuilder:
     p1_box = d.box(16, 94, 780, 178, "", fill="#F8FAFC", stroke="#2563EB", sw=1.3, dashed=1)
     d.text(28, 98, 756, 22, t("Phase I: Ingestion, Structural Linking &amp; Multi-Registry Retrieval (Layers 1–4)", "Giai đoạn I: Trích xuất, Liên kết cấu trúc &amp; Truy hồi đa nguồn (Tầng 1–4)"), font_size=13, font_color="#1E3A8A", bold=True, align="left")
 
-    l1 = d.card(26, 130, 174, 128, t("L1. Parsing", "T1. Trích xuất"), t("GROBID TEI +<br/>PyMuPDF + OCR<br/>11 Formats + VN Law", "GROBID TEI +<br/>PyMuPDF + OCR<br/>11 chuẩn + Luật VN"), icon_key="tei", fill="#FFFFFF", stroke="#1D4ED8", title_color="#1E3A8A")
-    l2 = d.card(220, 130, 174, 128, t("L2. Merging", "T2. Hợp nhất"), t("Donor URL repair,<br/>TOC filter &amp;<br/>style consensus", "Sửa URL, lọc mục lục<br/>&amp; đồng thuận chuẩn<br/>trích dẫn"), icon_key="merge", fill="#FFFFFF", stroke="#1D4ED8", title_color="#1E3A8A")
+    l1 = d.card(26, 130, 174, 128, t("L1. Parsing", "T1. Trích xuất"), t("GROBID TEI +<br/>PyMuPDF + OCR<br/>12 Formats · TOC filter", "GROBID TEI +<br/>PyMuPDF + OCR<br/>12 chuẩn · Lọc mục lục"), icon_key="tei", fill="#FFFFFF", stroke="#1D4ED8", title_color="#1E3A8A")
+    l2 = d.card(220, 130, 174, 128, t("L2. Merging", "T2. Hợp nhất"), t("Donor URL repair,<br/>NFC Unicode &amp;<br/>style consensus", "Sửa URL, chuẩn NFC<br/>&amp; đồng thuận chuẩn<br/>trích dẫn"), icon_key="merge", fill="#FFFFFF", stroke="#1D4ED8", title_color="#1E3A8A")
     l3 = d.card(414, 130, 174, 128, t("L3. Linking", "T3. Liên kết"), t("Bidirectional 7-tier<br/>cascade (tei_link<br/>.. no_keys)", "Liên kết hai chiều<br/>7 bậc (tei_link<br/>.. no_keys)"), icon_key="link", fill="#FFFFFF", stroke="#1D4ED8", title_color="#1E3A8A")
     l4 = d.card(608, 130, 174, 128, t("L4. Retrieval", "T4. Truy hồi"), t("Tier 0–3 (15+ APIs),<br/>SSRF Link/Wayback<br/>&amp; Abstract Enrich", "Tầng 0–3 (15+ API),<br/>SSRF/Wayback &amp;<br/>Bổ sung tóm tắt"), icon_key="globe", fill="#FFFFFF", stroke="#047857", title_color="#065F46")
 
@@ -1295,15 +1297,15 @@ def build_fig4_3(vn: bool) -> DiagramBuilder:
         title_color="#854D0E",
     )
 
-    # Bottom 3 Diagnostic Buckets explicitly covering ALL 8 CitationMappingStatus states!
-    o_ok = d.box(24, 574, 240, 88, t("<b>Resolved Links (3 states)</b><br/>matched · manual_review<br/>ambiguous_mapping (0.50)", "<b>Liên kết khớp (3 trạng thái)</b><br/>matched · manual_review<br/>ambiguous_mapping (0.50)"), fill="#DCFCE7", stroke="#047857", sw=1.5, font_size=13)
-    o_or = d.box(280, 574, 240, 88, t("<b>Body-Side Faults (3 states)</b><br/>missing_reference · unresolved<br/>in_text_mismatch", "<b>Lỗi nội văn (3 trạng thái)</b><br/>missing_reference · unresolved<br/>in_text_mismatch"), fill="#FEF3C7", stroke="#B45309", sw=1.5, font_size=13)
-    o_un = d.box(536, 574, 248, 88, t("<b>Bib-Side Faults (2 states)</b><br/>uncited_reference<br/>duplicate_reference → s_link", "<b>Lỗi danh mục (2 trạng thái)</b><br/>uncited_reference<br/>duplicate_reference → s_link"), fill="#FEE2E2", stroke="#DC2626", sw=1.5, font_size=13)
+    # Bottom 3 Diagnostic Buckets explicitly covering ALL 8 exact CitationMappingStatus enum states (Table 4.4 / statuses.py)!
+    o_ok = d.box(20, 574, 210, 88, t("<b>Resolved / Neutral (2)</b><br/>matched · unresolved", "<b>Hợp lệ / Trung tính (2)</b><br/>matched · unresolved"), fill="#DCFCE7", stroke="#047857", sw=1.5, font_size=13)
+    o_or = d.box(242, 574, 304, 88, t("<b>Body-Side Issues (4)</b><br/>missing_reference · in_text_mismatch<br/>ambiguous_mapping (0.50) · style_inconsistent", "<b>Lỗi phía thân bài (4)</b><br/>missing_reference · in_text_mismatch<br/>ambiguous_mapping (0.50) · style_inconsistent"), fill="#FEF3C7", stroke="#B45309", sw=1.5, font_size=13)
+    o_un = d.box(558, 574, 226, 88, t("<b>Bib-Side Issues (2)</b><br/>uncited_reference<br/>duplicate_reference → s_link", "<b>Lỗi danh mục (2)</b><br/>uncited_reference<br/>duplicate_reference → s_link"), fill="#FEE2E2", stroke="#DC2626", sw=1.5, font_size=13)
 
-    d.edge(None, o_ok, "", src_pt=(18, 558), nx=0.22, ny=0, pts=[(77, 558)], stroke="#047857", sw=1.6)
-    d.edge(step_ids[6], o_or, "", ex=0.5, ey=1, nx=0.5, ny=0, pts=[(296, 548), (400, 548)], stroke="#B45309", sw=1.5)
-    d.edge(step_ids[6], o_un, "", ex=0.85, ey=1, nx=0.5, ny=0, pts=[(472, 540), (660, 540)], stroke="#DC2626", sw=1.5)
-    d.edge(man, o_ok, "", ex=0.5, ey=1, nx=0.85, ny=0, pts=[(678, 558), (228, 558)], dashed=1, stroke="#CA8A04", sw=1.4)
+    d.edge(None, o_ok, "", src_pt=(18, 558), nx=0.22, ny=0, pts=[(66, 558)], stroke="#047857", sw=1.6)
+    d.edge(step_ids[6], o_or, "", ex=0.5, ey=1, nx=0.5, ny=0, pts=[(296, 548), (394, 548)], stroke="#B45309", sw=1.5)
+    d.edge(step_ids[6], o_un, "", ex=0.85, ey=1, nx=0.5, ny=0, pts=[(472, 540), (671, 540)], stroke="#DC2626", sw=1.5)
+    d.edge(man, o_ok, "", ex=0.5, ey=1, nx=0.85, ny=0, pts=[(678, 558), (199, 558)], dashed=1, stroke="#CA8A04", sw=1.4)
     return d
 
 
@@ -1558,8 +1560,8 @@ def build_fig4_7(vn: bool) -> DiagramBuilder:
     d.edge(d14, o_ret, t("G3 / Retr.", "N3 / Rút"), ex=0, ey=0.5, nx=1, ny=0.5, orth=False, stroke="#B45309", oy=-14, bold=True)
     d.edge(d14, o_hal, t("Fabricated", "Bịa đặt"), ex=1, ey=0.5, nx=0, ny=0.5, orth=False, stroke="#DC2626", ox=-6, oy=-14, bold=True)
 
-    # Group 5: Safe Abstention (HTTP 429 / No-CSL / R-FAIL-ALL)
-    d5 = d.diamond(280, 360, 260, 92, t("Group 5: API Outage /\nNo-CSL / Low Border?", "Nhóm 5: Lỗi API / Thiếu\nCSL / Vùng biên mờ?"))
+    # Group 5: Safe Abstention (HTTP 429 / No-CSL / R-FAIL-ALL — strictly Table 4.6!)
+    d5 = d.diamond(280, 360, 260, 92, t("Group 5: API Outage /\nRate Limit / No-CSL?", "Nhóm 5: Lỗi API / Cạn\nhạn mức / Thiếu CSL?"))
     d.edge(d14, d5, t("Pass", "Qua"), ex=0.5, ey=1, nx=0.5, ny=0, orth=False, stroke="#334155", ox=34, bold=True)
 
     o_unr = d.card(604, 366, 206, 82, "UNRESOLVED", t("HTTP 429 · No-CSL DOI<br/>Safe Abstention (G5)", "HTTP 429 · DOI thiếu CSL<br/>Từ chối an toàn (N5)"), icon_key="teacher", fill="#F1F5F9", stroke="#475569", title_color="#1E293B")
