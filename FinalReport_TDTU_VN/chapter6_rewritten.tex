@@ -1,82 +1,67 @@
-\chapter{Kết luận và Hướng phát triển}
+\chapter{Kết luận và hướng phát triển}
 \label{chap:conclusion}
 
 \section{Tổng kết kết quả đạt được so với mục tiêu đề ra}
 
-Đồ án tốt nghiệp này đã thiết kế, hiện thực hóa và đánh giá thực nghiệm \textbf{CITRA} (\textit{Essay Integrity Checker v3.90.9}) --- một nền tảng phần mềm kết hợp nơ-ron -- ký hiệu (neuro-symbolic) có khả năng giải thích, phục vụ chấm điểm tự động tính toàn vẹn trích dẫn (Citation Integrity Scoring -- CIS), phát hiện tài liệu tham khảo ngụy tạo và chuẩn hóa danh mục tài liệu tham khảo. Bảng~\ref{tab:obj-summary} đối chiếu trực tiếp các sản phẩm phần mềm đã hoàn thiện cùng kết quả thực nghiệm đạt được với sáu mục tiêu nghiên cứu đề ra tại Mục~\ref{sec:objectives}.
+Đồ án tốt nghiệp đã thiết kế, hiện thực và đánh giá thực nghiệm \textbf{CITRA} (\textit{v3.90.9}) --- nền tảng phần mềm lai Nơ-ron -- Ký hiệu có khả năng giải thích phục vụ chấm điểm tự động tính toàn vẹn trích dẫn (CIS), phát hiện tài liệu tham khảo bịa đặt và chuẩn hóa danh mục tham khảo. Bảng~\ref{tab:obj-summary} đối chiếu trực tiếp sản phẩm kỹ thuật và kết quả thực nghiệm với sáu mục tiêu SMART đặt ra tại Mục~\ref{sec:objectives}. Xuyên suốt tám tầng xử lý, cơ chế bảo vệ cốt lõi tổng hợp tại Hình~\ref{fig:decision-flow} (Chương~\ref{chap:architecture}) duy trì kỷ luật nguồn gốc nghiêm ngặt: cáo buộc ảo giác bắt buộc phải có bằng chứng bác bỏ cấu trúc tường minh (tên miền giả RFC 2606~\cite{rfc2606}, DOI bịa đặt/lai ghép, năm tương lai phi lý) hoặc phản hồi HTTP 200 rỗng sạch từ nhiều cơ sở dữ liệu trực tuyến, trong khi cạn hạn mức mạng, DOI khu vực không có CSL và tương đồng giáp ranh ($[0.40, 0.60)$) được định tuyến tất định sang \texttt{unresolved} để giảng viên thẩm định.
 
 {\setlength{\tabcolsep}{3.5pt}
-\begin{longtable}{|C{0.14}|L{0.32}|L{0.54}|}
-\caption{Tổng hợp kết quả đạt được của đồ án tốt nghiệp đối chiếu với các mục tiêu nghiên cứu của đề tài.}\label{tab:obj-summary}\\
+\begin{table}[!htbp]
+\centering
+\caption{Tổng hợp kết quả đạt được đối chiếu với sáu mục tiêu nghiên cứu của đồ án.}\label{tab:obj-summary}
+\begin{tabular}{|C{0.14}|L{0.31}|L{0.55}|}
 \hline
 \textbf{Mục tiêu} & \textbf{Năng lực mục tiêu} & \textbf{Kết quả kỹ thuật và thực nghiệm đạt được} \\
 \hline
-\endfirsthead
-\multicolumn{3}{c}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
+\textbf{OBJ-1} & \textbf{Trích xuất đa định dạng và liên kết hai chiều} & Kết hợp lai GROBID \texttt{0.9.1-crf} + PyMuPDF + \texttt{python-docx} hỗ trợ \textbf{12 định dạng} (gồm luật VN) và bộ liên kết 7 phương pháp (\textbf{97.7\%--100\%} nhận diện danh mục trên 310 PDF; \textbf{70.1\%--96.9\%} liên kết thuần PyMuPDF). \\
 \hline
-\textbf{Mục tiêu} & \textbf{Năng lực mục tiêu} & \textbf{Kết quả kỹ thuật và thực nghiệm đạt được} \\
+\textbf{OBJ-2} & \textbf{Truy hồi liên hợp nhận biết miền chuyên ngành} & Chỉ mục SQLite FTS5 \textbf{129,137 bản ghi} (\textbf{99.80\%} độ phủ trên 500 truy vấn ACL, \textbf{87.6\,ms}) + 4 tầng \textbf{15+ API trực tuyến}, Retraction Watch~\cite{crossref-tdm}, đệm singleflight và kiểm tra SSRF ghim IP. \\
 \hline
-\endhead
+\textbf{OBJ-3} & \textbf{Kiểm chứng lai Nơ-ron -- Ký hiệu và hiệu chỉnh} & Bộ mã hóa kép SBERT + ONNX INT8 \texttt{VI}$\leftrightarrow$\texttt{EN} dung hợp \textbf{68 mã luật \texttt{R-*}}, MLR 16D ($C=0.25$) và Platt (\textbf{ECE = 0.0405}, \textbf{Brier = 0.0067}, \textbf{0/6,480} hợp lệ$\rightarrow$ảo giác). \\
 \hline
-\multicolumn{3}{r}{\itshape Tiếp theo ở trang sau}\\
-\endfoot
+\textbf{OBJ-4} & \textbf{Chấm điểm CIS minh bạch và sửa lỗi tự động} & Thang CIS năm thành phần (\textbf{Spearman $\rho$ = 0.9987}) kèm tự động sửa lỗi và xuất danh mục chuẩn APA, IEEE, TDTU, BibTeX, RIS và \texttt{.docx}. \\
 \hline
-\endlastfoot
-\textbf{OBJ-1} & \textbf{Trích xuất đa định dạng và liên kết hai chiều} & Kết hợp lai GROBID \texttt{0.9.1-crf} TEI-XML + PyMuPDF + \texttt{python-docx} hỗ trợ \textbf{12 chuẩn trích dẫn} (gồm cả văn bản pháp luật VN) và bộ liên kết 7 phương pháp (phát hiện mục tài liệu tham khảo đạt \textbf{$97.7\%$--$100\%$} trên 310 tệp PDF). \\
+\textbf{OBJ-5} & \textbf{Nền tảng web phân quyền an toàn} & FastAPI đóng gói container (\textbf{15 bảng ORM}, 13 bản di trú \texttt{0001}--\texttt{0013}, SSE, RBAC/IDOR, SSRF ghim IP, xóa dữ liệu Luật 91/2025/QH15) \& React 18.3 / TypeScript 5.9 (\textbf{231.50\,kB} khởi động). \\
 \hline
-\textbf{OBJ-2} & \textbf{Truy xuất liên hợp nhận biết miền tri thức} & Kho dữ liệu cục bộ SQLite FTS5 gồm \textbf{129,137 bản ghi} (độ phủ \textbf{$99.80\%$}, độ trễ $87.6\text{\,ms}$) kết hợp \textbf{hơn 15 API trực tuyến}, Retraction Watch, bộ nhớ đệm gộp truy vấn singleflight và bộ kiểm tra URL/HTML ghim địa chỉ IP. \\
+\textbf{OBJ-6} & \textbf{Đánh giá thực nghiệm quy mô lớn chống rò rỉ} & \textbf{99.67\%} ID có kiểm soát ($N=18\text{K}$), \textbf{99.95\%} OOD i.i.d.\ ($N=2\text{K}$), \textbf{89.17\%} trực tuyến 15 API ($N=120$; F1 hợp lệ \textbf{98.36\%}; \textbf{100\%} ngoại tuyến), \textbf{12.64\,s} WAN lạnh 50\,tr., GROBID 0-swap GCE (\textbf{95.53\,s $\rightarrow$ 17.44\,s}) và \textbf{50/50} tải I/O. \\
 \hline
-\textbf{OBJ-3} & \textbf{Xác minh nơ-ron -- ký hiệu và hiệu chỉnh xác suất} & Bộ mã hóa kép SBERT + ONNX INT8 \texttt{VI}$\leftrightarrow$\texttt{EN} tích hợp cùng \textbf{68 luật ký hiệu}, mô hình hồi quy logistic đa thức 16 chiều ($C=0.25$) và hiệu chỉnh Platt (\textbf{$\text{ECE} = 0.0405$}, \textbf{$\text{Brier} = 0.0067$}). \\
-\hline
-\textbf{OBJ-4} & \textbf{Chấm điểm CIS minh bạch và sửa lỗi tự động} & Thang chấm CIS năm thành phần (độ ổn định thứ hạng \textbf{$\rho = 0.9987$}) đi kèm tính năng tự động chuẩn hóa và sửa lỗi tài liệu tham khảo theo chuẩn APA, IEEE, TDTU, BibTeX, RIS và tệp \texttt{.docx}. \\
-\hline
-\textbf{OBJ-5} & \textbf{Nền tảng web phân quyền bảo mật} & Hệ thống FastAPI đóng gói bằng container (\textbf{15 bảng ORM}, 13 bản di trú lược đồ (\texttt{0001}--\texttt{0013}), SSE, bảo vệ RBAC/IDOR, chống SSRF bằng ghim IP) và ứng dụng đơn trang React 18.3 (gói khởi tạo \textbf{$228.42\text{\,kB}$}). \\
-\hline
-\textbf{OBJ-6} & \textbf{Đánh giá thực nghiệm quy mô lớn chống rò rỉ dữ liệu} & Độ chính xác trong phân phối (ID) đạt \textbf{$99.67\%$} ($N=18\text{K}$), ngoài phân phối (OOD) đạt \textbf{$99.96\%$} ($N=2.4\text{K}$), đánh giá đầu-cuối (E2E) trên 6 lĩnh vực đạt \textbf{$100\%$} ($120/120$) và chịu tải đồng thời \textbf{$50/50$} phiên. \\
-\hline
-\end{longtable}
+\end{tabular}
+\end{table}
 }
-
-Hình~\ref{fig:verdict-paths} tổng hợp cơ chế bảo vệ kiến trúc cốt lõi chi phối mọi phán quyết trong \textbf{CITRA}: các kết luận nghi ngờ ngụy tạo (\texttt{suspected\_hallucination}) bắt buộc phải dựa trên bằng chứng bác bỏ cấu trúc xác thực (mã DOI ngụy tạo hoặc chắp vá chéo, tên miền giả lập theo RFC 2606, năm xuất bản phi lý ở tương lai) hoặc phản hồi rỗng hợp lệ với mã trạng thái HTTP 200 đồng nhất từ nhiều cơ sở dữ liệu học thuật trực tuyến; ngược lại, các trường hợp cạn kiệt hạn ngạch mạng, mã DOI khu vực chưa công bố siêu dữ liệu hay độ tương đồng nằm trong vùng biên ($[0.40, 0.60)$) đều được điều hướng tất định về trạng thái \texttt{unresolved} để giảng viên trực tiếp xem xét.
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=\textwidth,keepaspectratio]{picture/figures/fig6_1_verdict_paths.png}
-    \caption[Cây quyết định nơ-ron -- ký hiệu có rào chắn phân tách bác bỏ và từ chối phán quyết]{Cây quyết định nơ-ron -- ký hiệu có rào chắn bảo vệ trong CITRA (\texttt{v3.90.9}) giúp phân tách rạch ròi giữa kết luận bác bỏ có bằng chứng (\texttt{suspected\_hallucination}) và cơ chế từ chối phán quyết có truy vết nguồn gốc (\texttt{unresolved}).}
-    \label{fig:verdict-paths}
-\end{figure}
 
 \section{Tổng hợp các phát hiện thực nghiệm trọng tâm}
 
-Ba bài học thực nghiệm quan trọng được rút ra từ chuỗi thí nghiệm tại Chương~\ref{chap:results}:
+Ba bài học thực nghiệm cốt lõi rút ra từ Chương~\ref{chap:results}:
 \begin{enumerate}
-    \item \textbf{Hệ luật ký hiệu và học thống kê bổ trợ lẫn nhau thay vì dư thừa.} Mô hình Hồi quy Logistic 16 chiều thuần túy (\texttt{B5}) hoạt động tốt trên các biên đánh đổi độ tương đồng liên tục ($97.70\%$ trên tập ID) nhưng sụt giảm nghiêm trọng xuống chỉ còn $57.33\%$ trước các quy tắc toàn vẹn rời rạc ngoài phân phối OOD (như bài báo đã bị rút bỏ, URL giả mạo hoặc sai thẩm quyền văn bản luật VN). Việc kết hợp các rào chắn luật ký hiệu có thứ tự ưu tiên cùng cơ chế pha trộn xác suất học máy giúp hệ thống đạt đồng thời $99.67\%$ độ chính xác ID và $99.96\%$ độ chính xác OOD.
-    \item \textbf{Hiệu chỉnh xác suất hậu kiểm là yếu tố thiết yếu để báo cáo độ tin cậy đáng tin.} Điểm tự tin thô sinh ra trực tiếp từ tập luật ký hiệu mắc hiện tượng tự tin thái quá nghiêm trọng ($\text{ECE} = 0.2477$). Phép hiệu chỉnh Platt trên không gian logit giúp giảm sai số hiệu chỉnh kỳ vọng (ECE) tới $6.12\times$, xuống còn $0.0405$, và giảm Điểm Brier $12.58\times$ xuống còn $0.0067$, trong khi vẫn bảo toàn nguyên vẹn tỷ lệ bao phủ không từ chối phán quyết ($87.92\%$).
-    \item \textbf{Chỉ mục FTS5 ngoại tuyến giúp việc triển khai thực tế tại lớp học trên máy chủ thuần CPU trở nên khả thi.} Cơ chế lưu đệm ứng viên đã xác minh kết hợp lập chỉ mục cục bộ 129,137 bài báo mang lại tốc độ truy xuất nhanh hơn $688.72\times$, cho phép một máy chủ chỉ sử dụng CPU xử lý trọn vẹn 50 lượt tải bài đồng thời vào thời điểm sát hạn nộp mà không gặp tình trạng sụp đổ do giới hạn tần suất từ các API bên ngoài.
+    \item \textbf{Rào chắn ký hiệu và học thống kê bổ trợ lẫn nhau thay vì dư thừa.} Mô hình Hồi quy Logistic 16 chiều thuần túy (\texttt{B5}) đạt $97.70\%$ trên tập tương đồng liên tục nhưng tụt xuống $59.80\%$ trên các chính sách toàn vẹn OOD i.i.d.\ ($57.33\%$ gộp) vì các vị từ nguồn gốc rời rạc (cờ rút bài, URL giả RFC 2606, thẩm quyền luật VN) đòi hỏi thực thi ký hiệu không cần huấn luyện lại. Kết hợp cả hai đạt $99.67\%$ ID có kiểm soát, $99.95\%$ OOD i.i.d.\ và $89.17\%$ trực tuyến 15 API ($100.00\%$ độ chuẩn xác trên lớp \texttt{verified}).
+    \item \textbf{Hiệu chỉnh xác suất hậu kiểm thiết yếu cho độ tin cậy trung thực.} Độ tin cậy luật ký hiệu thô bị tự tin thái quá nghiêm trọng ($\text{ECE} = 0.2477$). Hiệu chỉnh Platt trên không gian logit giảm ECE $6.12\times$ xuống $0.0405$ và Brier $12.58\times$ xuống $0.0067$ mà bảo toàn độ bao phủ không từ chối ($87.92\%$), song xếp hạng rủi ro nội bộ nên dùng logit chưa cắt trần để tránh hiệu ứng đồng hạng $0.99$ tại $50\%$ độ phủ.
+    \item \textbf{Chỉ mục FTS5 ngoại tuyến và tinh chỉnh GROBID ngoài heap giúp triển khai CPU thực tế.} Lưu đệm ứng viên và chỉ mục cục bộ 129,137 bản ghi tăng tốc truy hồi đồ án 50 trang gấp $151.2\times$ ($12.64\text{\,s}$ WAN lạnh $\rightarrow 2.00\text{\,s}$ đệm ấm), còn cấp container GROBID $4\text{\,GiB}$ kèm \texttt{-Xmx768m} xóa sạch swap cgroup ($95.53\text{\,s} \rightarrow 17.44\text{\,s}$ lượt ấm không đệm trên bản thảo 117 trang).
 \end{enumerate}
 
 \section{Hạn chế của hệ thống}
 \label{sec:limitations}
 
-Mặc dù đạt hiệu năng thực nghiệm ấn tượng, phiên bản \texttt{3.90.9} hiện vẫn tồn tại bốn hạn chế kỹ thuật cụ thể:
+Bên cạnh kết quả đạt được, phiên bản \texttt{3.90.9} vẫn tồn tại năm hạn chế kỹ thuật và thực nghiệm cụ thể:
 \begin{itemize}
-    \item \textbf{L1 (Điểm mù đối chứng luận điểm trên toàn văn có thu phí):} Cơ chế đối sánh ngữ nghĩa hiện tại so khớp câu trích dẫn trong bài với tiêu đề và phần tóm tắt mở (abstract). Khi sinh viên trích dẫn một hình vẽ, định lý hoặc đoạn thảo luận chi tiết nằm sâu bên trong bài báo đóng phí truy cập mà phần tóm tắt không đề cập tới, \textbf{CITRA} chưa thể kiểm chứng quan hệ suy diễn ngữ nghĩa ở cấp độ toàn văn.
-    \item \textbf{L2 (Độ lệch lĩnh vực trong kho dữ liệu ngoại tuyến):} Do $98.42\%$ dữ liệu trong \texttt{local\_papers.db} bắt nguồn từ ACL Anthology và kho bài báo Khoa học Máy tính trên arXiv, các môi trường triển khai cô lập hoàn toàn không có kết nối Internet sẽ bị giảm độ phủ truy xuất Tầng 0 (Tier-0) đối với các bài báo thuộc lĩnh vực y sinh, khoa học xã hội -- nhân văn và các tạp chí chuyên ngành xuất bản trong nước tại Việt Nam.
-    \item \textbf{L3 (Tài liệu lưu trữ đa cột phức tạp và bản quét chữ viết tay):} Dù cơ chế nhận dạng ký tự quang học (Tesseract OCR) có chọn lọc đã khôi phục tốt các trang in tiếng Việt, những bản chụp bằng camera độ phân giải thấp, tài liệu lưu trữ bị nghiêng lệch hoặc ghi chú trích dẫn viết tay bên lề vẫn làm suy giảm độ chính xác nhận dạng ký tự và làm tăng tỷ lệ phân loại vào nhóm \texttt{unresolved}.
-    \item \textbf{L4 (Tuần tự hóa tác vụ ghi của SQLite trên một máy chủ đơn lẻ):} Mặc dù chế độ SQLite WAL đáp ứng tốt 50 lượt sinh viên tải bài đồng thời trên một máy chủ duy nhất, việc mở rộng theo chiều ngang (horizontal scaling) qua nhiều máy ảo API độc lập đòi hỏi một hệ quản trị cơ sở dữ liệu quan hệ dùng chung qua mạng cùng hệ thống hàng đợi thông điệp phân tán.
+    \item \textbf{L1 (Điểm mù đối chứng toàn văn sau tường phí):} Đối sánh ngữ nghĩa chỉ dựa trên tiêu đề và tóm tắt mở. Khi sinh viên viện dẫn một bảng số liệu hay định lý nằm sâu trong thân bài đóng phí mà tóm tắt không đề cập, \textbf{CITRA} chưa thể kiểm chứng suy diễn mức toàn văn.
+    \item \textbf{L2 (Độ lệch lĩnh vực trong kho ngoại tuyến):} Do $98.42\%$ ($127{,}102 / 129{,}137$) kho \texttt{local\_papers.db} bắt nguồn thuần túy từ ACL Anthology~\cite{acl-anthology} (chỉ có 3 bản ghi arXiv, $0.002\%$), triển khai cô lập không Internet bị suy giảm độ phủ Tầng~0 trên y sinh, kinh tế, nhân văn và tạp chí trong nước Việt Nam.
+    \item \textbf{L3 (Bản quét lưu trữ phức tạp và chuẩn chú thích khi tắt GROBID):} Dù OCR Tesseract có chọn lọc khôi phục trang in tiếng Việt, ảnh chụp mờ, chú thích viết tay và các chuẩn chú thích chân trang/chỉ số trên khi chạy thuần PyMuPDF vẫn làm giảm độ phủ liên kết nội văn ($70.1\%$ trên 220 bài báo mở).
+    \item \textbf{L4 (Tuần tự hóa ghi SQLite một nút và đánh đổi xóa dây chuyền kiểm toán):} Mở rộng ngang nhiều máy chủ API cần CSDL quan hệ dùng chung và hàng đợi phân tán; đồng thời ràng buộc \texttt{ON DELETE CASCADE} từ \texttt{essays}/\texttt{verdicts} xuống \texttt{audit\_logs} ưu tiên quyền xóa dữ liệu cá nhân hơn bảo lưu biên bản chấm điểm bất biến sau hạn nộp.
+    \item \textbf{L5 (Khoảng trống nghiên cứu người dùng, đối chứng mở rộng và hiệu lực pháp lý trực tuyến):} Tập huấn luyện quy mô lớn dựa trên sinh nhiễu chương trình; kiểm toán 21 PDF thực chưa có hai đánh giá viên độc lập mù (Cohen's $\kappa$) hay thử nghiệm thực địa với giảng viên; trọng số CIS chưa khớp thực nghiệm theo điểm chấm giảng viên; chưa đối chiếu với mô hình cây phi tuyến (XGBoost) và LLM-as-a-Judge; và \texttt{VNLegalVerifier} mới kiểm tra cú pháp -- thẩm quyền mà chưa truy vấn tình trạng còn hiệu lực/hết hiệu lực trực tuyến tại Cơ sở dữ liệu Quốc gia về Văn bản Pháp luật (\texttt{vbpl.vn})~\cite{vbpl-vn}.
 \end{itemize}
 
 \section{Hướng phát triển}
 \label{sec:future-work}
 
-Mỗi hạn chế nêu tại Mục~\ref{sec:limitations} trực tiếp mở ra một định hướng phát triển kỹ thuật tương ứng trong tương lai:
+Mỗi hạn chế ở Mục~\ref{sec:limitations} mở ra một mục tiêu phát triển trực tiếp:
 \begin{itemize}
-    \item \textbf{F1 (Truy xuất đoạn văn toàn văn truy cập mở $\leftarrow$ L1):} Tích hợp dữ liệu JATS XML từ PubMed Central, HTML5 từ arXiv (\texttt{ar5iv}) và tệp PDF truy cập mở từ Unpaywall kết hợp truy xuất đoạn văn dày đặc (dense passage retrieval) ở cấp độ đoạn văn, giúp mở rộng khả năng kiểm chứng luận điểm vượt ra ngoài phạm vi tóm tắt bất cứ khi nào giấy phép mở cho phép.
-    \item \textbf{F2 (Mở rộng kho dữ liệu ngoại tuyến đa ngành và khu vực ASEAN $\leftarrow$ L2):} Bổ sung vào \texttt{local\_papers.db} các bản chụp dữ liệu mở từ DOAJ, Cơ sở dữ liệu Tạp chí Khoa học Việt Nam Trực tuyến (VJOL) và các phân vùng chuyên ngành của OpenAlex nhằm cân bằng độ phủ ngoại tuyến trên các lĩnh vực kinh tế, luật học, y sinh và kỹ thuật.
-    \item \textbf{F3 (Nhận dạng OCR thị giác -- ngôn ngữ nhận biết bố cục $\leftarrow$ L3):} Tích hợp các mô hình phân tích bố cục tài liệu gọn nhẹ đã lượng tử hóa cho CPU (như Docling hoặc Surya OCR) nhằm nâng cao chất lượng phân tách tài liệu tham khảo trên các bản quét lưu trữ kém chất lượng và các bản thảo nhân văn sử dụng nhiều chú thích cuối trang phức tạp.
-    \item \textbf{F4 (Mở rộng cụm tiến trình PostgreSQL + Redis và tích hợp LMS chuẩn LTI 1.3 $\leftarrow$ L4):} Hỗ trợ tùy chọn vùng kết nối PostgreSQL (connection pooling) và hàng đợi tác vụ Redis song song với giao thức Learning Tools Interoperability (LTI 1.3) đồng bộ trực tiếp vào sổ điểm của Moodle và Canvas, tạo tiền đề triển khai các nghiên cứu theo dõi dài hạn liên khoa qua nhiều học kỳ.
+    \item \textbf{F1 (Truy hồi đoạn văn toàn văn truy cập mở $\leftarrow$ L1):} Tích hợp JATS XML từ Europe PMC~\cite{europepmc}, HTML5 arXiv (\texttt{ar5iv}) và PDF truy cập mở Unpaywall kèm truy hồi đoạn văn dày đặc để mở rộng đối sánh nhận định ra ngoài tóm tắt khi giấy phép cho phép.
+    \item \textbf{F2 (Mở rộng kho ngoại tuyến đa ngành và ASEAN $\leftarrow$ L2):} Bổ sung bản chụp mở từ DOAJ~\cite{doaj}, Tạp chí Khoa học Việt Nam Trực tuyến (VJOL) và các lát cắt đa ngành từ OpenAlex~\cite{openalex} để cân bằng độ phủ kinh tế, luật, y sinh và kỹ thuật.
+    \item \textbf{F3 (Phân tích bố cục bằng mô hình thị giác -- ngôn ngữ $\leftarrow$ L3):} Tích hợp mô hình nhận biết bố cục lượng tử hóa CPU (Docling hoặc Surya OCR) để nâng cao độ chính xác tách chú thích chân trang, chỉ số trên và bản quét lưu trữ.
+    \item \textbf{F4 (Mở rộng PostgreSQL + Redis, lưu trữ kiểm toán WORM và LTI 1.3 $\leftarrow$ L4):} Bổ sung vùng kết nối PostgreSQL, hàng đợi Redis, băm hóa token phiên, bản sao lưu kiểm toán chỉ ghi một lần cho bài đã nộp vào lớp và chuẩn LTI 1.3 kết nối Moodle/Canvas.
+    \item \textbf{F5 (Nghiên cứu người dùng, kiểm định $\kappa$, đối chứng mở rộng và tra cứu \texttt{vbpl.vn} $\leftarrow$ L5):} Tiến hành gán nhãn mù đa đánh giá viên (Cohen's $\kappa$) cùng khảo sát thực địa giảng viên theo học kỳ, đối chiếu XGBoost và bộ kiểm chứng LLM-as-a-Judge có truy hồi~\cite{hu2024refchecker}, \cite{press2024citeme}, hiệu chỉnh trọng số CIS theo điểm giảng viên, xếp hạng rủi ro trên logit chưa cắt trần và tích hợp tra cứu hiệu lực văn bản trực tuyến tại \texttt{vbpl.vn}~\cite{vbpl-vn}.
 \end{itemize}
 
 \section{Lời kết}
 
-Các công cụ phần mềm phục vụ đánh giá học thuật luôn mang trên mình trách nhiệm về tính công bằng và sự minh bạch. Bằng cách đặt mọi phép kiểm tra trích dẫn trên nền tảng các cơ sở dữ liệu học thuật có thể truy vết rõ ràng, kết hợp đối sánh ngữ nghĩa bằng mạng nơ-ron với 68 luật ký hiệu có thể kiểm toán cùng xác suất đã hiệu chỉnh Platt, trung thực từ chối đưa ra phán quyết khi bằng chứng chưa đầy đủ và trao quyền quyết định ghi đè cuối cùng cho giảng viên, \textbf{CITRA} đã minh chứng một bản thiết kế kỹ thuật phần mềm thiết thực cho bài toán xác minh liêm chính học thuật có sự hỗ trợ đáng tin cậy của trí tuệ nhân tạo.
+Các hệ thống phần mềm hỗ trợ đánh giá học thuật mang trách nhiệm cao về tính công bằng, chặt chẽ và minh bạch. Bằng việc neo mọi kiểm chứng trích dẫn vào cơ sở dữ liệu đối chứng có thể truy vết, dung hợp đối sánh ngữ nghĩa nơ-ron với 68 luật ký hiệu và xác suất hiệu chỉnh Platt, trung thực từ chối phán quyết khi thiếu bằng chứng, công khai minh bạch ranh giới giữa đánh giá có kiểm soát và trực tuyến, đồng thời bảo toàn quyền quyết định cuối cùng cho giảng viên, \textbf{CITRA} đề xuất một bản thiết kế kỹ thuật phần mềm thực tiễn và có khả năng tái lập cho bài toán kiểm chứng tính toàn vẹn trích dẫn trong giáo dục đại học.

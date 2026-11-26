@@ -3,80 +3,65 @@
 
 \section{Summary of Achievements Against Objectives}
 
-This graduation project designed, implemented, and empirically evaluated \textbf{CITRA} (\textit{Essay Integrity Checker v3.90.9}), an explainable neuro-symbolic software platform for automated Citation Integrity Scoring (CIS), fabricated reference detection, and bibliography remediation. Table~\ref{tab:obj-summary} maps the delivered software artifacts and empirical results directly back to the six research objectives defined in Section~\ref{sec:objectives}.
+This graduation project designed, implemented, and empirically evaluated \textbf{CITRA} (\textit{v3.90.9}), an explainable neuro-symbolic software platform for automated Citation Integrity Scoring (CIS), fabricated reference detection, and bibliography remediation. Table~\ref{tab:obj-summary} maps the delivered artifacts and verified experimental outcomes directly against the six SMART objectives defined in Section~\ref{sec:objectives}. Across all verification layers, the core architectural safeguard summarized in Figure~\ref{fig:decision-flow} (Chapter~\ref{chap:architecture}) enforces strict provenance discipline: substantive hallucination accusations require either positive structural refutation (RFC 2606 fake domains~\cite{rfc2606}, fabricated/chimeric DOIs, impossible future years) or clean HTTP 200 empty responses across multiple live registries, whereas network exhaustion, regional non-CSL DOIs, and borderline similarities ($[0.40, 0.60)$) route deterministically to \texttt{unresolved} for instructor review.
 
 {\setlength{\tabcolsep}{3.5pt}
-\begin{longtable}{|C{0.14}|L{0.32}|L{0.54}|}
-\caption{Summary of graduation project achievements mapped against project research objectives.}\label{tab:obj-summary}\\
+\begin{table}[!htbp]
+\centering
+\caption{Summary of graduation project achievements mapped against project research objectives.}\label{tab:obj-summary}
+\begin{tabular}{|C{0.14}|L{0.31}|L{0.55}|}
 \hline
 \textbf{Objective} & \textbf{Target Capability} & \textbf{Delivered Engineering \& Empirical Outcome} \\
 \hline
-\endfirsthead
-\multicolumn{3}{c}{\itshape Table \thetable\ (continued from previous page)}\\
+\textbf{OBJ-1} & \textbf{Multi-format extraction \& bidirectional linking} & Hybrid GROBID \texttt{0.9.1-crf} + PyMuPDF + \texttt{python-docx} across \textbf{12 formats} (incl.\ VN laws) and 7-method linker (\textbf{97.7\%--100\%} bib.\ detection on 310 PDFs; \textbf{70.1\%--96.9\%} PyMuPDF-only linking). \\
 \hline
-\textbf{Objective} & \textbf{Target Capability} & \textbf{Delivered Engineering \& Empirical Outcome} \\
+\textbf{OBJ-2} & \textbf{Domain-aware federated retrieval} & \textbf{129,137-record} SQLite FTS5 index (\textbf{99.80\%} recall on 500 ACL queries, \textbf{87.6\,ms}) + 4-tier \textbf{15+ live APIs}, Retraction Watch~\cite{crossref-tdm}, singleflight cache, and pinned-IP SSRF validation. \\
 \hline
-\endhead
+\textbf{OBJ-3} & \textbf{Neuro-symbolic verification \& calibration} & Dual SBERT + ONNX INT8 \texttt{VI}$\leftrightarrow$\texttt{EN} encoders fused with \textbf{68 \texttt{R-*} rules}, 16D MLR ($C=0.25$), and Platt scaling (\textbf{ECE = 0.0405}, \textbf{Brier = 0.0067}, \textbf{0/6,480} verified$\rightarrow$hallucination). \\
 \hline
-\multicolumn{3}{r}{\itshape Continued on next page}\\
-\endfoot
+\textbf{OBJ-4} & \textbf{Interpretable CIS grading \& remediation} & Five-component CIS rubric (\textbf{Spearman $\rho$ = 0.9987} rank stability) plus automated APA, IEEE, TDTU, BibTeX, RIS, and \texttt{.docx} bibliography repair. \\
 \hline
-\endlastfoot
-\textbf{OBJ-1} & \textbf{Multi-format extraction \& bidirectional linking} & Hybrid GROBID \texttt{0.9.1-crf} TEI-XML + PyMuPDF + \texttt{python-docx} across \textbf{12 styles} (incl.\ VN laws) and 7-method linker (\textbf{$97.7\%$--$100\%$} bib.\ detection on 310 PDFs). \\
+\textbf{OBJ-5} & \textbf{Secure role-based web platform} & Containerized FastAPI (\textbf{15 ORM tables}, 13 migrations \texttt{0001}--\texttt{0013}, SSE, RBAC/IDOR, pinned-IP SSRF, Law 91/2025/QH15 erasure) \& React 18.3 / TypeScript 5.9 SPA (\textbf{231.50\,kB} entry). \\
 \hline
-\textbf{OBJ-2} & \textbf{Domain-aware federated retrieval} & \textbf{129,137-record} SQLite FTS5 corpus (\textbf{$99.80\%$} recall, $87.6\text{\,ms}$) + \textbf{15+ live APIs}, Retraction Watch, singleflight cache, and pinned-IP URL/HTML validators. \\
+\textbf{OBJ-6} & \textbf{Leak-free large-scale evaluation} & \textbf{99.67\%} controlled ID ($N=18\text{K}$), \textbf{99.95\%} i.i.d.\ OOD ($N=2\text{K}$), \textbf{89.17\%} live 15-API ($N=120$; \textbf{98.36\%} verified F1; \textbf{100\%} offline), \textbf{12.64\,s} 50-pp.\ cold WAN, 0-swap GCE GROBID (\textbf{95.53\,s $\rightarrow$ 17.44\,s}), and \textbf{50/50} I/O burst. \\
 \hline
-\textbf{OBJ-3} & \textbf{Neuro-symbolic verification \& calibration} & Dual SBERT + ONNX INT8 \texttt{VI}$\leftrightarrow$\texttt{EN} encoders fused with \textbf{68 symbolic rules}, 16D MLR ($C=0.25$), and Platt scaling (\textbf{$\text{ECE} = 0.0405$}, \textbf{$\text{Brier} = 0.0067$}). \\
-\hline
-\textbf{OBJ-4} & \textbf{Interpretable CIS grading \& remediation} & Five-component CIS rubric (\textbf{$\rho = 0.9987$} rank stability) plus automated APA, IEEE, TDTU, BibTeX, RIS, and \texttt{.docx} bibliography repair. \\
-\hline
-\textbf{OBJ-5} & \textbf{Secure role-based web platform} & Containerized FastAPI (\textbf{15 ORM tables}, 13 migrations (\texttt{0001}--\texttt{0013}), SSE, RBAC/IDOR, pinned-IP SSRF defense) \& React 18.3 SPA (\textbf{$228.42\text{\,kB}$} entry). \\
-\hline
-\textbf{OBJ-6} & \textbf{Leak-free large-scale evaluation} & \textbf{$99.67\%$} ID accuracy ($N=18\text{K}$), \textbf{$99.96\%$} OOD accuracy ($N=2.4\text{K}$), \textbf{$100\%$} 6-domain E2E accuracy ($120/120$), and \textbf{$50/50$} burst concurrency. \\
-\hline
-\end{longtable}
+\end{tabular}
+\end{table}
 }
-
-Figure~\ref{fig:verdict-paths} synthesizes the core architectural safeguard governing every verdict in \textbf{CITRA}: substantive accusations (\texttt{suspected\_hallucination}) require either positive structural refutation (fabricated/chimeric DOI, RFC 2606 fake domain, impossible future year) or clean HTTP 200 empty responses across multiple live registries, whereas network exhaustion, unindexed regional DOIs, and borderline similarities ($[0.40, 0.60)$) route deterministically to \texttt{unresolved} for human review.
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=\textwidth,keepaspectratio]{picture/figures/fig6_1_verdict_paths.png}
-    \caption[Guarded neuro-symbolic decision tree separating refutation from abstention]{Guarded neuro-symbolic decision tree in CITRA (\texttt{v3.90.9}) separating evidence-backed refutation (\texttt{suspected\_hallucination}) from provenance-aware abstention (\texttt{unresolved}).}
-    \label{fig:verdict-paths}
-\end{figure}
 
 \section{Synthesis of Key Empirical Findings}
 
-Three empirical lessons emerge from the experiments in Chapter~\ref{chap:results}:
+Three empirical lessons emerge from Chapter~\ref{chap:results}:
 \begin{enumerate}
-    \item \textbf{Symbolic rules and statistical learning are complementary, not redundant.} Pure 16-dimensional Logistic Regression (\texttt{B5}) performs well on smooth similarity trade-offs ($97.70\%$ ID) yet collapses to $57.33\%$ on discrete OOD integrity rules (such as retracted articles, fake URLs, or Vietnamese statutory authority mismatches). Combining priority-ordered symbolic guardrails with ML probability blending achieves both $99.67\%$ ID accuracy and $99.96\%$ OOD accuracy.
-    \item \textbf{Post-hoc calibration is essential for trustworthy confidence reporting.} Raw symbolic rule confidences suffer from severe overconfidence ($\text{ECE} = 0.2477$). Logit-space Platt scaling lowers ECE by $6.12\times$ to $0.0405$ and Brier Score by $12.58\times$ to $0.0067$ while preserving exact non-abstention coverage ($87.92\%$).
-    \item \textbf{Offline FTS5 indexing makes CPU-only classroom deployment practical.} Caching verified candidates and indexing 129,137 papers locally yields a $688.72\times$ retrieval speedup and allows a single CPU server to handle 50 simultaneous deadline uploads without external rate-limit collapse.
+    \item \textbf{Symbolic guardrails and statistical learning are complementary, not redundant.} Pure 16-dimensional Logistic Regression (\texttt{B5}) achieves $97.70\%$ on smooth controlled similarity features yet drops to $59.80\%$ across i.i.d.\ OOD integrity policies ($57.33\%$ combined) because discrete provenance predicates (retraction flags, RFC 2606 fake URLs, statutory issuing authorities) require zero-retraining symbolic enforcement. Combining priority-ordered symbolic guardrails with ML probability blending yields $99.67\%$ controlled ID accuracy, $99.95\%$ i.i.d.\ OOD accuracy, and $89.17\%$ live 15-API end-to-end accuracy ($100.00\%$ precision on \texttt{verified}).
+    \item \textbf{Post-hoc calibration is essential for trustworthy confidence reporting.} Raw symbolic rule confidences suffer from severe overconfidence ($\text{ECE} = 0.2477$). Logit-space Platt scaling lowers ECE by $6.12\times$ to $0.0405$ and Brier Score by $12.58\times$ to $0.0067$ while preserving exact non-abstention coverage ($87.92\%$), though internal risk-ranking should use unclipped logits to avoid $0.99$ tie saturation at $50\%$ coverage.
+    \item \textbf{Offline FTS5 indexing and bounded off-heap GROBID tuning make CPU-only classroom deployment practical.} Caching verified candidates and indexing 129,137 records locally accelerates 50-page capstone retrieval by $151.2\times$ ($12.64\text{\,s}$ cold WAN $\rightarrow 2.00\text{\,s}$ warm), while sizing the GROBID container to $4\text{\,GiB}$ with \texttt{-Xmx768m} eliminates cgroup swap ($95.53\text{\,s} \rightarrow 17.44\text{\,s}$ warm uncached on a 117-page draft thesis).
 \end{enumerate}
 
 \section{System Limitations}
 \label{sec:limitations}
 
-Despite strong empirical performance, version \texttt{3.90.9} has four concrete engineering limitations:
+Despite strong empirical performance, version \texttt{3.90.9} exhibits five concrete engineering and evaluation limitations:
 \begin{itemize}
-    \item \textbf{L1 (Paywalled Full-Text Claim Blindness):} Semantic claim alignment compares inline sentences against titles and open abstracts. When a student cites a specific figure, theorem, or discussion paragraph inside a closed-access article whose abstract omits that detail, \textbf{CITRA} cannot verify body-level entailment.
-    \item \textbf{L2 (Domain Skew in the Offline Corpus):} Because $98.42\%$ of \texttt{local\_papers.db} originates from the ACL Anthology and CS arXiv, fully air-gapped deployments without Internet access experience reduced Tier-0 recall on biomedical, humanities, and Vietnamese domestic journal articles.
-    \item \textbf{L3 (Complex Multi-Column Archival and Handwritten Scans):} Although selective Tesseract OCR recovers printed Vietnamese pages, low-resolution camera scans, skewed archival manuscripts, and handwritten margin citations degrade character accuracy and increase \texttt{unresolved} rates.
-    \item \textbf{L4 (Single-Host SQLite Write Serialization):} While SQLite WAL handles 50 concurrent student uploads on a single host, scaling horizontally across multiple independent API virtual machines requires a network-shared relational database and distributed message broker.
+    \item \textbf{L1 (Paywalled Full-Text Claim Blindness):} Semantic claim alignment compares inline sentences against titles and open abstracts. When a student cites a specific figure, theorem, or table inside a closed-access article whose abstract omits that detail, \textbf{CITRA} cannot verify body-level entailment.
+    \item \textbf{L2 (Domain Skew in the Offline Corpus):} Because $98.42\%$ ($127{,}102 / 129{,}137$) of \texttt{local\_papers.db} originates strictly from the ACL Anthology~\cite{acl-anthology} (with only 3 arXiv records, $0.002\%$), air-gapped deployments without Internet access experience reduced Tier-0 recall on biomedical, economics, humanities, and Vietnamese domestic journal articles.
+    \item \textbf{L3 (Complex Archival Scans and PyMuPDF-Only Footnote Styles):} Although selective Tesseract OCR recovers printed Vietnamese pages, low-resolution camera scans, handwritten annotations, and footnote/superscript styles parsed without GROBID reduce inline linking accuracy ($70.1\%$ PyMuPDF-only on 220 diverse open-access articles).
+    \item \textbf{L4 (Single-Host SQLite Write Serialization and Cascade Audit Trade-Off):} While SQLite WAL handles 50 concurrent uploads on one host, horizontal multi-node scaling requires a shared relational database and broker; additionally, \texttt{ON DELETE CASCADE} from \texttt{essays}/\texttt{verdicts} to \texttt{audit\_logs} prioritizes personal-data erasure over immutable post-deadline grade archival.
+    \item \textbf{L5 (Empirical User Study, External Baselines, and Live Legal-Validity Gaps):} Large-scale training relied on programmatic perturbations rather than naturally occurring student hallucinations; real-manuscript auditing lacked blinded multi-rater annotation (Cohen's $\kappa$) and classroom instructor user studies; CIS weights are not yet empirically fitted to faculty grading outcomes; non-linear tree (XGBoost) and LLM-as-a-Judge baselines were not evaluated; and \texttt{VNLegalVerifier} checks statutory syntax and issuing authority without querying live effective/repealed status on Vietnam's National Legal Database (\texttt{vbpl.vn})~\cite{vbpl-vn}.
 \end{itemize}
 
 \section{Future Work}
 \label{sec:future-work}
 
-Each limitation in Section~\ref{sec:limitations} motivates a direct future engineering direction:
+Each limitation in Section~\ref{sec:limitations} defines a concrete next engineering milestone:
 \begin{itemize}
-    \item \textbf{F1 (Open-Access Full-Text Passage Retrieval $\leftarrow$ L1):} Integrate PubMed Central JATS XML, arXiv HTML5 (\texttt{ar5iv}), and Unpaywall open-access PDFs with paragraph-level dense passage retrieval so claim verification extends beyond abstracts whenever open licenses permit.
-    \item \textbf{F2 (Multidisciplinary and ASEAN Offline Corpus Expansion $\leftarrow$ L2):} Expand \texttt{local\_papers.db} with open snapshots from DOAJ, Vietnam Journals Online (VJOL), and OpenAlex subfield slices to provide balanced offline coverage across economics, law, biomedicine, and engineering.
-    \item \textbf{F3 (Layout-Aware Vision-Language OCR $\leftarrow$ L3):} Incorporate lightweight CPU-quantized document layout models (such as Docling or Surya OCR) to improve reference segmentation on degraded archival scans and complex footnote-heavy humanities manuscripts.
-    \item \textbf{F4 (PostgreSQL + Redis Worker Scaling and LTI 1.3 LMS Integration $\leftarrow$ L4):} Support optional PostgreSQL connection pooling and Redis task queues alongside Learning Tools Interoperability (LTI 1.3) webhooks for Moodle and Canvas gradebooks, enabling multi-faculty longitudinal studies across semesters.
+    \item \textbf{F1 (Open-Access Full-Text Passage Retrieval $\leftarrow$ L1):} Integrate Europe PMC~\cite{europepmc} JATS XML, arXiv HTML5 (\texttt{ar5iv}), and Unpaywall open-access PDFs with paragraph-level dense passage retrieval so claim entailment extends beyond abstracts whenever open licenses permit.
+    \item \textbf{F2 (Multidisciplinary and ASEAN Offline Corpus Expansion $\leftarrow$ L2):} Expand \texttt{local\_papers.db} with open snapshots from DOAJ~\cite{doaj}, Vietnam Journals Online (VJOL), and multidisciplinary OpenAlex~\cite{openalex} slices to balance offline coverage across economics, law, biomedicine, and engineering.
+    \item \textbf{F3 (Layout-Aware Vision-Language Parsing $\leftarrow$ L3):} Integrate lightweight CPU-quantized layout models (such as Docling or Surya OCR) to improve footnote, superscript, and degraded archival scan extraction.
+    \item \textbf{F4 (PostgreSQL + Redis Scaling, WORM Audit Archival, and LTI 1.3 $\leftarrow$ L4):} Add PostgreSQL connection pooling, Redis task queues, hashed session tokens, write-once archival snapshots for submitted class grades, and Learning Tools Interoperability (LTI 1.3) integration for Moodle and Canvas.
+    \item \textbf{F5 (Instructor User Study, Blinded $\kappa$, External Baselines, and Live \texttt{vbpl.vn} Lookup $\leftarrow$ L5):} Conduct a blinded multi-rater annotation study (Cohen's $\kappa$) and semester-long classroom usability study with faculty, benchmark XGBoost and retrieval-augmented LLM-as-a-Judge verifiers~\cite{hu2024refchecker}, \cite{press2024citeme} on real student manuscripts, calibrate CIS weights empirically against instructor grades, rank selective risk on unclipped logits, and integrate live statutory effective-date verification against \texttt{vbpl.vn}~\cite{vbpl-vn}.
 \end{itemize}
 
 \section{Concluding Remarks}
 
-Software tools used in academic assessment carry an obligation of fairness and transparency. By grounding every citation check in traceable external registries, combining neural semantic alignment with 68 auditable symbolic rules and Platt-calibrated probabilities, abstaining honestly when evidence is incomplete, and placing final override authority in the hands of instructors, \textbf{CITRA} demonstrates a practical software engineering blueprint for trustworthy AI-assisted academic integrity verification.
+Software tools used in academic assessment carry an ethical obligation of fairness, rigor, and transparency. By grounding every citation check in traceable external registries, combining neural semantic alignment with 68 auditable symbolic rules and Platt-calibrated probabilities, abstaining honestly when evidence is incomplete, reporting controlled and live-WAN limitations candidly, and preserving human instructor override authority, \textbf{CITRA} provides a reproducible software engineering blueprint for trustworthy AI-assisted citation integrity verification.

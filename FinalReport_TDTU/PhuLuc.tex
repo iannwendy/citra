@@ -2,13 +2,13 @@
 \chapter*{APPENDICES}
 \phantomsection
 \addcontentsline{toc}{chapter}{APPENDICES}
+\setcounter{appsec}{0}
+\renewcommand{\thelstlisting}{\theappsec.\arabic{lstlisting}}
+
+\appsection{Runtime Configuration}{app:config}
 \setcounter{lstlisting}{0}
-\renewcommand{\thelstlisting}{\arabic{lstlisting}}
 
-\section*{Appendix A. Runtime Configuration}
-\label{app:config}
-
-Listing~\ref{app:env} shows the sanitized environment configuration template read at startup alongside the YAML settings in \texttt{configs/config.yaml}. Secret keys and third-party credentials are injected only at deployment time and are never committed to version control.
+Listing~\ref{app:env} presents the sanitized environment configuration template read at startup alongside \texttt{configs/config.yaml}. Secret keys and third-party credentials are injected only at deployment time and are never committed to version control.
 
 \begin{lstlisting}[language=bash, captionpos=t, caption={Sanitized runtime environment template (\texttt{.env.example}).}, label={app:env}]
 # --- App & Security ---
@@ -70,10 +70,10 @@ VNPAY_USD_TO_VND_RATE=25000
 VNPAY_EXTERNAL_REDIRECT=false
 \end{lstlisting}
 
-\section*{Appendix B. Development Container Topology}
-\label{app:compose}
+\appsection{Development Container Topology}{app:docker}
+\setcounter{lstlisting}{0}
 
-Listing~\ref{app:compose-listing} presents the sanitized three-service development Docker Compose specification (\texttt{docker-compose.yml}) coordinating the CPU-tuned \texttt{grobid/grobid:0.9.1-crf} parser, the FastAPI backend (\texttt{integrity-api}), and the Vite frontend container (\texttt{integrity-web}) over the internal bridge network.
+Listing~\ref{app:compose-listing} presents the complete sanitized three-service development Docker Compose specification (\texttt{docker-compose.yml}) coordinating the CPU-tuned \texttt{grobid/grobid:0.9.1-crf} parser, the FastAPI backend (\texttt{integrity-api}), and the Vite frontend container (\texttt{integrity-web}) with full startup commands over the internal bridge network.
 
 \begin{lstlisting}[language=yaml, captionpos=t, caption={Sanitized development multi-container topology (\texttt{docker-compose.yml}).}, label={app:compose-listing}]
 services:
@@ -106,9 +106,7 @@ services:
       - grobid-cache:/opt/grobid/grobid-home/cache
       - ./scripts/grobid-entrypoint.sh:/opt/grobid/citra-grobid-entrypoint.sh:ro
     healthcheck:
-      test:
-        - CMD-SHELL
-        - 'bash -c ''exec 3<>/dev/tcp/127.0.0.1/8070 && printf "GET /api/isalive HTTP/1.0\r\n\r\n" >&3 && head -1 <&3 | grep -q 200'''
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8070 && printf \"GET /api/isalive HTTP/1.0\\r\\n\\r\\n\" >&3 && head -1 <&3 | grep -q 200'"]
       interval: 15s
       timeout: 10s
       retries: 5
@@ -139,6 +137,7 @@ services:
       - DATABASE_URL=sqlite:///./data/app.db
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+    command: uvicorn integrity_checker.api.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app/src
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://localhost:8000/api/health',timeout=5).status==200 else 1)"]
       interval: 30s
@@ -166,6 +165,7 @@ services:
       - VITE_API_BASE_URL=/api
       - VITE_API_PROXY_TARGET=http://api:8000
       - VITE_GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+    command: sh -c "npm install --legacy-peer-deps && npm run dev -- --host 0.0.0.0"
     depends_on:
       - api
     restart: unless-stopped
@@ -175,50 +175,46 @@ services:
 networks:
   essay-check-net:
     driver: bridge
-
 volumes:
   grobid-cache:
     driver: local
 \end{lstlisting}
 
-\section*{Appendix C. Verdict Taxonomy Specification}
-\label{app:guideline}
+\appsection{Verdict Taxonomy Specification}{app:taxonomy}
 
-CITRA assigns verification labels at the individual reference-entry level rather than labeling an entire student manuscript as AI-generated or human-written. The five mutually exclusive classes are defined as follows:
-
-\begin{description}
-    \item[\texttt{verified}] The cited publication exists in at least one authoritative scholarly database (Local FTS5 Corpus, Crossref, OpenAlex, DataCite, Global DOI RA, DOAJ, OpenAIRE/HAL, NCBI/bioRxiv, DBLP, arXiv, OpenLibrary, Europe PMC, or ACL Anthology); the normalized title matches closely; author surnames agree without fabricated co-authors; the publication year differs by at most one year (or matches a documented arXiv-to-proceedings transition); the work is not retracted; and any cited DOI resolves to the same work.
-    \item[\texttt{metadata\_error}] The underlying scholarly work is genuine, but one or more bibliographic or contextual attributes are inaccurate: publication year off by two or more years, truncated or altered title, missing or grafted co-authors, mismatched venue, retracted status (\texttt{R-RETRACTED-PAPER}), contradicted body claim (\texttt{R-CONTENT-MISMATCH}), statutory issuing-authority mismatch (\texttt{R-VN-LEGAL-MISMATCH}), or broken URL on an otherwise verified record (\texttt{domain\_exception}).
-    \item[\texttt{suspected\_hallucination}] No matching record is found across queried registries while live APIs returned clean HTTP 200 responses, or the citation contains an unregistered DOI prefix, a cross-work chimeric DOI splice (\texttt{R-CHIMERIC-DOI-MISMATCH}), a non-existent domain, or an impossible future publication year.
-    \item[\texttt{unresolved}] Available evidence is insufficient to verify or refute the source, such as when external APIs experience HTTP 429 rate-limit exhaustion (\texttt{R-RATE-LIMITED-ABSTAIN} / \texttt{R-API\_EXHAUSTED}), a regional DOI agency registers the handle without public CSL metadata (\texttt{R-DOI-RA-NO-CSL}), or title similarity falls inside the $[0.40, 0.60)$ abstention zone (\texttt{R-ABSTENTION-BORDER}).
-    \item[\texttt{resource}] The entry refers to a non-article web page, open-source repository, Hugging Face model or dataset card, IETF RFC or PyPI package specification, official technical manual, or Vietnamese statutory document (\begin{vietnamese}\texttt{Luật}, \texttt{Nghị định}, \texttt{Thông tư}, \texttt{Quyết định}\end{vietnamese}).
-\end{description}
-
-\section*{Appendix D. Codebase Package Map}
-\label{app:modules}
-
-The repository (\texttt{v3.90.9}) separates backend domain packages (\texttt{src/\allowbreak integrity\_checker/}) from the single-page web client (\texttt{web/src/}) across the following core modules:
+\textbf{CITRA} assigns verification labels at the individual reference-entry level rather than classifying an entire student manuscript as AI-generated or human-written. The five mutually exclusive classes are defined as follows:
 
 \begin{description}
-    \item[\texttt{extraction/}] Multi-format parsers for PDF (GROBID \texttt{0.9.1-crf} TEI-XML, two-column PyMuPDF, \texttt{pdfplumber}, and selective Tesseract Vietnamese OCR), DOCX (\texttt{python-docx}), BibTeX, and RIS, alongside table-of-contents filtering and twelve citation-style extractors.
-    \item[\texttt{linking/}] Bidirectional \texttt{CitationLinker} implementing seven ordered resolution methods, composite sub-reference splitting (\texttt{[14a, 14b]}), duplicate detection, and eight \texttt{MappingStatus} states.
-    \item[\texttt{database/}] Offline SQLite FTS5 scholarly index (\texttt{local\_papers.db}, 129,137 records covering 128,115 unique papers and 82,887 full abstracts) using WAL mode and Okapi BM25 ranking.
-    \item[\texttt{retrieval/}] Domain-aware \texttt{RetrievalOrchestrator}, 101-paper seminal whitelist, asynchronous clients for 15+ registries, Retraction Watch screening, per-provider circuit breakers, singleflight request coalescing, persistent SQLite cache, and SSRF-hardened \texttt{LinkValidator} + \texttt{SafeHtmlMetaVerifier}.
-    \item[\texttt{matching/}] Symmetric containment-aware RapidFuzz lexical matching, Vietnamese-aware \texttt{author\_matcher}, \texttt{VenueNormalizer}, Sentence-BERT (\texttt{all-\allowbreak MiniLM-\allowbreak L6-v2}) title and abstract evidence alignment, citation intent/stance classification, and ONNX INT8 multilingual (\texttt{VI} $\leftrightarrow$ \texttt{EN}) bridging.
-    \item[\texttt{logic/}] \texttt{NeuroSymbolicChecker}, Order 0 pre-screening plus 16 priority-ordered rule groups (68 distinct \texttt{R-*} identifiers), \texttt{VNLegalVerifier}, 16-feature \texttt{HybridMLScorer} ($C = 0.25$), logit-space \texttt{PlattCalibrator} ($a = 1.891263, b = 1.138599$), \texttt{CISCalculator}, and bilingual explanation templates.
-    \item[\texttt{pipeline/} \& \texttt{models/}] Singleton \texttt{IntegrityPipeline} coordinating all eight stages and Pydantic domain schemas shared across extraction, retrieval, verification, and API serialization.
-    \item[\texttt{evaluation/}] Paper-disjoint 120,000-sample benchmark generator and runner, baseline ladder (\texttt{B0}--\texttt{B5}), 2,400-sample OOD guardrail suite, 120-reference E2E gold evaluator, and paired McNemar, Holm--Bonferroni, Clopper--Pearson, and bootstrap tests.
-    \item[\texttt{export/}] Sanitized report exporters (PDF, DOCX, CSV, JSON, BibTeX, RIS), \texttt{bibliography\_formatter.py}, and automated bibliography repair for \texttt{.docx} manuscripts (\texttt{docx\_exporter.py}).
-    \item[\texttt{db/}, \texttt{billing/} \& \texttt{api/}] Fifteen SQLAlchemy ORM models, thirteen SHA-256 checksummed schema migrations (\texttt{0001}--\texttt{0013}), adaptive SQLite WAL tuning, \texttt{PipelineAdmissionController}, stale-job recovery, Stripe/VNPay billing handlers, and FastAPI routes under \texttt{/api/*}.
-    \item[\texttt{web/}] React 18.3 and TypeScript 5.8 single-page application (\textbf{CITRA}) tested by 494 Vitest unit/component tests (63 suites) and 20 Playwright E2E specification suites.
+    \item[\texttt{verified}] The cited publication exists in at least one authoritative scholarly database (Local FTS5 Corpus, Crossref, OpenAlex, DataCite, Global DOI RA, DOAJ, OpenAIRE/HAL, NCBI/bioRxiv, DBLP, arXiv, OpenLibrary, Europe PMC, or ACL Anthology); the normalized title matches closely; author surnames agree without fabricated co-authors; the publication year differs by at most one year (or matches a documented arXiv-to-proceedings transition); the work is not retracted; and any cited DOI resolves to the same publication.
+    \item[\texttt{metadata\_error}] The underlying scholarly work is genuine, but one or more bibliographic or contextual attributes are inaccurate: publication year off by two or more years, truncated or altered title, missing or grafted co-authors, mismatched venue, retracted status (\texttt{R-RETRACTED-PAPER}), contradicted body claim (\texttt{R-CONTENT-MISMATCH}), statutory issuing-authority mismatch (\texttt{R-VN-LEGAL-MISMATCH}), or broken URL on an otherwise verified record (\texttt{R-DOMAIN-EXCEPTION}).
+    \item[\texttt{suspected\_hallucination}] No matching record is found across queried registries while live APIs returned clean HTTP 200 responses, or the citation contains an unregistered DOI prefix, a cross-work chimeric DOI splice (\texttt{R-CHIMERIC-DOI-MISMATCH}), an RFC 2606 placeholder/non-existent domain, or an impossible future publication year.
+    \item[\texttt{unresolved}] Available evidence is insufficient to verify or refute the source, such as when external APIs hit HTTP 429 rate-limit exhaustion (\texttt{R-RATE-LIMITED-ABSTAIN} / \texttt{R-API\_EXHAUSTED}), a regional DOI agency registers the handle without public CSL metadata (\texttt{R-DOI-RA-NO-CSL}), or title similarity falls inside the $[0.40, 0.60)$ abstention zone (\texttt{R-ABSTENTION-BORDER}).
+    \item[\texttt{resource}] The entry refers to a non-article web page, open-source repository, Hugging Face model or dataset card, IETF RFC or PyPI package specification, official technical manual, or Vietnamese statutory document (\begin{vietnamese}\textit{Luật}, \textit{Nghị định}, \textit{Thông tư}, \textit{Quyết định}\end{vietnamese}).
 \end{description}
 
-\section*{Appendix E. Project Execution Log and Author Contributions}
-\label{app:contributions}
+\appsection{Codebase Package Map}{app:packages}
 
-The graduation project was executed over a ten-week engineering schedule from September to November 2026. Weeks 1--2 covered requirements analysis, corpus indexing (\texttt{local\_papers.db}), and GROBID/PyMuPDF extraction. Weeks 3--4 implemented the seven-method \texttt{CitationLinker} and 15-source federated \texttt{RetrievalOrchestrator}. Weeks 5--6 built the Sentence-BERT/ONNX matching layer, 68-rule symbolic engine, \texttt{HybridMLScorer}, and Platt calibrator. Weeks 7--8 delivered the FastAPI RBAC/SSE backend, 15-table schema migrations, and React workspace, while Weeks 9--10 completed the 120,000-sample benchmark, OOD stress suite, 50-user concurrency load testing, and project documentation. Both authors contributed equally ($50\% / 50\%$) under the supervision of M.Sc.\ Vo Thi Kim Anh:
+The repository (\texttt{v3.90.9}) organizes thirteen backend domain packages under \texttt{src/\allowbreak integrity\_checker/} alongside the React single-page client under \texttt{web/src/}:
+
+\begin{description}
+    \item[\texttt{extraction/}] Multi-format parsers for PDF (GROBID \texttt{0.9.1-crf} TEI-XML, two-column PyMuPDF, \texttt{pdfplumber}, and selective Tesseract Vietnamese/English OCR), DOCX (\texttt{python-docx}), BibTeX, and RIS, alongside table-of-contents filtering and twelve citation-format extractors.
+    \item[\texttt{linking/}] Bidirectional \texttt{CitationLinker} implementing seven automated resolution methods (including live \texttt{arxiv\_exact}), composite sub-reference splitting (\texttt{[14a, 14b]}), duplicate detection, and eight \texttt{MappingStatus} states.
+    \item[\texttt{database/}] Offline SQLite FTS5 scholarly index (\texttt{local\_papers.db}, 129,137 raw records yielding the 128,115 benchmark-eligible unique papers and 82,887 full abstracts) using WAL mode and Okapi BM25 ranking.
+    \item[\texttt{retrieval/}] Four-tier \texttt{RetrievalOrchestrator}, 101-paper seminal whitelist, asynchronous clients for 15+ registries, Retraction Watch screening, per-provider circuit breakers, singleflight coalescing, persistent SQLite cache, and pinned-IP SSRF-safe \texttt{LinkValidator} + \texttt{SafeHtmlMetaVerifier}.
+    \item[\texttt{matching/}] Symmetric RapidFuzz lexical matching, \texttt{author\_matcher} supporting Vietnamese surnames, \texttt{VenueNormalizer}, Sentence-BERT (\texttt{all-MiniLM-L6-v2}) sentence-pooled evidence alignment, stance gating, and ONNX INT8 \texttt{VI}$\leftrightarrow$\texttt{EN} semantic bridging.
+    \item[\texttt{logic/}] \texttt{NeuroSymbolicChecker}, Order~0 pre-screening plus 16 priority-ordered rule groups (68 distinct \texttt{R-*} identifiers), \texttt{VNLegalVerifier}, 16-feature \texttt{HybridMLScorer} ($C = 0.25$), logit-space \texttt{PlattCalibrator} ($a_{\text{cal}} = 1.891263, b_{\text{cal}} = 1.138599$), \texttt{CISCalculator}, and bilingual explanation templates.
+    \item[\texttt{pipeline/} \& \texttt{models/}] Singleton \texttt{IntegrityPipeline} coordinating all eight layers and Pydantic domain schemas shared across extraction, retrieval, verification, and API serialization.
+    \item[\texttt{evaluation/}] Paper-disjoint 120,000-sample controlled benchmark runner, baseline ladder (\texttt{B0}--\texttt{B5}), 2,400-sample OOD guardrail suite, offline/live 120-reference gold evaluator, and paired McNemar, Holm--Bonferroni, Clopper--Pearson, Wilcoxon, and bootstrap protocols.
+    \item[\texttt{export/}] Sanitized report exporters (PDF, DOCX, CSV, JSON, BibTeX, RIS), \texttt{bibliography\_formatter.py}, and automated \texttt{.docx} bibliography repair (\texttt{docx\_exporter.py}).
+    \item[\texttt{db/}, \texttt{billing/} \& \texttt{api/}] Fifteen SQLAlchemy ORM models, thirteen SHA-256 checksummed schema migrations (\texttt{0001}--\texttt{0013}), adaptive SQLite WAL tuning, \texttt{PipelineAdmissionController}, stale-job recovery, Stripe REST and VNPay v2.1.0 HMAC-SHA512 billing handlers, Law 91/2025/QH15 privacy erasure, and FastAPI routes under \texttt{/api/*}.
+    \item[\texttt{web/}] React 18.3 and TypeScript 5.9 single-page application (\textbf{CITRA}) verified by 494 Vitest unit/component tests (63 suites) and 20 Playwright E2E specification suites (168 scenarios).
+\end{description}
+
+\appsection{Project Execution Log and Author Contributions}{app:log}
+
+The graduation project progressed over an eighteen-week engineering cycle from July to November 2026: July--August covered requirements engineering, offline corpus indexing (\texttt{local\_papers.db}), and GROBID/PyMuPDF extraction; September delivered the seven-method \texttt{CitationLinker}, four-tier \texttt{RetrievalOrchestrator}, and pinned-IP SSRF defense; October completed the Sentence-BERT/ONNX matching layer, 68-rule engine, \texttt{HybridMLScorer}, Platt calibrator, 15-table FastAPI RBAC/SSE/billing backend, and React 18.3 workspace; and November executed the 120,000-sample benchmark, OOD stress suite, live 15-API and 21-PDF audits, zero-swap GCE GROBID optimization, and final bilingual report compilation. Both authors contributed equally ($50\% / 50\%$) under the supervision of M.Sc.\ Vo Thi Kim Anh:
 
 \begin{itemize}
-    \item \textbf{Nguyen Bao Minh (523H0054):} Document extraction pipeline (\texttt{extraction\allowbreak /}), bidirectional linking (\texttt{linking/}), federated retrieval and SSRF-safe URL/HTML verification (\texttt{retrieval/}, \texttt{database/}), Docker Compose orchestration, and Chapters 1, 3, and 4 (Sections 4.1--4.4).
-    \item \textbf{Tran Gia Thanh (523H0096):} Semantic and cross-lingual matching (\texttt{matching\allowbreak /}), neuro-symbolic rule engine, Multinomial Logistic Regression, Platt calibration, and CIS scoring (\texttt{logic/}), FastAPI RBAC/classroom/health routes, React \textbf{CITRA} frontend (\texttt{web/}), empirical evaluation (\texttt{evalua\allowbreak tion/}), and Chapters 2, 4 (Sections 4.5--4.8), 5, and 6.
+    \item \textbf{Nguyen Bao Minh (523H0054):} Document extraction (\texttt{extraction/}), bidirectional linking (\texttt{linking/}), federated retrieval and pinned-IP SSRF validation (\texttt{retrieval/}, \texttt{database/}), pipeline orchestration and domain models (\texttt{pipeline/}, \texttt{models/}), report/DOCX export (\texttt{export/}), Docker Compose and GCE GROBID tuning, and Chapters 1, 3, and 4 (Sections 4.1--4.4).
+    \item \textbf{Tran Gia Thanh (523H0096):} Semantic and cross-lingual matching (\texttt{matching/}), neuro-symbolic rules, MLR, Platt calibration, and CIS scoring (\texttt{logic/}), relational migrations, billing, and FastAPI RBAC/classroom/health routes (\texttt{db/}, \texttt{billing/}, \texttt{api/}), React \textbf{CITRA} frontend (\texttt{web/}), empirical evaluation (\texttt{evaluation/}), and Chapters 2, 4 (Sections 4.5--4.8), 5, and 6.
 \end{itemize}

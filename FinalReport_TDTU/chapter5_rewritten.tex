@@ -3,51 +3,45 @@
 
 \section{Experimental Design and Verification Setup}
 
-Following Empirical Software Engineering evaluation standards~\cite{wohlin2012experimentation}, this chapter evaluates \textbf{CITRA} (\texttt{v3.90.9}) through automated unit, integration, and browser test suites, requirements traceability verification, and controlled quantitative benchmarks structured around five Research Questions (\textbf{RQ1}--\textbf{RQ5}).
+Following Empirical Software Engineering evaluation standards~\cite{wohlin2012experimentation}, this chapter evaluates \textbf{CITRA} (\texttt{v3.90.9}) through automated unit, integration, and browser test suites, bidirectional requirements traceability, and five empirical research questions (\textbf{RQ1}--\textbf{RQ5}) combining controlled decision-layer benchmarks, live multi-registry evaluations, real multi-style manuscript audits, and production systems load tests.
 
 \subsection{Research Questions}
 
 \begin{itemize}
-    \item \textbf{RQ1 (In-Distribution Accuracy and Ablation):} How accurately does the proposed neuro-symbolic engine classify citations on a leak-free, paper-disjoint benchmark compared with single-source, lexical, neural, and pure machine-learning baselines (\texttt{B0}--\texttt{B5})?
-    \item \textbf{RQ2 (Out-of-Distribution Symbolic Robustness):} How effectively do symbolic guardrails handle discrete integrity violations (retracted papers, chimeric DOIs, placeholder URLs, regional DOIs, API rate limits, and statutory mismatches) where continuous linear classifiers fail?
-    \item \textbf{RQ3 (Probability Calibration and CIS Stability):} Does logit-space Platt scaling improve confidence calibration and selective risk-coverage trade-offs, and how stable are Citation Integrity Score (CIS) manuscript rankings under rubric weight perturbations?
-    \item \textbf{RQ4 (Multi-Domain and Real Manuscript Generalization):} Does the end-to-end pipeline generalize across raw multi-domain references, multi-style academic PDFs, Vietnamese legal corpora, and real undergraduate capstone reports?
-    \item \textbf{RQ5 (Latency, Caching, and Concurrency Scalability):} Does the platform satisfy all non-functional latency, memory, and 50-user deadline burst SLAs on standard CPU hardware?
+    \item \textbf{RQ1 (Controlled In-Distribution Accuracy and Ablation):} How accurately does the proposed neuro-symbolic decision layer classify citations on a leak-free, paper-disjoint benchmark compared with single-cue ablation baselines (\texttt{B0}--\texttt{B4}) and a pure 16-feature Multinomial Logistic Regression baseline (\texttt{B5})?
+    \item \textbf{RQ2 (Out-of-Distribution Symbolic Robustness):} How effectively do discrete symbolic guardrails handle zero-retraining integrity policies (retracted papers, chimeric DOIs, RFC 2606 placeholder URLs, regional DOIs, API rate exhaustion, and Vietnamese statutory mismatches) where continuous linear classifiers fail?
+    \item \textbf{RQ3 (Probability Calibration and CIS Stability):} Does logit-space Platt scaling improve confidence calibration and selective risk--coverage behavior, and how stable are Citation Integrity Score (CIS) rankings under rubric weight perturbations?
+    \item \textbf{RQ4 (Live Multi-Registry and Real Manuscript Generalization):} How well does the end-to-end pipeline generalize across offline and live 15-API multi-domain references, 310 multi-style and legal PDFs, and line-by-line audited real manuscripts?
+    \item \textbf{RQ5 (Latency, Caching, and Concurrency Scalability):} Does the platform satisfy all non-functional latency, memory, zero-swap GROBID, bundle-size, and 50-user burst SLAs on standard CPU hardware?
 \end{itemize}
 
 \subsection{Automated Test Suites and Requirements Traceability Matrix}
 
-Software verification spans three automated test layers summarized in Table~\ref{tab:test-suites}: 2,430+ passing backend \texttt{pytest} unit and integration tests (with environment-gated live-network skips and 0 failures), 494 passing frontend \texttt{Vitest} tests across 63 suites, and 20 \texttt{Playwright} end-to-end browser specification suites across desktop, tablet, and mobile viewports. In addition, an offline retrieval test over 500 stratified ACL Anthology queries achieved $99.80\%$ recall ($499/500$) and $100.0\%$ precision at $87.62\text{\,ms}$ mean latency. Table~\ref{tab:rtm} provides the bidirectional Requirements Traceability Matrix (RTM) linking the functional and non-functional specifications from Chapter~\ref{chap:overview} to their implementing packages and verification evidence.
+Software verification spans three automated layers summarized in Table~\ref{tab:test-suites}: \textbf{2,430+} passing backend \texttt{pytest} unit and integration tests (\textbf{2,437} default suite; \textbf{2,446} total including 9 slow/live-gated tests; 0 failures), \textbf{494} passing frontend \texttt{Vitest} tests across \textbf{63} suites, and \textbf{20} \texttt{Playwright} end-to-end browser suites containing \textbf{168} \texttt{test()} scenarios---totalling \textbf{2,931} unit/integration tests and \textbf{3,099} automated verification checks (\textbf{3,108} including slow tests). Separately, an offline FTS5 retrieval benchmark over 500 stratified ACL Anthology queries achieved $99.80\%$ recall ($499/500$) and $100.0\%$ precision at $87.62\text{\,ms}$ mean latency. Table~\ref{tab:rtm} provides the bidirectional Requirements Traceability Matrix (RTM) linking all twenty functional requirements (\texttt{FR-01}--\texttt{FR-20}) and ten non-functional requirements (\texttt{NFR-01}--\texttt{NFR-10}) to implementing modules and verification evidence.
 
 {\setlength{\tabcolsep}{3.5pt}
-\begin{longtable}{|L{0.23}|L{0.25}|L{0.52}|}
-\caption{Automated software verification suites executed in version \texttt{3.90.9}.}\label{tab:test-suites}\\
+\begin{table}[!htbp]
+\centering
+\caption{Automated software verification suites executed in version \texttt{3.90.9}.}\label{tab:test-suites}
+\begin{tabular}{|L{0.23}|L{0.26}|L{0.51}|}
 \hline
 \textbf{Verification Layer} & \textbf{Execution Result} & \textbf{Verified Subsystem Scope} \\
 \hline
-\endfirsthead
-\multicolumn{3}{c}{\itshape Table \thetable\ (continued from previous page)}\\
+\textbf{Backend (\texttt{pytest})} & \textbf{2,430+ passed} (2,437 default; 2,446 total; 0 failed) & Multi-format extraction, 12 formats, \texttt{VNLegalVerifier}, 7-method linker, FTS5 + 15+ APIs, SSRF pinned-IP, 68 symbolic rules, Platt calibration, CIS, RBAC/IDOR, migrations \texttt{0001}--\texttt{0013}, billing, privacy erasure, and crash recovery. \\
 \hline
-\textbf{Verification Layer} & \textbf{Execution Result} & \textbf{Verified Subsystem Scope} \\
+\textbf{Frontend (\texttt{Vitest})} & \textbf{494 passed} (63 suites, 0 failed) & Auth/OAuth flows, progressive-disclosure panels, 4 primary report tabs, Citation Network DAG, Remediation modal, Classroom/Admin telemetry, SSE Step~1 handoff, and bundle chunk guards. \\
 \hline
-\endhead
+\textbf{Browser E2E (\texttt{Playwright})} & \textbf{20 spec suites} (168 scenarios) & Zero horizontal overflow across 5 viewports $\times$ Light/Dark $\times$ EN/VI, SSE upload, split-pane inspection, teacher override, and 404/error recovery. \\
 \hline
-\multicolumn{3}{r}{\itshape Continued on next page}\\
-\endfoot
+\textbf{Combined Total} & \textbf{3,099 checks} (2,931 unit/int.\ + 168 E2E) & Exceeds \texttt{NFR-09} threshold ($\ge 2{,}500$ automated checks, 0 failures). \\
 \hline
-\endlastfoot
-\textbf{Backend (\texttt{pytest})} & \textbf{2,430+ passed (0 failed)} & Multi-format extraction, 12 styles, \texttt{VNLegalVerifier}, 7-method linker, FTS5 + 15 APIs, SSRF-safe URL/HTML checks, 68 symbolic rules, Platt calibration, CIS, RBAC/IDOR, migrations \texttt{0001}--\texttt{0013}, and crash recovery. \\
-\hline
-\textbf{Frontend (\texttt{Vitest})} & \textbf{494 passed (63 suites, 0 failed)} & Auth/OAuth flows, progressive-disclosure drawers, 6 diagnostic report views, Citation Network DAG, Remediation modal, Classroom/Admin telemetry, SSE Step~1 handoff, and $<251\text{\,kB}$ chunk guards. \\
-\hline
-\textbf{Browser E2E (\texttt{Playwright})} & \textbf{20 spec suites (132+ scenarios)} & Zero horizontal overflow across 5 viewports $\times$ Light/Dark $\times$ EN/VI, SSE upload, split-pane inspection, teacher override, and 404/error recovery. \\
-\hline
-\end{longtable}
+\end{tabular}
+\end{table}
 }
 
 {\setlength{\tabcolsep}{3.5pt}
-\begin{longtable}{|L{0.18}|L{0.34}|L{0.34}|C{0.14}|}
-\caption{Requirements Traceability Matrix (RTM) mapping functional and non-functional specifications to code and verification suites.}\label{tab:rtm}\\
+\begin{longtable}{|L{0.19}|L{0.33}|L{0.34}|C{0.14}|}
+\caption{Requirements Traceability Matrix (RTM) mapping \texttt{FR-01}--\texttt{FR-20} and \texttt{NFR-01}--\texttt{NFR-10} to code and verification suites.}\label{tab:rtm}\\
 \hline
 \textbf{Req.\ IDs} & \textbf{Implementing Modules} & \textbf{Verification Suite / Benchmark} & \textbf{Status} \\
 \hline
@@ -64,112 +58,97 @@ Software verification spans three automated test layers summarized in Table~\ref
 \endlastfoot
 \texttt{FR-01}, \texttt{FR-02}, \texttt{NFR-06} & \texttt{api/routes/auth.py}, \texttt{routes/users.py}, \texttt{link\_validator.py} & RBAC/IDOR, SSRF pinned-IP, \& \texttt{bcrypt}/SHA-256 auth tests (\texttt{pytest} + \texttt{Playwright}) & Pass ($100\%$) \\
 \hline
-\texttt{FR-03}, \texttt{FR-04}, \texttt{NFR-03}, \texttt{NFR-04} & \texttt{api/routes/essays.py}, \texttt{api/progress.py}, \texttt{api/job\_recovery.py} & Magic-byte, CAS quota refund, \& 50-user burst stress suite (Table~\ref{tab:nfr-deadline-stress}) & Pass ($50/50$) \\
+\texttt{FR-03}, \texttt{FR-04}, \texttt{NFR-03}, \texttt{NFR-04} & \texttt{api/routes/essays.py}, \texttt{api/progress.py}, \texttt{api/job\_recovery.py} & Magic-byte, corrupt-PDF, CAS quota refund, \& 50-user concurrency tests (Table~\ref{tab:nfr-deadline-stress}) & Pass ($50/50$) \\
 \hline
-\texttt{FR-05}, \texttt{FR-06} & \texttt{extraction/document\_parser.py}, \texttt{grobid\_adapter.py}, \texttt{docx\_parser.py}, \texttt{patterns/*} & 310-PDF multi-style \& VN legal corpus + 841-PDF regression suite (Table~\ref{tab:pdf-corpora}) & Pass ($97.7$--$100\%$) \\
+\texttt{FR-05}, \texttt{FR-06} & \texttt{extraction/document\_parser.py}, \texttt{grobid\_adapter.py}, \texttt{docx\_parser.py}, \texttt{patterns/*} & 310-PDF multi-style \& VN legal corpus + 841-PDF regression sweep (Table~\ref{tab:pdf-corpora}) & Pass ($97.7$--$100\%$) \\
 \hline
-\texttt{FR-07} & \texttt{linking/citation\_linker.py}, \texttt{duplicate\_detector.py} & Bipartite linking unit tests \& consistency E2E suite & Pass ($100\%$) \\
+\texttt{FR-07} & \texttt{linking/citation\_linker.py}, \texttt{duplicate\_detector.py} & 7-method linker unit tests (incl.\ \texttt{arxiv\_exact}, \texttt{manual\_review}) \& consistency E2E & Pass ($100\%$) \\
 \hline
-\texttt{FR-08}, \texttt{FR-09} & \texttt{database/local\_db.py}, \texttt{retrieval\_orchestrator.py}, \texttt{html\_meta\_verifier.py} & 500-query FTS5 benchmark ($99.8\%$ recall) \& OOD categories 1, 3, 4, 5 (Table~\ref{tab:ood-stress}) & Pass ($99.8\%$) \\
+\texttt{FR-08}, \texttt{FR-09} & \texttt{database/local\_db.py}, \texttt{retrieval\_orchestrator.py}, \texttt{html\_meta\_verifier.py} & 500-query FTS5 ($99.8\%$), 120-ref live 15-API eval ($89.17\%$), \& OOD 1, 3, 4, 5 & Pass \\
 \hline
 \texttt{FR-10}, \texttt{FR-11}, \texttt{NFR-05} & \texttt{matching/semantic.py}, \texttt{logic/rules.py}, \texttt{calibration.py} & 120K disjoint benchmark ($N=18\text{K}$ test) \& 2.4K OOD suite (Tables~\ref{tab:baselines}--\ref{tab:calibration-results}) & Pass ($99.67\%$) \\
 \hline
-\texttt{FR-12}, \texttt{FR-13}, \texttt{FR-14} & \texttt{logic/cis.py}, \texttt{docx\_exporter.py}, \texttt{routes/essays.py}, \texttt{Shared\allowbreak ReportPage.tsx} & $300 \times 20$ CIS simplex test ($\rho = 0.9987$), DOCX repair \& HMAC share tests & Pass ($100\%$) \\
+\texttt{FR-12}, \texttt{FR-13}, \texttt{FR-14} & \texttt{logic/cis.py}, \texttt{docx\_exporter.py}, \texttt{routes/essays.py}, \texttt{SharedReportPage.tsx} & $300 \times 20$ CIS simplex test ($\rho = 0.9987$), DOCX repair, Basic export gate, \& HMAC share tests & Pass ($100\%$) \\
 \hline
-\texttt{FR-15}, \texttt{FR-16} & \texttt{api/\allowbreak routes/\allowbreak teacher.py}, \texttt{routes/system.py}, \texttt{ClassDetailPage.tsx}, \texttt{SystemHealthPage.tsx} & Transactional override, cohort analytics, \& circuit-breaker tests & Pass ($100\%$) \\
+\texttt{FR-15}, \texttt{FR-16} & \texttt{api/\allowbreak routes/\allowbreak teacher.py}, \texttt{routes/system.py}, \texttt{ClassDetailPage.tsx}, \texttt{SystemHealthPage.tsx} & Transactional override, cohort analytics, \& circuit-breaker reset tests & Pass ($100\%$) \\
 \hline
-\texttt{NFR-01}, \texttt{NFR-02}, \texttt{NFR-07}--\texttt{10} & Full 8-layer pipeline, Docker Compose, \& Vite build (\texttt{web/}) & Latency/RSS ($P_{90}=1.33\text{\,s}$, $1.03\text{\,GB}$), zero-swap GROBID prod benchmark, WCAG E2E, $2{,}945+$ tests, chunk \& container health checks & Pass ($100\%$) \\
+\texttt{FR-17}--\texttt{FR-20} & \texttt{api/routes/billing.py}, \texttt{routes/users.py}, \texttt{routes/essays.py} & Stripe REST, VNPay v2.1.0 HMAC-SHA512, Law 91/2025/QH15 erasure, diff, \& sandbox tests & Pass ($100\%$) \\
+\hline
+\texttt{NFR-01}, \texttt{NFR-02}, \texttt{NFR-07}--\texttt{10} & Full 8-layer pipeline, Docker Compose, \& Vite build (\texttt{web/}) & Warm $1.33\text{\,s}$ / cold $12.64\text{\,s}$, RSS $1.03\text{\,GB}$, 0-swap GROBID, WCAG E2E, $231.50\text{\,kB}$ entry, 3,099 checks & Pass ($100\%$) \\
 \hline
 \end{longtable}
 }
 
 \subsection{Benchmark Datasets and Perturbation Taxonomy}
 
-Table~\ref{tab:dataset} summarizes the evaluation datasets constructed to test every layer without train-test contamination:
+Table~\ref{tab:dataset} summarizes the multi-layer evaluation datasets separating controlled decision-layer verification from end-to-end live-network generalization:
 \begin{enumerate}
-    \item \textbf{120,000-Sample Paper- and Title-Disjoint Benchmark:} From 128,115 valid unique papers in \texttt{local\_papers.db}, exactly 120,000 distinct papers (80,000 with full abstracts $>80$ characters and 40,000 metadata-complete records) were partitioned \emph{prior to perturbation} into \textbf{Train} (84,000, $70\%$), \textbf{Validation} (18,000, $15\%$), and \textbf{Held-Out Test} (18,000, $15\%$). Programmatic set-intersection checks confirm $\text{Train} \cap \text{Val} = \text{Train} \cap \text{Test} = \text{Val} \cap \text{Test} = \emptyset$ on both \texttt{paper\_id} and normalized title. Because \texttt{resource} entries are pre-screened deterministically at Order 0 (and evaluated end-to-end in \textbf{RQ4}), the 120,000-sample benchmark evaluates the four scholarly classes across \textbf{15 fine-grained perturbation sub-taxonomies}:
+    \item \textbf{120,000-Sample Controlled Decision-Layer Benchmark (Paper- and Title-Disjoint):} From 128,115 benchmark-eligible unique papers in \texttt{local\_papers.db}, 120,000 distinct papers (80,000 with full abstracts $>80$ characters and 40,000 metadata-complete records) were partitioned \emph{prior to perturbation} into \textbf{Train} (84,000, $70\%$), \textbf{Validation} (18,000, $15\%$), and \textbf{Held-Out Test} (18,000, $15\%$) with verified $\text{Train} \cap \text{Val} = \text{Train} \cap \text{Test} = \text{Val} \cap \text{Test} = \emptyset$ on both \texttt{paper\_id} and normalized title. Because \texttt{resource} entries are pre-screened deterministically at Order~0 (and evaluated end-to-end in \textbf{RQ4}), this controlled benchmark evaluates the four scholarly classes across \textbf{15 perturbation sub-taxonomies} (implemented in \texttt{scripts/train\_neuro\_symbolic\_model.py}):
     \begin{itemize}
-        \item \texttt{verified} ($36\%$, \texttt{V1}--\texttt{V4}): exact canonical citations (\texttt{V1}), colon-subtitle omissions (\texttt{V2}), arXiv-to-conference $\pm 1$-year transitions (\texttt{V3}), and paraphrased inline claims (\texttt{V4}).
+        \item \texttt{verified} ($36\%$, \texttt{V1}--\texttt{V4}): exact canonical records with full author lists and $\Delta y = 0$ (\texttt{sub\_mode} $< 8$), abbreviated first-author citations with optional $\pm 1$-year transitions ($8 \le \texttt{sub\_mode} < 13$), minor OCR/punctuation title variations with full or first-author lists and optional $\pm 1$-year shifts ($13 \le \texttt{sub\_mode} < 17$), and minor OCR variations paired with up to two abbreviated co-authors ($17 \le \texttt{sub\_mode} < 20$).
         \item \texttt{suspected\_hallucination} ($30\%$, \texttt{H1}--\texttt{H4}): same-domain spliced titles/authors with zero registry hits (\texttt{H1}), spliced titles/authors with noisy low-overlap candidates (\texttt{H2}), non-existent DOI suffixes under real publisher prefixes (\texttt{H3}), and fabricated works paired with HTTP 404 dead links or RFC 2606 fake domains (\texttt{H4}).
         \item \texttt{metadata\_error} ($22\%$, \texttt{M1}--\texttt{M5}): publication year drift $\ge 2$ years (\texttt{M1}), swapped/grafted co-authors or venue mismatch (\texttt{M2}), valid DOI paired with moderately altered title (\texttt{M3}), non-DOI partial title alteration or contradicted body claims (\texttt{M4}), and multi-field drift or broken-URL domain exceptions (\texttt{M5}).
         \item \texttt{unresolved} ($12\%$, \texttt{U1}--\texttt{U2}): borderline title similarity inside $[0.40, 0.60)$ (\texttt{U1}) and upstream HTTP 429 rate-limit exhaustion or regional non-CSL DOIs (\texttt{U2}).
     \end{itemize}
-    To prevent annotation shortcuts~\cite{poliak2018hypothesis}, full-abstract records are stratified across all four classes so non-zero Sentence-BERT alignment appears in every class ($P(\texttt{verified} \mid \text{score} > 0) = 54.06\%$), and all 419,109 unique strings are encoded with \texttt{all-MiniLM-L6-v2} without \texttt{np.clip} clamping.
-    \item \textbf{2,400-Sample OOD Symbolic Guardrail Suite:} Six discrete edge-case categories ($6 \times 400 = 2{,}400$) generated strictly from held-out \texttt{test\_papers} covering retracted articles, chimeric real DOIs, RFC 2606 fake URLs, regional non-CSL DOIs, HTTP 429 API exhaustion, and Vietnamese statutory authority mismatches.
-    \item \textbf{End-to-End Raw-Reference and Multi-Style PDF Corpora:} A 120-reference raw-string gold benchmark ($6\text{ domains} \times 20\text{ references}$ across 7 styles) plus 15 adversarial references, a 310-PDF multi-style and Vietnamese legal extraction corpus, an 841-PDF multi-institutional regression corpus, and full capstone report runs.
+    This benchmark isolates the decision and calibration layers (`SymbolicRules + HybridMLScorer + PlattCalibrator`) under known ground-truth retrieval signals rather than replacing live PDF/API evaluation. To eliminate trivial context shortcuts~\cite{poliak2018hypothesis}, full-abstract records are stratified across all four classes ($P(\texttt{verified} \mid \text{score} > 0) = 54.06\%$), and all 419,109 unique strings are encoded with live \texttt{all-MiniLM-L6-v2} embeddings without \texttt{np.clip} truncation.
+    \item \textbf{2,400-Sample OOD Symbolic Guardrail Suite:} Six discrete integrity categories ($6 \times 400 = 2{,}400$): Categories 1--5 ($N = 2{,}000$) draw paper-unique instances strictly from held-out \texttt{test\_papers}, while Category 6 cycles 10 distinct Vietnamese statutory authority-mismatch templates ($\times 40$ variations) and is reported both jointly and separately to preserve i.i.d.\ rigor.
+    \item \textbf{End-to-End Raw-Reference, Multi-Style PDF, and Audited Manuscript Corpora:} A 120-reference raw-string gold benchmark ($6\text{ domains} \times 20\text{ references}$ across 7 styles) plus 15 adversarial references evaluated in \emph{both} Offline Deterministic Registry mode and Live 15-API mode; 250 real PDFs plus 60 synthetic 12-style diagnostic PDFs (310 total); an 841-PDF parser stability sweep; and a 21-PDF / 329-reference / 682-citation line-by-line E2E audit (including 6 Pure-Live API contrast runs).
 \end{enumerate}
 
 {\setlength{\tabcolsep}{3.5pt}
-\begin{longtable}{|L{0.35}|L{0.23}|L{0.42}|}
-\caption{Summary of datasets used across quantitative and end-to-end evaluations.}\label{tab:dataset}\\
+\begin{table}[!htbp]
+\centering
+\caption{Summary of datasets used across controlled decision-layer and end-to-end evaluations.}\label{tab:dataset}
+\begin{tabular}{|L{0.35}|L{0.23}|L{0.42}|}
 \hline
 \textbf{Dataset / Corpus} & \textbf{Scale / Split} & \textbf{Evaluation Purpose} \\
 \hline
-\endfirsthead
-\multicolumn{3}{c}{\itshape Table \thetable\ (continued from previous page)}\\
+\textbf{Controlled Decision Benchmark} & \textbf{120,000 citations} & 43.2K \texttt{ver.}, 36.0K \texttt{hall.}, 26.4K \texttt{meta.}, 14.4K \texttt{unr.} across 15 sub-taxonomies (\texttt{V1}--\texttt{U2}). \\
 \hline
-\textbf{Dataset / Corpus} & \textbf{Scale / Split} & \textbf{Evaluation Purpose} \\
+\quad Train / Val / Test Splits & \textbf{84K / 18K / 18K} & Zero paper or title overlap; fits LR ($C=0.25$), fits Platt ($a_{\text{cal}}, b_{\text{cal}}$), and evaluates \textbf{RQ1} \& \textbf{RQ3}. \\
 \hline
-\endhead
+\textbf{OOD Guardrail Stress Suite} & \textbf{2,400 citations} & 2,000 paper-unique i.i.d.\ cases (Cats 1--5) + 400 VN legal template cases (Cat 6) (\textbf{RQ2}). \\
 \hline
-\multicolumn{3}{r}{\itshape Continued on next page}\\
-\endfoot
+\textbf{Multi-Domain Raw Gold Suite} & \textbf{120 + 15 refs} & 6 domains $\times$ 7 styles evaluated in both \textbf{Offline} and \textbf{Live 15-API} modes (\textbf{RQ4}). \\
 \hline
-\endlastfoot
-\textbf{Paper-Disjoint Benchmark} & \textbf{120,000 citations} & 43.2K \texttt{ver.}, 36.0K \texttt{hall.}, 26.4K \texttt{meta.}, 14.4K \texttt{unr.} across 15 sub-taxonomies (\texttt{V1}--\texttt{U2}). \\
+\textbf{Real \& Diagnostic PDFs} & \textbf{310 + 841 + 21 PDFs} & 250 real + 60 synthetic PDFs, 841-PDF stability sweep, and 21-PDF (329-ref) line-by-line E2E audit (\textbf{RQ4}). \\
 \hline
-\quad Train / Val / Test Splits & \textbf{84K / 18K / 18K} & Zero paper or title overlap; fits LR ($C=0.25$), fits Platt ($a,b$), and evaluates \textbf{RQ1} \& \textbf{RQ3}. \\
-\hline
-\textbf{OOD Guardrail Stress Suite} & \textbf{2,400 citations} & $6 \times 400$ discrete symbolic guardrails built strictly from \texttt{test\_papers} (\textbf{RQ2}). \\
-\hline
-\textbf{Multi-Domain Raw Gold Suite} & \textbf{120 + 15 refs} & 6 domains $\times$ 7 citation styles + 15 adversarial cases, zero oracle metadata (\textbf{RQ4}). \\
-\hline
-\textbf{Multi-Style \& Regression PDFs} & \textbf{310 + 841 PDFs} & 30 VN legal, 60 hard-case, 220 11-style PDFs, plus 841-PDF parser stability suite (\textbf{RQ4}). \\
-\hline
-\end{longtable}
+\end{tabular}
+\end{table}
 }
 
 \subsection{Baselines, Evaluation Metrics, and Statistical Tests}
 
-Six progressively stronger baselines are compared on the identical 18,000-sample test split: \texttt{B0} (\texttt{doi\_only}: exact DOI lookup), \texttt{B1} (\texttt{crossref}: single-registry Crossref lookup), \texttt{B2} (\texttt{fuzzy\_only}: RapidFuzz title + author Jaccard thresholds), \texttt{B3} (\texttt{embedding}: Sentence-BERT cosine threshold), \texttt{B4} (\texttt{no\_calib}: linear weighted heuristic without abstention), and \texttt{B5} (\texttt{ml\_hybrid}: pure 16-feature Multinomial Logistic Regression at $C = 0.25$ without symbolic guardrails).
+Six progressively stronger baselines are evaluated on the identical 18,000-sample held-out test split: five single-layer ablation baselines---\texttt{B0} (\texttt{doi\_only}: exact DOI match), \texttt{B1} (\texttt{crossref}: single-registry Crossref lookup), \texttt{B2} (\texttt{fuzzy\_only}: RapidFuzz title + author Jaccard thresholds), \texttt{B3} (\texttt{embedding}: Sentence-BERT cosine threshold), and \texttt{B4} (\texttt{no\_calib}: linear weighted heuristic without abstention)---plus the full four-class statistical baseline \texttt{B5} (\texttt{ml\_hybrid}: pure 16-feature Multinomial Logistic Regression at $C = 0.25$ without symbolic guardrails). Because \texttt{B0}--\texttt{B4} structurally omit one or more label pathways (such as abstention or metadata drift), their Macro-F1 scores isolate the architectural ceiling of single-cue heuristics rather than serving as full multi-class competitors to \texttt{B5}.
 
-Classification quality is measured by overall accuracy and unweighted Macro-Precision, Macro-Recall, and Macro-F1~\cite{Chawla2009}. Probability calibration is quantified by 10-bin Expected Calibration Error (ECE)~\cite{guo2017} in Equation~\eqref{eq:ece} and top-label correctness Brier Score~\cite{brier1950} in Equation~\eqref{eq:brier}:
+Classification quality is measured via overall accuracy and unweighted Macro-Precision, Macro-Recall, and Macro-F1~\cite{Chawla2009}. Calibration quality is quantified by 10-bin Expected Calibration Error (ECE)~\cite{guo2017} in Equation~\eqref{eq:ece} and top-label correctness Brier Score~\cite{brier1950} in Equation~\eqref{eq:brier}:
 \begin{equation}\label{eq:ece}
 \text{ECE} = \sum_{b=1}^{B} \frac{|I_b|}{N} \bigl|\operatorname{acc}(I_b) - \operatorname{conf}(I_b)\bigr|,
 \end{equation}
 \begin{equation}\label{eq:brier}
 \text{Brier} = \frac{1}{N} \sum_{i=1}^{N} \bigl(\hat{p}_i - \mathbb{I}[\hat{y}_i = y_i]\bigr)^2,
 \end{equation}
-where $B = 10$ denotes equal-width confidence bins partitioning $[0, 1]$, $I_b$ is the index set of test instances falling into bin $b$, $\operatorname{acc}(I_b)$ and $\operatorname{conf}(I_b)$ are the empirical accuracy and mean predicted confidence within $I_b$, $N = 18{,}000$ is the test set size, $\hat{p}_i$ and $\hat{y}_i$ are the predicted confidence and label for citation $i$, $y_i$ is the ground-truth label, and $\mathbb{I}[\cdot]$ is the indicator function. Pairwise accuracy differences are tested with continuity-corrected McNemar $\chi^2$ tests~\cite{dietterich1998approximate} adjusted across all six baseline comparisons via the Holm--Bonferroni step-down procedure~\cite{holm1979simple}, alongside 1,000-resample paired bootstrap $95\%$ confidence intervals~\cite{bergkirkpatrick2012empirical}, \cite{dror2018hitchhiker} and exact Clopper--Pearson binomial bounds for zero-count cells.
+where $B = 10$ partitions $[0, 1]$ into equal-width confidence bins, $I_b$ is the index set falling into bin $b$, $\operatorname{acc}(I_b)$ and $\operatorname{conf}(I_b)$ are empirical accuracy and mean confidence in $I_b$, $N = 18{,}000$, and $(\hat{p}_i, \hat{y}_i, y_i)$ denote predicted confidence, predicted label, and ground-truth label. Pairwise differences are assessed via continuity-corrected McNemar $\chi^2$ tests~\cite{mcnemar1947}, \cite{dietterich1998approximate} with Holm--Bonferroni family-wise adjustment across all six baseline comparisons~\cite{holm1979simple} (implemented in \texttt{\_holm\_bonferroni\_adjust()}), 1,000-resample paired bootstrap $95\%$ confidence intervals~\cite{bergkirkpatrick2012empirical}, \cite{dror2018hitchhiker}, Wilcoxon signed-rank tests~\cite{wilcoxon1945} for Brier reductions, and exact Clopper--Pearson binomial bounds~\cite{clopper1934} for zero-count cells.
 
-\section{RQ1: In-Distribution Verification Accuracy and Baseline Ablation}
+\section{RQ1: Controlled In-Distribution Verification Accuracy and Ablation}
 
-Figure~\ref{fig:benchmark-charts} summarizes the quantitative empirical results across \textbf{RQ1}, \textbf{RQ2}, and \textbf{RQ3}. Table~\ref{tab:baselines} reports held-out test performance ($N = 18{,}000$) across \texttt{B0}--\texttt{B5} and the unified \texttt{Proposed} engine, while Table~\ref{tab:per-class} details per-class precision, recall, F1, and the four-class confusion rows.
+Figure~\ref{fig:benchmark-charts} summarizes quantitative findings across \textbf{RQ1}, \textbf{RQ2}, and \textbf{RQ3}. Table~\ref{tab:baselines} reports held-out test performance ($N = 18{,}000$) across \texttt{B0}--\texttt{B5} and \texttt{Proposed}, while Table~\ref{tab:per-class} presents per-class precision, recall, F1, and the properly diagonal-aligned confusion matrix (\texttt{ver / meta / hal / unr}).
 
-\begin{figure}[H]
+\begin{figure}[!htbp]
     \centering
     \includegraphics[width=\textwidth,keepaspectratio]{picture/figures/fig5_1_benchmark_charts.png}
-    \caption[Four-panel scientific plots across baseline ablation, confusion matrix, OOD guardrails, and Platt calibration]{Quantitative evaluation plots: (a) in-distribution baseline ablation ($N=18{,}000$), (b) held-out four-class confusion matrix highlighting zero-harm cells, (c) OOD symbolic guardrail stress test ($N=2{,}400$; \texttt{*} indicates upstream provenance bit supplied to \texttt{B5}'s 16th feature), and (d) Platt reliability curve with selective coverage-accuracy inset.}
+    \caption[Four-panel quantitative plots across ablation, confusion matrix, OOD guardrails, and Platt calibration]{Quantitative evaluation plots rendered at print-native scale: (a)~in-distribution ablation ($N=18{,}000$), (b)~held-out four-class confusion matrix, (c)~OOD guardrail evaluation ($N=2{,}400$; \texttt{*} indicates provenance bit supplied to \texttt{B5}), and (d)~Platt reliability diagram with selective coverage--accuracy inset.}
     \label{fig:benchmark-charts}
 \end{figure}
 
 {\setlength{\tabcolsep}{3.5pt}
-\begin{longtable}{|L{0.23}|L{0.25}|C{0.09}|C{0.09}|C{0.09}|C{0.09}|C{0.16}|}
-\caption{In-distribution baseline ablation and Holm--Bonferroni adjusted McNemar significance ($N = 18{,}000$).}\label{tab:baselines}\\
+\begin{table}[!htbp]
+\centering
+\caption{In-distribution baseline ablation and Holm--Bonferroni adjusted McNemar significance ($N = 18{,}000$).}\label{tab:baselines}
+\begin{tabular}{|L{0.23}|L{0.25}|C{0.09}|C{0.09}|C{0.09}|C{0.09}|C{0.16}|}
 \hline
 \textbf{Method} & \textbf{Core Mechanism} & \textbf{Acc.\ (\%)} & \textbf{P (\%)} & \textbf{R (\%)} & \textbf{F1 (\%)} & \textbf{Adj.\ McNemar $p$} \\
 \hline
-\endfirsthead
-\multicolumn{7}{c}{\itshape Table \thetable\ (continued from previous page)}\\
-\hline
-\textbf{Method} & \textbf{Core Mechanism} & \textbf{Acc.\ (\%)} & \textbf{P (\%)} & \textbf{R (\%)} & \textbf{F1 (\%)} & \textbf{Adj.\ McNemar $p$} \\
-\hline
-\endhead
-\hline
-\multicolumn{7}{r}{\itshape Continued on next page}\\
-\endfoot
-\hline
-\endlastfoot
 \texttt{B0} (\texttt{doi\_only}) & Exact DOI match only & 26.24 & 23.42 & 34.89 & 19.57 & $< 10^{-16}$ \\
 \hline
 \texttt{B1} (\texttt{crossref}) & Single-source Crossref & 58.31 & 56.64 & 48.13 & 45.38 & $< 10^{-16}$ \\
@@ -184,103 +163,86 @@ Figure~\ref{fig:benchmark-charts} summarizes the quantitative empirical results 
 \hline
 \textbf{\texttt{Proposed}} & \textbf{Neuro-Symbolic + Platt} & \textbf{99.67} & \textbf{99.65} & \textbf{99.64} & \textbf{99.65} & \textbf{Reference (\#1)} \\
 \hline
-\end{longtable}
+\end{tabular}
+\end{table}
 }
 
 {\setlength{\tabcolsep}{3.5pt}
-\begin{longtable}{|L{0.25}|C{0.12}|C{0.11}|C{0.11}|C{0.11}|L{0.30}|}
-\caption{Per-class metrics and confusion matrix of the Proposed engine on the held-out test split ($N = 18{,}000$).}\label{tab:per-class}\\
+\begin{table}[!htbp]
+\centering
+\caption{Per-class metrics and diagonal-aligned confusion matrix of the Proposed engine ($N = 18{,}000$).}\label{tab:per-class}
+\begin{tabular}{|L{0.25}|C{0.12}|C{0.11}|C{0.11}|C{0.11}|L{0.30}|}
 \hline
 \textbf{Verdict Class} & \textbf{Support} & \textbf{Prec.\ (\%)} & \textbf{Rec.\ (\%)} & \textbf{F1 (\%)} & \textbf{Confusion (\texttt{ver / meta / hal / unr})} \\
 \hline
-\endfirsthead
-\multicolumn{6}{c}{\itshape Table \thetable\ (continued from previous page)}\\
+\textbf{\texttt{verified}} & 6,480 & 99.43 & 99.94 & 99.68 & \texttt{\textbf{6,476} / 4 / 0 / 0} \\
 \hline
-\textbf{Verdict Class} & \textbf{Support} & \textbf{Prec.\ (\%)} & \textbf{Rec.\ (\%)} & \textbf{F1 (\%)} & \textbf{Confusion (\texttt{ver / meta / hal / unr})} \\
+\textbf{\texttt{metadata\_error}} & 3,960 & 99.90 & 98.66 & 99.28 & \texttt{37 / \textbf{3,907} / 4 / 12} \\
 \hline
-\endhead
+\textbf{\texttt{suspected\_hallucination}} & 5,400 & \textbf{99.93} & 99.96 & \textbf{99.94} & \texttt{0 / 0 / \textbf{5,398} / 2} \\
 \hline
-\multicolumn{6}{r}{\itshape Continued on next page}\\
-\endfoot
-\hline
-\endlastfoot
-\textbf{\texttt{verified}} & 6,480 & 99.43 & 99.94 & 99.68 & \texttt{6,476 / 4 / 0 / 0} \\
-\hline
-\textbf{\texttt{suspected\_hallucination}} & 5,400 & \textbf{99.93} & 99.96 & \textbf{99.94} & \texttt{0 / 0 / 5,398 / 2} \\
-\hline
-\textbf{\texttt{metadata\_error}} & 3,960 & 99.90 & 98.66 & 99.28 & \texttt{37 / 3,907 / 4 / 12} \\
-\hline
-\textbf{\texttt{unresolved}} & 2,160 & 99.36 & \textbf{100.00} & 99.68 & \texttt{0 / 0 / 0 / 2,160} \\
+\textbf{\texttt{unresolved}} & 2,160 & 99.36 & \textbf{100.00} & 99.68 & \texttt{0 / 0 / 0 / \textbf{2,160}} \\
 \hline
 \textbf{Macro / Total} & \textbf{18,000} & \textbf{99.65} & \textbf{99.64} & \textbf{99.65} & \textbf{Acc.: 99.67\%} (95\% CI $[99.58, 99.76]$) \\
 \hline
-\end{longtable}
+\end{tabular}
+\end{table}
 }
 
-Single-cue baselines fail for clear structural reasons: \texttt{B0} ($26.24\%$) misses valid conference papers cited without DOIs, \texttt{B1} ($58.31\%$) misses ACL/arXiv papers absent from Crossref, and pure embedding \texttt{B3} ($66.93\%$) confuses same-domain spliced hallucinations (\texttt{H1}) with real titles because topical vocabulary overlaps strongly. The 16-feature logistic classifier \texttt{B5} reaches $97.70\%$ ($414$ errors), whereas \texttt{Proposed} improves accuracy by $+1.97$ percentage points to \textbf{99.67\% (17,941/18,000, 59 errors)} and Macro-F1 to \textbf{99.65\%} ($95\%$ bootstrap CI $[99.55\%, 99.74\%]$, Holm--Bonferroni adjusted McNemar $\chi^2 = 328.91, p = 1.66 \times 10^{-73}$, cutting residual errors by $85.7\%$). Global one-to-one author reconciliation (preserving standalone surnames such as \textit{Du}/\textit{Das} and single-letter patronymic initials), monotonic single-source abstention boundaries, clean zero-candidate hallucination routing without author-whitelist immunity, and proportional lexical grounding deficit detection jointly raise \texttt{unresolved} recall to $100.00\%$ ($2{,}160/2{,}160$), \texttt{suspected\_hallucination} F1 to $99.94\%$ ($5{,}398/5{,}400$), and \texttt{metadata\_error} F1 to $99.28\%$. Most importantly, \textbf{0 / 6,480 genuine verified citations are falsely accused of hallucination} ($95\%$ Clopper--Pearson upper bound $0.057\%$), and \textbf{0 / 5,400 fabricated citations leak into \texttt{verified}} ($95\%$ Clopper--Pearson upper bound $0.068\%$).
+Single-cue ablation baselines expose clear failure modes: \texttt{B0} ($26.24\%$) fails whenever conference papers omit DOIs, \texttt{B1} ($58.31\%$) misses ACL/arXiv records absent from Crossref, and pure embedding \texttt{B3} ($66.93\%$) confuses same-domain spliced titles (\texttt{H1}) with real articles due to shared technical vocabulary. The 16-feature logistic baseline \texttt{B5} reaches $97.70\%$ ($414$ errors), while \texttt{Proposed} rises $+1.97$ percentage points to \textbf{99.67\% (17,941/18,000; 59 residual errors)} and \textbf{99.65\%} Macro-F1 ($95\%$ bootstrap CI $[99.55\%, 99.74\%]$; Holm--Bonferroni adjusted McNemar $\chi^2 = 328.91, p = 1.66 \times 10^{-73}$, cutting errors by $85.7\%$; Holm--Bonferroni adjusted bootstrap $p = 0.006$). Across the 59 residual errors, \textbf{0 / 6,480 genuine verified citations are falsely labeled \texttt{suspected\_hallucination}} ($95\%$ Clopper--Pearson upper bound $0.057\%$) and \textbf{0 / 5,400 fabricated citations leak into \texttt{verified}} ($95\%$ bound $0.068\%$); notably, 4 of 3,960 severely corrupted \texttt{metadata\_error} entries ($0.10\%$) cross into \texttt{suspected\_hallucination} and 2 of 5,400 hallucinations ($0.04\%$) abstain safely to \texttt{unresolved}, underscoring why instructor review remains mandatory.
 
-\rqanswer{RQ1}{On 18,000 paper-disjoint held-out citations, CITRA achieves $99.67\%$ accuracy and $99.65\%$ Macro-F1, statistically outperforming all six baselines ($p \le 1.66 \times 10^{-73}$) with zero false hallucination accusations on verified papers ($0/6{,}480$).}
+\rqanswer{RQ1}{On 18,000 paper-disjoint held-out decision-layer citations, CITRA achieves $99.67\%$ accuracy and $99.65\%$ Macro-F1, significantly outperforming all six baselines (Holm--Bonferroni McNemar $p \le 1.66 \times 10^{-73}$) with zero verified-to-hallucination inversions ($0/6{,}480$) and only 4 severe metadata-to-hallucination escalations ($0.10\%$).}
 
 \section{RQ2: Out-of-Distribution Symbolic Guardrail Robustness}
 
-Table~\ref{tab:ood-stress} evaluates \texttt{B4}, \texttt{B5}, and \texttt{Proposed} on the 2,400-sample OOD stress suite. Because continuous 16D similarity features remain high ($1.00$ title, author, and year match) when a paper is retracted in Retraction Watch or carries an RFC 2606 placeholder URL, pure 16D Logistic Regression (\texttt{B5}) achieves $0.00\%$ on both categories and only $57.33\%$ overall (scoring $100.00\%$ on Categories 4--5 only because its 16th feature receives upstream \texttt{doi\_ra\_status} and \texttt{api\_exhausted} abstention bits, without which \texttt{B4} drops to $0.00\%$). By contrast, \textbf{CITRA}'s Order 0 and Group 1/5 symbolic rules inspect discrete provenance predicates before continuous scoring, reaching \textbf{99.96\% (2,399 / 2,400)} ($\chi^2 = 1{,}021.00, p = 4.89 \times 10^{-224}$ vs.\ \texttt{B5}).
+Table~\ref{tab:ood-stress} evaluates \texttt{B4}, \texttt{B5}, and \texttt{Proposed} on the 2,400-sample OOD guardrail suite. Crucially, the experiment highlights \emph{architectural extensibility without retraining}: because \texttt{B5} operates on 16 continuous matching features that intentionally exclude discrete external provenance flags (\texttt{is\_retracted} and RFC 2606 \texttt{url\_status}), a retracted article or fake-URL citation with $1.00$ title/author/year similarity yields $0.00\%$ accuracy on Categories 1 and 3 under \texttt{B5}. Adding new discrete integrity policies (such as Retraction Watch or statutory rules) to a pure ML classifier requires re-engineering features and collecting labeled training data, whereas \textbf{CITRA}'s Order~0 and Group~1/5 symbolic predicates enforce them deterministically on day one.
+
+To respect i.i.d.\ statistical assumptions strictly, Table~\ref{tab:ood-stress} separates the \textbf{2,000 paper-unique i.i.d.\ instances (Categories 1--5)}, where \texttt{Proposed} achieves \textbf{99.95\% (1,999/2,000)} versus \texttt{B5}'s $59.80\%$ ($1{,}196/2{,}000$; McNemar $\chi^2 = 801.00, p < 10^{-175}$), from \textbf{Category 6} (Vietnamese statutory mismatches, which cycles 10 unique authority-conflict templates $\times 40$ variations and passes \textbf{10/10 unique templates} [$100\%$] under \texttt{VNLegalVerifier} vs.\ $45.00\%$ under \texttt{B5}). Combined across all 2,400 instances, \texttt{Proposed} attains \textbf{99.96\% (2,399/2,400)} versus $57.33\%$ for \texttt{B5}.
 
 {\setlength{\tabcolsep}{3.5pt}
-\begin{longtable}{|L{0.35}|L{0.25}|C{0.10}|C{0.11}|C{0.19}|}
-\caption{Out-of-distribution symbolic guardrail evaluation ($N = 2{,}400$ built from \texttt{test\_papers}).}\label{tab:ood-stress}\\
+\begin{table}[!htbp]
+\centering
+\caption{Out-of-distribution symbolic guardrail evaluation separating i.i.d.\ Categories 1--5 ($N=2{,}000$) from statutory template Category 6 ($10 \times 40 = 400$).}\label{tab:ood-stress}
+\begin{tabular}{|L{0.35}|L{0.25}|C{0.10}|C{0.11}|C{0.19}|}
 \hline
 \textbf{OOD Category ($N = 400$ each)} & \textbf{Primary Guardrail} & \textbf{\texttt{B4} (\%)} & \textbf{\texttt{B5} (\%)} & \textbf{\texttt{Proposed} (\%)} \\
 \hline
-\endfirsthead
-\multicolumn{5}{c}{\itshape Table \thetable\ (continued from previous page)}\\
-\hline
-\textbf{OOD Category ($N = 400$ each)} & \textbf{Primary Guardrail} & \textbf{\texttt{B4} (\%)} & \textbf{\texttt{B5} (\%)} & \textbf{\texttt{Proposed} (\%)} \\
-\hline
-\endhead
-\hline
-\multicolumn{5}{r}{\itshape Continued on next page}\\
-\endfoot
-\hline
-\endlastfoot
-\textbf{1. Retracted papers} (\texttt{is\_retracted}) & \texttt{R-RETRACTED-\allowbreak PAPER} & 0.00 & 0.00 & \textbf{100.00} \\
+\textbf{1. Retracted papers} (\texttt{is\_retracted})\textsuperscript{$\dagger$} & \texttt{R-RETRACTED-\allowbreak PAPER} & 0.00 & 0.00 & \textbf{100.00} \\
 \hline
 \textbf{2. Chimeric real DOI on invented title} & \texttt{R-CHIMERIC-DOI-\allowbreak MISMATCH} & 0.00 & 99.00 & \textbf{99.75} \\
 \hline
-\textbf{3. RFC 2606 placeholder/fake URLs} & \texttt{R-FAKE-URL} & 0.00 & 0.00 & \textbf{100.00} \\
+\textbf{3. RFC 2606 fake/placeholder URLs}\textsuperscript{$\dagger$} & \texttt{R-FAKE-URL} & 0.00 & 0.00 & \textbf{100.00} \\
 \hline
 \textbf{4. Regional DOIs lacking public CSL} & \texttt{R-DOI-RA-NO-CSL} & 0.00 & 100.00 & \textbf{100.00} \\
 \hline
 \textbf{5. Upstream HTTP 429 rate exhaustion} & \texttt{R-RATE-LIMITED-\allowbreak ABSTAIN} & 0.00 & 100.00 & \textbf{100.00} \\
 \hline
-\textbf{6. VN statutory authority mismatch} & \texttt{VNLegalVerifier} & 25.00 & 45.00 & \textbf{100.00} \\
+\textbf{Subtotal: Paper-Unique i.i.d.\ ($N=2{,}000$)} & \textbf{McNemar $\chi^2=801.0, p < 10^{-175}$} & 0.00 & 59.80 & \textbf{99.95} \\
 \hline
-\textbf{Total OOD Suite ($N = 2{,}400$)} & \textbf{McNemar $p = 4.89 \times 10^{-224}$} & 4.17 & 57.33 & \textbf{99.96} \\
+\textbf{6. VN statutory mismatch} (10 templates $\times 40$) & \texttt{VNLegalVerifier} & 25.00 & 45.00 & \textbf{100.00} (10/10) \\
 \hline
-\end{longtable}
+\textbf{Combined OOD Suite ($N = 2{,}400$)} & \textbf{All 6 Categories} & 4.17 & 57.33 & \textbf{99.96} \\
+\hline
+\multicolumn{5}{l}{\scriptsize\textsuperscript{$\dagger$}\texttt{is\_retracted} and RFC 2606 \texttt{url\_status} are outside \texttt{B5}'s 16 continuous features, illustrating zero-retraining symbolic extensibility.}
+\end{tabular}
+\end{table}
 }
 
-\rqanswer{RQ2}{First-order symbolic guardrails raise out-of-distribution accuracy from $57.33\%$ (pure ML \texttt{B5}) to $99.96\%$ ($2{,}399/2{,}400$), preventing $100\%$ of retracted-paper and fake-URL false verifications while guaranteeing $100\%$ safe abstention under HTTP 429 exhaustion.}
+\rqanswer{RQ2}{First-order symbolic guardrails raise i.i.d.\ paper-unique OOD accuracy (Categories 1--5, $N=2{,}000$) from $59.80\%$ (\texttt{B5}) to $99.95\%$ ($\chi^2 = 801.00, p < 10^{-175}$) and pass $10/10$ unique Vietnamese statutory mismatch templates ($99.96\%$ combined), demonstrating zero-retraining enforcement of discrete integrity policies.}
 
 \section{RQ3: Probability Calibration and CIS Rubric Sensitivity}
 
-Table~\ref{tab:calibration-results} compares uncalibrated symbolic confidences against logit-space Platt calibration on the 18,000-sample test split. Notice that Table~\ref{tab:calibration-results} separates \emph{Non-Abstention Coverage} ($\Pr[\hat{y} \neq \texttt{unresolved}] = 87.92\%$, matching the $88.00\%$ non-\texttt{unresolved} ground-truth prior) from the \emph{High-Confidence Rate} ($\Pr[\hat{p} \ge 0.50] = 99.99\%$). Platt scaling reduces Expected Calibration Error by $83.6\%$ ($0.2477 \rightarrow \mathbf{0.0405}$, $95\%$ CI $[0.0394, 0.0415]$) and reduces Brier Score by $92.1\%$ ($0.0843 \rightarrow \mathbf{0.0067}$, Wilcoxon $p < 10^{-16}$). Furthermore, perturbing the default CIS rubric weight vector $(0.35, 0.25, 0.25, 0.10, 0.05)$ across 20 normalized simplex vectors over 300 manuscript profiles yields a mean Spearman rank correlation of $\rho = 0.9987$ ($\min \rho = 0.9964$), Kendall's $\tau = 0.9765$, and a mean absolute shift of only $1.75$ CIS points.
+Table~\ref{tab:calibration-results} reports uncalibrated symbolic confidences versus logit-space Platt calibration on all $18{,}000$ test records across \emph{all five} standard selective coverage thresholds ($50\%, 70\%, 90\%, 95\%, 100\%$). Platt scaling cuts ECE by $83.6\%$ ($0.2477 \rightarrow \mathbf{0.0405}$, $95\%$ CI $[0.0394, 0.0415]$) and Brier Score by $92.1\%$ ($0.0843 \rightarrow \mathbf{0.0067}$, Wilcoxon $p < 10^{-16}$) while leaving Non-Abstention Coverage ($\Pr[\hat{y} \neq \texttt{unresolved}] = 87.92\%$) untouched.
 
-\begin{longtable}{|L{0.40}|C{0.21}|C{0.21}|C{0.18}|}
-\caption{Probability calibration and selective risk-coverage results ($N = 18{,}000$).}\label{tab:calibration-results}\\
+Reporting the full $50\%$--$100\%$ selective curve exposes an important calibration boundary effect visible in the Figure~\ref{fig:benchmark-charts}(d) inset: at $70\%$, $90\%$, and $95\%$ coverage, Platt calibration consistently outperforms raw symbolic scores ($99.67\%$, $99.73\%$, and $99.74\%$). However, at $50\%$ coverage, Platt selective accuracy dips slightly to $99.60\%$ (below uncalibrated $99.76\%$ and full-set $99.67\%$) because \texttt{PlattCalibrator} clips displayed probabilities at $\text{max\_prob} = 0.99$ (Equation~\eqref{eq:platt-calib}), causing over half of test samples to tie at $0.9900$ and breaking fine-grained ranking within the top $50\%$. Retaining unclipped logits strictly for internal risk-ranking while preserving $[0.01, 0.99]$ UI display clipping resolves this tie-collapse without sacrificing user-facing probability conservatism. Separately, perturbing default CIS weights $(0.35, 0.25, 0.25, 0.10, 0.05)$ across 20 normalized simplex vectors over 300 manuscript profiles yields mean Spearman $\rho = 0.9987$ ($\min \rho = 0.9964$), Kendall $\tau = 0.9765$, and mean absolute shift $1.75$ CIS points.
+
+\begin{table}[!htbp]
+\centering
+\caption{Probability calibration and complete 5-level selective risk--coverage results ($N = 18{,}000$).}\label{tab:calibration-results}
+\begin{tabular}{|L{0.42}|C{0.20}|C{0.20}|C{0.18}|}
 \hline
 \textbf{Calibration / Coverage Metric} & \textbf{Uncalibrated Symbolic} & \textbf{Platt Neuro-Symbolic} & \textbf{Change} \\
 \hline
-\endfirsthead
-\multicolumn{4}{c}{\itshape Table \thetable\ (continued from previous page)}\\
-\hline
-\textbf{Calibration / Coverage Metric} & \textbf{Uncalibrated Symbolic} & \textbf{Platt Neuro-Symbolic} & \textbf{Change} \\
-\hline
-\endhead
-\hline
-\multicolumn{4}{r}{\itshape Continued on next page}\\
-\endfoot
-\hline
-\endlastfoot
 Expected Calibration Error (ECE $\downarrow$) & 0.2477 & \textbf{0.0405} & $-83.6\%$ ($6.12\times\downarrow$) \\
 \hline
 Brier Score ($\downarrow$) & 0.0843 & \textbf{0.0067} & $-92.1\%$ ($12.58\times\downarrow$) \\
@@ -289,202 +251,209 @@ Non-Abstention Coverage ($\hat{y} \neq \texttt{unresolved}$) & 87.92\% & \textbf
 \hline
 High-Confidence Rate ($\hat{p} \ge 0.50$) & 92.82\% & \textbf{99.99\%} & $+7.17$\,pp \\
 \hline
+Selective Accuracy at $50\%$ Coverage\textsuperscript{$\ddagger$} & \textbf{99.76\%} & 99.60\% & $-0.16$\,pp (0.99 clip) \\
+\hline
 Selective Accuracy at $70\%$ Coverage ($\uparrow$) & 99.64\% & \textbf{99.67\%} & $+0.03$\,pp \\
 \hline
 Selective Accuracy at $90\%$ Coverage ($\uparrow$) & 99.69\% & \textbf{99.73\%} & $+0.04$\,pp \\
 \hline
 Selective Accuracy at $95\%$ Coverage ($\uparrow$) & 99.70\% & \textbf{99.74\%} & $+0.04$\,pp \\
 \hline
-\end{longtable}
+Full-Set Accuracy at $100\%$ Coverage & 99.67\% & \textbf{99.67\%} & $0.00$\,pp \\
+\hline
+\multicolumn{4}{l}{\scriptsize\textsuperscript{$\ddagger$}Slight 50\% dip stems from tie saturation at $\text{max\_prob}=0.99$ across $>50\%$ of high-confidence test samples.}
+\end{tabular}
+\end{table}
 
-\rqanswer{RQ3}{Logit-space Platt calibration cuts ECE by $6.12\times$ to $0.0405$ and Brier Score by $12.58\times$ to $0.0067$ without altering non-abstention coverage ($87.92\%$), while CIS rankings remain invariant under weight perturbations (mean Spearman $\rho = 0.9987$).}
+\rqanswer{RQ3}{Logit-space Platt calibration cuts ECE by $6.12\times$ to $0.0405$ and Brier Score by $12.58\times$ to $0.0067$ while improving selective accuracy across $70\%$--$95\%$ coverage (with a documented $0.99$ clip tie effect at $50\%$), and CIS manuscript rankings remain highly stable ($\rho = 0.9987$).}
 
-\section{RQ4: End-to-End Multi-Domain and Real Manuscript Verification}
+\section{RQ4: Live Multi-Registry and Real Manuscript Verification}
 
-To evaluate end-to-end generalization beyond the synthetic perturbation benchmark, three real-world evaluations were conducted:
+To evaluate end-to-end generalization beyond controlled feature-level benchmarks, four complementary evaluations were executed:
 \begin{enumerate}
-    \item \textbf{Multi-Domain Raw-Reference Gold Suite ($N = 120 + 15$):} Running raw formatted strings through \texttt{ReferenceListParser} $\rightarrow$ \texttt{RetrievalOrchestrator} $\rightarrow$ \texttt{NeuroSymbolicChecker} across six disciplines (20 references each: CS/AI, Biomedicine, Economics/Social Sciences, Engineering/Physics, Vietnamese Legal Statutes, and Software/RFC Standards) and seven styles (APA, TDTU, IEEE, Vancouver, Chicago, Harvard, MLA) achieved \textbf{100.00\% five-class accuracy (120/120, Macro-F1 $= 1.0000$, $\text{ECE} = 0.0831$)} and \textbf{100.00\% (15/15)} on the adversarial suite.
-    \item \textbf{Multi-Style (310 PDFs) and Multi-Institutional (841 PDFs) Extraction Suites:} Table~\ref{tab:pdf-corpora} shows $100.0\%$ bibliography detection and $96.9\%$ link recovery on 30 real Vietnamese legal PDFs, $100.0\%$ exact reference extraction ($397/397$) across 60 twelve-style diagnostic PDFs, and $97.7\%$ bibliography detection (8,126 references) across 220 real open-access articles. An extended parser stability sweep across 841 diverse institutional and arXiv PDFs completed with $0$ unhandled exceptions.
-    \item \textbf{Full Articles and Anonymized Student Capstone Reports:} Table~\ref{tab:samples} summarizes end-to-end runs on landmark NLP articles and anonymized undergraduate capstone reports. Clean published papers (\textit{BERT}, \textit{Attention Is All You Need}, \textit{VietDepression}) produce zero false hallucination flags, whereas intentional metadata errors and chimeric fabrications in test capstone reports are isolated accurately.
+    \item \textbf{Dual-Mode Multi-Domain Raw-Reference Gold Suite ($N = 120 + 15$, Table~\ref{tab:e2e-gold}):} Running raw formatted strings end-to-end across six domains (20 each: CS/AI, Biomedicine, Economics/Finance, Engineering/Physics, Technical Standards, Vietnamese Legal) and seven styles in \textbf{Offline Deterministic Registry Mode} (\texttt{--mode offline}, 37-paper deterministic catalog verifying parser + rule integration) achieves \textbf{100.00\% (120/120)} and \textbf{100.00\% (15/15)} adversarial accuracy. Crucially, executing the exact same 120 raw references in \textbf{Live 15-API Mode} (\texttt{--mode live}, 187.11\,s over live WAN APIs with zero local-catalog shortcuts) achieves \textbf{89.17\% five-class accuracy (107/120; Macro-F1 $= 86.90\%$, $\text{ECE} = 0.0690$, $\text{Brier} = 0.0885$)} and \textbf{89.32\% four-class scholarly accuracy}, with \textbf{100.00\% precision / 96.77\% recall (98.36\% F1)} on \texttt{verified} (zero verified citations misclassified as hallucinations!) and $95.0\%$ accuracy in CS/AI, Biomedicine, and Technical Standards ($90.0\%$ Vietnamese Legal; $80.0\%$ Economics and Engineering). Error dissection of all 13 live-WAN misses reveals: (i)~4 non-existent unindexed regional DOIs (\texttt{E2E-017/037/057/077}) flagged via \texttt{R-NONEXISTENT-DOI} during Crossref throttling; (ii)~5 cases (3 hallucinations + 2 Vietnamese statutes) safely routed to \texttt{unresolved} via \texttt{R-RATE-LIMITED-ABSTAIN} when burst queries tripped Crossref's circuit breaker (zero false accusations); (iii)~2 severe DOI-mismatch metadata errors escalated to \texttt{R-CHIMERIC-DOI-MISMATCH}; (iv)~1 domestic Vietnamese journal partial match; and (v)~1 scikit-learn venue drift.
+    \item \textbf{Multi-Style Extraction Corpus (250 Real + 60 Synthetic PDFs, Table~\ref{tab:pdf-corpora}) \& 841-PDF Stability Sweep:} Executed in PyMuPDF-only mode (GROBID disabled for bulk throughput), CITRA achieves $100.0\%$ bibliography detection and $96.9\%$ in-text linking on 30 real Vietnamese legal PDFs, $100.0\%$ ($397/397$) extraction on 60 synthetic 12-style diagnostic PDFs, and $97.7\%$ ($215/220$, 8,126 refs) detection on 220 real open-access 11-style articles. Without GROBID TEI \texttt{<ref target>} pointers, inline linking across the 220 heterogeneous articles reaches $70.1\%$ ($8{,}954/12{,}770$), with the remaining $29.9\%$ stemming mainly from superscript/footnote markers (Nature, AMA, Chicago) and multi-column headers that GROBID recovers in production hybrid mode. An extended 841-PDF regression sweep completed with zero unhandled exceptions.
+    \item \textbf{Line-by-Line Audited Real Manuscripts \& Pure-Live API Parity (Table~\ref{tab:samples}):} We conducted a line-by-line end-to-end audit across \textbf{21 diverse PDFs (835 pages, 329 references, 682 inline citations)} in full production mode (GROBID + live 15+ APIs) plus \textbf{6 Pure-Live API contrast runs} (disabling both \texttt{local\_papers.db} and \texttt{\_KNOWN\_PAPERS}), achieving \textbf{100\% verdict and CIS parity on 6/6 manuscripts}, $0$ masked in-text year mismatches, $0$ dead URLs mislabeled \texttt{resource}, and $5/5$ atomic quota tracking plus $5.5\text{\,ms}$ corrupt-PDF HTTP 400 rejection under a 7-file live Docker batch upload. Table~\ref{tab:samples} details nine representative audited manuscripts, including the exact \texttt{CISCalculator} score of \textbf{75.50} (\textbf{75.08} with one uncited entry) for the 6-reference seeded capstone fixture and the explained \textbf{87.50} CIS on Report~B (5/5 verified references but 0 body markers, capping $s_{\text{link}} \le 0.50$).
 \end{enumerate}
 
 {\setlength{\tabcolsep}{3.5pt}
-\begin{longtable}{|L{0.34}|C{0.10}|C{0.18}|C{0.19}|C{0.19}|}
-\caption{Extraction and bidirectional linking accuracy on the 310-PDF multi-style and legal corpus.}\label{tab:pdf-corpora}\\
+\begin{table}[!htbp]
+\centering
+\caption{120-reference multi-domain raw-string evaluation comparing Offline Deterministic Registry mode against Live 15-API WAN execution.}\label{tab:e2e-gold}
+\begin{tabular}{|L{0.34}|C{0.15}|C{0.15}|C{0.18}|C{0.18}|}
 \hline
-\textbf{PDF Corpus} & \textbf{PDFs} & \textbf{Bib.\ Detected} & \textbf{Extracted Refs} & \textbf{Matched Links} \\
+\textbf{Evaluation Mode / Label} & \textbf{Support} & \textbf{Prec.\ (\%)} & \textbf{Rec.\ (\%)} & \textbf{F1 / Acc.\ (\%)} \\
 \hline
-\endfirsthead
-\multicolumn{5}{c}{\itshape Table \thetable\ (continued from previous page)}\\
+\textbf{Offline Deterministic} (37-paper catalog) & 120 & 100.00 & 100.00 & \textbf{100.00} (120/120) \\
 \hline
-\textbf{PDF Corpus} & \textbf{PDFs} & \textbf{Bib.\ Detected} & \textbf{Extracted Refs} & \textbf{Matched Links} \\
+\textbf{Live 15-API Overall (5-Class)} & \textbf{120} & \textbf{87.65} & \textbf{86.38} & \textbf{89.17 Acc.\ / 86.90 F1} \\
 \hline
-\endhead
+\quad \texttt{verified} (Live) & 31 & \textbf{100.00} & 96.77 & \textbf{98.36 F1} \\
 \hline
-\multicolumn{5}{r}{\itshape Continued on next page}\\
-\endfoot
+\quad \texttt{metadata\_error} (Live) & 30 & 93.33 & 93.33 & \textbf{93.33 F1} \\
 \hline
-\endlastfoot
-VN Legal Corpus (Pre-v3.80 Baseline) & 30 & 27 / 30 (90.0\%) & 164 (15 Legal) & 109 / 235 (46.4\%) \\
+\quad \texttt{suspected\_hallucination} (Live) & 28 & 80.65 & 89.29 & 84.75 F1 \\
 \hline
-\textbf{VN Legal Corpus} (\textbf{CITRA v3.90.9}) & \textbf{30} & \textbf{30 / 30 (100.0\%)} & \textbf{258 (91 Legal)} & \textbf{403 / 416 (96.9\%)} \\
+\quad \texttt{unresolved} (Live) & 14 & 64.29 & 64.29 & 64.29 F1 \\
 \hline
-\textbf{12-Style Diagnostic Suite ($12 \times 5$)} & \textbf{60} & \textbf{60 / 60 (100.0\%)} & \textbf{397 / 397 (100.0\%)} & \textbf{60 / 60 PDFs (100\%)} \\
+\quad \texttt{resource} (Live) & 17 & \textbf{100.00} & 88.24 & \textbf{93.75 F1} \\
 \hline
-\textbf{11-Style Open-Access Articles ($11 \times 20$)} & \textbf{220} & \textbf{215 / 220 (97.7\%)} & \textbf{8,126 refs} & \textbf{8,954 / 12,770 (70.1\%)} \\
+\end{tabular}
+\end{table}
+}
+
+{\setlength{\tabcolsep}{3.5pt}
+\begin{table}[!htbp]
+\centering
+\caption{Extraction and PyMuPDF-only bidirectional linking on 250 real and 60 synthetic PDFs.}\label{tab:pdf-corpora}
+\begin{tabular}{|L{0.34}|C{0.10}|C{0.18}|C{0.19}|C{0.19}|}
 \hline
-\end{longtable}
+\textbf{PDF Corpus (Type)} & \textbf{PDFs} & \textbf{Bib.\ Detected} & \textbf{Extracted Refs} & \textbf{Matched Links} \\
+\hline
+VN Legal Corpus (Real, Pre-v3.80) & 30 & 27 / 30 (90.0\%) & 164 (15 Legal) & 109 / 235 (46.4\%) \\
+\hline
+\textbf{VN Legal Corpus (Real, v3.90.9)} & \textbf{30} & \textbf{30 / 30 (100.0\%)} & \textbf{258 (91 Legal)} & \textbf{403 / 416 (96.9\%)} \\
+\hline
+\textbf{12-Style Diagnostic (Synthetic, $12 \times 5$)} & \textbf{60} & \textbf{60 / 60 (100.0\%)} & \textbf{397 / 397 (100.0\%)} & \textbf{60 / 60 PDFs (100\%)} \\
+\hline
+\textbf{11-Style Open-Access (Real, $11 \times 20$)} & \textbf{220} & \textbf{215 / 220 (97.7\%)} & \textbf{8,126 refs} & \textbf{8,954 / 12,770 (70.1\%)} \\
+\hline
+\end{tabular}
+\end{table}
 }
 
 {\setlength{\tabcolsep}{3pt}
-\begin{longtable}{|L{0.29}|C{0.13}|C{0.08}|C{0.10}|C{0.08}|C{0.09}|C{0.09}|C{0.14}|}
-\caption{End-to-end verification outcomes on published papers and anonymized student capstone reports.}\label{tab:samples}\\
+\begin{table}[!htbp]
+\centering
+\caption{Representative end-to-end production results from the 21-PDF (329-reference) audited corpus and seeded capstone fixture.}\label{tab:samples}
+\begin{tabular}{|L{0.31}|C{0.11}|C{0.08}|C{0.10}|C{0.08}|C{0.09}|C{0.09}|C{0.14}|}
 \hline
-\textbf{Manuscript} & \textbf{Style} & \textbf{Refs} & \textbf{CIS} & \textbf{Ver.} & \textbf{Meta.} & \textbf{Hall.} & \textbf{Res./Unr.} \\
+\textbf{Audited Manuscript} & \textbf{Style} & \textbf{Refs} & \textbf{CIS} & \textbf{Ver.} & \textbf{Meta.} & \textbf{Hall.} & \textbf{Res./Unr.} \\
 \hline
-\endfirsthead
-\multicolumn{8}{c}{\itshape Table \thetable\ (continued from previous page)}\\
+\textbf{VietDepression Article} (19\,pp.)\textsuperscript{*} & IEEE & 18 & \textbf{100.00} & 17 & 0 & 0 & 1 / 0 \\
 \hline
-\textbf{Manuscript} & \textbf{Style} & \textbf{Refs} & \textbf{CIS} & \textbf{Ver.} & \textbf{Meta.} & \textbf{Hall.} & \textbf{Res./Unr.} \\
-\hline
-\endhead
-\hline
-\multicolumn{8}{r}{\itshape Continued on next page}\\
-\endfoot
-\hline
-\endlastfoot
-\textbf{BERT} (\textit{NAACL 2019}) & APA & 101 & \textbf{97.43} & 94 & 7 & 0 & 0 / 0 \\
-\hline
-\textbf{Attention Is All You Need} (\textit{NeurIPS}) & Numeric & 71 & \textbf{92.99} & 70 & 1 & 0 & 0 / 0 \\
-\hline
-\textbf{VietDepression Clinical Study} (19\,pp.) & IEEE & 20 & \textbf{100.00} & 18 & 0 & 0 & 2 / 0 \\
+\textbf{UIT Hate Speech Article} (12\,pp.) & IEEE & 24 & \textbf{99.78} & 24 & 0 & 0 & 0 / 0 \\
 \hline
 \textbf{SE Capstone Report A} (98\,pp.) & IEEE & 27 & \textbf{99.30} & 24 & 0 & 0 & 3 / 0 \\
 \hline
-\textbf{SE Capstone Report B} (53\,pp.) & IEEE & 5 & \textbf{77.50} & 5 & 0 & 0 & 0 / 0 \\
+\textbf{International Thesis \#11} (35\,pp.) & APA & 23 & \textbf{96.88} & 21 & 1 & 0 & 1 / 0 \\
 \hline
-\textbf{CS Literature Survey} (51\,pp.) & APA & 66 & \textbf{95.73} & 62 & 3 & 0 & 0 / 1 \\
+\textbf{HUST Capstone Report} (69\,pp.) & IEEE & 24 & \textbf{94.59} & 22 & 1 & 1 & 0 / 0 \\
 \hline
-\textbf{Seeded Capstone Audit Fixture} (42\,pp.) & APA & 6 & \textbf{91.40} & 3 & \textbf{1} & \textbf{1} & 1 / 0 \\
+\textbf{TDTU Capstone Report} (55\,pp.)\textsuperscript{*} & IEEE & 12 & \textbf{91.25} & 9 & 0 & 0 & 0 / 3 \\
 \hline
-\end{longtable}
+\textbf{SE Capstone Report B} (53\,pp., 0 cites) & IEEE & 5 & \textbf{87.50} & 5 & 0 & 0 & 0 / 0 \\
+\hline
+\textbf{VN Legal Report (ESCO)} (13\,pp.) & TDTU & 18 & \textbf{80.00} & 2 & 1 & 0 & 15 / 0 \\
+\hline
+\textbf{Seeded Capstone Fixture} (UI demo) & APA & 6 & \textbf{75.50} & 3 & \textbf{1} & \textbf{1} & 1 / 0 \\
+\hline
+\multicolumn{8}{l}{\scriptsize\textsuperscript{*}Confirmed 100\% identical verdicts and CIS in Pure-Live API mode (\texttt{local\_db} and \texttt{\_KNOWN\_PAPERS} disabled).}
+\end{tabular}
+\end{table}
 }
 
-Figures~\ref{fig:demo-debugger}--\ref{fig:demo-consistency} display the live diagnostic views in \textbf{CITRA} (\texttt{v3.90.9}) on the seeded Software Engineering capstone audit manuscript (6 bibliography entries and 28 inline mentions). Figure~\ref{fig:demo-debugger} contrasts a chimeric DOI hallucination flag (left) with a side-by-side publication-year discrepancy diff (\texttt{2021} vs.\ canonical \texttt{2019}, right). Figure~\ref{fig:demo-trace-context} shows the 5-stage logic trace with ONNX INT8 \texttt{VI}$\leftrightarrow$\texttt{EN} concept alignment (left) and the inline Document Inspector context stream (right). Figure~\ref{fig:demo-consistency} illustrates the bidirectional In-Text Consistency view isolating orphan inline markers and uncited bibliography entries.
+Figures~\ref{fig:demo-debugger}--\ref{fig:demo-consistency} render the live \texttt{v3.90.9} diagnostic views on the 6-reference seeded capstone audit fixture ($\text{CIS} = 75.50 / 100$ when all 6 references are cited; $75.08$ with one uncited entry) at full printable width with navigation sidebars cropped for readability. Figure~\ref{fig:demo-debugger} highlights the chimeric AlphaFold2 DOI hallucination (with its canonical Crossref record resolved side by side) and the publication-year \texttt{metadata\_error} diff (\texttt{2021} vs.\ canonical \texttt{2019}). Figure~\ref{fig:demo-trace-context} shows the complete 5-stage logic trace with ONNX INT8 \texttt{VI}$\leftrightarrow$\texttt{EN} concept alignment alongside the inline Document Inspector context stream, while Figure~\ref{fig:demo-consistency} isolates orphan inline markers and uncited bibliography entries.
 
-\begin{figure}[H]
+\begin{figure}[!htbp]
     \centering
-    \includegraphics[width=0.49\textwidth,keepaspectratio]{picture/figures/05-verification-report.png}\hfill
-    \includegraphics[width=0.49\textwidth,keepaspectratio]{picture/figures/06-reference-inspector.png}
-    \caption[Reference Inspector comparing suspected hallucination and metadata year drift]{CITRA Reference Inspector isolating a chimeric-DOI \texttt{suspected\_hallucination} (left) and a publication-year \texttt{metadata\_error} diff (\texttt{2021} vs.\ canonical \texttt{2019}, right).}
+    \fboxsep=0pt\fboxrule=0.4pt\fbox{\includegraphics[width=0.94\textwidth,keepaspectratio]{picture/figures/05-verification-report.png}}\\[6pt]
+    \fboxsep=0pt\fboxrule=0.4pt\fbox{\includegraphics[width=0.94\textwidth,keepaspectratio]{picture/figures/06-reference-inspector.png}}
+    \caption[Reference Inspector comparing chimeric DOI hallucination and metadata year drift]{CITRA Reference Inspector on the seeded capstone ($\text{CIS} = 75.5/100$), isolating a chimeric-DOI \texttt{suspected\_hallucination} against its resolved AlphaFold2 record (top) and a publication-year \texttt{metadata\_error} diff (\texttt{2021} vs.\ canonical \texttt{2019}, bottom).}
     \label{fig:demo-debugger}
 \end{figure}
 
-\begin{figure}[H]
+\begin{figure}[!htbp]
     \centering
-    \includegraphics[width=0.49\textwidth,keepaspectratio]{picture/figures/07-logic-trace.png}\hfill
-    \includegraphics[width=0.49\textwidth,keepaspectratio]{picture/figures/09-document-inspector.png}
-    \caption[Logic Trace cross-lingual alignment and inline Document Inspector views]{Logic Trace displaying ONNX INT8 \texttt{VI}$\leftrightarrow$\texttt{EN} concept bridging (left) and the Document Inspector inline context stream (right).}
+    \fboxsep=0pt\fboxrule=0.4pt\fbox{\includegraphics[width=0.94\textwidth,keepaspectratio]{picture/figures/07-logic-trace.png}}\\[6pt]
+    \fboxsep=0pt\fboxrule=0.4pt\fbox{\includegraphics[width=0.94\textwidth,keepaspectratio]{picture/figures/09-document-inspector.png}}
+    \caption[Logic Trace cross-lingual alignment and inline Document Inspector views]{Complete 5-stage Logic Trace displaying ONNX INT8 \texttt{VI}$\leftrightarrow$\texttt{EN} concept bridging (top) and the Document Inspector inline context stream (bottom).}
     \label{fig:demo-trace-context}
 \end{figure}
 
-\begin{figure}[H]
+\begin{figure}[!htbp]
     \centering
-    \includegraphics[width=0.84\textwidth,keepaspectratio]{picture/figures/08-consistency-check.png}
-    \caption[Bidirectional In-Text Consistency view isolating orphan citations and uncited entries]{Bidirectional In-Text Consistency view (\texttt{/verification/report/\{id\}/consistency}) separating matched citations from orphan inline markers and uncited bibliography entries.}
+    \fboxsep=0pt\fboxrule=0.4pt\fbox{\includegraphics[width=0.96\textwidth,keepaspectratio]{picture/figures/08-consistency-check.png}}
+    \caption[Bidirectional In-Text Consistency view isolating orphan citations and uncited entries]{Bidirectional In-Text Consistency view (\texttt{/verification/report/\{id\}/consistency}) separating matched links from orphan inline markers and uncited bibliography entries.}
     \label{fig:demo-consistency}
 \end{figure}
 
-\rqanswer{RQ4}{CITRA generalizes across disciplines and document formats, achieving $100.00\%$ ($120/120$) accuracy across six domains and seven styles on raw references, $97.7\%$--$100.0\%$ bibliography detection across 310 PDFs, and zero false hallucination flags on clean published manuscripts.}
+\rqanswer{RQ4}{CITRA achieves $89.17\%$ 5-class accuracy ($98.36\%$ verified F1, $100.00\%$ verified precision, zero false hallucinations on genuine articles) under live 15-API WAN execution on 120 multi-domain references ($100.00\%$ offline), detects $97.7\%$--$100.0\%$ of bibliographies across 310 PDFs ($70.1\%$--$96.9\%$ PyMuPDF-only linking), and reaches $100\%$ Pure-Live parity across audited real manuscripts.}
 
 \section{RQ5: Latency, Caching Efficiency, and Concurrency Scalability}
 \label{sec:nfr-benchmarks}
 
-Figure~\ref{fig:nfr-scalability} and Tables~\ref{tab:nfr-step-latency}--\ref{tab:nfr-deadline-stress} report non-functional benchmarks executed via \texttt{scripts/\allowbreak benchmark\_pipeline\_performance.py}. Warm-cache end-to-end $P_{90}$ latency scales linearly from $0.58\text{\,s}$ (12-page article) to $1.33\text{\,s}$ (50-page capstone report, well within the $2.5\text{\,s}$ \texttt{NFR-01} target) and $4.22\text{\,s}$ (156-page monograph), with peak RSS bounded at $1{,}030.8\text{\,MB}$ ($\le 1.5\text{\,GB}$ \texttt{NFR-02} limit). Tier-0 FTS5 and GROBID caching accelerate retrieval by $688.72\times$ ($8{,}635.8\text{\,ms} \rightarrow 12.5\text{\,ms}$) and end-to-end processing by $19.41\times$ (Table~\ref{tab:nfr-cold-warm-cache}). Under 20 and 50 simultaneous student uploads (Table~\ref{tab:nfr-deadline-stress}), \texttt{PipelineAdmissionController} and SQLite WAL complete $50/50$ submissions ($100\%$) with zero database lock errors and zero HTTP 5xx/429 failures.
+Non-functional local CPU benchmarks (Tables~\ref{tab:nfr-step-latency}--\ref{tab:nfr-deadline-stress} and Figure~\ref{fig:nfr-scalability}) were executed on Apple Silicon ARM64 (\texttt{macOS 26.6.2}, Python \texttt{3.14.6}, CPU-only, live Sentence-BERT enabled) via \texttt{scripts/benchmark\_pipeline\_performance.py}, while Table~\ref{tab:nfr-grobid-prod} measures live container parsing on a 2-vCPU, $5.8\text{\,GiB}$ Google Compute Engine VM (\texttt{e2-custom-medium-6144}).
 
-\begin{figure}[H]
+Warm-cache end-to-end $P_{90}$ latency across $n = 5$ timed iterations (after 1 warmup run; note that $P_{99}$ at $n = 5$ reflects the observed sample maximum) scales smoothly from $0.58\text{\,s}$ (12-page article) to $1.33\text{\,s}$ (50-page capstone report, well below the $2.5\text{\,s}$ \texttt{NFR-01} target) and $4.22\text{\,s}$ (156-page monograph), with peak API RSS bounded at $1{,}030.8\text{\,MB}$ ($\le 1.5\text{\,GB}$ \texttt{NFR-02}) and per-stage peak heap deltas capped at $11.09\text{\,MB}$ ($\le 25\text{\,MB}$).
+
+To verify the \texttt{NFR-01} cold-WAN SLA directly on the target 50-page document scale, Table~\ref{tab:nfr-cold-warm-cache} reports \emph{both} the 12-page article ($n = 1$: $9.41\text{\,s}$ cold $\rightarrow 0.48\text{\,s}$ warm, $688.72\times$ retrieval gain) \emph{and} a fresh $n = 3$ live cold-WAN benchmark on the \textbf{50-page capstone report} (\texttt{20-theses/109.pdf}, 32/32 live Crossref+OpenAlex queries, PyMuPDF + real SBERT): median cold-WAN latency is \textbf{12.64\,s} ($12{,}639.1\text{\,ms} \le 15\text{\,s}$ \texttt{NFR-01} SLA pass; retrieval $10{,}687.8\text{\,ms}$), accelerating to \textbf{2.00\,s} warm cache (\textbf{151.2$\times$} retrieval speedup, \textbf{6.31$\times$} E2E speedup).
+
+\begin{figure}[!htbp]
     \centering
     \includegraphics[width=\textwidth,keepaspectratio]{picture/figures/fig5_2_nfr_scalability.png}
-    \caption[Pipeline stage latency, log-scale cache speedup, and 50-user concurrent burst throughput]{Systems performance and scalability plots: (a) per-stage warm-cache latency breakdown and RSS across manuscript scales relative to the \texttt{NFR-01} SLA ceiling, (b) log-scale cold WAN versus warm FTS5 cache latency, and (c) 20-user and 50-user concurrent burst latency and throughput.}
+    \caption[Pipeline stage latency, log-scale cache speedup, and 50-user I/O burst stress test]{Systems performance and scalability plots: (a)~warm-cache stage latency and RSS across scales vs.\ \texttt{NFR-01} SLA, (b)~log-scale cold WAN vs.\ warm cache on 12-page article and 50-page capstone ($12.64\text{\,s} \le 15\text{\,s}$), and (c)~20-user and 50-user I/O, queue, and SQLite WAL burst test (stubbed NLP).}
     \label{fig:nfr-scalability}
 \end{figure}
 
 {\setlength{\tabcolsep}{3.5pt}
-\begin{longtable}{|L{0.22}|L{0.22}|C{0.11}|C{0.11}|C{0.11}|C{0.11}|C{0.12}|}
-\caption{Warm-cache per-step latency percentiles and memory usage across three manuscript scales.}\label{tab:nfr-step-latency}\\
+\begin{table}[!htbp]
+\centering
+\caption{Warm-cache per-step latency percentiles ($n = 5$ after 1 warmup, Apple ARM64 CPU) and peak memory usage across three manuscript scales.}\label{tab:nfr-step-latency}
+\begin{tabular}{|L{0.22}|L{0.22}|C{0.11}|C{0.11}|C{0.11}|C{0.11}|C{0.12}|}
 \hline
-\textbf{Manuscript Scale} & \textbf{Stage} & \textbf{$P_{50}$ (ms)} & \textbf{$P_{90}$ (ms)} & \textbf{$P_{99}$ (ms)} & \textbf{Heap $\Delta$ (MB)} & \textbf{RSS (MB)} \\
+\textbf{Manuscript Scale} & \textbf{Stage Group} & \textbf{$P_{50}$ (ms)} & \textbf{$P_{90}$ (ms)} & \textbf{$P_{99}$\textsuperscript{*} (ms)} & \textbf{Max $\Delta$ (MB)} & \textbf{RSS (MB)} \\
 \hline
-\endfirsthead
-\multicolumn{7}{c}{\itshape Table \thetable\ (continued from previous page)}\\
-\hline
-\textbf{Manuscript Scale} & \textbf{Stage} & \textbf{$P_{50}$ (ms)} & \textbf{$P_{90}$ (ms)} & \textbf{$P_{99}$ (ms)} & \textbf{Heap $\Delta$ (MB)} & \textbf{RSS (MB)} \\
-\hline
-\endhead
-\hline
-\multicolumn{7}{r}{\itshape Continued on next page}\\
-\endfoot
-\hline
-\endlastfoot
-\textbf{Article} (12\,pp., 24\,refs) & \texttt{parsing} + \texttt{extract} & 182.8 & 263.7 & 309.7 & 2.36 & 835.7 \\
- & \texttt{link} + \texttt{retrieve} & 39.6 & 48.0 & 52.5 & 0.18 & 835.7 \\
- & \texttt{compare} + \texttt{check} & 268.3 & 274.5 & 276.4 & 0.22 & 835.7 \\
+\textbf{Article} (12\,pp., 24\,refs) & \texttt{parsing} + \texttt{extract} & 182.8 & 263.7 & 309.7 & 1.52 & 835.7 \\
+ & \texttt{link} + \texttt{retrieve} & 39.6 & 48.0 & 52.5 & 0.12 & 835.7 \\
+ & \texttt{compare} + \texttt{check} & 268.3 & 274.5 & 276.4 & 0.16 & 835.7 \\
  & \textbf{Total (All 8 steps)} & \textbf{494.1} & \textbf{583.4} & \textbf{635.5} & \textbf{1.61} & \textbf{835.7} \\
 \hline
-\textbf{Capstone} (50\,pp., 32\,refs) & \texttt{parsing} + \texttt{extract} & 693.1 & 702.9 & 705.3 & 6.93 & 843.1 \\
- & \texttt{link} + \texttt{retrieve} & 98.9 & 100.4 & 101.0 & 0.32 & 843.2 \\
- & \texttt{compare} + \texttt{check} & 506.2 & 530.6 & 536.1 & 0.37 & 843.2 \\
+\textbf{Capstone} (50\,pp., 32\,refs) & \texttt{parsing} + \texttt{extract} & 693.1 & 702.9 & 705.3 & 4.38 & 843.1 \\
+ & \texttt{link} + \texttt{retrieve} & 98.9 & 100.4 & 101.0 & 0.25 & 843.2 \\
+ & \texttt{compare} + \texttt{check} & 506.2 & 530.6 & 536.1 & 0.22 & 843.2 \\
  & \textbf{Total (All 8 steps)} & \textbf{1306.9} & \textbf{1325.1} & \textbf{1333.0} & \textbf{4.39} & \textbf{843.4} \\
 \hline
-\textbf{Monograph} (156\,pp., 87\,refs) & \texttt{parsing} + \texttt{extract} & 1257.4 & 1273.1 & 1276.2 & 16.78 & 1029.8 \\
- & \texttt{link} + \texttt{retrieve} & 317.0 & 320.8 & 322.2 & 0.38 & 1029.8 \\
- & \texttt{compare} + \texttt{check} & 2593.0 & 2633.8 & 2642.7 & 1.37 & 1029.9 \\
+\textbf{Monograph} (156\,pp., 87\,refs) & \texttt{parsing} + \texttt{extract} & 1257.4 & 1273.1 & 1276.2 & 11.09 & 1029.8 \\
+ & \texttt{link} + \texttt{retrieve} & 317.0 & 320.8 & 322.2 & 0.24 & 1029.8 \\
+ & \texttt{compare} + \texttt{check} & 2593.0 & 2633.8 & 2642.7 & 1.16 & 1029.9 \\
  & \textbf{Total (All 8 steps)} & \textbf{4159.7} & \textbf{4215.3} & \textbf{4215.6} & \textbf{11.10} & \textbf{1030.8} \\
 \hline
-\end{longtable}
+\multicolumn{7}{l}{\scriptsize\textsuperscript{*}$P_{99}$ from $n=5$ runs approximates the sample maximum; stage Heap $\Delta$ reports peak (\texttt{max}), not sum, across sub-steps.}
+\end{tabular}
+\end{table}
 }
 
 {\setlength{\tabcolsep}{3.5pt}
-\begin{longtable}{|L{0.27}|C{0.12}|C{0.12}|C{0.13}|C{0.13}|C{0.12}|C{0.11}|}
-\caption{Cold-cache (live WAN APIs) versus warm-cache (TEI + SQLite FTS5) latency comparison.}\label{tab:nfr-cold-warm-cache}\\
+\begin{table}[!htbp]
+\centering
+\caption{Cold-cache (live WAN APIs) versus warm-cache latency across 12-page article and 50-page capstone report.}\label{tab:nfr-cold-warm-cache}
+\begin{tabular}{|L{0.29}|C{0.11}|C{0.11}|C{0.13}|C{0.13}|C{0.12}|C{0.11}|}
 \hline
-\textbf{Cache Mode} & \textbf{Parse (ms)} & \textbf{Extr.\ (ms)} & \textbf{Retr.\ (ms)} & \textbf{Total (ms)} & \textbf{Retr.\ Gain} & \textbf{E2E Gain} \\
+\textbf{Document \& Cache Mode} & \textbf{Parse (ms)} & \textbf{Extr.\ (ms)} & \textbf{Retr.\ (ms)} & \textbf{Total (ms)} & \textbf{Retr.\ Gain} & \textbf{E2E Gain} \\
 \hline
-\endfirsthead
-\multicolumn{7}{c}{\itshape Table \thetable\ (continued from previous page)}\\
+12-pp.\ Article --- Cold WAN ($n=1$) & 76.2 & 243.1 & 8,635.8 & 9,407.6 & $1.00\times$ & $1.00\times$ \\
 \hline
-\textbf{Cache Mode} & \textbf{Parse (ms)} & \textbf{Extr.\ (ms)} & \textbf{Retr.\ (ms)} & \textbf{Total (ms)} & \textbf{Retr.\ Gain} & \textbf{E2E Gain} \\
+\textbf{12-pp.\ Article --- Warm Cache} & 96.0 & \textbf{87.1} & \textbf{12.5} & \textbf{484.8} & \textbf{$688.72\times$} & \textbf{$19.41\times$} \\
 \hline
-\endhead
+50-pp.\ Capstone --- Cold WAN ($n=3$ med.) & 453.3 & 732.6 & 10,687.8 & \textbf{12,639.1} & $1.00\times$ & $1.00\times$ \\
 \hline
-\multicolumn{7}{r}{\itshape Continued on next page}\\
-\endfoot
+\textbf{50-pp.\ Capstone --- Warm Cache} ($n=3$) & 452.1 & 730.6 & \textbf{70.7} & \textbf{2,003.9} & \textbf{$151.2\times$} & \textbf{$6.31\times$} \\
 \hline
-\endlastfoot
-Cold Cache (Live WAN) & 76.2 & 243.1 & 8635.8 & 9407.6 & $1.00\times$ & $1.00\times$ \\
-\hline
-\textbf{Warm Cache (TEI + FTS5)} & 96.0 & \textbf{87.1} & \textbf{12.5} & \textbf{484.8} & \textbf{$688.72\times$} & \textbf{$19.41\times$} \\
-\hline
-\end{longtable}
+\end{tabular}
+\end{table}
 }
 
+Table~\ref{tab:nfr-deadline-stress} isolates the \textbf{HTTP multipart upload, CAS quota accounting, SQLite WAL write concurrency, and \texttt{PipelineAdmissionController} FIFO queueing layers} under 20-user and 50-user simultaneous deadline bursts using a synthetic 2-page / 3-reference PDF with \textbf{stubbed NLP orchestration} (GROBID and Sentence-BERT bypassed to hammer database locking and queue scheduling directly). All $50/50$ concurrent uploads complete cleanly with $0$ SQLite lock errors and $0$ HTTP 5xx/429 failures ($11.57\text{\,essays/s}$ queue drain; $24.49\text{\,req/s}$ HTTP ingestion). By Little's Law, under full CPU-bound AI execution (\texttt{max\_concurrent=3}, $1.33\text{\,s}$ warm / $12.64\text{\,s}$ cold per 50-page capstone), real sustained verification throughput is bounded at $\sim 2.2\text{\,essays/s}$ (warm cache) or $\sim 0.24\text{\,essays/s}$ (cold WAN), while the admission queue absorbs all 50 simultaneous uploads smoothly without dropping requests.
+
 {\setlength{\tabcolsep}{3pt}
-\begin{longtable}{|L{0.22}|C{0.08}|C{0.16}|C{0.20}|C{0.19}|C{0.15}|}
-\caption{Concurrent deadline burst tests on the admission queue and FastAPI HTTP multipart endpoint.}\label{tab:nfr-deadline-stress}\\
+\begin{table}[!htbp]
+\centering
+\caption{I/O, admission queue, and SQLite WAL concurrency stress test (stubbed NLP orchestration, synthetic 2-page PDF).}\label{tab:nfr-deadline-stress}
+\begin{tabular}{|L{0.23}|C{0.07}|C{0.15}|C{0.21}|C{0.19}|C{0.15}|}
 \hline
-\textbf{Stress Scenario} & \textbf{$N$} & \textbf{Completed} & \textbf{Upload / Queue $P_{50}/P_{90}$ (ms)} & \textbf{Throughput} & \textbf{DB Lock / 5xx} \\
+\textbf{Stress Scenario (Stubbed NLP)} & \textbf{$N$} & \textbf{Completed} & \textbf{Upload / Queue $P_{50}/P_{90}$ (ms)} & \textbf{Throughput} & \textbf{DB Lock / 5xx} \\
 \hline
-\endfirsthead
-\multicolumn{6}{c}{\itshape Table \thetable\ (continued from previous page)}\\
-\hline
-\textbf{Stress Scenario} & \textbf{$N$} & \textbf{Completed} & \textbf{Upload / Queue $P_{50}/P_{90}$ (ms)} & \textbf{Throughput} & \textbf{DB Lock / 5xx} \\
-\hline
-\endhead
-\hline
-\multicolumn{6}{r}{\itshape Continued on next page}\\
-\endfoot
-\hline
-\endlastfoot
 Admission Queue Worker & 20 & \textbf{20 / 20} & 315.5 / 520.7 & \textbf{30.07 essays/s} & \textbf{0 / 0} \\
 \hline
 Admission Queue Worker & \textbf{50} & \textbf{50 / 50} & 3361.1 / 4079.2 & 11.57 essays/s & \textbf{0 / 0} \\
@@ -493,62 +462,55 @@ HTTP \texttt{POST /api/essays} & 20 & \textbf{20 / 20} & 514.2 / 659.4 & \textbf
 \hline
 HTTP \texttt{POST /api/essays} & \textbf{50} & \textbf{50 / 50} & 1530.2 / 1948.0 & 24.49 req/s & \textbf{0 / 0} \\
 \hline
-\end{longtable}
+\end{tabular}
+\end{table}
 }
 
-To validate live production memory behavior on long theses without disk-cache assistance, Table~\ref{tab:nfr-grobid-prod} compares the legacy $3\text{\,GiB}$ GROBID container (\texttt{-Xmx1280m}, \texttt{concurrency=10}, \texttt{teiCoordinates} enabled) against the tuned $4\text{\,GiB}$ production deployment (\texttt{-Xmx768m}, \texttt{concurrency=2}, \texttt{pdfalto=1024\,MB}, \texttt{teiCoordinates} omitted) on the live Google Compute Engine VM (\texttt{e2-custom-medium-6144}, 2 vCPU, $5.8\text{\,GiB}$ RAM) using this 117-page ($10.63\text{\,MB}$) graduation report with TEI caching disabled. Rebalancing the container budget above GROBID's $3.1\text{\,GiB}$ native Wapiti working set eliminates cgroup swap entirely ($2.19\text{\,GiB} \rightarrow 0\text{\,B}$), cuts major page faults by $99.74\%$ ($91{,}718 \rightarrow 239$), accelerates uncached GROBID parsing by $2.04\times$ cold ($95.53\text{\,s} \rightarrow 46.93\text{\,s}$) and $5.48\times$ warm ($17.44\text{\,s}$), and sustains two simultaneous 117-page theses in $31.31\text{\,s}$ total wall time with $100\%$ extraction parity ($46$ references, $73$ in-text citations) and $885\text{\,MiB}$ of host RAM still available.
+To validate live production memory behavior on long manuscripts without disk-cache assistance, Table~\ref{tab:nfr-grobid-prod} compares the legacy $3\text{\,GiB}$ GROBID container (\texttt{-Xmx1280m}, \texttt{concurrency=10}, \texttt{teiCoordinates} enabled) against the tuned $4\text{\,GiB}$ production deployment (\texttt{-Xmx768m}, \texttt{concurrency=2}, \texttt{pdfalto=1024\,MB}, \texttt{teiCoordinates} omitted) on the live Google Compute Engine VM using a 117-page ($10.63\text{\,MB}$) draft of this report with TEI caching disabled. Sizing the container above GROBID's $3.1\text{\,GiB}$ native Wapiti working set eliminates cgroup swap ($2.19\text{\,GiB} \rightarrow 0\text{\,B}$), reduces major page faults by $99.74\%$ ($91{,}718 \rightarrow 239$ boot baseline with $+0$ run delta), speeds up uncached GROBID parsing $5.48\times$ warm ($95.53\text{\,s} \rightarrow 17.44\text{\,s}$), and sustains two concurrent 117-page theses in $31.31\text{\,s}$ wall time with $885\text{\,MiB}$ host RAM remaining. Finally, the remaining NFRs pass quantitatively: \texttt{NFR-07} achieves WCAG 2.1 AA contrast and $0\text{\,px}$ overflow across 5 Playwright viewports; \texttt{NFR-08} compiles the entry bundle at $231.50\text{\,kB}$ ($67.50\text{\,kB}$ gzipped $\le 250\text{\,kB}$); \texttt{NFR-09} executes $3{,}099$ automated checks ($0$ failures); and \texttt{NFR-10} brings all 3 Docker containers healthy within $\le 60\text{\,s}$ warm ($\le 120\text{\,s}$ cold model preload) with $0$ GPU dependencies.
 
 {\setlength{\tabcolsep}{3.5pt}
-\begin{longtable}{|L{0.28}|C{0.15}|C{0.14}|C{0.14}|C{0.14}|C{0.15}|}
-\caption{Live production GCE VM benchmark of uncached GROBID parsing on a 117-page ($10.63\text{\,MB}$) thesis before and after memory and pool optimization.}\label{tab:nfr-grobid-prod}\\
+\begin{table}[!htbp]
+\centering
+\caption{Live production GCE VM benchmark of uncached GROBID parsing on a 117-page ($10.63\text{\,MB}$) draft thesis before and after memory optimization.}\label{tab:nfr-grobid-prod}
+\begin{tabular}{|L{0.28}|C{0.15}|C{0.13}|C{0.16}|C{0.13}|C{0.15}|}
 \hline
 \textbf{Production Configuration} & \textbf{GROBID Time} & \textbf{Swap Peak} & \textbf{Major Faults} & \textbf{TEI Size} & \textbf{Refs / Cits} \\
 \hline
-\endfirsthead
-\multicolumn{6}{c}{\itshape Table \thetable\ (continued from previous page)}\\
-\hline
-\textbf{Production Configuration} & \textbf{GROBID Time} & \textbf{Swap Peak} & \textbf{Major Faults} & \textbf{TEI Size} & \textbf{Refs / Cits} \\
-\hline
-\endhead
-\hline
-\multicolumn{6}{r}{\itshape Continued on next page}\\
-\endfoot
-\hline
-\endlastfoot
 Legacy \texttt{3G} (\texttt{-Xmx1280m}, pool 10) & 95.53\,s & 2.19\,GiB & 91,718 & 236.3\,kB & 46 / 73 \\
 \hline
-\textbf{Tuned \texttt{4G} --- Cold JIT (uncached)} & \textbf{46.93\,s} ($2.04\times$) & \textbf{0\,B} & \textbf{239} & \textbf{227.3\,kB} & \textbf{46 / 73} \\
+\textbf{Tuned \texttt{4G} --- Cold JIT (uncached)} & \textbf{46.93\,s} ($2.04\times$) & \textbf{0\,B} & \textbf{239 (+0 run)} & \textbf{227.3\,kB} & \textbf{46 / 73} \\
 \hline
-\textbf{Tuned \texttt{4G} --- Warm JIT (uncached)} & \textbf{17.44\,s} ($5.48\times$) & \textbf{0\,B} & \textbf{239} & \textbf{227.3\,kB} & \textbf{46 / 73} \\
+\textbf{Tuned \texttt{4G} --- Warm JIT (uncached)} & \textbf{17.44\,s} ($5.48\times$) & \textbf{0\,B} & \textbf{239 (+0 run)} & \textbf{227.3\,kB} & \textbf{46 / 73} \\
 \hline
-\textbf{Tuned \texttt{4G} --- 2$\times$ Concurrent (234\,pp.)} & \textbf{31.31\,s wall} & \textbf{0\,B} & \textbf{239} & \textbf{227.3\,kB} & \textbf{46 / 73 ($\times 2$)} \\
+\textbf{Tuned \texttt{4G} --- 2$\times$ Concurrent (234\,pp.)} & \textbf{31.31\,s wall} & \textbf{0\,B} & \textbf{239 (+0 run)} & \textbf{227.3\,kB} & \textbf{46 / 73 ($\times 2$)} \\
 \hline
-\end{longtable}
+\end{tabular}
+\end{table}
 }
 
-\rqanswer{RQ5}{CITRA processes a 50-page capstone report in $1.33\text{\,s}$ ($P_{90}$ warm-cache; $9.41\text{\,s}$ cold WAN) within a $1.03\text{\,GB}$ API peak RAM budget, achieves a $19.41\times$ warm-cache speedup, eliminates GROBID swap thrashing on the 2-vCPU production VM ($95.53\text{\,s} \rightarrow 17.44\text{\,s}$ warm uncached on a 117-page thesis with $0\text{\,B}$ swap and $99.74\%$ fewer major page faults), and sustains 50 simultaneous uploads with zero SQLite lock or HTTP 5xx errors.}
+\rqanswer{RQ5}{CITRA verifies a 50-page capstone report in $1.33\text{\,s}$ ($P_{90}$ warm cache) and $12.64\text{\,s}$ median cold WAN ($32/32$ live queries, passing the $15\text{\,s}$ \texttt{NFR-01} SLA; $151.2\times$ retrieval speedup), bounds API RSS at $1.03\text{\,GB}$, eliminates GCE GROBID swap ($95.53\text{\,s} \rightarrow 17.44\text{\,s}$, $0\text{\,B}$ swap), satisfies \texttt{NFR-07}--\texttt{NFR-10}, and handles 50-user I/O bursts with $0$ SQLite locks or HTTP 5xx errors.}
 
 \section{Threats to Validity}
 \label{sec:difficulties}
 
-Following Wohlin et al.~\cite{wohlin2012experimentation}, four categories of methodological threats to validity are analyzed below.
+Following Wohlin et al.~\cite{wohlin2012experimentation}, we examine genuine methodological threats across all four validity dimensions.
 
 \subsection{Internal Validity}
 
-Because no human-annotated corpus of $10^5$ naturally occurring citation hallucinations exists publicly, the 120,000-sample benchmark uses programmatic perturbations of real papers. A potential threat is that synthetic perturbations could introduce shortcut artifacts. This threat was mitigated by partitioning base papers strictly before perturbation ($0\%$ ID/title overlap), ensuring non-zero Sentence-BERT scores across all four classes ($P(\texttt{verified} \mid \text{score} > 0) = 54.06\%$), forbidding \texttt{np.clip} feature truncation, splicing real authors and titles from the same research domain, and validating the exact same model weights on 120 unperturbed raw references and 310 real PDFs.
+The 120,000-sample benchmark programmatically perturbs real records into feature configurations aligned with our verification taxonomy; consequently, its $99.67\%$ accuracy measures \emph{controlled decision-layer consistency} rather than noise-free real-world accuracy. We transparently paired this benchmark with a live 15-API evaluation on 120 unperturbed/perturbed raw references ($89.17\%$), where upstream API throttling and unindexed regional DOIs account for the $10.5$-point gap. In \textbf{RQ2}, Categories 1 and 3 intentionally test features (\texttt{is\_retracted}, \texttt{url\_status}) outside \texttt{B5}'s 16D vector, and Category 6 replicates 10 statutory templates $\times 40$; we therefore report i.i.d.\ Categories 1--5 ($N=2{,}000$) separately from Category 6. Finally, while \texttt{Train/Val/Test} splits are strictly paper- and title-disjoint with live Sentence-BERT scores across all classes, adversarial student evasions targeting borderline similarity $[0.40, 0.60)$ remain an open arms race.
 
 \subsection{External Validity}
 
-The offline FTS5 database (\texttt{local\_papers.db}) consists primarily of computer science and NLP papers ($98.42\%$ ACL Anthology). Consequently, offline-only mode has lower recall on biomedical, humanities, or economics papers. In connected deployments, \textbf{CITRA} mitigates this domain skew by routing queries dynamically across 15+ multidisciplinary APIs (Crossref, OpenAlex, Europe PMC, NCBI/bioRxiv, DOAJ, DataCite, OpenLibrary, and \texttt{VNLegalVerifier}), confirmed by the $100.00\%$ result across six disciplines in \textbf{RQ4}.
+First, $98.42\%$ ($127{,}102/129{,}137$) of \texttt{local\_papers.db} originates from ACL Anthology, limiting offline recall outside computational linguistics; connected deployments rely on 15+ live APIs (where live accuracy ranged from $80\%$ in Economics/Engineering to $95\%$ in CS/AI and Biomedicine). Second, specialized legal and surname logic targets English and Vietnamese manuscripts; other languages rely on generic lexical and multilingual embeddings. Third, bulk 310-PDF linking ran in PyMuPDF-only mode ($70.1\%$ linking on 220 diverse open-access articles), reflecting lower-bound parsing without GROBID. Fourth, commercial paywalled databases (Scopus, Web of Science) are excluded by zero-cost design.
 
 \subsection{Construct Validity}
 
-Construct validity concerns whether evaluation metrics reflect real academic integrity needs. First, commercial publisher paywalls often hide full article text and occasionally omit public abstracts; when an inline claim cites a specific table inside a paywalled body section absent from the abstract, sentence-level abstract alignment cannot verify or refute that detail. Second, CIS rubric weights represent an institutional grading policy rather than physical constants, although simplex sensitivity testing confirmed high rank stability ($\rho = 0.9987$).
+Four construct threats apply. First, commercial paywalls obscure full-text body sections, restricting claim verification to titles and open abstracts. Second, CIS weights represent an institutional policy rather than an empirically fitted faculty grading rubric, and omitting all DOIs/URLs yields $s_{\text{id}} = 1.00$ while \texttt{unresolved} references receive $0$ penalty in $s_{\text{meta}}$ (requiring instructors to inspect \texttt{num\_unresolved} alongside CIS). Third, line-by-line auditing of the 21 real PDFs (329 references) was performed by the project authors rather than blinded external annotators, so inter-rater Cohen's $\kappa$ is not yet established. Fourth, \textbf{RQ1} compares against single-cue ablations and linear MLR (\texttt{B5}); benchmarking non-linear tree ensembles (XGBoost) and retrieval-augmented LLM-as-a-Judge baselines~\cite{hu2024refchecker}, \cite{press2024citeme} remains future work.
 
 \subsection{Conclusion Validity}
 
-To guard against Type I errors from multiple baseline comparisons and skewed error distributions, all accuracy comparisons used paired continuity-corrected McNemar tests with Holm--Bonferroni family-wise error control ($\alpha = 0.05$), 1,000-resample paired bootstrap confidence intervals, and exact Clopper--Pearson binomial bounds for zero-count cells.
+Although pairwise \textbf{RQ1}/\textbf{RQ2} comparisons apply continuity-corrected McNemar tests, Holm--Bonferroni control, Wilcoxon signed-rank tests, bootstrap intervals, and Clopper--Pearson bounds, three statistical limitations must be noted: (i)~small sample sizes in Table~\ref{tab:nfr-step-latency} ($n = 5$) and Table~\ref{tab:nfr-cold-warm-cache} ($n = 3$ cold WAN) render tail percentile ($P_{99}$) estimates approximate; (ii)~probability clipping at $\text{max\_prob} = 0.99$ induces tie saturation causing a slight selective-accuracy dip at $50\%$ coverage ($99.60\%$); and (iii)~Table~\ref{tab:nfr-deadline-stress} tests I/O, queue, and SQLite WAL concurrency with stubbed NLP, whose throughput ($11.57\text{\,essays/s}$) must not be conflated with full CPU AI throughput ($\sim 0.24$--$2.2\text{\,essays/s}$).
 
 \section{Chapter Summary}
 
-This chapter verified \textbf{CITRA} (\texttt{v3.90.9}) across 2,945+ automated checks, a full Requirements Traceability Matrix, and five empirical research questions, demonstrating $99.67\%$ in-distribution accuracy ($\text{ECE} = 0.0405$), $99.96\%$ OOD symbolic accuracy, $100.00\%$ six-domain E2E gold accuracy, zero-swap production GROBID scaling, and zero-error 50-user burst scalability. Chapter~\ref{chap:conclusion} summarizes achievements, current limitations, and future research directions.
+This chapter verified \textbf{CITRA} (\texttt{v3.90.9}) across 3,099 automated checks (2,430+ backend \texttt{pytest} [2,437 default], 494 \texttt{Vitest}, 168 \texttt{Playwright}), a complete 20-FR/10-NFR traceability matrix, and five research questions---demonstrating $99.67\%$ controlled decision accuracy ($\text{ECE} = 0.0405$), $99.95\%$ i.i.d.\ OOD accuracy, $89.17\%$ live 15-API raw-reference accuracy ($98.36\%$ verified F1; $100.00\%$ offline), $12.64\text{\,s}$ real 50-page cold-WAN compliance, zero-swap GCE GROBID parsing ($95.53\text{\,s} \rightarrow 17.44\text{\,s}$), and zero-error 50-user I/O burst handling. Chapter~\ref{chap:conclusion} synthesizes achievements, limitations, and future work.

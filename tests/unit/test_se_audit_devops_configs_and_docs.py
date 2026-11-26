@@ -696,7 +696,7 @@ class TestOps10ToOps14ConfigsDocsAndThesisParity:
             ch5 = (REPO_ROOT / thesis_dir / "chapter5_rewritten.tex").read_text(encoding="utf-8")
             phu = (REPO_ROOT / thesis_dir / "PhuLuc.tex").read_text(encoding="utf-8")
             assert "2,430+" in ch1 and "494" in ch1 and "63" in ch1
-            assert "2,430+" in ch5 and "494" in ch5 and "63" in ch5 and "2,945+" in ch5
+            assert "2,430+" in ch5 and "494" in ch5 and "63" in ch5 and "3,099" in ch5
             assert "494" in phu and "63" in phu
             assert "grobid-entrypoint.sh" in phu and "-Xmx768m" in phu and "memory: 4G" in phu
             assert "tab:nfr-grobid-prod" in ch5 and "95.53" in ch5 and "17.44" in ch5
