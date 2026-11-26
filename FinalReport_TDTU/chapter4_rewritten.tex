@@ -5,7 +5,7 @@
 
 \subsection{Eight-Layer Pipeline and Graceful Degradation}
 
-\textbf{CITRA} organizes manuscript verification into an acyclic sequence of eight software layers, summarized in Table~\ref{tab:layers} and illustrated in Figure~\ref{fig:architecture}. Each layer accepts typed data structures and emits explicit status metadata so individual stages can be unit-tested or replaced independently.
+\textbf{CITRA} organizes manuscript verification into an acyclic sequence of eight software layers, summarized in Table~\ref{tab:layers}, mapped to source packages in Appendix~\ref{app:packages}, and illustrated in Figure~\ref{fig:architecture}. Each layer accepts typed data structures and emits explicit status metadata so individual stages can be unit-tested or replaced independently.
 
 {\setlength{\tabcolsep}{3.5pt}
 \begin{longtable}{|L{0.18}|L{0.34}|L{0.48}|}
@@ -24,69 +24,69 @@
 \endfoot
 \hline
 \endlastfoot
-\textbf{1. Extraction} & \texttt{document\_parser}, \texttt{grobid\_parser}, \texttt{grobid\_adapter}, \texttt{docx\_parser}, \texttt{patterns/*}, \texttt{style\_detector} & Parse PDF, DOCX, BibTeX, and RIS inputs into body text, contextual in-text markers, and bibliography entries across \textbf{12 styles}. \\
+\textbf{1. Extraction} & \texttt{document\_parser}, \texttt{grobid\_parser}, \texttt{grobid\_adapter}, \texttt{docx\_parser}, \texttt{patterns/*}, \texttt{style\_detector} & Parse PDF, DOCX, BibTeX, and RIS inputs into body text, contextual in-text markers, and bibliography entries across \textbf{12 formats}. \\
 \hline
 \textbf{2. Merging} & \texttt{integrity\_pipeline.\_merge\_citations} & Deduplicate in-text, bibliography, and appendix citations into unique referenced works while keeping all inline occurrences. \\
 \hline
-\textbf{3. Linking} & \texttt{citation\_linker}, \texttt{duplicate\_detector}, \texttt{statuses} & Reconstruct the bipartite graph between inline markers and bibliography entries across \textbf{7 resolution methods} and \textbf{8 statuses}. \\
+\textbf{3. Linking} & \texttt{citation\_linker}, \texttt{duplicate\_detector}, \texttt{statuses} & Reconstruct the bipartite graph between inline markers and bibliography entries across \textbf{7 automated methods} and \textbf{8 statuses}. \\
 \hline
-\textbf{4. Retrieval} & \texttt{retrieval\_orchestrator}, \texttt{local\_db}, \texttt{link\_validator}, \texttt{html\_meta\_verifier}, 15+ clients & Route queries across offline SQLite FTS5, \textbf{15+ live APIs}, Retraction Watch, and SSRF-safe HTTP/Wayback/HTML checks. \\
+\textbf{4. Retrieval} & \texttt{retrieval\_orchestrator}, \texttt{local\_db}, \texttt{link\_validator}, \texttt{html\_meta\_verifier}, 15+ clients & Route queries across 4 tiers (offline SQLite FTS5, \textbf{15+ live APIs}, specialist/arXiv enrichment, optional search) plus SSRF-safe HTTP/Wayback/HTML checks. \\
 \hline
 \textbf{5. Matching} & \texttt{features}, \texttt{fuzzy}, \texttt{semantic}, \texttt{author\_matcher}, \texttt{venue\_normalizer} & Compute lexical similarity, metadata distances, SBERT sentence-pooled alignment, stance, and ONNX INT8 \texttt{VI}$\leftrightarrow$\texttt{EN} scores. \\
 \hline
-\textbf{6. Verification} & \texttt{neuro\_symbolic\_checker}, \texttt{rules}, \texttt{vn\_legal\_verifier}, \texttt{calibration} & Evaluate Order 0 + 16 symbolic rule groups (\textbf{68 rule IDs}) blended with 16D Logistic Regression and Platt calibration. \\
+\textbf{6. Verification} & \texttt{neuro\_symbolic\_checker}, \texttt{rules}, \texttt{vn\_legal\_verifier}, \texttt{calibration} & Evaluate Order 0 + 16 symbolic rule groups (\textbf{68 \texttt{R-*} IDs}) blended with 16D Logistic Regression and Platt calibration. \\
 \hline
 \textbf{7. Scoring \& Export} & \texttt{cis}, \texttt{explanation}, \texttt{bibliography\_formatter}, \texttt{docx\_exporter} & Compute the \textbf{five-component CIS}, render bilingual explanations, and export sanitized reports and repaired \texttt{.docx} files. \\
 \hline
-\textbf{8. Presentation} & FastAPI \texttt{api/*}, React/TypeScript \texttt{web/src/*} & Serve SSE progress, six diagnostic report views, classroom analytics, inline teacher overrides, and admin health controls. \\
+\textbf{8. Presentation} & FastAPI \texttt{api/*}, React/TypeScript \texttt{web/src/*} & Serve SSE progress, four primary report tabs with progressive logic traces, classroom analytics, teacher overrides, and admin health controls. \\
 \hline
 \end{longtable}
 }
 
-\begin{figure}[H]
+\begin{figure}[!htbp]
     \centering
     \includegraphics[width=\textwidth,keepaspectratio]{picture/figures/fig4_1_architecture.png}
-    \caption[Eight-layer software architecture and graceful degradation contracts]{Eight-layer software architecture of CITRA (\texttt{v3.90.9}) showing inter-layer contracts and graceful degradation fallbacks.}
+    \caption[Eight-layer software architecture and graceful degradation contracts]{Eight-layer software architecture of CITRA (\texttt{v3.90.9}) showing typed inter-layer contracts and graceful degradation fallbacks.}
     \label{fig:architecture}
 \end{figure}
 
-Every layer enforces a strict \emph{graceful degradation contract}. If the GROBID container is unreachable, Layer 1 falls back automatically to two-column PyMuPDF and regex parsing. Similarly, if live registries return HTTP 429 or time out, Layer 4 falls back to the 129,137-record offline FTS5 index and records \texttt{api\_exhausted = True}, while Layer 6 emits \texttt{unresolved} rather than guessing whenever evidence remains incomplete.
+Every layer enforces a strict \emph{graceful degradation contract}. If the GROBID container is unreachable, Layer 1 falls back automatically to two-column PyMuPDF and regex parsing. If live registries return HTTP 429 or time out, Layer 4 relies on the 129,137-record offline FTS5 index and records \texttt{api\_exhausted = True}, while Layer 6 routes incomplete evidence safely to \texttt{unresolved} rather than guessing.
 
 \subsection{Software Design Patterns}
 
 Five classical object-oriented and cloud resilience patterns keep the codebase modular and maintainable:
 \begin{itemize}
-    \item \textbf{Strategy and Priority Registry (\texttt{extraction/patterns/}):} Twelve citation-style parsers inherit from the \texttt{CitationFormat} base class and register integer priorities so style-specific rules remain isolated from the document reader.
-    \item \textbf{Adapter (\texttt{grobid\_adapter.py} \& API Clients):} Heterogeneous external formats (GROBID TEI-XML, Crossref JATS XML, OpenAlex inverted abstract indices, arXiv Atom XML, and BibTeX) are normalized into uniform internal \texttt{Citation} and \texttt{ScholarlyCandidate} objects.
-    \item \textbf{Chain of Responsibility (\texttt{CitationLinker} \& \texttt{SymbolicRules}):} Both the seven-method linker and the 16-group symbolic verifier evaluate ordered handlers and short-circuit as soon as a decisive condition fires.
-    \item \textbf{Circuit Breaker and Token-Bucket Rate Limiter (\texttt{retrieval/}):} Each external API client is wrapped in a state machine (\texttt{closed} $\rightarrow$ \texttt{open} $\rightarrow$ \texttt{half\_open}) and a thread-safe rate limiter so a slow or failing upstream provider is temporarily bypassed without stalling concurrent essays.
-    \item \textbf{Singleflight Request Coalescing:} Identical normalized queries arriving concurrently across batch uploads share a single in-flight HTTP coroutine before persisting the result in \texttt{citation\_cache}.
+    \item \textbf{Strategy and Priority Registry (\texttt{extraction/patterns/}):} Eleven international citation-style parsers subclass \texttt{CitationFormat} and register descending integer priorities ($100 \rightarrow 70$, higher value = higher priority), complemented by a dedicated Vietnamese statutory extractor (\texttt{parse\_vn\_legal\_reference} / \texttt{VNLegalVerifier}) for twelve supported formats.
+    \item \textbf{Adapter (\texttt{grobid\_adapter.py} \& API Clients):} Heterogeneous external schemas (GROBID TEI-XML, Crossref JATS XML, OpenAlex inverted abstract indices, arXiv Atom XML, and BibTeX) are normalized into uniform internal \texttt{Citation} and \texttt{SourceCandidate} objects.
+    \item \textbf{Chain of Responsibility (\texttt{CitationLinker} \& \texttt{SymbolicRules}):} Both the seven-method linker and the 16-group symbolic verifier evaluate ordered handlers and short-circuit immediately upon a decisive match or violation.
+    \item \textbf{Circuit Breaker and Rate Limiter (\texttt{retrieval/}):} Each external API client is wrapped in a per-provider state machine (\texttt{closed} $\rightarrow$ \texttt{open} $\rightarrow$ \texttt{half\_open}) and an async rate limiter (token-bucket or event-loop slot reservation) so failing providers are bypassed without stalling concurrent essays.
+    \item \textbf{Singleflight Request Coalescing:} Identical normalized queries arriving concurrently across batch uploads share one in-flight HTTP coroutine before persisting results in \texttt{citation\_cache}.
 \end{itemize}
 
 \section{Extraction Layer}
 
 \subsection{Multi-Format Document Parsing}
 
-Manuscript ingestion (\texttt{DocumentParser}) handles four input formats: PDF, DOCX, BibTeX, and RIS. For PDF files, the primary \texttt{grobid\_hybrid} path submits the binary stream to GROBID \texttt{0.9.1-crf}~\cite{Lopez2009}, extracting body paragraphs, inline \texttt{<ref type="bibr">} pointers, sentence windows, and \texttt{<biblStruct>} entries. Two post-processors correct recurring student-report artifacts in GROBID output: (1) a \emph{table-of-contents (TOC) and dot-leader filter} discards numbered chapter headings that mimic numbered references, and (2) a \emph{regex field-enrichment pass} recovers URLs, publishers, Vietnamese statutory codes, and humanities page ranges omitted from TEI-XML tags.
+Manuscript ingestion (\texttt{DocumentParser}) handles four formats: PDF, DOCX, BibTeX, and RIS. For PDFs, the primary \texttt{grobid\_hybrid} path submits the binary stream to GROBID \texttt{0.9.1-crf}~\cite{Lopez2009}, extracting body paragraphs, inline \texttt{<ref type="bibr">} pointers, sentence windows, and \texttt{<biblStruct>} entries. Two deterministic post-processors correct student-report artifacts: (1)~a \emph{table-of-contents (TOC) and dot-leader filter} discards numbered headings that mimic numbered references, and (2)~a \emph{regex field-enrichment pass} recovers URLs, publishers, Vietnamese statutory numbers, and humanities page ranges omitted from TEI-XML tags.
 
-When GROBID is disabled or encounters non-standard word-processor layouts, \texttt{DocumentParser} falls back to a two-column geometry-aware PyMuPDF~\cite{PyMuPDF2024} and \texttt{pdfplumber}~\cite{Pdfplumber2024} pipeline. Pages with near-zero extractable character density trigger selective Tesseract Vietnamese/English OCR, whereas legacy Vietnamese encodings (VNI and TCVN3) are normalized to NFC Unicode. Native \texttt{.docx} manuscripts are parsed directly via \texttt{python-docx} paragraph styles and XML numbering properties without intermediate PDF conversion loss.
+When GROBID is disabled or encounters non-standard layouts, \texttt{DocumentParser} falls back to a two-column geometry-aware PyMuPDF~\cite{PyMuPDF2024} and \texttt{pdfplumber}~\cite{Pdfplumber2024} pipeline. Inside \texttt{mupdf\_parser.py}, pages with near-zero extractable character density automatically invoke selective Tesseract Vietnamese/English OCR (bypassing the legacy \texttt{fallback\_to\_ocr: false} default in \texttt{config.yaml} so scanned PDFs remain readable), while legacy Vietnamese encodings (VNI, TCVN3) normalize to NFC Unicode. Native \texttt{.docx} manuscripts parse directly via \texttt{python-docx} paragraph styles and XML numbering properties without intermediate PDF loss.
 
-To prevent memory swap thrashing on constrained production virtual machines (2 vCPU, $5.8\text{\,GiB}$ RAM), GROBID \texttt{0.9.1-crf}---whose native Wapiti CRF models consume approximately $3.1\text{\,GiB}$ of off-heap memory---is launched via a POSIX configuration wrapper (\texttt{scripts/\allowbreak grobid-entrypoint.sh}) inside a $4\text{\,GiB}$ container paired with a bounded G1GC JVM heap (\texttt{-Xmx768m} with \texttt{-XX:+ExitOnOutOfMemoryError}), an engine pool capped at \texttt{concurrency=2} (\texttt{poolMaxWait=30}), \texttt{modelPreload=true}, and a \texttt{pdfalto} ceiling of $1{,}024\text{\,MB}$. On the HTTP client path, \texttt{call\_grobid\_fulltext()} omits unused bounding-box serialization (\texttt{teiCoordinates}) by default (remaining opt-in via \texttt{GrobidConfig.tei\_coordinates} with hash-namespaced \texttt{.coords-*} TEI cache keys), enforces separate connect and read timeouts, fails fast in a single attempt on \texttt{ReadTimeout}, \texttt{SSLError}, and non-transient client errors, and retries only transient connection or HTTP 502--504 failures outside the concurrency semaphore.
+To prevent memory swap thrashing on constrained production virtual machines (2 vCPU, $5.8\text{\,GiB}$ RAM), GROBID \texttt{0.9.1-crf}---whose native Wapiti CRF models occupy approximately $3.1\text{\,GiB}$ off-heap---launches via \texttt{scripts/\allowbreak grobid-entrypoint.sh} inside a $4\text{\,GiB}$ container with a bounded G1GC JVM heap (\texttt{-Xmx768m} with \texttt{-XX:+ExitOnOutOfMemoryError}), \texttt{concurrency=2} (\texttt{poolMaxWait=30}), \texttt{modelPreload=true}, and a $1{,}024\text{\,MB}$ \texttt{pdfalto} ceiling. On the HTTP client path, \texttt{call\_grobid\_fulltext()} omits unused bounding-box coordinates (\texttt{teiCoordinates}) by default (opt-in via \texttt{GrobidConfig.tei\_coordinates} with hash-namespaced \texttt{.coords-*} TEI cache keys), separates connect and read timeouts, fails fast on \texttt{ReadTimeout}/\texttt{SSLError}, and retries only transient connection or HTTP 502--504 faults outside the concurrency semaphore.
 
-\subsection{Twelve Citation Style Modules and Style Detection}
+\subsection{Twelve Citation Formats and Style Detection}
 
-Bibliography entries and inline markers are matched against twelve modular conventions listed in priority order in Table~\ref{tab:styles} and depicted in Figure~\ref{fig:extraction}. Integer priorities resolve syntactic overlaps (such as bracketed ordinals shared by IEEE, ACM, and Vancouver). In parallel, \texttt{StyleDetector} scores document-wide structural ratios to output a \texttt{StyleProfile} (\texttt{APA-like}, \texttt{IEEE-like}, \texttt{MIXED}, or \texttt{UNKNOWN}); documents mixing incompatible conventions above $30\%$ receive a style-inconsistency flag.
+Bibliography entries and inline markers match eleven priority-ordered \texttt{CitationFormat} subclasses ($100 \rightarrow 70$) plus the dedicated Vietnamese statutory extractor, listed in Table~\ref{tab:styles} and depicted in Figure~\ref{fig:extraction}. In parallel, \texttt{StyleDetector} computes document-wide structural counts to emit a \texttt{StyleProfile} (\texttt{APA-like}, \texttt{IEEE-like}, \texttt{MIXED}, or \texttt{UNKNOWN}); a document receives a \texttt{MIXED} style-inconsistency flag only when at least two incompatible families each exceed $30\%$ of citations and total markers/entries satisfy $\text{total} \ge 5$.
 
 {\setlength{\tabcolsep}{3.5pt}
-\begin{longtable}{|L{0.16}|C{0.12}|L{0.33}|L{0.39}|}
-\caption{Twelve registered citation style extractors and their structural patterns.}\label{tab:styles}\\
+\begin{longtable}{|L{0.16}|C{0.13}|L{0.32}|L{0.39}|}
+\caption{Twelve supported citation formats (11 \texttt{CitationFormat} subclasses plus VN Legal).}\label{tab:styles}\\
 \hline
-\textbf{Style} & \textbf{Priority} & \textbf{In-Text Marker Pattern} & \textbf{Bibliography Entry Pattern} \\
+\textbf{Format} & \textbf{Priority} & \textbf{In-Text Marker Pattern} & \textbf{Bibliography Entry Pattern} \\
 \hline
 \endfirsthead
 \multicolumn{4}{c}{\itshape Table \thetable\ (continued from previous page)}\\
 \hline
-\textbf{Style} & \textbf{Priority} & \textbf{In-Text Marker Pattern} & \textbf{Bibliography Entry Pattern} \\
+\textbf{Format} & \textbf{Priority} & \textbf{In-Text Marker Pattern} & \textbf{Bibliography Entry Pattern} \\
 \hline
 \endhead
 \hline
@@ -116,15 +116,15 @@ Bibliography entries and inline markers are matched against twelve modular conve
 \hline
 \textbf{MLA (9th)} & 70 & \textit{(Author 45)}, \textit{(Author and Coauthor 12)} & Author, First. ``Title.'' \textit{Venue}, vol.\ 1, no.\ 2, 2020, pp.\ 1--15. \\
 \hline
-\textbf{VN Legal} & \textbf{Rule} & \begin{vietnamese}\textit{(Luật số 20/2023/QH15)}\end{vietnamese} & \begin{vietnamese}Quốc hội / Chính phủ. (2023). \textit{Luật / Nghị định / Thông tư}.\end{vietnamese} \\
+\textbf{VN Legal} & \textbf{Helper} & \begin{vietnamese}\textit{(Luật số 20/2023/QH15)}\end{vietnamese} & \begin{vietnamese}Quốc hội / Chính phủ. (2023). \textit{Luật / Nghị định / Thông tư}.\end{vietnamese} \\
 \hline
 \end{longtable}
 }
 
-\begin{figure}[H]
+\begin{figure}[!htbp]
     \centering
     \includegraphics[width=\textwidth,keepaspectratio]{picture/figures/fig4_2_extraction.png}
-    \caption[Multi-format extraction pipeline across PDF, DOCX, BibTeX, and RIS]{Extraction layer architecture combining GROBID \texttt{0.9.1-crf} TEI-XML, TOC filtering, two-column PyMuPDF fallback, selective OCR, and twelve style parsers.}
+    \caption[Multi-format extraction pipeline across PDF, DOCX, BibTeX, and RIS]{Extraction layer architecture combining GROBID \texttt{0.9.1-crf} TEI-XML, TOC filtering, two-column PyMuPDF fallback, selective OCR, and twelve citation formats.}
     \label{fig:extraction}
 \end{figure}
 
@@ -132,22 +132,37 @@ Bibliography entries and inline markers are matched against twelve modular conve
 
 \subsection{Work-Level Citation Merging}
 
-Extraction yields three raw lists: body in-text markers, bibliography entries, and appendix citations. \texttt{IntegrityPipeline.\_merge\_citations} fuses matching markers and bibliography entries into a deduplicated set of unique referenced works while keeping every inline occurrence attached as a contextual observation. Short Vietnamese family names (such as \textit{Le}, \textit{Vo}, \textit{Do}, \textit{Ho}, and \textit{Ly}) are explicitly preserved during surname normalization so two-letter Vietnamese surnames are never stripped as initials. Compound markers such as \texttt{[9, 10]} or \texttt{(Vaswani et al., 2017; Devlin et al., 2019)} are expanded into individual edges, and composite numbered entries (\texttt{[14] a) ... b) ...}) are split into sub-indexed items (\texttt{14a}, \texttt{14b}).
+Extraction produces body in-text markers, bibliography entries, and appendix citations. \texttt{IntegrityPipeline.\_merge\_citations} merges matching records into unique referenced works while attaching every inline occurrence as a contextual observation. Short two-letter Vietnamese family names (\textit{Le}, \textit{Vo}, \textit{Do}, \textit{Ho}, \textit{Ly}) are explicitly preserved during surname normalization so they are never discarded as initials. Compound markers such as \texttt{[9, 10]} or \textit{(Vaswani et al., 2017; Devlin et al., 2019)} expand into individual edges, and composite numbered entries (\texttt{[14] a) ... b) ...}) split into sub-indexed records (\texttt{14a}, \texttt{14b}).
 
-\subsection{Seven-Method Linker and Eight Mapping Statuses}
+\subsection{Seven-Method Linker, Formal Algorithm, and Mapping Statuses}
 
-Internal structural integrity requires a coherent bipartite graph between inline claims and the reference list. As shown in Figure~\ref{fig:linking}, \texttt{CitationLinker} runs a seven-stage resolution waterfall (plus instructor override) ordered by reliability in Table~\ref{tab:mapping-methods}, and assigns one of eight \texttt{MappingStatus} labels in Table~\ref{tab:mapping-statuses}. Duplicate bibliography entries are detected via exact DOI/arXiv match or $\ge 0.92$ combined title--author--year similarity. When \texttt{ambiguous\_mapping} occurs (for example, two papers by the same first author in the same year lacking \texttt{2024a}/\texttt{2024b} suffixes), downstream verification caps confidence at $0.50$ and forces \texttt{unresolved}.
+Internal structural integrity requires a coherent bipartite graph between inline claims and the bibliography. As formalized in Algorithm~4.1 and depicted in Figure~\ref{fig:linking}, \texttt{CitationLinker} executes seven ordered automated resolution methods (Table~\ref{tab:mapping-methods}, where \texttt{numeric\_index} precedes \texttt{author\_year}, plus \texttt{manual\_review} recorded upon instructor override) and classifies each edge into one of eight \texttt{MappingStatus} states (Table~\ref{tab:mapping-statuses}). Duplicate bibliography entries are flagged via exact DOI/arXiv match or $\ge 0.92$ combined title--author--year similarity. When \texttt{ambiguous\_mapping} occurs (such as two same-author same-year papers lacking \texttt{a}/\texttt{b} suffixes), downstream verification caps confidence at $0.50$ and emits \texttt{unresolved}.
 
-\begin{figure}[H]
+\begin{citraalgo}{4.1}{\texttt{BidirectionalCitationLink}$(\mathcal{M}, \mathcal{B})$}{alg:linker}
+\textbf{Input:} In-text markers $\mathcal{M} = \{m_1, \dots, m_k\}$, bibliography entries $\mathcal{B} = \{r_1, \dots, r_N\}$.\\
+\textbf{Output:} Directed links $\mathcal{L}$, uncited set $\mathcal{U} \subseteq \mathcal{B}$, duplicate pairs $\mathcal{D}$.\\
+1.\quad Build lookup indices on $\mathcal{B}$: $I_{\text{tei}}$ (\texttt{xml:id}), $I_{\text{doi}}$ (normalized DOI), $I_{\text{arxiv}}$ (canonical arXiv ID), $I_{\text{num}}$ (ordinal), and $I_{\text{ay}}$ (surname, year, suffix).\\
+2.\quad Detect duplicate bibliography entries $\mathcal{D} \leftarrow \texttt{DuplicateDetector}(\mathcal{B})$ (exact DOI/arXiv or similarity $\ge 0.92$).\\
+3.\quad $\mathcal{L} \leftarrow \emptyset$; $\mathcal{C}_{\text{cited}} \leftarrow \emptyset$.\\
+4.\quad \textbf{for each} $m \in \mathcal{M}$ \textbf{do}\\
+5.\quad\quad Try in strict priority order: (a)~$I_{\text{tei}}[m]$ ($0.98$); (b)~$I_{\text{doi}}[m]$ ($0.95$); (c)~$I_{\text{arxiv}}[m]$ ($0.95$); (d)~$I_{\text{num}}[m]$ ($0.90$); (e)~$I_{\text{ay}}[m]$ ($0.90$); (f)~fuzzy token match $\ge \tau_{\text{fuzz}}$ ($0.65$).\\
+6.\quad\quad \textbf{if} single target $r^*$ found \textbf{then}\\
+7.\quad\quad\quad $\text{status} \leftarrow \texttt{in\_text\_mismatch}$ if $m$ and $r^*$ disagree on year/surname, else \texttt{matched}; record $(m, r^*, \text{status})$ in $\mathcal{L}$ and add $r^*$ to $\mathcal{C}_{\text{cited}}$.\\
+8.\quad\quad \textbf{else if} multiple tied targets found \textbf{then} record $(m, \bot, \texttt{ambiguous\_mapping}, \text{conf}=0.0)$ in $\mathcal{L}$.\\
+9.\quad\quad \textbf{else} record $(m, \bot, \texttt{missing\_reference}, \text{method}=\texttt{no\_keys}, \text{conf}=0.0)$ in $\mathcal{L}$.\\
+10.\quad $\mathcal{U} \leftarrow \mathcal{B} \setminus \mathcal{C}_{\text{cited}}$ (tag each $r \in \mathcal{U}$ as \texttt{uncited\_reference}); \textbf{return} $(\mathcal{L}, \mathcal{U}, \mathcal{D})$.
+\end{citraalgo}
+
+\begin{figure}[!htbp]
     \centering
     \includegraphics[width=\textwidth,keepaspectratio]{picture/figures/fig4_3_linking.png}
-    \caption[Seven-method bidirectional citation linking waterfall and eight mapping statuses]{Bidirectional citation linking waterfall across seven automated resolution methods and the resulting eight structural mapping statuses.}
+    \caption[Seven-method bidirectional citation linking waterfall and eight mapping statuses]{Bidirectional citation linking waterfall across seven automated resolution methods (exact code order) and the resulting eight structural mapping statuses.}
     \label{fig:linking}
 \end{figure}
 
 {\setlength{\tabcolsep}{3.5pt}
 \begin{longtable}{|L{0.25}|C{0.15}|L{0.60}|}
-\caption{Ordered resolution methods in \texttt{CitationLinker}.}\label{tab:mapping-methods}\\
+\caption[Ordered resolution methods in \texttt{CitationLinker}]{Ordered resolution methods in \texttt{CitationLinker} (matching live execution order).}\label{tab:mapping-methods}\\
 \hline
 \textbf{Method} & \textbf{Default Conf.} & \textbf{Matching Criterion} \\
 \hline
@@ -166,17 +181,17 @@ Internal structural integrity requires a coherent bipartite graph between inline
 \hline
 \textbf{\texttt{doi\_exact}} & \textbf{0.95} & Identical normalized DOI present in both inline marker and reference entry. \\
 \hline
-\textbf{\texttt{arxiv\_exact}} & \textbf{0.95} & Identical canonical \texttt{arXiv} identifier present on both sides. \\
-\hline
-\textbf{\texttt{author\_year}} & 0.90 & Normalized surname(s), year, and optional suffix (\texttt{a}--\texttt{f}) agree (including MLA author--page inference). \\
+\textbf{\texttt{arxiv\_exact}} & \textbf{0.95} & Identical canonical \texttt{arXiv} identifier extracted from both inline marker and bibliography entry. \\
 \hline
 \textbf{\texttt{numeric\_index}} & 0.90 & Bracketed or superscript ordinal (or expanded range \texttt{[1]--[3]}) matches bibliography index. \\
 \hline
+\textbf{\texttt{author\_year}} & 0.90 & Normalized surname(s), year, and optional suffix (\texttt{a}--\texttt{f}) agree (including MLA author--page inference). \\
+\hline
 \textbf{\texttt{fuzzy}} & 0.65 & Partial title or author token overlap above fallback threshold when exact keys are missing. \\
 \hline
-\textbf{\texttt{no\_keys}} & 0.30 & Insufficient disambiguating keys or tie across multiple entries (\texttt{ambiguous\_mapping}). \\
+\textbf{\texttt{no\_keys}} & \textbf{0.00} & Insufficient disambiguating keys or unresolved tie (\texttt{missing\_reference} / \texttt{ambiguous\_mapping}). \\
 \hline
-\textbf{\texttt{manual\_review}} & \textbf{1.00} & Link explicitly adjudicated by an authorized instructor. \\
+\textbf{\texttt{manual\_review}} & \textbf{1.00} & Link explicitly overridden by an authorized instructor (\texttt{api/routes/verdicts.py}). \\
 \hline
 \end{longtable}
 }
@@ -219,33 +234,36 @@ Internal structural integrity requires a coherent bipartite graph between inline
 
 \section{Federated Retrieval and URL Verification}
 
-\subsection{Domain-Aware Multi-Tier Orchestration}
+\subsection{Domain-Aware Four-Tier Orchestration}
 
-Rather than broadcasting every reference to every external API, \texttt{Retrieval\allowbreak Orchestrator} routes queries through the tiered architecture shown in Figure~\ref{fig:retrieval}:
+Rather than broadcasting every reference to all external APIs, \texttt{Retrieval\allowbreak Orchestrator} routes queries across the four-tier architecture depicted in Figure~\ref{fig:retrieval}:
 \begin{enumerate}
-    \item \textbf{Pre-Screening:} Pure web URLs, software repositories, IETF RFCs, PyPI packages, Hugging Face cards, and Vietnamese legal documents (\texttt{parse\_vn\_legal\_reference} + \texttt{VNLegalVerifier}) are routed directly to specialized technical/legal verifiers.
-    \item \textbf{Tier 0 (Offline Sub-100\,ms Lookup):} Queries first check the 101-paper seminal whitelist (\texttt{\_KNOWN\_PAPERS}) and the local SQLite FTS5 database (\texttt{local\_papers.db}, 129,137 records covering 128,115 unique papers and 82,887 full abstracts) using Okapi BM25 across exact-title, year-constrained, and author-constrained queries.
-    \item \textbf{Tier 1 (Domain-Routed Public APIs):} Using identifier cues (DOI, arXiv ID, ISBN, PMID) and lexical domain regexes (CS/AI, Biomedicine, Books, Repositories), async queries dispatch under configured token-bucket rate limits (\texttt{configs/config.yaml}). Specifically, \textbf{Crossref} ($25\text{\,req/s}$ polite pool + Retraction Watch flags), \textbf{OpenAlex} ($8\text{\,req/s}$), \textbf{DataCite}, \textbf{Global DOI RA}, \textbf{DOAJ}, and \textbf{OpenAIRE/HAL} cover general and open-access venues, while \textbf{DBLP} ($1.5\text{\,req/s}$), \textbf{arXiv} ($1.0\text{\,req/s}$), \textbf{Europe PMC} ($5.0\text{\,req/s}$), \textbf{NCBI/bioRxiv}, \textbf{OpenLibrary / Google Books} ($3.0\text{\,req/s}$), and \textbf{Wikidata / OpenCitations} cover domain-specific records.
-    \item \textbf{Tier 2 (Fallback \& Abstract Recovery):} Zero-hit queries optionally consult the \textbf{Serper / SerpAPI} router, and any winning candidate lacking an abstract triggers a 9-source \texttt{\_enrich\_missing\_abstract} pass so semantic claim alignment retains abstract coverage.
+    \item \textbf{Pre-Screening:} Bare web URLs, software repositories, IETF RFCs, PyPI packages, Hugging Face cards, and Vietnamese legal documents (\texttt{parse\_vn\_legal\_reference} + \texttt{VNLegalVerifier}) bypass scholarly title search and route to dedicated technical/legal verifiers.
+    \item \textbf{Tier 0 (Offline Sub-100\,ms Lookup):} Queries check the 101-paper seminal whitelist (\texttt{\_KNOWN\_PAPERS}) and the local SQLite FTS5 index (\texttt{local\_papers.db}, 129,137 records; 128,115 unique papers; 82,887 abstracts; $98.42\%$ ACL Anthology) using Okapi BM25~\cite{robertson2009bm25}.
+    \item \textbf{Tier 1 (Core Public Registries):} Using DOI, arXiv, ISBN, or title cues, concurrent queries dispatch under configured rate limits to \textbf{Crossref} ($25\text{\,req/s}$ polite pool + Retraction Watch), \textbf{OpenAlex} ($8\text{\,req/s}$), \textbf{DataCite}, \textbf{Global DOI RA}, \textbf{DOAJ}, and \textbf{OpenAIRE/HAL}.
+    \item \textbf{Tier 2 (Domain Specialist \& Stage 2.5 arXiv Enrichment):} Domain-routed queries consult \textbf{DBLP} ($1.5\text{\,req/s}$), \textbf{Europe PMC} ($5.0\text{\,req/s}$), \textbf{NCBI/bioRxiv}, \textbf{OpenLibrary / Google Books} ($3.0\text{\,req/s}$), \textbf{Wikidata / OpenCitations}, \textbf{IETF RFC / PyPI / Hugging Face}, and Stage 2.5 \textbf{arXiv API} ($1.0\text{\,s}$ serialized slot spacing). When the winning candidate omits an abstract, \texttt{\_enrich\_missing\_abstract} queries up to the top three prioritized adapters (\texttt{pool[:3]}) from the nine-source enrichment pool to cap tail latency.
+    \item \textbf{Tier 3 (Optional Commercial Web Fallback):} Zero-hit queries optionally consult the \textbf{Serper / SerpAPI} router only when an operator explicitly configures API credentials.
 \end{enumerate}
 
-\begin{figure}[H]
+\begin{figure}[!htbp]
     \centering
     \includegraphics[width=\textwidth,keepaspectratio]{picture/figures/fig4_4_retrieval.png}
-    \caption[Domain-aware multi-tier retrieval and SSRF-safe URL validation]{Domain-aware retrieval orchestration across Tier 0 (SQLite FTS5 + 101 known papers), Tier 1 (15+ live APIs), Tier 2 fallback, and parallel HTTP/Wayback/HTML verification.}
+    \caption[Domain-aware four-tier retrieval and SSRF-safe URL validation]{Domain-aware four-tier retrieval orchestration across Tier 0 (SQLite FTS5 + 101 known papers), Tier 1 (Core Public APIs), Tier 2 (Specialist \& arXiv), Tier 3 (Optional Search), and parallel HTTP/Wayback/HTML verification.}
     \label{fig:retrieval}
 \end{figure}
 
-\subsection{Consensus, LinkValidator, and SafeHtmlMetaVerifier}
+\subsection{Consensus, Pinned-IP SSRF Guard, and SafeHtmlMetaVerifier}
 \label{sec:consensus}
 
-Returned candidates are deduplicated and scored for multi-source consensus (\texttt{title\_sim} $\ge 0.90$, \texttt{author\_jaccard} $\ge 0.50$, $|\Delta y| \le 1$), inheriting abstracts across agreeing registries when one record omits abstract text. Simultaneously, \texttt{LinkValidator} probes cited URLs via pinned-IP SSRF-safe \texttt{HEAD}/\texttt{GET} requests and Internet Archive Wayback CDX lookups, assigning one of \textbf{six \texttt{LinkStatus} states}: \texttt{alive} (HTTP 200--399), \texttt{restricted\_alive} (HTTP 401/403/405/429 publisher anti-bot/paywall), \texttt{archived\_alive} (dead live link recovered in Wayback Machine), \texttt{dead\_link} (HTTP 404/410 or DNS NXDOMAIN), \texttt{fake\_domain} (RFC 2606 reserved/placeholder domains), or \texttt{unchecked}. For reachable web resources, \texttt{SafeHtmlMetaVerifier} streams up to $128\text{\,KB}$ of HTML (\texttt{MAX\_HTML\_HEAD\_BYTES = 131,072}) to extract Highwire Press (\texttt{citation\_title}, \texttt{citation\_author}, \texttt{citation\_doi}), Dublin Core, OpenGraph, and JSON-LD metadata while detecting bilingual English/Vietnamese ``Soft-404'' error pages disguised under HTTP 200 responses.
+Returned candidates are deduplicated and scored for multi-source consensus (\texttt{title\_sim} $\ge 0.90$, \texttt{author\_jaccard} $\ge 0.50$, $|\Delta y| \le 1$), inheriting abstracts across agreeing registries. Simultaneously, \texttt{LinkValidator} probes cited URLs and Internet Archive Wayback CDX snapshots~\cite{wayback-cdx}, assigning one of \textbf{six \texttt{LinkStatus} states}: \texttt{alive} (HTTP 200--399), \texttt{restricted\_alive} (HTTP 401/403/405/429 anti-bot/paywall), \texttt{archived\_alive} (recovered in Wayback), \texttt{dead\_link} (HTTP 404/410 or NXDOMAIN), \texttt{fake\_domain} (RFC 2606~\cite{rfc2606} reserved/placeholder domains), or \texttt{unchecked}. For live web resources, \texttt{SafeHtmlMetaVerifier} streams up to $128\text{\,KB}$ (\texttt{MAX\_HTML\_HEAD\_BYTES = 131,072}) to extract Highwire Press, Dublin Core, OpenGraph, and JSON-LD metadata while flagging English/Vietnamese ``Soft-404'' pages served under HTTP 200.
+
+To defeat DNS rebinding and internal network probing, all outbound URL fetches route through \texttt{SSRFSafeAsyncNetworkBackend} (\texttt{retrieval/link\_validator.py}). Before initiating any socket, the transport resolves all A/AAAA records via \texttt{socket.getaddrinfo}, restricts ports strictly to $\{80, 443\}$, and rejects the request if \emph{any} resolved address falls inside loopback, link-local, RFC 1918 private, IPv6-mapped IPv4 (\texttt{::ffff:127.0.0.1}), or cloud-metadata (\texttt{169.254.169.254}) blocks. Within \texttt{connect\_tcp()}, the transport dials the validated literal IP address directly while passing the original hostname via TLS Server Name Indication (SNI) and HTTP \texttt{Host} headers so X.509 certificate verification remains intact, repeating full DNS and IP validation on every HTTP 3xx redirect hop.
 
 \section{Lexical, Neural, and Cross-Lingual Matching}
 
 \subsection{Lexical and Bibliographic Field Matching}
 
-Given the top candidate from retrieval, \texttt{FeatureCalculator} computes the structured \texttt{MatchFeatures} signals summarized in Table~\ref{tab:features}. Three domain normalizers prevent false metadata errors on legitimate scholarship. First, colon-delimited subtitle and edition stripping (\textit{2nd ed.}, \textit{Revised edition}) grants $0.95$ title similarity to clean main-title prefixes. Second, arXiv-to-proceedings year reconciliation computes \texttt{year\_distance} as the minimum $|\Delta y|$ across matching preprint and published versions of the same work, while \texttt{VenueNormalizer} expands conference and journal aliases (such as \texttt{NeurIPS} $\leftrightarrow$ \texttt{Advances in Neural Information Processing Systems}).
+Given the winning \texttt{SourceCandidate}, \texttt{FeatureCalculator} computes the structured \texttt{MatchFeatures} signals summarized in Table~\ref{tab:features}. Three domain normalizers eliminate false metadata errors on valid scholarship: colon-delimited subtitle and edition stripping grants $0.95$ title similarity to clean main-title prefixes; arXiv-to-proceedings reconciliation sets \texttt{year\_distance} to the minimum $|\Delta y|$ across preprint and published versions; and \texttt{VenueNormalizer} expands conference/journal aliases (\texttt{NeurIPS} $\leftrightarrow$ \texttt{Advances in Neural Information Processing Systems}).
 
 {\setlength{\tabcolsep}{3.5pt}
 \begin{longtable}{|L{0.28}|C{0.12}|L{0.60}|}
@@ -270,7 +288,7 @@ Given the top candidate from retrieval, \texttt{FeatureCalculator} computes the 
 \hline
 \textbf{\texttt{title\_sim\_max}} & \texttt{float} & Maximum of \texttt{title\_sim\_fuzzy} and \texttt{title\_sim\_semantic}. \\
 \hline
-\textbf{\texttt{author\_jaccard}} & \texttt{float} & Diacritic-folded surname overlap preserving short Vietnamese surnames (\textit{Le}, \textit{Vo}, \textit{Do}). \\
+\textbf{\texttt{author\_jaccard}} & \texttt{float} & Diacritic-folded surname overlap preserving short Vietnamese surnames (\textit{Le}, \textit{Vo}, \textit{Do}, \textit{Ho}, \textit{Ly}). \\
 \hline
 \textbf{\texttt{year\_distance}} & \texttt{int} & Minimum $|y_{\text{cited}} - y_{\text{cand}}|$ across matching preprint/edition records ($999$ if missing). \\
 \hline
@@ -291,12 +309,12 @@ Given the top candidate from retrieval, \texttt{FeatureCalculator} computes the 
 
 \subsection{Dual-Encoder Semantic Alignment and Stance Analysis}
 
-Figure~\ref{fig:matching} illustrates the dual-encoder neural matching pipeline in \texttt{SemanticMatcher}. Monolingual English claims and abstracts are encoded via Sentence-BERT (\texttt{all-MiniLM-L6-v2}, 384D)~\cite{reimers2019sbert} and pooled across abstract sentences via Equation~\eqref{eq:abs-pooling} ($0.65\max + 0.35\text{abs}$), aggregating up to eight inline occurrences per referenced work. Whenever Vietnamese diacritics are detected in the inline sentence while the retrieved abstract is in English (or vice versa), \texttt{SemanticMatcher} automatically invokes the quantized ONNX INT8 \texttt{paraphrase-multilingual-MiniLM-L12-v2} encoder~\cite{reimers2020multilingual} to compute cross-lingual similarity and extract bridged bilingual concept pairs. Claim stance and citation intent (\texttt{background}, \texttt{methodology}, \texttt{result\_comparison}) use verb-agnostic content-stem specificity gating rather than brittle reporting-verb lists, catching polarity-inverting or unrelated factual claims attached to real papers.
+Figure~\ref{fig:matching} illustrates the dual-encoder pipeline in \texttt{SemanticMatcher}. Monolingual English claims and abstracts are encoded with Sentence-BERT (\texttt{all-MiniLM-L6-v2}, 384D)~\cite{reimers2019sbert} and sentence-pooled via Equation~\eqref{eq:abs-pooling} ($0.65\,\max + 0.35\,\mathrm{abs}$, unified across batch and single-sentence fallback paths), aggregating up to eight inline occurrences per work. Whenever bilingual Vietnamese--English text is detected in either direction (\texttt{VI}$\leftrightarrow$\texttt{EN}), \texttt{SemanticMatcher} activates the quantized ONNX INT8 \texttt{paraphrase-multilingual-MiniLM-L12-v2} encoder~\cite{reimers2020multilingual}, augments similarity with a curated bilingual terminology mapper (\texttt{vn\_en\_academic\_bridge}), and applies a calibrated cross-lingual boost (\texttt{cross\_lingual\_sim\_boost = +0.08}, clipped to $[0, 1]$) to offset multilingual cosine compression; non-English/non-Vietnamese pairs use the multilingual encoder directly without heuristic boost. Stance and citation intent (\texttt{background}, \texttt{methodology}, \texttt{result\_comparison}) rely on verb-agnostic content-stem specificity gating to isolate contradicted factual claims.
 
-\begin{figure}[H]
+\begin{figure}[!htbp]
     \centering
     \includegraphics[width=\textwidth,keepaspectratio]{picture/figures/fig4_5_matching.png}
-    \caption[Dual-encoder lexical, semantic, and cross-lingual matching architecture]{Matching layer architecture combining lexical field normalizers, Sentence-BERT sentence-pooled abstract alignment ($0.65\max + 0.35\text{abs}$), stance gating, and ONNX INT8 \texttt{VI}$\leftrightarrow$\texttt{EN} bridging.}
+    \caption[Dual-encoder lexical, semantic, and cross-lingual matching architecture]{Matching layer architecture combining lexical normalizers, Sentence-BERT sentence-pooled abstract alignment ($(0.65\,\max + 0.35\,\mathrm{abs})$), stance gating, and ONNX INT8 \texttt{VI}$\leftrightarrow$\texttt{EN} bridging.}
     \label{fig:matching}
 \end{figure}
 
@@ -304,18 +322,18 @@ Figure~\ref{fig:matching} illustrates the dual-encoder neural matching pipeline 
 
 \subsection{Priority-Ordered Symbolic Decision Tree}
 
-\texttt{NeuroSymbolicChecker} combines neural alignment features with a deterministic symbolic rule engine (\texttt{SymbolicRules}, containing \textbf{68 distinct \texttt{R-*} rule identifiers} across an Order 0 resource pre-screen and 16 priority-ordered scholarly rule groups) and a calibrated machine-learning scorer, as shown in Figure~\ref{fig:neurosymbolic} and detailed in Table~\ref{tab:rules}.
+\texttt{NeuroSymbolicChecker} fuses neural alignment features with a deterministic symbolic decision tree spanning \textbf{68 distinct \texttt{R-*} rule identifiers}---60 defined in \texttt{logic/rules.py} (57 static plus 3 dynamic provenance modifiers) and 8 across \texttt{neuro\_symbolic\_checker.py}, \texttt{vn\_legal\_verifier.py}, and \texttt{cis.py} (taxonomy summarized in Appendix~\ref{app:taxonomy})---paired with a 16-feature Multinomial Logistic Regression scorer and Platt calibrator, illustrated in Figure~\ref{fig:neurosymbolic} and Table~\ref{tab:rules}. As a latency optimization, \texttt{is\_known\_paper()} verifies the 101 canonical works in \texttt{\_KNOWN\_PAPERS} prior to general blending while still validating year, author, and claim stance; general scholarly citations proceed through Order~0 pre-screening and Groups 1--16, summarized visually in the end-to-end guarded decision flow in Figure~\ref{fig:decision-flow}.
 
-\begin{figure}[H]
+\begin{figure}[!htbp]
     \centering
     \includegraphics[width=\textwidth,keepaspectratio]{picture/figures/fig4_6_neurosymbolic.png}
-    \caption[Neuro-symbolic verification engine and logit-space Platt calibration]{Neuro-symbolic verification architecture fusing the 16-group symbolic rule engine (68 rule IDs) with the 16-feature Multinomial Logistic Regression scorer and Platt calibrator.}
+    \caption[Neuro-symbolic verification engine and logit-space Platt calibration]{Neuro-symbolic verification architecture fusing the 16-group symbolic rule engine (68 \texttt{R-*} IDs) with the 16-feature Multinomial Logistic Regression scorer and logit-space Platt calibrator.}
     \label{fig:neurosymbolic}
 \end{figure}
 
 {\setlength{\tabcolsep}{3.5pt}
 \begin{longtable}{|C{0.11}|L{0.33}|L{0.56}|}
-\caption{Evaluation order of symbolic pre-screening and the 16 verification rule groups (68 distinct \texttt{R-*} rule IDs).}\label{tab:rules}\\
+\caption{Evaluation order of symbolic pre-screening and the 16 verification rule groups (68 \texttt{R-*} IDs).}\label{tab:rules}\\
 \hline
 \textbf{Group} & \textbf{Representative Rule ID(s)} & \textbf{Trigger Condition and Verdict Outcome} \\
 \hline
@@ -330,7 +348,7 @@ Figure~\ref{fig:matching} illustrates the dual-encoder neural matching pipeline 
 \endfoot
 \hline
 \endlastfoot
-\textbf{Pre-0} & \texttt{R-URL-RESOURCE}, \texttt{R-WEB-RESOURCE}, \texttt{R-VN-LEGAL-VERIFIED}, \texttt{R-VN-LEGAL-\allowbreak MISMATCH} & Pure web documentation, software/RFC/HF artifact, or Vietnamese statute checked by \texttt{VNLegalVerifier} $\rightarrow$ \textbf{\texttt{resource}} (or \texttt{metadata\_error} if statutory authority/code conflicts). \\
+\textbf{Pre-0} & \texttt{R-URL-RESOURCE}, \texttt{R-WEB-RESOURCE}, \texttt{R-VN-LEGAL-VERIFIED}, \texttt{R-VN-LEGAL-\allowbreak MISMATCH} & Pure web documentation, software/RFC/HF artifact, or Vietnamese statute checked by \texttt{VNLegalVerifier} $\rightarrow$ \textbf{\texttt{resource}} (or \texttt{metadata\_error} / \texttt{suspected\_hallucination} if statutory authority or code conflicts). \\
 \hline
 \textbf{1} & \texttt{R-FAKE-URL}, \texttt{R-FABRICATED-DOI}, \texttt{R-CHIMERIC-DOI-\allowbreak MISMATCH}, \texttt{R-RETRACTED-PAPER} & RFC 2606 fake domain, unregistered DOI prefix, or real DOI resolving to an unrelated title $\rightarrow$ \textbf{\texttt{suspected\_hallucination}}; Retraction Watch flag (\texttt{is\_retracted}) $\rightarrow$ \textbf{\texttt{metadata\_error}}. \\
 \hline
@@ -346,11 +364,11 @@ Figure~\ref{fig:matching} illustrates the dual-encoder neural matching pipeline 
 \hline
 \textbf{7} & \texttt{R-LOCAL\_DB\_VERIFIED}, \texttt{R-LOCAL\_DB\_GOOD\_MATCH} & Offline FTS5 match ($\texttt{title\_sim\_fuzzy} \ge 0.95$, $\texttt{author\_jaccard} \ge 0.80$, $|\Delta y| = 0$) with no DOI conflict $\rightarrow$ \textbf{\texttt{verified}}. \\
 \hline
-\textbf{8} & \texttt{R-WELL-LINKED}, \texttt{R-WELL-LINKED-\allowbreak MODERATE} & Linked citation ($\texttt{matched}$) with strong title/author/year agreement and zero identifier contradiction $\rightarrow$ \textbf{\texttt{verified}}. \\
+\textbf{8} & \texttt{R-WELL-LINKED}, \texttt{R-WELL-LINKED-\allowbreak MODERATE} & Linked citation (\texttt{matched}) with strong title/author/year agreement and zero identifier contradiction $\rightarrow$ \textbf{\texttt{verified}}. \\
 \hline
 \textbf{9} & \texttt{R-DOI-TITLE-\allowbreak MISMATCH} & Live DOI resolves, but title similarity falls in $[0.60, 0.90)$ $\rightarrow$ \textbf{\texttt{metadata\_error}} with mismatched fields isolated. \\
 \hline
-\textbf{10} & \texttt{R-CONSENSUS-FULL}, \texttt{R-CONSENSUS-\allowbreak PARTIAL} & $\ge 2$ registries agree on title ($\ge 0.90$): matching author/year $\rightarrow$ \textbf{\texttt{verified}}; drifted author/year $\rightarrow$ \textbf{\texttt{metadata\_error}}. \\
+\textbf{10} & \texttt{R-CONSENSUS-FULL}, \texttt{R-CONSENSUS-\allowbreak PARTIAL} & $\ge 2$ registries agree on title ($\ge 0.90$) without DOI conflict: matching author/year $\rightarrow$ \textbf{\texttt{verified}}; drifted author/year $\rightarrow$ \textbf{\texttt{metadata\_error}}. \\
 \hline
 \textbf{11} & \texttt{R-SINGLE-SOURCE-\allowbreak VERIFIED}, \texttt{R-BOOK-EDITION-\allowbreak VERIFIED}, \texttt{R-SINGLE-SOURCE-\allowbreak PARTIAL} & Single live registry match ($\ge 0.90$ title, $\ge 0.80$ author, $|\Delta y| \le 1$, or $\le 15\text{\,yr}$ across OpenLibrary book editions) $\rightarrow$ \textbf{\texttt{verified}}; field drift $\rightarrow$ \textbf{\texttt{metadata\_error}}. \\
 \hline
@@ -367,95 +385,117 @@ Figure~\ref{fig:matching} illustrates the dual-encoder neural matching pipeline 
 \end{longtable}
 }
 
-Two provenance safeguards in \texttt{SymbolicRules} prevent overconfident false accusations. First, Group 4 (\texttt{R-NO-SCHOLARLY-RECORD}) fires only when at least two live scholarly APIs return HTTP 200 with zero matches; if APIs fail or hit HTTP 429, Group 5 forces \texttt{unresolved}. Second, when a hallucination suspicion rests purely on registry absence rather than a positive contradiction (such as a chimeric or fake DOI), post-calibration confidence is explicitly capped at $\le 0.88$ to acknowledge finite indexing coverage.
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[width=\textwidth,keepaspectratio]{picture/figures/fig4_7_decision_flow.png}
+    \caption[Guarded neuro-symbolic verification decision flow across Order 0 and Groups 1--16]{End-to-end guarded decision flow tracing how CITRA routes incoming citations through Order 0 pre-screening, high-priority symbolic guardrails (Groups 1--5), evidence scoring (Groups 6--16), and logit-space Platt calibration.}
+    \label{fig:decision-flow}
+\end{figure}
 
-\subsection{16-Feature Logistic Regression and Platt Calibration}
+Two provenance safeguards prevent overconfident false accusations. First, Group 4 (\texttt{R-NO-SCHOLARLY-RECORD}) fires only when $\ge 2$ live registries return clean HTTP 200 empty results; otherwise Group 5 enforces \texttt{unresolved}. Second, any hallucination flag resting purely on registry absence rather than a positive contradiction is capped at $\le 0.88$ post-calibration confidence.
 
-To convert discrete symbolic outcomes into smooth, accurate probabilities, \texttt{HybridMLScorer} extracts a 16-dimensional feature vector $\mathbf{x} \in \mathbb{R}^{16}$ containing ten base features (\texttt{title\_sim\_fuzzy}, \texttt{title\_sim\_semantic}, \texttt{title\_sim\_max}, \texttt{author\_jaccard}, $\exp(-0.5 \min(|\Delta y|, 10))$, \texttt{doi\_exact\_match}, $\min(\text{consensus}, 4)/4$, \texttt{venue\_sim}, \texttt{content\_alignment\_signal}, \texttt{has\_candidate}) and six interaction terms (\texttt{title\_x\_author}, \texttt{title\_x\_year}, \texttt{title\_mismatch\_author}, \texttt{title\_mismatch\_year}, \texttt{doi\_mismatch\_title}, and \texttt{abstention\_zone\_indicator}).
+\subsection{16-Feature Logistic Regression, Formal Algorithm, and Platt Calibration}
 
-A Multinomial Logistic Regression model ($W \in \mathbb{R}^{4 \times 16}, \mathbf{b} \in \mathbb{R}^4$, regularized at $C = 0.25$ with balanced class weights on 84,000 disjoint training citations) outputs $P_{\text{ML}}(y \mid \mathbf{x})$. In \texttt{SymbolicRules}, provenance modifiers (\texttt{R-LOCAL\_DB}: $-0.05$, \texttt{R-API\_EXHAUSTED}: $-0.10$, \texttt{R-LOCAL\_DB\_ONLY}: $-0.15$) first adjust local-only or rate-limited symbolic confidence; \texttt{HybridMLScorer} then blends symbolic confidence $C_{\text{sym}}^{(0)}$ with $P_{\text{ML}}(y_{\text{sym}} \mid \mathbf{x})$ via Equation~\eqref{eq:platt-calib} using $\alpha = 0.72$ (raised automatically to $\alpha = 0.90$ when $C_{\text{sym}}^{(0)} \ge 0.85$ and $|C_{\text{sym}}^{(0)} - P_{\text{ML}}| > 0.45$ so symbolic guardrails on retracted or fake-URL citations are never diluted). Finally, \texttt{PlattCalibrator} ($a = 1.891263, b = 1.138599$, fitted on 18,000 validation citations), document style penalties, and the $\le 0.88$ pure-absence cap produce the final calibrated confidence.
+To convert discrete symbolic outcomes into calibrated probabilities, \texttt{HybridMLScorer.extract\_feature\_vector()} constructs $\mathbf{x} \in \mathbb{R}^{16}$ from ten base signals ($x_1 = t_{\text{fuzz}}$, $x_2 = t_{\text{sem}}$, $x_3 = t_{\max} = \max(t_{\text{fuzz}}, t_{\text{sem}})$, $x_4 = a_J$ [\texttt{author\_jaccard}], $x_5 = y_m = 0$ if $|\Delta y| \ge 50$ else $\exp(-0.5\min(|\Delta y|, 10))$, $x_6 = d_{\text{ok}} \in \{0, 1\}$, $x_7 = \min(\text{consensus}, 4)/4$, $x_8 = v_{\text{sim}}$, $x_9 = s_{\text{content}}$ if aligned and $\ge 0.45$ without \texttt{contradiction\_risk}, $-0.6$ if contradicted or unaligned with $0 < s_{\text{content}} < 0.46$, else $0$, $x_{10} = h_{\text{cand}} \in \{0, 1\}$) and six interaction features formalized in Equation~\eqref{eq:ml-interactions}:
+\begin{equation}\label{eq:ml-interactions}
+\begin{aligned}
+x_{11} &= t_{\max}\, a_J, & x_{12} &= t_{\max}\, y_m, \\
+x_{13} &= t_{\max}(1 - a_J)\,\mathbb{I}[t_{\max} \ge 0.60], & x_{14} &= t_{\max}(1 - y_m)\,\mathbb{I}[t_{\max} \ge 0.60], \\
+x_{15} &= d_{\text{ok}}(1 - t_{\max}), & x_{16} &= \mathbb{I}[\text{abstention zone}],
+\end{aligned}
+\end{equation}
+where $x_{16} = 1$ whenever either (i)~$h_{\text{cand}} = 0$ with API exhaustion or \texttt{registered\_no\_csl}, or (ii)~$d_{\text{ok}} = 0 \land h_{\text{cand}} = 1$ inside the borderline title band ($0.40 \le t_{\max} < 0.60$ with supporting author/fuzzy/consensus cue) or partial-author grey band ($0.25 \le t_{\max} < 0.60 \land a_J \ge 0.18 \land |\Delta y| \le 3$).
+
+\begin{citraalgo}{4.2}{\texttt{NeuroSymbolicVerifyAndCalibrate}$(r, \mathcal{S}, \mathbf{f}, \delta_{\text{style}})$}{alg:verify}
+\textbf{Input:} Reference $r$, retrieved source result $\mathcal{S}$, match features $\mathbf{f}$, document style penalty $\delta_{\text{style}} \in [0, 0.10]$.\\
+\textbf{Output:} Final verdict $(y^*, P_{\text{cal}}, \mathcal{R}_{\text{rules}})$.\\
+1.\quad \textbf{Order 0:} If $r$ is a validated web/software/RFC or Vietnamese statute (\texttt{VNLegalVerifier}), check fake/dead URLs first; return corresponding \texttt{resource} (or \texttt{metadata\_error}/\texttt{suspected\_hallucination}) verdict.\\
+2.\quad \textbf{Known-Paper Fast Path:} If $r$ matches \texttt{\_KNOWN\_PAPERS} (101 seminal works), check year/author/stance consistency and return \texttt{verified} or \texttt{metadata\_error} with \texttt{R-KNOWN-PAPER}.\\
+3.\quad \textbf{Symbolic Tree:} Evaluate Groups 1--16 in \texttt{SymbolicRules.apply}$(r, \mathcal{S}, \mathbf{f}, \delta_{\text{style}})$ $\rightarrow (y_{\text{sym}}, C_{\text{sym}}^{(0)}, \mathcal{R}_{\text{rules}})$, applying provenance modifiers (\texttt{R-LOCAL\_DB}: $-0.05$, \texttt{R-API\_EXHAUSTED}: $-0.10$, \texttt{R-LOCAL\_DB\_ONLY}: $-0.15$) and $\delta_{\text{style}}$ uniformly.\\
+4.\quad \textbf{ML Scoring:} Extract $\mathbf{x} \in \mathbb{R}^{16}$ (Equation~\eqref{eq:ml-interactions}) and compute $P_{\text{ML}}(y \mid \mathbf{x}) = \operatorname{softmax}(W\mathbf{x} + \mathbf{b})_y$.\\
+5.\quad \textbf{Adaptive Blending:} Set $\alpha \leftarrow 0.90$ if $C_{\text{sym}}^{(0)} \ge 0.85 \land |C_{\text{sym}}^{(0)} - P_{\text{ML}}(y_{\text{sym}} \mid \mathbf{x})| > 0.45$, else $\alpha \leftarrow 0.72$; compute $p_{\text{blend}} = \alpha C_{\text{sym}}^{(0)} + (1 - \alpha) P_{\text{ML}}(y_{\text{sym}} \mid \mathbf{x})$.\\
+6.\quad \textbf{Logit-Space Platt Scaling:} Compute $P_{\text{cal}}$ via Equation~\eqref{eq:platt-calib} with $(a_{\text{cal}}, b_{\text{cal}}) = (1.891263, 1.138599)$.\\
+7.\quad \textbf{Post-Calibration Guards:} Clamp $P_{\text{cal}} \le 0.50$ if \texttt{R-AMBIGUOUS-MAPPING} fired; clamp $P_{\text{cal}} \le 0.88$ if $y_{\text{sym}} = \texttt{suspected\_hallucination}$ rests solely on registry absence; \textbf{return} $(y_{\text{sym}}, P_{\text{cal}}, \mathcal{R}_{\text{rules}})$.
+\end{citraalgo}
+
+Algorithm~4.2 formalizes the full decision-and-calibration flow executed by \texttt{NeuroSymbolicChecker}. The Multinomial Logistic Regression model ($W \in \mathbb{R}^{4 \times 16}, \mathbf{b} \in \mathbb{R}^4$, $C = 0.25$, balanced class weights on 84,000 paper-disjoint training records) preserves symbolic authority while providing continuous probability density; because $b_{\text{cal}} = +1.138599$ reflects high overall held-out correctness ($99.67\%$), neutral \texttt{unresolved} scores around $p_{\text{blend}} = 0.50$ calibrate to $0.7574$ (indicating high confidence in the \emph{abstention decision itself}), whereas \texttt{R-AMBIGUOUS-MAPPING} explicitly clamps output confidence to $0.50$.
 
 \section{Integrity Scoring and Bilingual Explanations}
 
 \subsection{Five-Component Citation Integrity Score}
 
-\texttt{CISCalculator.compute()} summarizes manuscript-wide citation quality as an interpretable score in $[0, 100]$. Non-scholarly \texttt{resource} entries are excluded from the academic denominator $N_{\text{acad}}$ so citing official software manuals or national laws never distorts scholarly verification ratios. For $N_{\text{acad}} \ge 1$, \texttt{metadata\_accuracy} ($s_{\text{meta}}$) applies tiered deductions across standard metadata errors ($N_{\text{meta\_std}}$, penalty $0.50$), severely incomplete references ($N_{\text{meta\_incomp}}$, penalty $0.75$), and suspected hallucinations ($N_{\text{hall}}$, penalty $1.00$), as defined in Equation~\eqref{eq:cis-meta}:
-\begin{equation}\label{eq:cis-meta}
-s_{\text{meta}} = \max\left(0,\; 1 - \frac{0.50\,N_{\text{meta\_std}} + 0.75\,N_{\text{meta\_incomp}} + 1.00\,N_{\text{hall}}}{N_{\text{acad}}}\right).
-\end{equation}
-Combining all five components in Table~\ref{tab:cis} produces the final Citation Integrity Score in Equation~\eqref{eq:cis-total}:
-\begin{equation}\label{eq:cis-total}
-\text{CIS} = 100 \times \bigl(0.35\,s_{\text{ver}} + 0.25\,s_{\text{meta}} + 0.25\,s_{\text{link}} + 0.10\,s_{\text{fmt}} + 0.05\,s_{\text{id}}\bigr).
-\end{equation}
+\texttt{CISCalculator.compute()} aggregates document-wide verification evidence into $[0, 100]$. Empty bibliographies ($N = 0$) return $\text{CIS} = 0.00$. Non-scholarly \texttt{resource} citations are excluded from the academic denominator $N_{\text{acad}}$ so official manuals and laws never penalize scholarly verification ratios. In the edge case of a resource-only bibliography ($N \ge 1, N_{\text{acad}} = 0$), identifier validity $s_{\text{id}}$ is computed across all resource URLs/DOIs, and when $N \ge 3$ with linking metadata present, $s_{\text{ver}} = s_{\text{meta}} = (0.5 + 0.5\,\rho_{\text{cited}})\,s_{\text{id}}$ so uncited web bibliographies cannot achieve inflated scores.
+
+For manuscripts with $N_{\text{acad}} \ge 1$, the five components in Table~\ref{tab:cis} are formally defined in Equations~\eqref{eq:cis-meta}--\eqref{eq:cis-total}:
+\begin{align}
+s_{\text{ver}} &= \frac{N_{\text{verified}}}{N_{\text{acad}}}, \qquad
+s_{\text{meta}} = \max\!\left(0,\; 1 - \frac{0.50\,N_{\text{meta\_std}} + 0.75\,N_{\text{meta\_incomp}} + 1.00\,N_{\text{hall}}}{N_{\text{acad}}}\right), \label{eq:cis-meta}\\
+s_{\text{link}} &= \max\!\left(0,\; 1 - \frac{\sum_{e \in \mathcal{L}} \pi(e) + 0.10\,N_{\text{uncited}} + 0.10\,N_{\text{dup}}}{|\mathcal{L}| + N_{\text{uncited}} + N_{\text{dup}}}\right), \label{eq:cis-link}\\
+\text{CIS} &= 100 \times \bigl(0.35\,s_{\text{ver}} + 0.25\,s_{\text{meta}} + 0.25\,s_{\text{link}} + 0.10\,s_{\text{fmt}} + 0.05\,s_{\text{id}}\bigr), \label{eq:cis-total}
+\end{align}
+where $s_{\text{link}}$ is additionally capped at $\le 0.50$ whenever $100\%$ of bibliography entries are uncited and zero inline markers matched; $s_{\text{fmt}}$ maps \texttt{StyleProfile} confidence ($0.6 + 0.4\,\text{conf}$ for uniform style, $0.5$ for \texttt{UNKNOWN}, $0.4 + 0.2\,\text{conf}$ for \texttt{MIXED}) minus per-entry style deductions; and $s_{\text{id}} = N_{\text{valid\_id}} / N_{\text{with\_id}}$ (defaulting to $1.00$ when $N_{\text{with\_id}} = 0$ so humanities styles omitting DOIs are not penalized).
+
+The default rubric allocates $60\%$ weight to factual provenance ($0.35\,s_{\text{ver}} + 0.25\,s_{\text{meta}}$), $25\%$ to structural citation discipline ($s_{\text{link}}$), and $15\%$ to formatting and identifier hygiene ($0.10\,s_{\text{fmt}} + 0.05\,s_{\text{id}}$); weight robustness is verified in Chapter~\ref{chap:results} (Spearman $\rho = 0.9987$). Two deliberate boundary properties warrant transparent instructor guidance: first, omitting all DOIs/URLs yields $s_{\text{id}} = 1.00$ (avoiding unfair penalties on print-only citations); second, \texttt{unresolved} references receive zero credit in $s_{\text{ver}}$ (losing up to $35$ points) while incurring zero metadata penalty in $s_{\text{meta}}$ (preserving the presumption of innocence). Accordingly, \textbf{CITRA} always displays \texttt{num\_unresolved} and the five-component breakdown beside the scalar CIS ring so a manuscript composed heavily of unresolved entries triggers instructor review rather than passing silently.
 
 {\setlength{\tabcolsep}{3.5pt}
-\begin{longtable}{|L{0.31}|C{0.11}|L{0.58}|}
-\caption{Components and default rubric weights of the Citation Integrity Score (CIS).}\label{tab:cis}\\
+\begin{table}[!htbp]
+\centering
+\caption{Components and default rubric weights of the Citation Integrity Score (CIS).}\label{tab:cis}
+\begin{tabular}{|L{0.31}|C{0.11}|L{0.58}|}
 \hline
 \textbf{Component} & \textbf{Weight} & \textbf{Exact Definition in \texttt{CISCalculator.compute()}} \\
 \hline
-\endfirsthead
-\multicolumn{3}{c}{\itshape Table \thetable\ (continued from previous page)}\\
-\hline
-\textbf{Component} & \textbf{Weight} & \textbf{Exact Definition in \texttt{CISCalculator.compute()}} \\
-\hline
-\endhead
-\hline
-\multicolumn{3}{r}{\itshape Continued on next page}\\
-\endfoot
-\hline
-\endlastfoot
 \textbf{\texttt{verified\_ratio}} ($s_{\text{ver}}$) & \textbf{0.35} & $N_{\text{verified}} / N_{\text{acad}}$, measuring corroborated scholarly references. \\
 \hline
 \textbf{\texttt{metadata\_accuracy}} ($s_{\text{meta}}$) & \textbf{0.25} & Tiered bibliographic fidelity score defined in Equation~\eqref{eq:cis-meta}. \\
 \hline
-\textbf{\texttt{in\_text\_bib\_consistency}} ($s_{\text{link}}$) & \textbf{0.25} & One minus the weighted linking penalties (Table~\ref{tab:mapping-statuses}) across inline links, uncited entries, and duplicates. \\
+\textbf{\texttt{in\_text\_bib\_consistency}} ($s_{\text{link}}$) & \textbf{0.25} & Weighted bipartite linking consistency (Equation~\eqref{eq:cis-link}, capped $\le 0.50$ if 0\% cited). \\
 \hline
-\textbf{\texttt{format\_consistency}} ($s_{\text{fmt}}$) & \textbf{0.10} & Document style consistency derived from \texttt{StyleProfile} and per-entry style deviations. \\
+\textbf{\texttt{format\_consistency}} ($s_{\text{fmt}}$) & \textbf{0.10} & Document style consistency derived from \texttt{StyleProfile} and per-entry deviations. \\
 \hline
-\textbf{\texttt{identifier\_validity}} ($s_{\text{id}}$) & \textbf{0.05} & Share of DOI/URL-bearing citations whose identifiers resolve cleanly without \texttt{dead\_link}, \texttt{fake\_domain}, or \texttt{domain\_exception}. \\
+\textbf{\texttt{identifier\_validity}} ($s_{\text{id}}$) & \textbf{0.05} & Share of DOI/URL-bearing citations resolving without \texttt{dead\_link}, \texttt{fake\_domain}, or \texttt{domain\_exception} ($1.00$ if none present). \\
 \hline
-\end{longtable}
+\end{tabular}
+\end{table}
 }
 
 \subsection{Bilingual Verdict Explanations and Bibliography Repair}
 
-Every verdict is accompanied by a deterministic English and Vietnamese explanation (\texttt{logic/explanation.py} and \texttt{verdictExplanation.ts}) reporting the matched registry, field-level diffs, semantic alignment score, and triggered rule IDs. For entries labeled \texttt{metadata\_error} or \texttt{verified}, the remediation modules (\texttt{export/bibliography\_formatter.py} and \texttt{export/docx\_exporter.py}) reconstruct clean APA 7th, IEEE, TDTU, BibTeX, and RIS strings from canonical registry fields and export a repaired \texttt{.docx} manuscript while leaving \texttt{suspected\_hallucination} entries highlighted for author removal.
+Every verdict ships with deterministic English and Vietnamese explanations (\texttt{logic/explanation.py} and \texttt{verdictExplanation.ts}) detailing the matched registry, field-level diffs, semantic alignment score, and triggered rule IDs. For \texttt{metadata\_error} and \texttt{verified} items, \texttt{bibliography\_formatter.py} and \texttt{docx\_exporter.py} synthesize clean APA 7th, IEEE, TDTU, BibTeX, and RIS entries from canonical registry fields and export repaired \texttt{.docx} files while isolating \texttt{suspected\_hallucination} entries for manual removal.
 
 \section{Web Presentation Layer (CITRA)}
 
 \subsection{Frontend Architecture and Progressive Disclosure}
 
-The web client (\textbf{CITRA}) is implemented in React 18.3, TypeScript 5.8, Vite, TanStack React Query, and Tailwind CSS v3.4. Both Light (\texttt{\#FBFAF6}) and Dark (\texttt{\#13120F}) themes satisfy WCAG 2.1 AA contrast ratios and support full Vietnamese diacritic typography. To serve both non-technical students and software engineering auditors, the UI applies \emph{progressive disclosure}: primary cards display plain-language verdicts and repair actions, whereas raw symbolic rule codes (\texttt{R-*}), feature vectors, and 5-stage execution traces expand on demand via accessible \texttt{aria-expanded} drawers. During long-document ingestion, \texttt{DocumentParser.parse()} emits branch-accurate Step~1 sub-stage callbacks (PyMuPDF extraction, TEI cache lookup, live GROBID layout parsing, and citation merging) through \texttt{ProgressTracker}---persisted to SQLite for multi-worker \texttt{web\_only} SSE readers---and rendered as monotonic bilingual \texttt{[01/08]} lines in \texttt{ProcessingPage}, while a pure \texttt{pendingHandoffEssayId} handoff in \texttt{VerificationProgressContext} eliminates transient aborted (\texttt{HTTP 499}) background SSE connections during route transitions from \texttt{UploadPage}. Rollup code-splitting keeps the entry bundle at $228.42\text{\,kB}$ ($66.39\text{\,kB}$ gzipped), with all 60 lazy-loaded route chunks $\le 251.00\text{\,kB}$.
+The web client (\textbf{CITRA}) is built in React 18.3, TypeScript 5.9 (\texttt{\string^5.4.0} semver range, lockfile \texttt{5.9.3}), Vite, TanStack React Query, and Tailwind CSS v3.4. Both Light (\texttt{\#FBFAF6}) and Dark (\texttt{\#13120F}) editorial themes meet WCAG 2.1 AA contrast ratios and support full Vietnamese diacritic rendering. To serve both students and technical auditors, the interface implements \emph{progressive disclosure}: primary report views surface plain-language verdicts across four main tabs (\textit{Overview}, \textit{Reference Inspector}, \textit{Consistency Check}, and \textit{Document Preview}), while raw symbolic rule codes (\texttt{R-*}), 16D feature vectors, and 5-stage execution traces expand on demand via accessible \texttt{aria-expanded} disclosure panels. During long-document parsing, \texttt{DocumentParser.parse()} streams monotonic bilingual \texttt{[01/08]} callbacks via \texttt{ProgressTracker} (persisted to SQLite for \texttt{web\_only} SSE readers), while a \texttt{pendingHandoffEssayId} handoff in \texttt{VerificationProgressContext} eliminates transient aborted (\texttt{HTTP 499}) SSE connections across route transitions. Rollup code-splitting keeps the initial entry bundle at \textbf{$231.50\text{\,kB}$} ($67.50\text{\,kB}$ gzipped) across 60 lazy-loaded chunks (largest lazy route chunk \texttt{EssayPage} at $250.58\text{\,kB}$ raw / $68.67\text{\,kB}$ gzipped).
 
 \subsection{Role-Based Workspaces and Telemetry Surfaces}
 
-Figures~\ref{fig:ui-landing}--\ref{fig:ui-portals} showcase the live \texttt{v3.90.9} interface across unauthenticated and role-gated routes. Figure~\ref{fig:ui-landing} illustrates the public landing page in Light and Dark themes. Figure~\ref{fig:ui-workspace} shows the Student/Researcher dashboard and the multi-file batch verification queue (\texttt{.pdf}, \texttt{.docx}, \texttt{.bib}, \texttt{.ris}) supporting concurrent classroom uploads. Figure~\ref{fig:ui-portals} displays the Teacher Classroom cohort analytics view (highlighting grade band histograms and cross-student shared hallucinations) alongside the Administrator System Health console monitoring GROBID, SQLite FTS5, and all fifteen upstream API circuit breakers.
+Figures~\ref{fig:ui-landing}--\ref{fig:ui-portals} display the live \texttt{v3.90.9} interface rendered at full printable text width with navigation sidebars cropped for legibility. Figure~\ref{fig:ui-landing} shows the Light-mode public landing page (with theme switching to WCAG AA Dark mode available in the header). Figure~\ref{fig:ui-workspace} presents the Student/Researcher verification dashboard (displaying \texttt{/100} CIS scale metrics) and the multi-format concurrent batch upload queue (\texttt{.pdf}, \texttt{.docx}, \texttt{.bib}, \texttt{.ris}). Figure~\ref{fig:ui-portals} contrasts the Teacher Classroom cohort analytics workspace (with consistent submission counts and issue-only top triggered rules) against the Administrator System Health console displaying the 129,137-record local index, GROBID readiness, and all fifteen upstream API circuit breakers.
 
-\begin{figure}[H]
+\begin{figure}[!htbp]
     \centering
-    \includegraphics[width=0.49\textwidth,keepaspectratio]{picture/figures/01-landing-light.png}\hfill
-    \includegraphics[width=0.49\textwidth,keepaspectratio]{picture/figures/02-landing-dark.png}
-    \caption[CITRA landing page in WCAG AA Light and Dark themes]{CITRA (\texttt{v3.90.9}) public landing page rendered in Light mode (left) and Dark mode (right).}
+    \fboxsep=0pt\fboxrule=0.4pt\fbox{\includegraphics[width=0.96\textwidth,keepaspectratio]{picture/figures/01-landing-light.png}}
+    \caption[CITRA public landing page in WCAG AA Light editorial theme]{CITRA (\texttt{v3.90.9}) public landing page in the WCAG 2.1 AA Light editorial theme (Dark theme toggle available in the top header).}
     \label{fig:ui-landing}
 \end{figure}
 
-\begin{figure}[H]
+\begin{figure}[!htbp]
     \centering
-    \includegraphics[width=0.49\textwidth,keepaspectratio]{picture/figures/03-dashboard-light.png}\hfill
-    \includegraphics[width=0.49\textwidth,keepaspectratio]{picture/figures/04-batch-upload.png}
-    \caption[Student verification dashboard and concurrent batch upload workspace]{Student verification dashboard (\texttt{/dashboard}, left) and multi-format batch verification queue (\texttt{/batch-upload}, right).}
+    \fboxsep=0pt\fboxrule=0.4pt\fbox{\includegraphics[width=0.94\textwidth,keepaspectratio]{picture/figures/03-dashboard-light.png}}\\[6pt]
+    \fboxsep=0pt\fboxrule=0.4pt\fbox{\includegraphics[width=0.94\textwidth,keepaspectratio]{picture/figures/04-batch-upload.png}}
+    \caption[Student verification dashboard and concurrent batch upload workspace]{Student verification dashboard (\texttt{/dashboard}, top) and multi-format concurrent batch verification queue (\texttt{/batch-upload}, bottom), cropped to main workspace panels for print legibility.}
     \label{fig:ui-workspace}
 \end{figure}
 
-\begin{figure}[H]
+\begin{figure}[!htbp]
     \centering
-    \includegraphics[width=0.49\textwidth,keepaspectratio]{picture/figures/10-teacher-classroom.png}\hfill
-    \includegraphics[width=0.49\textwidth,keepaspectratio]{picture/figures/11-admin-system-health.png}
-    \caption[Teacher cohort analytics classroom and Administrator system health console]{Teacher classroom cohort analytics (\texttt{/teacher/classes/1}, left) and Administrator system health monitor (\texttt{/admin/system}, right).}
+    \fboxsep=0pt\fboxrule=0.4pt\fbox{\includegraphics[width=0.94\textwidth,keepaspectratio]{picture/figures/10-teacher-classroom.png}}\\[6pt]
+    \fboxsep=0pt\fboxrule=0.4pt\fbox{\includegraphics[width=0.94\textwidth,keepaspectratio]{picture/figures/11-admin-system-health.png}}
+    \caption[Teacher cohort analytics classroom and Administrator system health console]{Teacher classroom cohort analytics (\texttt{/teacher/classes/1}, top) and Administrator system health monitor showing GROBID and upstream API circuit breakers (\texttt{/admin/system}, bottom).}
     \label{fig:ui-portals}
 \end{figure}
 
 \section{Chapter Summary}
 
-This chapter presented the implementation of \textbf{CITRA} across its eight software layers: multi-format 12-style extraction, work-level merging and 7-method bidirectional linking, tiered 15-API retrieval with pinned-IP URL/HTML validation, dual-encoder \texttt{VI}$\leftrightarrow$\texttt{EN} semantic matching, 68-rule neuro-symbolic verification with 16D Logistic Regression and Platt scaling, five-component CIS grading, and the code-split React workspace. Chapter~\ref{chap:results} evaluates these components empirically across five research questions.
+This chapter presented the internal architecture and formal algorithms of \textbf{CITRA} across all eight layers: twelve-format extraction, work-level merging and seven-method bidirectional linking (Algorithm~4.1), four-tier retrieval with pinned-IP SSRF protection, dual-encoder \texttt{VI}$\leftrightarrow$\texttt{EN} semantic matching, 68-rule neuro-symbolic verification with 16D Logistic Regression and Platt calibration (Algorithm~4.2 and Figure~\ref{fig:decision-flow}), complete five-component CIS formulas, and the code-split React 18.3 / TypeScript 5.9 workspace. Chapter~\ref{chap:results} evaluates these components empirically across five research questions.

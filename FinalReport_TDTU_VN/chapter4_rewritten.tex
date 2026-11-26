@@ -1,11 +1,11 @@
-\chapter{Kiến trúc và Hiện thực Hệ thống}
+\chapter{Kiến trúc và hiện thực hệ thống}
 \label{chap:architecture}
 
-\section{Tổng quan Kiến trúc}
+\section{Tổng quan kiến trúc}
 
-\subsection{Đường ống Tám Tầng và Cơ chế Suy giảm Uyển chuyển}
+\subsection{Đường ống tám tầng và cơ chế suy giảm uyển chuyển}
 
-\textbf{CITRA} tổ chức quy trình kiểm chứng bản thảo thành một chuỗi tám tầng phần mềm không chu trình, được tóm tắt tại Bảng~\ref{tab:layers} và minh họa trong Hình~\ref{fig:architecture}. Mỗi tầng nhận đầu vào là các cấu trúc dữ liệu định kiểu tường minh và xuất kèm siêu dữ liệu trạng thái rõ ràng, cho phép từng công đoạn được kiểm thử đơn vị hoặc thay thế hoàn toàn độc lập.
+\textbf{CITRA} tổ chức quy trình kiểm chứng bản thảo thành một chuỗi tám tầng phần mềm phi chu trình, tóm tắt tại Bảng~\ref{tab:layers}, ánh xạ chi tiết tới cấu trúc gói mã nguồn tại Phụ lục~\ref{app:packages} và minh họa trong Hình~\ref{fig:architecture}. Mỗi tầng nhận cấu trúc dữ liệu định kiểu rõ ràng và xuất kèm siêu dữ liệu trạng thái tường minh, cho phép kiểm thử đơn vị hoặc thay thế độc lập từng công đoạn.
 
 {\setlength{\tabcolsep}{3.5pt}
 \begin{longtable}{|L{0.18}|L{0.34}|L{0.48}|}
@@ -24,69 +24,69 @@
 \endfoot
 \hline
 \endlastfoot
-\textbf{1. Trích xuất} & \texttt{document\_parser}, \texttt{grobid\_parser}, \texttt{grobid\_adapter}, \texttt{docx\_parser}, \texttt{patterns/*}, \texttt{style\_detector} & Phân tích cú pháp các tệp đầu vào PDF, DOCX, BibTeX và RIS thành văn bản nội dung, dấu trích dẫn theo ngữ cảnh trong bài và các mục tài liệu tham khảo thuộc \textbf{12 chuẩn trích dẫn}. \\
+\textbf{1. Trích xuất} & \texttt{document\_parser}, \texttt{grobid\_parser}, \texttt{grobid\_adapter}, \texttt{docx\_parser}, \texttt{patterns/*}, \texttt{style\_detector} & Phân tích tệp PDF, DOCX, BibTeX và RIS thành văn bản thân bài, dấu trích dẫn nội văn kèm ngữ cảnh và danh mục tham khảo trên \textbf{12 định dạng}. \\
 \hline
-\textbf{2. Hợp nhất} & \texttt{integrity\_pipeline.\_merge\_citations} & Khử trùng lặp các trích dẫn trong bài, danh mục tài liệu tham khảo và phụ lục thành tập công trình duy nhất nhưng vẫn giữ nguyên mọi vị trí xuất hiện nội văn. \\
+\textbf{2. Hợp nhất} & \texttt{integrity\_pipeline.\_merge\_citations} & Khử trùng lặp trích dẫn nội văn, danh mục tham khảo và phụ lục thành tập công trình duy nhất nhưng bảo toàn mọi vị trí xuất hiện. \\
 \hline
-\textbf{3. Liên kết} & \texttt{citation\_linker}, \texttt{duplicate\_detector}, \texttt{statuses} & Tái tạo đồ thị hai phía giữa các dấu trích dẫn trong bài và danh mục tài liệu tham khảo thông qua \textbf{7 phương pháp phân giải} và \textbf{8 trạng thái ánh xạ}. \\
+\textbf{3. Liên kết} & \texttt{citation\_linker}, \texttt{duplicate\_detector}, \texttt{statuses} & Tái tạo đồ thị hai phía giữa dấu trích dẫn nội văn và danh mục tham khảo qua \textbf{7 phương pháp tự động} và \textbf{8 trạng thái}. \\
 \hline
-\textbf{4. Truy hồi} & \texttt{retrieval\_orchestrator}, \texttt{local\_db}, \texttt{link\_validator}, \texttt{html\_meta\_verifier}, hơn 15 trình khách & Điều phối truy vấn qua chỉ mục ngoại tuyến SQLite FTS5, \textbf{hơn 15 API trực tuyến}, Retraction Watch và các bộ kiểm tra HTTP/Wayback/HTML an toàn chống SSRF. \\
+\textbf{4. Truy hồi} & \texttt{retrieval\_orchestrator}, \texttt{local\_db}, \texttt{link\_validator}, \texttt{html\_meta\_verifier}, 15+ trình khách & Điều phối truy vấn 4 tầng (SQLite FTS5 ngoại tuyến, \textbf{15+ API trực tuyến}, làm giàu chuyên ngành/arXiv, tìm kiếm tùy chọn) và kiểm tra HTTP/Wayback/HTML chống SSRF. \\
 \hline
-\textbf{5. Đối sánh} & \texttt{features}, \texttt{fuzzy}, \texttt{semantic}, \texttt{author\_matcher}, \texttt{venue\_normalizer} & Tính toán độ tương đồng từ vựng, khoảng cách siêu dữ liệu, điểm căn chỉnh gộp theo câu bằng SBERT, lập trường luận điểm và điểm đối sánh xuyên ngôn ngữ \texttt{VI}$\leftrightarrow$\texttt{EN} chuẩn ONNX INT8. \\
+\textbf{5. Đối sánh} & \texttt{features}, \texttt{fuzzy}, \texttt{semantic}, \texttt{author\_matcher}, \texttt{venue\_normalizer} & Tính độ tương đồng từ vựng, khoảng cách siêu dữ liệu, đối sánh gộp theo câu bằng SBERT, lập trường nhận định và điểm \texttt{VI}$\leftrightarrow$\texttt{EN} ONNX INT8. \\
 \hline
-\textbf{6. Kiểm chứng} & \texttt{neuro\_symbolic\_checker}, \texttt{rules}, \texttt{vn\_legal\_verifier}, \texttt{calibration} & Đánh giá tầng sơ lọc Mức 0 cùng 16 nhóm luật ký hiệu (\textbf{68 mã luật}), kết hợp với Hồi quy Logistic 16 chiều và hiệu chỉnh xác suất Platt. \\
+\textbf{6. Kiểm chứng} & \texttt{neuro\_symbolic\_checker}, \texttt{rules}, \texttt{vn\_legal\_verifier}, \texttt{calibration} & Đánh giá tiền sàng lọc Bậc 0 cùng 16 nhóm luật ký hiệu (\textbf{68 mã \texttt{R-*}}) kết hợp Hồi quy Logistic 16 chiều và hiệu chỉnh xác suất Platt. \\
 \hline
-\textbf{7. Chấm điểm \& Xuất bản} & \texttt{cis}, \texttt{explanation}, \texttt{bibliography\_formatter}, \texttt{docx\_exporter} & Tính \textbf{Điểm toàn vẹn trích dẫn (CIS) năm thành phần}, sinh lời giải thích song ngữ, đồng thời xuất báo cáo đã làm sạch và tệp \texttt{.docx} đã chuẩn hóa. \\
+\textbf{7. Chấm điểm \& Xuất} & \texttt{cis}, \texttt{explanation}, \texttt{bibliography\_formatter}, \texttt{docx\_exporter} & Tính \textbf{Điểm toàn vẹn trích dẫn (CIS) năm thành phần}, sinh lời giải thích song ngữ, xuất báo cáo làm sạch và tệp \texttt{.docx} đã sửa lỗi. \\
 \hline
-\textbf{8. Trình bày} & FastAPI \texttt{api/*}, React/TypeScript \texttt{web/src/*} & Truyền luồng tiến độ qua SSE, cung cấp sáu chế độ xem báo cáo chẩn đoán, phân tích thống kê lớp học, ghi đè kết quả trực tiếp cho giảng viên và bảng quản trị hệ thống. \\
+\textbf{8. Trình bày} & FastAPI \texttt{api/*}, React/TypeScript \texttt{web/src/*} & Phát tiến độ SSE, bốn thẻ phân tích báo cáo chính kèm vết logic mở rộng theo cấp độ, thống kê lớp học, ghi đè phán quyết và giám sát hệ thống. \\
 \hline
 \end{longtable}
 }
 
-\begin{figure}[H]
+\begin{figure}[!htbp]
     \centering
     \includegraphics[width=\textwidth,keepaspectratio]{picture/figures/fig4_1_architecture.png}
-    \caption[Kiến trúc phần mềm tám tầng và các hợp đồng suy giảm uyển chuyển]{Kiến trúc phần mềm tám tầng của CITRA (\texttt{v3.90.9}) thể hiện các hợp đồng giao tiếp liên tầng và cơ chế dự phòng suy giảm uyển chuyển.}
+    \caption[Kiến trúc phần mềm tám tầng và các hợp đồng suy giảm uyển chuyển]{Kiến trúc phần mềm tám tầng của CITRA (\texttt{v3.90.9}) thể hiện hợp đồng dữ liệu liên tầng và cơ chế suy giảm uyển chuyển.}
     \label{fig:architecture}
 \end{figure}
 
-Mỗi tầng đều thực thi một \emph{hợp đồng suy giảm uyển chuyển} nghiêm ngặt. Khi container GROBID không thể kết nối, Tầng 1 tự động chuyển sang cơ chế dự phòng phân tích bố cục hai cột bằng PyMuPDF kết hợp biểu thức chính quy. Tương tự, nếu các cơ sở dữ liệu trực tuyến trả về mã HTTP 429 hoặc quá thời gian chờ, Tầng 4 tự động tra cứu trên chỉ mục FTS5 ngoại tuyến gồm 129,137 bản ghi và bật cờ \texttt{api\_exhausted = True}, trong khi Tầng 6 thực hiện từ chối phán quyết có chọn lọc dựa trên nguồn gốc bằng nhãn \texttt{unresolved} thay vì phỏng đoán cảm tính khi bằng chứng chưa đầy đủ.
+Mỗi tầng đều tuân thủ một \emph{hợp đồng suy giảm uyển chuyển} nghiêm ngặt. Nếu container GROBID không phản hồi, Tầng 1 tự động chuyển sang phân tích hai cột bằng PyMuPDF và biểu thức chính quy. Nếu API trực tuyến trả mã HTTP 429 hoặc quá hạn, Tầng 4 sử dụng chỉ mục ngoại tuyến FTS5 129,137 bản ghi kèm cờ \texttt{api\_exhausted = True}, còn Tầng 6 định tuyến an toàn các ca thiếu bằng chứng sang \texttt{unresolved} thay vì phỏng đoán.
 
-\subsection{Các Mẫu Thiết kế Phần mềm}
+\subsection{Các mẫu thiết kế phần mềm}
 
-Năm mẫu thiết kế hướng đối tượng kinh điển và mẫu chịu lỗi đám mây giúp mã nguồn luôn giữ được tính mô-đun và dễ bảo trì:
+Năm mẫu thiết kế hướng đối tượng và chịu lỗi đám mây duy trì tính mô-đun và khả năng bảo trì cho toàn bộ mã nguồn:
 \begin{itemize}
-    \item \textbf{Strategy và Priority Registry (\texttt{extraction/patterns/}):} Mười hai bộ phân tích chuẩn trích dẫn kế thừa từ lớp cơ sở \texttt{CitationFormat} và đăng ký mức ưu tiên số nguyên, giúp tách biệt hoàn toàn quy tắc đặc thù của từng chuẩn khỏi bộ đọc tài liệu.
-    \item \textbf{Adapter (\texttt{grobid\_adapter.py} \& các trình khách API):} Các định dạng dữ liệu ngoài không đồng nhất (GROBID TEI-XML, Crossref JATS XML, chỉ mục tóm tắt đảo của OpenAlex, arXiv Atom XML và BibTeX) đều được chuẩn hóa về hai lớp đối tượng nội bộ thống nhất là \texttt{Citation} và \texttt{ScholarlyCandidate}.
-    \item \textbf{Chain of Responsibility (\texttt{CitationLinker} \& \texttt{SymbolicRules}):} Cả bộ liên kết bảy phương pháp lẫn bộ kiểm chứng ký hiệu 16 nhóm luật đều duyệt tuần tự qua chuỗi bộ xử lý có thứ tự ưu tiên và ngắt mạch sớm ngay khi một điều kiện quyết định được kích hoạt.
-    \item \textbf{Circuit Breaker và Bộ giới hạn tốc độ Token-Bucket (\texttt{retrieval/}):} Mỗi trình khách API ngoài được bao bọc bởi một máy trạng thái (\texttt{closed} $\rightarrow$ \texttt{open} $\rightarrow$ \texttt{half\_open}) cùng bộ giới hạn tốc độ an toàn đa luồng, giúp tạm thời bỏ qua nhà cung cấp đang phản hồi chậm hoặc gặp sự cố mà không làm nghẽn các bài nộp đang xử lý đồng thời.
-    \item \textbf{Gộp yêu cầu đồng thời (Singleflight Request Coalescing):} Các truy vấn giống hệt nhau sau chuẩn hóa xuất hiện đồng thời trong cùng đợt tải lên hàng loạt sẽ dùng chung một coroutine HTTP duy nhất đang thực thi trước khi ghi kết quả vào bảng \texttt{citation\_cache}.
+    \item \textbf{Strategy và Priority Registry (\texttt{extraction/patterns/}):} Mười một bộ phân tích chuẩn trích dẫn quốc tế kế thừa lớp cơ sở \texttt{CitationFormat} theo mức ưu tiên số nguyên giảm dần ($100 \rightarrow 70$, giá trị lớn hơn được ưu tiên trước), kết hợp bộ trích xuất pháp luật Việt Nam chuyên biệt (\texttt{parse\_vn\_legal\_reference} / \texttt{VNLegalVerifier}) tạo thành mười hai định dạng hỗ trợ.
+    \item \textbf{Adapter (\texttt{grobid\_adapter.py} \& các trình khách API):} Các định dạng ngoài không đồng nhất (GROBID TEI-XML, Crossref JATS XML, chỉ mục đảo OpenAlex, arXiv Atom XML và BibTeX) được chuẩn hóa về hai lớp đối tượng nội bộ thống nhất là \texttt{Citation} và \texttt{SourceCandidate}.
+    \item \textbf{Chain of Responsibility (\texttt{CitationLinker} \& \texttt{SymbolicRules}):} Cả bộ liên kết bảy phương pháp lẫn bộ suy diễn ký hiệu 16 nhóm luật duyệt tuần tự chuỗi xử lý có thứ tự và ngắt mạch ngay khi điều kiện quyết định được thỏa mãn.
+    \item \textbf{Bộ ngắt mạch (Circuit Breaker) và điều tiết tốc độ (\texttt{retrieval/}):} Mỗi trình khách API ngoài được bao bọc bởi máy trạng thái (\texttt{closed} $\rightarrow$ \texttt{open} $\rightarrow$ \texttt{half\_open}) và bộ điều tiết tốc độ bất đồng bộ (Token-Bucket hoặc đặt chỗ theo vòng lặp sự kiện) giúp bỏ qua tạm thời nhà cung cấp đang lỗi mà không làm tắc nghẽn các bài nộp khác.
+    \item \textbf{Gộp yêu cầu đồng thời (Singleflight Request Coalescing):} Các truy vấn trùng khớp sau chuẩn hóa gửi đồng thời trong đợt tải lên hàng loạt dùng chung một coroutine HTTP duy nhất trước khi lưu vào bảng \texttt{citation\_cache}.
 \end{itemize}
 
-\section{Tầng Trích xuất}
+\section{Tầng trích xuất}
 
-\subsection{Phân tích Tài liệu Đa định dạng}
+\subsection{Phân tích tài liệu đa định dạng}
 
-Mô-đun tiếp nhận bản thảo (\texttt{DocumentParser}) xử lý bốn định dạng đầu vào: PDF, DOCX, BibTeX và RIS. Đối với tệp PDF, luồng xử lý chính \texttt{grobid\_hybrid} gửi luồng nhị phân tới GROBID \texttt{0.9.1-crf}~\cite{Lopez2009} để bóc tách các đoạn văn nội dung, con trỏ nội văn \texttt{<ref type="bibr">}, cửa sổ câu ngữ cảnh và các mục thư mục \texttt{<biblStruct>}. Hai bộ hậu xử lý tiếp tục khắc phục các nhiễu trình bày thường gặp trong báo cáo của sinh viên từ đầu ra GROBID: (1) \emph{bộ lọc mục lục (TOC) và dòng chấm dẫn} loại bỏ các tiêu đề chương mục đánh số dễ bị nhận nhầm thành tài liệu tham khảo đánh số, và (2) \emph{bước làm giàu trường bằng biểu thức chính quy} khôi phục lại URL, nhà xuất bản, số hiệu văn bản quy phạm pháp luật Việt Nam và khoảng trang thuộc khối ngành khoa học xã hội vốn bị thẻ TEI-XML bỏ sót.
+Mô-đun tiếp nhận bản thảo (\texttt{DocumentParser}) hỗ trợ bốn định dạng: PDF, DOCX, BibTeX và RIS. Với tệp PDF, nhánh chính \texttt{grobid\_hybrid} gửi luồng nhị phân tới GROBID \texttt{0.9.1-crf}~\cite{Lopez2009} để tách đoạn thân bài, con trỏ nội văn \texttt{<ref type="bibr">}, cửa sổ câu ngữ cảnh và mục \texttt{<biblStruct>}. Hai bộ hậu xử lý tất định khắc phục nhiễu của đồ án sinh viên: (1)~\emph{bộ lọc mục lục (TOC) và dòng chấm dẫn} loại bỏ tiêu đề chương đánh số dễ nhầm thành mục tham khảo, và (2)~\emph{bước làm giàu bằng biểu thức chính quy} khôi phục URL, nhà xuất bản, số hiệu văn bản pháp luật Việt Nam và khoảng trang bị thẻ TEI-XML bỏ sót.
 
-Khi GROBID bị tắt hoặc gặp bố cục trình bày phi chuẩn từ phần mềm soạn thảo, \texttt{DocumentParser} tự động chuyển sang đường ống dự phòng nhận biết hình học hai cột dựa trên PyMuPDF~\cite{PyMuPDF2024} và \texttt{pdfplumber}~\cite{Pdfplumber2024}. Những trang có mật độ ký tự trích xuất gần bằng không sẽ kích hoạt có chọn lọc công cụ OCR tiếng Việt/tiếng Anh Tesseract, trong khi các bảng mã tiếng Việt cũ (VNI và TCVN3) được chuẩn hóa về bảng mã Unicode dựng sẵn NFC. Các bản thảo gốc định dạng \texttt{.docx} được phân tích trực tiếp thông qua kiểu đoạn văn của \texttt{python-docx} và thuộc tính đánh số XML mà không cần chuyển đổi trung gian sang PDF gây mất mát cấu trúc.
+Khi GROBID tắt hoặc gặp bố cục phi chuẩn, \texttt{DocumentParser} chuyển sang đường ống dự phòng nhận biết hình học hai cột dựa trên PyMuPDF~\cite{PyMuPDF2024} và \texttt{pdfplumber}~\cite{Pdfplumber2024}. Trong \texttt{mupdf\_parser.py}, các trang có mật độ ký tự trích xuất gần bằng không tự động kích hoạt OCR Tesseract tiếng Việt/tiếng Anh có chọn lọc (bỏ qua cờ \texttt{fallback\_to\_ocr: false} mặc định trong \texttt{config.yaml} để đọc được PDF bản quét), còn các bảng mã tiếng Việt cũ (VNI, TCVN3) được chuẩn hóa về Unicode NFC. Tệp \texttt{.docx} gốc được đọc trực tiếp qua \texttt{python-docx} và thuộc tính đánh số XML không qua chuyển đổi trung gian.
 
-Nhằm ngăn ngừa hiện tượng tráo trang bộ nhớ ảo (swap thrashing) trên máy chủ ảo vận hành thực tế giới hạn tài nguyên (2 vCPU, $5.8\text{\,GiB}$ RAM), dịch vụ GROBID \texttt{0.9.1-crf}---với tập mô hình CRF Wapiti gốc chiếm khoảng $3.1\text{\,GiB}$ bộ nhớ ngoài heap---được khởi chạy qua kịch bản bọc cấu hình chuẩn POSIX (\texttt{scripts/\allowbreak grobid-entrypoint.sh}) trong bộ chứa $4\text{\,GiB}$ kết hợp vùng nhớ JVM G1GC giới hạn chặt (\texttt{-Xmx768m} kèm \texttt{-XX:+ExitOnOutOfMemoryError}), giới hạn nhóm tiến trình xử lý \texttt{concurrency=2} (\texttt{poolMaxWait=30}), nạp sẵn mô hình \texttt{modelPreload=true} và trần bộ nhớ \texttt{pdfalto} ở mức $1{,}024\text{\,MB}$. Trên tuyến gọi HTTP, hàm \texttt{call\_grobid\_fulltext()} lược bỏ mặc định trường tuần tự hóa tọa độ hộp bao không sử dụng (\texttt{teiCoordinates}, vẫn hỗ trợ bật chủ động qua \texttt{GrobidConfig.tei\_coordinates} với khóa đệm TEI phân tách \texttt{.coords-*}), tách riêng thời gian chờ kết nối và thời gian chờ đọc, dừng nhanh ngay lần thử đầu khi gặp \texttt{ReadTimeout}, \texttt{SSLError} hoặc lỗi phía trình khách không tạm thời, và chỉ thử lại các sự cố kết nối nhất thời hoặc mã HTTP 502--504 bên ngoài khóa đồng thời semaphore.
+Để triệt tiêu hiện tượng tráo trang bộ nhớ ảo trên máy chủ giới hạn tài nguyên (2 vCPU, $5.8\text{\,GiB}$ RAM), GROBID \texttt{0.9.1-crf}---với tập mô hình CRF Wapiti gốc chiếm khoảng $3.1\text{\,GiB}$ ngoài heap---khởi chạy qua \texttt{scripts/\allowbreak grobid-entrypoint.sh} trong container $4\text{\,GiB}$ với vùng nhớ JVM G1GC giới hạn chặt (\texttt{-Xmx768m} kèm \texttt{-XX:+ExitOnOutOfMemoryError}), \texttt{concurrency=2} (\texttt{poolMaxWait=30}), \texttt{modelPreload=true} và trần \texttt{pdfalto} $1{,}024\text{\,MB}$. Trên tuyến HTTP, \texttt{call\_grobid\_fulltext()} mặc định tắt tuần tự hóa hộp bao không dùng (\texttt{teiCoordinates}, hỗ trợ bật qua \texttt{GrobidConfig.tei\_coordinates} với khóa đệm \texttt{.coords-*}), tách thời gian chờ kết nối và đọc, dừng nhanh trước \texttt{ReadTimeout}/\texttt{SSLError} và chỉ thử lại sự cố kết nối tạm thời hoặc HTTP 502--504 bên ngoài semaphore đồng thời.
 
-\subsection{Mười hai Mô-đun Chuẩn Trích dẫn và Nhận diện Phong cách}
+\subsection{Mười hai định dạng trích dẫn và nhận diện phong cách}
 
-Các mục tài liệu tham khảo và dấu trích dẫn nội văn được đối sánh với mười hai quy ước mô-đun sắp xếp theo thứ tự ưu tiên tại Bảng~\ref{tab:styles} và minh họa trong Hình~\ref{fig:extraction}. Các mức ưu tiên số nguyên giúp phân giải hiện tượng chồng lấn cú pháp (chẳng hạn số thứ tự trong ngoặc vuông dùng chung bởi IEEE, ACM và Vancouver). Song song đó, \texttt{StyleDetector} chấm điểm tỷ lệ cấu trúc trên toàn văn bản để xuất ra hồ sơ \texttt{StyleProfile} (\texttt{APA-like}, \texttt{IEEE-like}, \texttt{MIXED} hoặc \texttt{UNKNOWN}); những bản thảo trộn lẫn các chuẩn không tương thích vượt ngưỡng $30\%$ sẽ bị gắn cờ thiếu nhất quán về phong cách trình bày.
+Các mục tham khảo và dấu trích dẫn nội văn được đối khớp trên mười một lớp con \texttt{CitationFormat} xếp theo ưu tiên ($100 \rightarrow 70$) cùng bộ trích xuất văn bản pháp luật Việt Nam chuyên biệt tại Bảng~\ref{tab:styles} và Hình~\ref{fig:extraction}. Song song đó, \texttt{StyleDetector} thống kê cấu trúc toàn văn bản xuất ra \texttt{StyleProfile} (\texttt{APA-like}, \texttt{IEEE-like}, \texttt{MIXED} hoặc \texttt{UNKNOWN}); cờ pha trộn chuẩn \texttt{MIXED} chỉ bật khi có ít nhất hai họ chuẩn không tương thích cùng vượt $30\%$ và tổng số mục/dấu thỏa mãn $\text{total} \ge 5$.
 
 {\setlength{\tabcolsep}{3.5pt}
-\begin{longtable}{|L{0.16}|C{0.12}|L{0.33}|L{0.39}|}
-\caption{Mười hai bộ trích xuất chuẩn trích dẫn đã đăng ký và mẫu cấu trúc nhận diện tương ứng.}\label{tab:styles}\\
+\begin{longtable}{|L{0.16}|C{0.13}|L{0.32}|L{0.39}|}
+\caption{Mười hai định dạng trích dẫn hỗ trợ (11 lớp con \texttt{CitationFormat} và Pháp luật VN).}\label{tab:styles}\\
 \hline
-\textbf{Chuẩn} & \textbf{Ưu tiên} & \textbf{Mẫu đánh dấu trong bài} & \textbf{Mẫu mục tài liệu tham khảo} \\
+\textbf{Định dạng} & \textbf{Ưu tiên} & \textbf{Mẫu đánh dấu trong bài} & \textbf{Mẫu mục tài liệu tham khảo} \\
 \hline
 \endfirsthead
 \multicolumn{4}{c}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
 \hline
-\textbf{Chuẩn} & \textbf{Ưu tiên} & \textbf{Mẫu đánh dấu trong bài} & \textbf{Mẫu mục tài liệu tham khảo} \\
+\textbf{Định dạng} & \textbf{Ưu tiên} & \textbf{Mẫu đánh dấu trong bài} & \textbf{Mẫu mục tài liệu tham khảo} \\
 \hline
 \endhead
 \hline
@@ -116,38 +116,53 @@ Các mục tài liệu tham khảo và dấu trích dẫn nội văn được đ
 \hline
 \textbf{MLA (9th)} & 70 & \textit{(Author 45)}, \textit{(Author and Coauthor 12)} & Author, First. ``Title.'' \textit{Venue}, vol.\ 1, no.\ 2, 2020, pp.\ 1--15. \\
 \hline
-\textbf{VN Legal} & \textbf{Quy tắc} & \textit{(Luật số 20/2023/QH15)} & Quốc hội / Chính phủ. (2023). \textit{Luật / Nghị định / Thông tư}. \\
+\textbf{Pháp luật VN} & \textbf{Hàm riêng} & \textit{(Luật số 20/2023/QH15)} & Quốc hội / Chính phủ. (2023). \textit{Luật / Nghị định / Thông tư}. \\
 \hline
 \end{longtable}
 }
 
-\begin{figure}[H]
+\begin{figure}[!htbp]
     \centering
     \includegraphics[width=\textwidth,keepaspectratio]{picture/figures/fig4_2_extraction.png}
-    \caption[Đường ống trích xuất đa định dạng cho PDF, DOCX, BibTeX và RIS]{Kiến trúc tầng trích xuất kết hợp GROBID \texttt{0.9.1-crf} TEI-XML, bộ lọc mục lục (TOC), cơ chế dự phòng PyMuPDF hai cột, OCR có chọn lọc và mười hai bộ phân tích chuẩn trích dẫn.}
+    \caption[Đường ống trích xuất đa định dạng cho PDF, DOCX, BibTeX và RIS]{Kiến trúc tầng trích xuất kết hợp GROBID \texttt{0.9.1-crf} TEI-XML, bộ lọc mục lục (TOC), dự phòng PyMuPDF hai cột, OCR chọn lọc và mười hai định dạng trích dẫn.}
     \label{fig:extraction}
 \end{figure}
 
-\section{Hợp nhất và Liên kết Hai chiều}
+\section{Hợp nhất và liên kết hai chiều}
 
-\subsection{Hợp nhất Trích dẫn ở Mức Công trình}
+\subsection{Hợp nhất trích dẫn ở mức công trình}
 
-Quá trình trích xuất tạo ra ba danh sách thô gồm: các dấu trích dẫn nội văn, danh mục tài liệu tham khảo và các trích dẫn ở phần phụ lục. Phương thức \texttt{IntegrityPipeline.\_merge\_citations} hợp nhất các dấu trích dẫn và mục thư mục tương ứng thành một tập công trình tham khảo duy nhất đã khử trùng lặp, đồng thời gắn kết mọi lần xuất hiện nội văn làm quan sát ngữ cảnh đi kèm. Các họ tiếng Việt ngắn có hai ký tự (như \textit{Le}, \textit{Vo}, \textit{Do}, \textit{Ho} và \textit{Ly}) được bảo toàn tường minh trong bước chuẩn hóa họ tên để không bao giờ bị cắt nhầm thành chữ viết tắt tên đệm. Các cụm trích dẫn ghép như \texttt{[9, 10]} hoặc \texttt{(Vaswani et al., 2017; Devlin et al., 2019)} được tách phẳng thành từng cạnh liên kết độc lập, còn các mục đánh số gộp (\texttt{[14] a) ... b) ...}) được tách thành các mục con có chỉ số phụ (\texttt{14a}, \texttt{14b}).
+Tầng trích xuất trả về dấu trích dẫn nội văn, danh mục tài liệu tham khảo và trích dẫn phụ lục. Phương thức \texttt{IntegrityPipeline.\_merge\_citations} hợp nhất các bản ghi tương ứng thành tập công trình duy nhất nhưng vẫn gắn đầy đủ mọi vị trí xuất hiện nội văn làm quan sát ngữ cảnh. Các họ tiếng Việt hai ký tự (\textit{Le}, \textit{Vo}, \textit{Do}, \textit{Ho}, \textit{Ly}) được bảo toàn tường minh trong chuẩn hóa họ tên để không bị cắt nhầm thành chữ viết tắt. Các cụm gộp như \texttt{[9, 10]} hay \textit{(Vaswani et al., 2017; Devlin et al., 2019)} được tách phẳng thành từng cạnh độc lập, còn mục đánh số gộp (\texttt{[14] a) ... b) ...}) tách thành mục con (\texttt{14a}, \texttt{14b}).
 
-\subsection{Bộ Liên kết Bảy Phương pháp và Tám Trạng thái Ánh xạ}
+\subsection{Bộ liên kết bảy phương pháp, thuật toán hình thức và trạng thái ánh xạ}
 
-Tính toàn vẹn cấu trúc nội tại đòi hỏi một đồ thị hai phía nhất quán giữa các luận điểm trích dẫn trong bài và danh mục tài liệu tham khảo cuối bài. Như minh họa tại Hình~\ref{fig:linking}, \texttt{CitationLinker} thực thi thác phân giải bảy tầng tự động (cùng cơ chế giảng viên ghi đè thủ công) được sắp xếp theo độ tin cậy giảm dần trong Bảng~\ref{tab:mapping-methods}, sau đó gán một trong tám nhãn \texttt{MappingStatus} tại Bảng~\ref{tab:mapping-statuses}. Các mục tài liệu tham khảo trùng lặp được phát hiện thông qua đối sánh chính xác mã DOI/arXiv hoặc điểm tương đồng kết hợp tiêu đề -- tác giả -- năm xuất bản đạt $\ge 0.92$. Khi xảy ra trạng thái ánh xạ nhập nhằng \texttt{ambiguous\_mapping} (ví dụ hai bài báo của cùng tác giả đầu tiên xuất bản trong cùng một năm nhưng thiếu hậu tố phân biệt \texttt{2024a}/\texttt{2024b}), tầng kiểm chứng phía sau sẽ giới hạn trần độ tin cậy ở mức $0.50$ và buộc trả về nhãn \texttt{unresolved}.
+Tính toàn vẹn cấu trúc đòi hỏi đồ thị hai phía nhất quán giữa nhận định trong bài và danh mục tham khảo. Như hình thức hóa tại Thuật toán~4.1 và minh họa ở Hình~\ref{fig:linking}, \texttt{CitationLinker} thực thi thác bảy phương pháp tự động theo đúng thứ tự thực thi (Bảng~\ref{tab:mapping-methods}, trong đó \texttt{numeric\_index} chạy trước \texttt{author\_year}, kèm \texttt{manual\_review} khi giảng viên ghi đè) và gán một trong tám nhãn \texttt{MappingStatus} (Bảng~\ref{tab:mapping-statuses}). Mục tham khảo trùng lặp được nhận diện qua khớp chính xác DOI/arXiv hoặc độ tương đồng gộp tiêu đề -- tác giả -- năm $\ge 0.92$. Khi xảy ra \texttt{ambiguous\_mapping}, tầng kiểm chứng phía sau chặn trần độ tin cậy ở $0.50$ và trả về \texttt{unresolved}.
 
-\begin{figure}[H]
+\begin{citraalgo}{4.1}{\texttt{BidirectionalCitationLink}$(\mathcal{M}, \mathcal{B})$}{alg:linker}
+\textbf{Đầu vào:} Dấu trích dẫn nội văn $\mathcal{M} = \{m_1, \dots, m_k\}$, danh mục tham khảo $\mathcal{B} = \{r_1, \dots, r_N\}$.\\
+\textbf{Đầu ra:} Tập liên kết $\mathcal{L}$, tập mục không được trích dẫn $\mathcal{U} \subseteq \mathcal{B}$, các cặp trùng lặp $\mathcal{D}$.\\
+1.\quad Dựng các chỉ mục tra cứu trên $\mathcal{B}$: $I_{\text{tei}}$ (\texttt{xml:id}), $I_{\text{doi}}$ (DOI chuẩn hóa), $I_{\text{arxiv}}$ (mã arXiv chuẩn), $I_{\text{num}}$ (số thứ tự) và $I_{\text{ay}}$ (họ tác giả, năm, hậu tố).\\
+2.\quad Phát hiện mục trùng lặp $\mathcal{D} \leftarrow \texttt{DuplicateDetector}(\mathcal{B})$ (khớp DOI/arXiv hoặc tương đồng $\ge 0.92$).\\
+3.\quad $\mathcal{L} \leftarrow \emptyset$; $\mathcal{C}_{\text{cited}} \leftarrow \emptyset$.\\
+4.\quad \textbf{với mỗi} $m \in \mathcal{M}$ \textbf{thực hiện}\\
+5.\quad\quad Tra cứu theo thứ tự ưu tiên nghiêm ngặt: (a)~$I_{\text{tei}}[m]$ ($0.98$); (b)~$I_{\text{doi}}[m]$ ($0.95$); (c)~$I_{\text{arxiv}}[m]$ ($0.95$); (d)~$I_{\text{num}}[m]$ ($0.90$); (e)~$I_{\text{ay}}[m]$ ($0.90$); (f)~khớp mờ từ khóa $\ge \tau_{\text{fuzz}}$ ($0.65$).\\
+6.\quad\quad \textbf{nếu} tìm thấy duy nhất một đích $r^*$ \textbf{thì}\\
+7.\quad\quad\quad Đặt $\text{status} \leftarrow \texttt{in\_text\_mismatch}$ nếu $m$ và $r^*$ lệch năm/họ, ngược lại \texttt{matched}; thêm $(m, r^*, \text{status})$ vào $\mathcal{L}$ và $r^*$ vào $\mathcal{C}_{\text{cited}}$.\\
+8.\quad\quad \textbf{ngược lại nếu} nhiều đích đồng hạng \textbf{thì} ghi $(m, \bot, \texttt{ambiguous\_mapping}, \text{conf}=0.0)$ vào $\mathcal{L}$.\\
+9.\quad\quad \textbf{ngược lại} ghi $(m, \bot, \texttt{missing\_reference}, \text{method}=\texttt{no\_keys}, \text{conf}=0.0)$ vào $\mathcal{L}$.\\
+10.\quad $\mathcal{U} \leftarrow \mathcal{B} \setminus \mathcal{C}_{\text{cited}}$ (gán nhãn \texttt{uncited\_reference}); \textbf{trả về} $(\mathcal{L}, \mathcal{U}, \mathcal{D})$.
+\end{citraalgo}
+
+\begin{figure}[!htbp]
     \centering
     \includegraphics[width=\textwidth,keepaspectratio]{picture/figures/fig4_3_linking.png}
-    \caption[Thác phân giải liên kết trích dẫn hai chiều bảy phương pháp và tám trạng thái ánh xạ]{Thác liên kết trích dẫn hai chiều qua bảy phương pháp phân giải tự động và tám trạng thái ánh xạ cấu trúc tương ứng.}
+    \caption[Thác phân giải liên kết hai chiều bảy phương pháp và tám trạng thái ánh xạ]{Thác liên kết trích dẫn hai chiều qua bảy phương pháp phân giải tự động (đúng thứ tự thực thi mã nguồn) và tám trạng thái ánh xạ cấu trúc tương ứng.}
     \label{fig:linking}
 \end{figure}
 
 {\setlength{\tabcolsep}{3.5pt}
 \begin{longtable}{|L{0.25}|C{0.15}|L{0.60}|}
-\caption{Các phương pháp phân giải theo thứ tự ưu tiên trong \texttt{CitationLinker}.}\label{tab:mapping-methods}\\
+\caption[Thứ tự phương pháp phân giải trong \texttt{CitationLinker}]{Các phương pháp phân giải theo đúng thứ tự ưu tiên trong \texttt{CitationLinker}.}\label{tab:mapping-methods}\\
 \hline
 \textbf{Phương pháp} & \textbf{Độ tin cậy} & \textbf{Tiêu chí đối sánh} \\
 \hline
@@ -162,21 +177,21 @@ Tính toàn vẹn cấu trúc nội tại đòi hỏi một đồ thị hai phí
 \endfoot
 \hline
 \endlastfoot
-\textbf{\texttt{tei\_link}} & \textbf{0.98} & Con trỏ trực tiếp \texttt{xml:id} trong GROBID TEI-XML nối từ thẻ nội văn \texttt{<ref>} tới \texttt{<biblStruct>}. \\
+\textbf{\texttt{tei\_link}} & \textbf{0.98} & Con trỏ trực tiếp \texttt{xml:id} trong GROBID TEI-XML nối từ \texttt{<ref>} tới \texttt{<biblStruct>}. \\
 \hline
-\textbf{\texttt{doi\_exact}} & \textbf{0.95} & Mã DOI sau chuẩn hóa xuất hiện trùng khớp ở cả dấu trích dẫn nội văn lẫn mục tài liệu tham khảo. \\
+\textbf{\texttt{doi\_exact}} & \textbf{0.95} & Mã DOI chuẩn hóa trùng khớp ở cả dấu trích dẫn nội văn và mục tài liệu tham khảo. \\
 \hline
-\textbf{\texttt{arxiv\_exact}} & \textbf{0.95} & Định danh chuẩn hóa \texttt{arXiv} trùng khớp hoàn toàn ở cả hai phía. \\
+\textbf{\texttt{arxiv\_exact}} & \textbf{0.95} & Định danh chuẩn \texttt{arXiv} trích xuất trùng khớp ở cả hai phía. \\
 \hline
-\textbf{\texttt{author\_year}} & 0.90 & Họ tác giả đã chuẩn hóa, năm xuất bản và hậu tố tùy chọn (\texttt{a}--\texttt{f}) thống nhất (bao gồm suy diễn tác giả -- số trang theo chuẩn MLA). \\
+\textbf{\texttt{numeric\_index}} & 0.90 & Số thứ tự ngoặc vuông hoặc chỉ số trên (hoặc dải \texttt{[1]--[3]}) khớp chỉ mục tài liệu tham khảo. \\
 \hline
-\textbf{\texttt{numeric\_index}} & 0.90 & Số thứ tự trong ngoặc vuông hoặc chỉ số trên (hoặc dải mở rộng \texttt{[1]--[3]}) khớp với chỉ mục tài liệu tham khảo. \\
+\textbf{\texttt{author\_year}} & 0.90 & Họ tác giả chuẩn hóa, năm xuất bản và hậu tố (\texttt{a}--\texttt{f}) đồng nhất (gồm suy diễn MLA). \\
 \hline
-\textbf{\texttt{fuzzy}} & 0.65 & Mức chồng lấn từ khóa tiêu đề hoặc tên tác giả vượt ngưỡng dự phòng khi thiếu khóa định danh chính xác. \\
+\textbf{\texttt{fuzzy}} & 0.65 & Chồng lấn từ khóa tiêu đề hoặc tác giả vượt ngưỡng dự phòng khi thiếu khóa định danh. \\
 \hline
-\textbf{\texttt{no\_keys}} & 0.30 & Không đủ khóa phân biệt hoặc xảy ra đồng hạng giữa nhiều mục tham khảo (\texttt{ambiguous\_mapping}). \\
+\textbf{\texttt{no\_keys}} & \textbf{0.00} & Thiếu khóa phân biệt hoặc đồng hạng không tách được (\texttt{missing\_reference} / \texttt{ambiguous\_mapping}). \\
 \hline
-\textbf{\texttt{manual\_review}} & \textbf{1.00} & Liên kết được giảng viên có thẩm quyền thẩm định và xác nhận trực tiếp. \\
+\textbf{\texttt{manual\_review}} & \textbf{1.00} & Liên kết được giảng viên có thẩm quyền ghi đè trực tiếp (\texttt{api/routes/verdicts.py}). \\
 \hline
 \end{longtable}
 }
@@ -198,54 +213,57 @@ Tính toàn vẹn cấu trúc nội tại đòi hỏi một đồ thị hai phí
 \endfoot
 \hline
 \endlastfoot
-\textbf{\texttt{matched}} & Không & 0.00 & Liên kết một--một duy nhất, nhất quán về siêu dữ liệu tác giả và năm xuất bản. \\
+\textbf{\texttt{matched}} & Không & 0.00 & Liên kết một--một duy nhất, nhất quán về tác giả và năm xuất bản. \\
 \hline
-\textbf{\texttt{missing\_reference}} & \textbf{Có} & \textbf{0.20} & Dấu trích dẫn trong bài viện dẫn một nguồn không tồn tại trong danh mục tham khảo (trích dẫn mồ côi). \\
+\textbf{\texttt{missing\_reference}} & \textbf{Có} & \textbf{0.20} & Dấu trích dẫn trong bài viện dẫn nguồn không có trong danh mục (trích dẫn mồ côi). \\
 \hline
-\textbf{\texttt{in\_text\_mismatch}} & \textbf{Có} & \textbf{0.15} & Cặp trích dẫn đã liên kết mâu thuẫn nhau về năm xuất bản, họ tác giả hoặc từ khóa tiêu đề. \\
+\textbf{\texttt{in\_text\_mismatch}} & \textbf{Có} & \textbf{0.15} & Cặp đã liên kết mâu thuẫn nhau về năm xuất bản, họ tác giả hoặc từ khóa tiêu đề. \\
 \hline
-\textbf{\texttt{uncited\_reference}} & \textbf{Có} & \textbf{0.10} & Mục tài liệu tham khảo có liệt kê ở cuối bài nhưng không được trích dẫn ở bất kỳ đâu trong phần nội dung. \\
+\textbf{\texttt{uncited\_reference}} & \textbf{Có} & \textbf{0.10} & Mục tài liệu tham khảo liệt kê cuối bài nhưng không được trích dẫn trong nội dung. \\
 \hline
-\textbf{\texttt{duplicate\_reference}} & \textbf{Có} & \textbf{0.10} & Hai hoặc nhiều mục trong danh mục tài liệu tham khảo cùng trỏ về một ấn phẩm duy nhất. \\
+\textbf{\texttt{duplicate\_reference}} & \textbf{Có} & \textbf{0.10} & Hai hoặc nhiều mục trong danh mục cùng trỏ về một ấn phẩm duy nhất. \\
 \hline
-\textbf{\texttt{ambiguous\_mapping}} & \textbf{Có} & 0.05 & Dấu trích dẫn trong bài khớp ngang bằng với nhiều mục tài liệu tham khảo khác nhau. \\
+\textbf{\texttt{ambiguous\_mapping}} & \textbf{Có} & 0.05 & Dấu trích dẫn nội văn khớp đồng hạng với nhiều mục tài liệu tham khảo. \\
 \hline
-\textbf{\texttt{style\_inconsistent}} & \textbf{Có} & 0.02 & Mục tham khảo hoặc dấu trích dẫn lệch khỏi chuẩn trình bày chủ đạo của bản thảo. \\
+\textbf{\texttt{style\_inconsistent}} & \textbf{Có} & 0.02 & Mục tham khảo hoặc dấu trích dẫn lệch khỏi chuẩn chủ đạo của bản thảo. \\
 \hline
 \textbf{\texttt{unresolved}} & Không & 0.00 & Không đủ thông tin cấu trúc để phân loại trạng thái liên kết. \\
 \hline
 \end{longtable}
 }
 
-\section{Truy hồi Liên hợp và Kiểm chứng URL}
+\section{Truy hồi liên hợp và kiểm chứng URL}
 
-\subsection{Điều phối Đa tầng Nhận biết Miền Tri thức}
+\subsection{Điều phối bốn tầng nhận biết miền tri thức}
 
-Thay vì phát tán mọi mục tài liệu tham khảo tới toàn bộ API bên ngoài, \texttt{Retrieval\allowbreak Orchestrator} định tuyến truy vấn qua kiến trúc phân tầng thể hiện ở Hình~\ref{fig:retrieval}:
+Thay vì phát tán mọi mục tham khảo tới toàn bộ API ngoài, \texttt{Retrieval\allowbreak Orchestrator} định tuyến truy vấn qua kiến trúc bốn tầng ở Hình~\ref{fig:retrieval}:
 \begin{enumerate}
-    \item \textbf{Sơ lọc ban đầu (Pre-Screening):} Các URL thuần web, kho mã nguồn phần mềm, tài liệu đặc tả IETF RFC, gói thư viện PyPI, thẻ mô hình Hugging Face và văn bản quy phạm pháp luật Việt Nam (\texttt{parse\_vn\_legal\_reference} + \texttt{VNLegalVerifier}) được chuyển thẳng tới các bộ kiểm chứng kỹ thuật và pháp lý chuyên biệt.
-    \item \textbf{Tầng 0 (Tra cứu ngoại tuyến dưới 100\,ms):} Truy vấn trước hết đối chiếu với danh sách trắng 101 công trình kinh điển (\texttt{\_KNOWN\_PAPERS}) và cơ sở dữ liệu cục bộ SQLite FTS5 (\texttt{local\_papers.db}, gồm 129,137 bản ghi bao phủ 128,115 bài báo duy nhất và 82,887 văn bản tóm tắt đầy đủ) bằng hàm xếp hạng Okapi BM25 kết hợp truy vấn khớp chính xác tiêu đề, ràng buộc năm xuất bản và ràng buộc tác giả.
-    \item \textbf{Tầng 1 (Các API công khai định tuyến theo miền):} Dựa trên dấu hiệu định danh (DOI, arXiv ID, ISBN, PMID) và biểu thức chính quy nhận diện lĩnh vực từ vựng (Khoa học máy tính/AI, Y sinh, Sách chuyên khảo, Kho lưu trữ), các truy vấn bất đồng bộ được điều phối dưới cơ chế giới hạn tốc độ thùng thẻ bài cấu hình trong \texttt{configs/config.yaml}. Cụ thể, \textbf{Crossref} ($25\text{\,req/s}$ qua luồng polite pool kèm cờ Retraction Watch), \textbf{OpenAlex} ($8\text{\,req/s}$), \textbf{DataCite}, \textbf{Global DOI RA}, \textbf{DOAJ} và \textbf{OpenAIRE/HAL} phụ trách ấn phẩm đa ngành và truy cập mở; trong khi \textbf{DBLP} ($1.5\text{\,req/s}$), \textbf{arXiv} ($1.0\text{\,req/s}$), \textbf{Europe PMC} ($5.0\text{\,req/s}$), \textbf{NCBI/bioRxiv}, \textbf{OpenLibrary / Google Books} ($3.0\text{\,req/s}$) và \textbf{Wikidata / OpenCitations} bao phủ các bản ghi chuyên ngành.
-    \item \textbf{Tầng 2 (Dự phòng \& Khôi phục tóm tắt):} Các truy vấn chưa tìm thấy ứng viên có thể tùy chọn tra cứu qua bộ định tuyến \textbf{Serper / SerpAPI}, đồng thời mọi ứng viên tốt nhất nhưng khuyết phần tóm tắt sẽ kích hoạt chu trình làm giàu \texttt{\_enrich\_missing\_abstract} qua 9 nguồn để bảo đảm bước căn chỉnh ngữ nghĩa luận điểm luôn có dữ liệu đối chứng.
+    \item \textbf{Tiền sàng lọc (Pre-Screening):} URL thuần web, kho phần mềm, chuẩn IETF RFC, gói PyPI, thẻ Hugging Face và văn bản pháp luật Việt Nam (\texttt{parse\_vn\_legal\_reference} + \texttt{VNLegalVerifier}) đi thẳng tới bộ kiểm chứng kỹ thuật/pháp lý chuyên biệt.
+    \item \textbf{Tầng 0 (Tra cứu ngoại tuyến dưới 100\,ms):} Kiểm tra danh sách trắng 101 công trình kinh điển (\texttt{\_KNOWN\_PAPERS}) và chỉ mục SQLite FTS5 cục bộ (\texttt{local\_papers.db}, 129,137 bản ghi; 128,115 bài báo duy nhất; 82,887 tóm tắt; $98.42\%$ ACL Anthology) bằng Okapi BM25~\cite{robertson2009bm25}.
+    \item \textbf{Tầng 1 (Các cơ sở dữ liệu công khai cốt lõi):} Dựa vào dấu hiệu DOI, arXiv, ISBN hoặc tiêu đề, các truy vấn bất đồng bộ chạy dưới giới hạn tốc độ cấu hình tới \textbf{Crossref} ($25\text{\,req/s}$ polite pool + Retraction Watch), \textbf{OpenAlex} ($8\text{\,req/s}$), \textbf{DataCite}, \textbf{Global DOI RA}, \textbf{DOAJ} và \textbf{OpenAIRE/HAL}.
+    \item \textbf{Tầng 2 (Chuyên ngành \& Pha 2.5 làm giàu arXiv):} Định tuyến theo lĩnh vực tới \textbf{DBLP} ($1.5\text{\,req/s}$), \textbf{Europe PMC} ($5.0\text{\,req/s}$), \textbf{NCBI/bioRxiv}, \textbf{OpenLibrary / Google Books} ($3.0\text{\,req/s}$), \textbf{Wikidata / OpenCitations}, \textbf{IETF RFC / PyPI / Hugging Face} và Pha 2.5 \textbf{arXiv API} (giãn cách đặt chỗ tuần tự $1.0\text{\,s}$). Khi ứng viên tốt nhất khuyết bản tóm tắt, \texttt{\_enrich\_missing\_abstract} truy vấn tối đa ba nguồn ưu tiên hàng đầu (\texttt{pool[:3]}) trong tập chín bộ chuyển đổi làm giàu để chặn độ trễ đuôi.
+    \item \textbf{Tầng 3 (Dự phòng tìm kiếm web tùy chọn):} Truy vấn không có ứng viên có thể tùy chọn gọi \textbf{Serper / SerpAPI} chỉ khi đơn vị vận hành cấu hình khóa API riêng.
 \end{enumerate}
 
-\begin{figure}[H]
+\begin{figure}[!htbp]
     \centering
     \includegraphics[width=\textwidth,keepaspectratio]{picture/figures/fig4_4_retrieval.png}
-    \caption[Truy hồi đa tầng nhận biết miền tri thức và kiểm tra URL chống SSRF]{Điều phối truy hồi nhận biết miền tri thức qua Tầng 0 (SQLite FTS5 + 101 bài báo kinh điển), Tầng 1 (hơn 15 API trực tuyến), Tầng 2 dự phòng và kiểm chứng song song HTTP/Wayback/HTML.}
+    \caption[Truy hồi bốn tầng nhận biết miền tri thức và kiểm tra URL chống SSRF]{Điều phối truy hồi bốn tầng qua Tầng 0 (SQLite FTS5 + 101 công trình kinh điển), Tầng 1 (API công khai cốt lõi), Tầng 2 (Chuyên ngành \& arXiv), Tầng 3 (Tìm kiếm tùy chọn) và kiểm chứng song song HTTP/Wayback/HTML.}
     \label{fig:retrieval}
 \end{figure}
 
-\subsection{Đồng thuận Đa nguồn, LinkValidator và SafeHtmlMetaVerifier}
+\subsection{Đồng thuận đa nguồn, bộ bảo vệ SSRF ghim IP và SafeHtmlMetaVerifier}
 \label{sec:consensus}
 
-Các ứng viên thu về được khử trùng lặp và chấm điểm đồng thuận đa nguồn (\texttt{title\_sim} $\ge 0.90$, \texttt{author\_jaccard} $\ge 0.50$, $|\Delta y| \le 1$), đồng thời kế thừa chéo văn bản tóm tắt giữa các cơ sở dữ liệu thống nhất khi một nguồn bị khuyết tóm tắt. Song song đó, \texttt{LinkValidator} thăm dò các URL được trích dẫn bằng yêu cầu \texttt{HEAD}/\texttt{GET} ghim địa chỉ IP an toàn chống SSRF kết hợp tra cứu lưu trữ Internet Archive Wayback CDX, từ đó gán một trong \textbf{sáu trạng thái \texttt{LinkStatus}}: \texttt{alive} (HTTP 200--399), \texttt{restricted\_alive} (HTTP 401/403/405/429 do cơ chế chống bot hoặc tường phí của nhà xuất bản), \texttt{archived\_alive} (liên kết gốc không còn hoạt động nhưng khôi phục được trên Wayback Machine), \texttt{dead\_link} (HTTP 404/410 hoặc lỗi phân giải DNS NXDOMAIN), \texttt{fake\_domain} (tên miền dành riêng hoặc giữ chỗ theo chuẩn RFC 2606), hoặc \texttt{unchecked}. Đối với các tài nguyên web truy cập được, \texttt{SafeHtmlMetaVerifier} đọc luồng tối đa $128\text{\,KB}$ mã HTML đầu trang (\texttt{MAX\_HTML\_HEAD\_BYTES = 131,072}) để bóc tách siêu dữ liệu chuẩn Highwire Press (\texttt{citation\_title}, \texttt{citation\_author}, \texttt{citation\_doi}), Dublin Core, OpenGraph và JSON-LD, đồng thời phát hiện các trang báo lỗi ``Soft-404'' song ngữ Anh/Việt ngụy trang dưới mã phản hồi HTTP 200.
+Các ứng viên trả về được khử trùng lặp và chấm điểm đồng thuận đa nguồn (\texttt{title\_sim} $\ge 0.90$, \texttt{author\_jaccard} $\ge 0.50$, $|\Delta y| \le 1$), kế thừa chéo bản tóm tắt giữa các cơ sở dữ liệu nhất trí. Song song đó, \texttt{LinkValidator} thăm dò URL trích dẫn và ảnh chụp Internet Archive Wayback CDX~\cite{wayback-cdx}, gán một trong \textbf{sáu trạng thái \texttt{LinkStatus}}: \texttt{alive} (HTTP 200--399), \texttt{restricted\_alive} (HTTP 401/403/405/429 chống bot/tường phí), \texttt{archived\_alive} (khôi phục qua Wayback), \texttt{dead\_link} (HTTP 404/410 hoặc NXDOMAIN), \texttt{fake\_domain} (tên miền giữ chỗ theo RFC 2606~\cite{rfc2606}) hoặc \texttt{unchecked}. Với tài nguyên web truy cập được, \texttt{SafeHtmlMetaVerifier} đọc tối đa $128\text{\,KB}$ đầu trang (\texttt{MAX\_HTML\_HEAD\_BYTES = 131,072}) để bóc tách siêu dữ liệu Highwire Press, Dublin Core, OpenGraph và JSON-LD đồng thời phát hiện trang lỗi ``Soft-404'' song ngữ Anh/Việt dưới mã HTTP 200.
 
-\section{Đối sánh Từ vựng, Nơ-ron và Xuyên ngôn ngữ}
+Để ngăn chặn tấn công DNS rebinding và dò quét mạng nội bộ, toàn bộ kết nối URL đi ra đều đi qua \texttt{SSRFSafeAsyncNetworkBackend} (\texttt{retrieval/link\_validator.py}). Trước khi mở socket, tầng truyền tải phân giải toàn bộ bản ghi A/AAAA qua \texttt{socket.getaddrinfo}, chỉ cho phép cổng $\{80, 443\}$ và lập tức từ chối nếu \emph{bất kỳ} địa chỉ IP nào rơi vào vùng loopback, link-local, mạng riêng RFC 1918, IPv4 ánh xạ IPv6 (\texttt{::ffff:127.0.0.1}) hoặc siêu dữ liệu đám mây (\texttt{169.254.169.254}). Bên trong \texttt{connect\_tcp()}, tầng truyền tải kết nối thẳng vào chuỗi IP đã xác minh đồng thời giữ nguyên tên miền gốc cho TLS Server Name Indication (SNI) và tiêu đề HTTP \texttt{Host} nhằm bảo toàn xác thực chứng chỉ X.509, đồng thời lặp lại toàn bộ quy trình kiểm tra DNS/IP trên từng bước chuyển hướng HTTP 3xx.
 
-\subsection{Đối sánh Từ vựng và Trường Thư mục}
+\section{Đối sánh từ vựng, nơ-ron và xuyên ngôn ngữ}
 
-Từ ứng viên tốt nhất của tầng truy hồi, \texttt{FeatureCalculator} tính toán tập tín hiệu cấu trúc \texttt{MatchFeatures} được tóm tắt tại Bảng~\ref{tab:features}. Ba bộ chuẩn hóa chuyên biệt theo miền học thuật giúp ngăn ngừa cảnh báo sai về lỗi siêu dữ liệu đối với các công trình hợp lệ. Thứ nhất, cơ chế tách phụ đề sau dấu hai chấm và lược bỏ thông tin lần xuất bản (\textit{2nd ed.}, \textit{Revised edition}) cấp mức tương đồng tiêu đề $0.95$ cho các tiền tố tiêu đề chính khớp sạch. Thứ hai, cơ chế đối chiếu năm xuất bản giữa bản tiền ấn phẩm arXiv và kỷ yếu chính thức tính \texttt{year\_distance} theo giá trị $|\Delta y|$ nhỏ nhất giữa các phiên bản của cùng một công trình, trong khi \texttt{VenueNormalizer} mở rộng bảng bí danh tên hội nghị và tạp chí (chẳng hạn \texttt{NeurIPS} $\leftrightarrow$ \texttt{Advances in Neural Information Processing Systems}).
+\subsection{Đối sánh từ vựng và trường thư mục}
+
+Từ đối tượng \texttt{SourceCandidate} tốt nhất, \texttt{FeatureCalculator} tính tập tín hiệu \texttt{MatchFeatures} tại Bảng~\ref{tab:features}. Ba bộ chuẩn hóa miền học thuật loại bỏ cảnh báo siêu dữ liệu giả: tách tiêu đề phụ sau dấu hai chấm/lần tái bản cấp mức tương đồng $0.95$ cho tiền tố tiêu đề chính khớp sạch; đối chiếu arXiv -- kỷ yếu lấy $|\Delta y|$ nhỏ nhất giữa bản tiền ấn phẩm và bản xuất bản chính thức; và \texttt{VenueNormalizer} mở rộng bí danh hội nghị/tạp chí (\texttt{NeurIPS} $\leftrightarrow$ \texttt{Advances in Neural Information Processing Systems}).
 
 {\setlength{\tabcolsep}{3.5pt}
 \begin{longtable}{|L{0.28}|C{0.12}|L{0.60}|}
@@ -264,58 +282,58 @@ Từ ứng viên tốt nhất của tầng truy hồi, \texttt{FeatureCalculator
 \endfoot
 \hline
 \endlastfoot
-\textbf{\texttt{title\_sim\_fuzzy}} & \texttt{float} & Giá trị lớn nhất giữa khớp chính xác sau chuẩn hóa, khớp tiền tố tiêu đề chính ($0.95$), khớp chuỗi con có kiểm soát ($0.90$) và \texttt{token\_set\_ratio} của RapidFuzz. \\
+\textbf{\texttt{title\_sim\_fuzzy}} & \texttt{float} & Giá trị lớn nhất giữa khớp chính xác, khớp tiền tố tiêu đề chính ($0.95$), chuỗi con có kiểm soát ($0.90$) và RapidFuzz \texttt{token\_set\_ratio}. \\
 \hline
-\textbf{\texttt{title\_sim\_semantic}} & \texttt{float} & Độ tương đồng cosine giữa vector nhúng \texttt{all-MiniLM-L6-v2} của tiêu đề trích dẫn và tiêu đề ứng viên. \\
+\textbf{\texttt{title\_sim\_semantic}} & \texttt{float} & Độ tương đồng cosine giữa véc-tơ nhúng \texttt{all-MiniLM-L6-v2} của tiêu đề trích dẫn và tiêu đề ứng viên. \\
 \hline
 \textbf{\texttt{title\_sim\_max}} & \texttt{float} & Giá trị lớn nhất giữa \texttt{title\_sim\_fuzzy} và \texttt{title\_sim\_semantic}. \\
 \hline
-\textbf{\texttt{author\_jaccard}} & \texttt{float} & Hệ số chồng lấn họ tác giả đã lược dấu nhưng vẫn bảo toàn các họ tiếng Việt ngắn (\textit{Le}, \textit{Vo}, \textit{Do}). \\
+\textbf{\texttt{author\_jaccard}} & \texttt{float} & Chồng lấn họ tác giả đã lược dấu nhưng bảo toàn các họ tiếng Việt ngắn (\textit{Le}, \textit{Vo}, \textit{Do}, \textit{Ho}, \textit{Ly}). \\
 \hline
-\textbf{\texttt{year\_distance}} & \texttt{int} & Giá trị nhỏ nhất của $|y_{\text{cited}} - y_{\text{cand}}|$ qua các bản ghi tiền ấn phẩm/lần tái bản tương ứng ($999$ nếu khuyết năm). \\
+\textbf{\texttt{year\_distance}} & \texttt{int} & Giá trị nhỏ nhất $|y_{\text{cited}} - y_{\text{cand}}|$ giữa các bản ghi tiền ấn phẩm/tái bản ($999$ nếu khuyết năm). \\
 \hline
-\textbf{\texttt{venue\_sim}} & \texttt{float} & Độ tương đồng từ khóa nơi công bố thuộc đoạn $[0, 1]$ sau khi mở rộng bí danh bằng \texttt{VenueNormalizer}. \\
+\textbf{\texttt{venue\_sim}} & \texttt{float} & Độ tương đồng từ khóa nơi công bố trong $[0, 1]$ sau mở rộng bí danh bởi \texttt{VenueNormalizer}. \\
 \hline
-\textbf{\texttt{doi\_exact\_match}} & \texttt{bool} & Khớp chính xác mã DOI đã chuẩn hóa hoặc tương đương định danh chuẩn giữa DOI của arXiv và DOI nhà xuất bản. \\
+\textbf{\texttt{doi\_exact\_match}} & \texttt{bool} & Khớp chính xác mã DOI chuẩn hóa hoặc tương đương chuẩn giữa DOI arXiv và DOI nhà xuất bản. \\
 \hline
-\textbf{\texttt{source\_consensus}} & \texttt{int} & Số lượng cơ sở dữ liệu độc lập cùng trả về bản ghi ứng viên củng cố lẫn nhau. \\
+\textbf{\texttt{source\_consensus}} & \texttt{int} & Số lượng cơ sở dữ liệu độc lập cùng trả về bản ghi ứng viên củng cố nhau. \\
 \hline
-\textbf{\texttt{content\_alignment\_score}} & \texttt{float} & Điểm căn chỉnh nơ-ron gộp theo câu giữa ngữ cảnh câu trích dẫn trong bài và tiêu đề/tóm tắt ứng viên (Phương trình~\eqref{eq:abs-pooling}). \\
+\textbf{\texttt{content\_alignment\_score}} & \texttt{float} & Điểm căn chỉnh nơ-ron gộp theo câu giữa ngữ cảnh trích dẫn và tiêu đề/tóm tắt ứng viên (Phương trình~\eqref{eq:abs-pooling}). \\
 \hline
-\textbf{\texttt{stance\_label}} & \texttt{str} & Nhãn lập trường hỗ trợ luận điểm (\texttt{supported}, \texttt{partially\_supported}, \texttt{neutral}, \texttt{contradiction\_risk}) thông qua cổng lọc độ đặc trưng gốc từ. \\
+\textbf{\texttt{stance\_label}} & \texttt{str} & Nhãn lập trường hỗ trợ (\texttt{supported}, \texttt{partially\_supported}, \texttt{neutral}, \texttt{contradiction\_risk}) qua lọc độ đặc trưng gốc từ. \\
 \hline
 \textbf{\texttt{url\_status}} & \texttt{enum} & Trạng thái hoạt động sáu mức của URL (\texttt{alive}, \texttt{restricted\_alive}, \texttt{archived\_alive}, \texttt{dead\_link}, \texttt{fake\_domain}, \texttt{unchecked}). \\
 \hline
 \end{longtable}
 }
 
-\subsection{Căn chỉnh Ngữ nghĩa bằng Bộ Mã hóa Kép và Phân tích Lập trường}
+\subsection{Căn chỉnh ngữ nghĩa bằng bộ mã hóa kép và phân tích lập trường}
 
-Hình~\ref{fig:matching} minh họa đường ống đối sánh nơ-ron dùng bộ mã hóa kép trong \texttt{SemanticMatcher}. Các câu luận điểm và tóm tắt đơn ngữ tiếng Anh được mã hóa bằng Sentence-BERT (\texttt{all-MiniLM-L6-v2}, 384 chiều)~\cite{reimers2019sbert} rồi gộp điểm trên từng câu tóm tắt theo Phương trình~\eqref{eq:abs-pooling} ($0.65\max + 0.35\text{abs}$), tổng hợp tối đa tám vị trí trích dẫn nội văn cho mỗi công trình tham khảo. Bất cứ khi nào phát hiện dấu thanh tiếng Việt trong câu trích dẫn nội văn trong khi bản tóm tắt truy hồi được viết bằng tiếng Anh (hoặc ngược lại), \texttt{SemanticMatcher} tự động kích hoạt bộ mã hóa đa ngôn ngữ lượng tử hóa ONNX INT8 \texttt{paraphrase-multilingual-MiniLM-L12-v2}~\cite{reimers2020multilingual} để tính độ tương đồng xuyên ngôn ngữ và trích xuất các cặp khái niệm song ngữ bắc cầu. Lập trường luận điểm và mục đích trích dẫn (\texttt{background}, \texttt{methodology}, \texttt{result\_comparison}) được xác định bằng cơ chế lọc độ đặc trưng gốc từ nội dung không phụ thuộc động từ tường thuật thay vì dựa vào danh sách động từ cứng nhắc, qua đó phát hiện hiệu quả các luận điểm đảo ngược cực tính hoặc gán ghép sai sự thật vào bài báo có thật.
+Hình~\ref{fig:matching} minh họa đường ống bộ mã hóa kép trong \texttt{SemanticMatcher}. Các nhận định và bản tóm tắt đơn ngữ tiếng Anh được mã hóa bằng Sentence-BERT (\texttt{all-MiniLM-L6-v2}, 384D)~\cite{reimers2019sbert} và gộp theo câu bằng Phương trình~\eqref{eq:abs-pooling} ($0.65\,\max + 0.35\,\mathrm{abs}$, thống nhất trên cả nhánh chạy lô lẫn nhánh dự phòng từng câu), tổng hợp tối đa tám vị trí trích dẫn mỗi công trình. Khi phát hiện văn bản song ngữ Việt -- Anh theo bất kỳ chiều nào (\texttt{VI}$\leftrightarrow$\texttt{EN}), \texttt{SemanticMatcher} tự động gọi bộ mã hóa lượng tử hóa ONNX INT8 \texttt{paraphrase-multilingual-MiniLM-L12-v2}~\cite{reimers2020multilingual}, bổ trợ bằng từ điển bắc cầu học thuật (\texttt{vn\_en\_academic\_bridge}) và áp dụng mức bù tương đồng xuyên ngữ (\texttt{cross\_lingual\_sim\_boost = +0.08}, cắt biên $[0, 1]$) để bù nén không gian cosine đa ngôn ngữ; các cặp ngôn ngữ khác dùng trực tiếp bộ mã hóa đa ngữ không cộng hệ số bù. Lập trường và ý định trích dẫn (\texttt{background}, \texttt{methodology}, \texttt{result\_comparison}) dùng lọc độ đặc trưng gốc từ nội dung không phụ thuộc động từ tường thuật để khoanh vùng nhận định mâu thuẫn.
 
-\begin{figure}[H]
+\begin{figure}[!htbp]
     \centering
     \includegraphics[width=\textwidth,keepaspectratio]{picture/figures/fig4_5_matching.png}
-    \caption[Kiến trúc đối sánh từ vựng, ngữ nghĩa và xuyên ngôn ngữ dùng bộ mã hóa kép]{Kiến trúc tầng đối sánh kết hợp chuẩn hóa trường từ vựng, căn chỉnh tóm tắt gộp theo câu bằng Sentence-BERT ($0.65\max + 0.35\text{abs}$), cổng lọc lập trường và bắc cầu ngữ nghĩa \texttt{VI}$\leftrightarrow$\texttt{EN} chuẩn ONNX INT8.}
+    \caption[Kiến trúc đối sánh từ vựng, ngữ nghĩa và xuyên ngôn ngữ bộ mã hóa kép]{Kiến trúc tầng đối sánh kết hợp chuẩn hóa từ vựng, căn chỉnh tóm tắt gộp theo câu bằng Sentence-BERT ($(0.65\,\max + 0.35\,\mathrm{abs})$), cổng lập trường và bắc cầu \texttt{VI}$\leftrightarrow$\texttt{EN} ONNX INT8.}
     \label{fig:matching}
 \end{figure}
 
-\section{Kiểm chứng lai Nơ-ron -- Ký hiệu và Hiệu chỉnh xác suất Platt}
+\section{Kiểm chứng lai Nơ-ron -- Ký hiệu và hiệu chỉnh xác suất Platt}
 
-\subsection{Cây Quyết định Ký hiệu Phân cấp Ưu tiên}
+\subsection{Cây quyết định ký hiệu phân cấp ưu tiên}
 
-\texttt{NeuroSymbolicChecker} dung hợp các đặc trưng căn chỉnh nơ-ron với bộ suy diễn luật ký hiệu tất định (\texttt{SymbolicRules}, gồm \textbf{68 mã luật \texttt{R-*} phân biệt} trải rộng trên tầng sơ lọc tài nguyên Mức 0 và 16 nhóm luật học thuật xếp theo thứ tự ưu tiên) cùng bộ chấm điểm học máy đã hiệu chỉnh xác suất, như thể hiện trong Hình~\ref{fig:neurosymbolic} và trình bày chi tiết tại Bảng~\ref{tab:rules}.
+\texttt{NeuroSymbolicChecker} dung hợp các đặc trưng căn chỉnh nơ-ron với cây quyết định ký hiệu tất định gồm \textbf{68 mã luật \texttt{R-*} phân biệt}---60 mã định nghĩa trong \texttt{logic/rules.py} (57 mã tĩnh và 3 mã điều chỉnh nguồn gốc động) cùng 8 mã phân bố tại \texttt{neuro\_symbolic\_checker.py}, \texttt{vn\_legal\_verifier.py} và \texttt{cis.py} (tổng hợp hệ phân loại tại Phụ lục~\ref{app:taxonomy})---kết hợp mô hình Hồi quy Logistic Đa lớp 16 đặc trưng và bộ hiệu chỉnh Platt, thể hiện ở Hình~\ref{fig:neurosymbolic} và Bảng~\ref{tab:rules}. Để tối ưu độ trễ, nhánh nhanh \texttt{is\_known\_paper()} kiểm chứng 101 công trình kinh điển trong \texttt{\_KNOWN\_PAPERS} trước khi pha trộn tổng quát nhưng vẫn kiểm tra chặt năm xuất bản, tác giả và lập trường; các trích dẫn học thuật thông thường đi qua tiền sàng lọc Bậc~0 và 16 nhóm luật như tóm lược trong sơ đồ luồng quyết định có rào chắn ở Hình~\ref{fig:decision-flow}.
 
-\begin{figure}[H]
+\begin{figure}[!htbp]
     \centering
     \includegraphics[width=\textwidth,keepaspectratio]{picture/figures/fig4_6_neurosymbolic.png}
-    \caption[Bộ kiểm chứng lai Nơ-ron -- Ký hiệu và hiệu chỉnh xác suất Platt trên không gian logit]{Kiến trúc kiểm chứng lai Nơ-ron -- Ký hiệu dung hợp bộ suy diễn 16 nhóm luật ký hiệu (68 mã luật) với mô hình chấm điểm Hồi quy Logistic Đa lớp 16 đặc trưng và bộ hiệu chỉnh xác suất Platt.}
+    \caption[Bộ kiểm chứng lai Nơ-ron -- Ký hiệu và hiệu chỉnh xác suất Platt]{Kiến trúc kiểm chứng lai Nơ-ron -- Ký hiệu dung hợp bộ suy diễn 16 nhóm luật ký hiệu (68 mã \texttt{R-*}) với mô hình Hồi quy Logistic Đa lớp 16 đặc trưng và hiệu chỉnh xác suất Platt trên không gian logit.}
     \label{fig:neurosymbolic}
 \end{figure}
 
 {\setlength{\tabcolsep}{3.5pt}
 \begin{longtable}{|C{0.11}|L{0.33}|L{0.56}|}
-\caption{Thứ tự đánh giá của bước sơ lọc ký hiệu và 16 nhóm luật kiểm chứng (68 mã luật \texttt{R-*} phân biệt).}\label{tab:rules}\\
+\caption{Thứ tự đánh giá của tiền sàng lọc ký hiệu và 16 nhóm luật kiểm chứng (68 mã \texttt{R-*}).}\label{tab:rules}\\
 \hline
 \textbf{Nhóm} & \textbf{Mã luật đại diện} & \textbf{Điều kiện kích hoạt và Nhãn phán quyết} \\
 \hline
@@ -330,132 +348,154 @@ Hình~\ref{fig:matching} minh họa đường ống đối sánh nơ-ron dùng b
 \endfoot
 \hline
 \endlastfoot
-\textbf{Mức 0} & \texttt{R-URL-RESOURCE}, \texttt{R-WEB-RESOURCE}, \texttt{R-VN-LEGAL-VERIFIED}, \texttt{R-VN-LEGAL-\allowbreak MISMATCH} & Tài liệu hướng dẫn web thuần túy, tạo tác phần mềm/RFC/HF hoặc văn bản pháp luật Việt Nam được \texttt{VNLegalVerifier} đối chứng $\rightarrow$ \textbf{\texttt{resource}} (hoặc \texttt{metadata\_error} nếu mâu thuẫn cơ quan ban hành/số hiệu). \\
+\textbf{Bậc 0} & \texttt{R-URL-RESOURCE}, \texttt{R-WEB-RESOURCE}, \texttt{R-VN-LEGAL-VERIFIED}, \texttt{R-VN-LEGAL-\allowbreak MISMATCH} & Tài liệu web thuần túy, thành phần phần mềm/RFC/HF hoặc văn bản pháp luật Việt Nam kiểm tra qua \texttt{VNLegalVerifier} $\rightarrow$ \textbf{\texttt{resource}} (hoặc \texttt{metadata\_error}/\texttt{suspected\_hallucination} nếu sai thẩm quyền/số hiệu). \\
 \hline
-\textbf{1} & \texttt{R-FAKE-URL}, \texttt{R-FABRICATED-DOI}, \texttt{R-CHIMERIC-DOI-\allowbreak MISMATCH}, \texttt{R-RETRACTED-PAPER} & Tên miền giả chuẩn RFC 2606, tiền tố DOI chưa đăng ký hoặc DOI thật nhưng phân giải ra công trình không liên quan $\rightarrow$ \textbf{\texttt{suspected\_hallucination}}; dính cờ Retraction Watch (\texttt{is\_retracted}) $\rightarrow$ \textbf{\texttt{metadata\_error}}. \\
+\textbf{1} & \texttt{R-FAKE-URL}, \texttt{R-FABRICATED-DOI}, \texttt{R-CHIMERIC-DOI-\allowbreak MISMATCH}, \texttt{R-RETRACTED-PAPER} & Tên miền giả RFC 2606, tiền tố DOI chưa đăng ký hoặc DOI thật phân giải ra tiêu đề không liên quan $\rightarrow$ \textbf{\texttt{suspected\_hallucination}}; cờ rút bài Retraction Watch (\texttt{is\_retracted}) $\rightarrow$ \textbf{\texttt{metadata\_error}}. \\
 \hline
-\textbf{2} & \texttt{R-FUTURE-YEAR}, \texttt{R-FUTURE-YEAR-\allowbreak KNOWN-AUTHOR} & Năm trích dẫn vượt quá năm dương lịch hiện tại: công trình lạ $\rightarrow$ \textbf{\texttt{suspected\_hallucination}}; công trình/tác giả đã biết $\rightarrow$ \textbf{\texttt{metadata\_error}}. \\
+\textbf{2} & \texttt{R-FUTURE-YEAR}, \texttt{R-FUTURE-YEAR-\allowbreak KNOWN-AUTHOR} & Năm trích dẫn vượt năm hiện tại: công trình lạ $\rightarrow$ \textbf{\texttt{suspected\_hallucination}}; công trình/tác giả có thật $\rightarrow$ \textbf{\texttt{metadata\_error}}. \\
 \hline
-\textbf{3} & \texttt{R-KNOWN-PAPER}, \texttt{R-TITLE-MISMATCH} & Khớp danh sách trắng 101 bài báo kinh điển: đồng nhất toàn bộ siêu dữ liệu và lập trường $\rightarrow$ \textbf{\texttt{verified}}; sai lệch năm/tác giả/luận điểm $\rightarrow$ \textbf{\texttt{metadata\_error}}. \\
+\textbf{3} & \texttt{R-KNOWN-PAPER}, \texttt{R-TITLE-MISMATCH} & Khớp danh sách 101 công trình kinh điển: đồng nhất siêu dữ liệu và lập trường $\rightarrow$ \textbf{\texttt{verified}}; sai năm/tác giả/nhận định $\rightarrow$ \textbf{\texttt{metadata\_error}}. \\
 \hline
-\textbf{4} & \texttt{R-DEAD-URL}, \texttt{R-NONEXISTENT-DOI}, \texttt{R-NO-SCHOLARLY-\allowbreak RECORD} & Không tìm thấy ứng viên nào dù $\ge 2$ cơ sở dữ liệu trực tuyến trả về HTTP 200 sạch (hoặc xác nhận URL chết không có bản lưu trữ) $\rightarrow$ \textbf{\texttt{suspected\_hallucination}} (trần độ tin cậy $\le 0.88$ nếu chỉ dựa trên sự vắng mặt bản ghi). \\
+\textbf{4} & \texttt{R-DEAD-URL}, \texttt{R-NONEXISTENT-DOI}, \texttt{R-NO-SCHOLARLY-\allowbreak RECORD} & Không có ứng viên khi $\ge 2$ API trực tuyến trả HTTP 200 sạch (hoặc xác nhận URL chết không có bản lưu) $\rightarrow$ \textbf{\texttt{suspected\_hallucination}} (chặn trần $\le 0.88$ nếu chỉ do vắng mặt bản ghi). \\
 \hline
-\textbf{5} & \texttt{R-FAIL-ALL}, \texttt{R-RATE-LIMITED-\allowbreak ABSTAIN}, \texttt{R-DOI-RA-NO-CSL} & Không có ứng viên do cạn hạn mức HTTP 429, đứt kết nối mạng hoặc DOI khu vực hợp lệ nhưng không công khai siêu dữ liệu CSL $\rightarrow$ \textbf{\texttt{unresolved}}. \\
+\textbf{5} & \texttt{R-FAIL-ALL}, \texttt{R-RATE-LIMITED-\allowbreak ABSTAIN}, \texttt{R-DOI-RA-NO-CSL} & Không có ứng viên do cạn hạn mức HTTP 429, lỗi mạng hoặc DOI khu vực hợp lệ không công bố siêu dữ liệu CSL $\rightarrow$ \textbf{\texttt{unresolved}}. \\
 \hline
 \textbf{6} & \texttt{R-DOI-TITLE-AUTHOR} & Khớp chính xác DOI trực tuyến kèm $\texttt{title\_sim} \ge 0.90$ và $\texttt{author\_jaccard} \ge 0.50$ $\rightarrow$ \textbf{\texttt{verified}}. \\
 \hline
-\textbf{7} & \texttt{R-LOCAL\_DB\_VERIFIED}, \texttt{R-LOCAL\_DB\_GOOD\_MATCH} & Khớp chỉ mục FTS5 ngoại tuyến ($\texttt{title\_sim\_fuzzy} \ge 0.95$, $\texttt{author\_jaccard} \ge 0.80$, $|\Delta y| = 0$) và không xung đột DOI $\rightarrow$ \textbf{\texttt{verified}}. \\
+\textbf{7} & \texttt{R-LOCAL\_DB\_VERIFIED}, \texttt{R-LOCAL\_DB\_GOOD\_MATCH} & Khớp chỉ mục FTS5 ngoại tuyến ($\texttt{title\_sim\_fuzzy} \ge 0.95$, $\texttt{author\_jaccard} \ge 0.80$, $|\Delta y| = 0$) không xung đột DOI $\rightarrow$ \textbf{\texttt{verified}}. \\
 \hline
-\textbf{8} & \texttt{R-WELL-LINKED}, \texttt{R-WELL-LINKED-\allowbreak MODERATE} & Trích dẫn đã liên kết (\texttt{matched}) có mức đồng thuận cao về tiêu đề/tác giả/năm và không mâu thuẫn định danh $\rightarrow$ \textbf{\texttt{verified}}. \\
+\textbf{8} & \texttt{R-WELL-LINKED}, \texttt{R-WELL-LINKED-\allowbreak MODERATE} & Trích dẫn đã liên kết (\texttt{matched}) có độ khớp cao về tiêu đề/tác giả/năm và không mâu thuẫn định danh $\rightarrow$ \textbf{\texttt{verified}}. \\
 \hline
-\textbf{9} & \texttt{R-DOI-TITLE-\allowbreak MISMATCH} & DOI trực tuyến phân giải thành công nhưng độ tương đồng tiêu đề rơi vào khoảng $[0.60, 0.90)$ $\rightarrow$ \textbf{\texttt{metadata\_error}} kèm khoanh vùng trường sai lệch. \\
+\textbf{9} & \texttt{R-DOI-TITLE-\allowbreak MISMATCH} & DOI trực tuyến phân giải thành công nhưng độ tương đồng tiêu đề nằm trong $[0.60, 0.90)$ $\rightarrow$ \textbf{\texttt{metadata\_error}} kèm trường sai lệch. \\
 \hline
-\textbf{10} & \texttt{R-CONSENSUS-FULL}, \texttt{R-CONSENSUS-\allowbreak PARTIAL} & Từ $\ge 2$ cơ sở dữ liệu đồng thuận về tiêu đề ($\ge 0.90$): khớp tác giả/năm $\rightarrow$ \textbf{\texttt{verified}}; lệch tác giả/năm $\rightarrow$ \textbf{\texttt{metadata\_error}}. \\
+\textbf{10} & \texttt{R-CONSENSUS-FULL}, \texttt{R-CONSENSUS-\allowbreak PARTIAL} & Từ $\ge 2$ cơ sở dữ liệu đồng thuận tiêu đề ($\ge 0.90$) không xung đột DOI: khớp tác giả/năm $\rightarrow$ \textbf{\texttt{verified}}; lệch tác giả/năm $\rightarrow$ \textbf{\texttt{metadata\_error}}. \\
 \hline
-\textbf{11} & \texttt{R-SINGLE-SOURCE-\allowbreak VERIFIED}, \texttt{R-BOOK-EDITION-\allowbreak VERIFIED}, \texttt{R-SINGLE-SOURCE-\allowbreak PARTIAL} & Khớp một cơ sở dữ liệu trực tuyến duy nhất ($\ge 0.90$ tiêu đề, $\ge 0.80$ tác giả, $|\Delta y| \le 1$, hoặc $\le 15$ năm giữa các lần tái bản sách trên OpenLibrary) $\rightarrow$ \textbf{\texttt{verified}}; trôi lệch trường $\rightarrow$ \textbf{\texttt{metadata\_error}}. \\
+\textbf{11} & \texttt{R-SINGLE-SOURCE-\allowbreak VERIFIED}, \texttt{R-BOOK-EDITION-\allowbreak VERIFIED}, \texttt{R-SINGLE-SOURCE-\allowbreak PARTIAL} & Khớp một nguồn trực tuyến duy nhất ($\ge 0.90$ tiêu đề, $\ge 0.80$ tác giả, $|\Delta y| \le 1$, hoặc $\le 15$ năm giữa ấn bản sách OpenLibrary) $\rightarrow$ \textbf{\texttt{verified}}; sai lệch trường $\rightarrow$ \textbf{\texttt{metadata\_error}}. \\
 \hline
-\textbf{12} & \texttt{R-AMBIGUOUS-\allowbreak MAPPING} & Bộ liên kết hai phía gắn cờ \texttt{ambiguous\_mapping} $\rightarrow$ \textbf{\texttt{unresolved}} với độ tin cậy giới hạn tối đa ở $0.50$. \\
+\textbf{12} & \texttt{R-AMBIGUOUS-\allowbreak MAPPING} & Bộ liên kết hai phía gắn cờ \texttt{ambiguous\_mapping} $\rightarrow$ \textbf{\texttt{unresolved}} với trần độ tin cậy $0.50$. \\
 \hline
-\textbf{13} & \texttt{R-CONTENT-\allowbreak ALIGNMENT}, \texttt{R-CONTENT-MISMATCH} & Điểm căn chỉnh ngữ cảnh -- tóm tắt cao giúp cứu các tiêu đề viết rút gọn ($\rightarrow$ \textbf{\texttt{verified}}); luận điểm trong bài mâu thuẫn với bài báo đã khớp $\rightarrow$ \textbf{\texttt{metadata\_error}}. \\
+\textbf{13} & \texttt{R-CONTENT-\allowbreak ALIGNMENT}, \texttt{R-CONTENT-MISMATCH} & Đối sánh ngữ cảnh -- tóm tắt cao cứu các tiêu đề viết tắt ($\rightarrow$ \textbf{\texttt{verified}}); nhận định trong bài mâu thuẫn công trình gốc $\rightarrow$ \textbf{\texttt{metadata\_error}}. \\
 \hline
-\textbf{14} & \texttt{R-KNOWN-AUTHOR-\allowbreak TITLE-MISMATCH} & Tác giả học thuật có thật kết hợp với tiêu đề lệch trong khoảng $[0.30, 0.90)$ $\rightarrow$ \textbf{\texttt{metadata\_error}}. \\
+\textbf{14} & \texttt{R-KNOWN-AUTHOR-\allowbreak TITLE-MISMATCH} & Tác giả học thuật có thật đi kèm tiêu đề lệch trong $[0.30, 0.90)$ $\rightarrow$ \textbf{\texttt{metadata\_error}}. \\
 \hline
-\textbf{15} & \texttt{R-ABSTENTION-\allowbreak BORDER}, \texttt{R-DOMAIN-EXCEPTION} & Độ tương đồng tiêu đề nằm ở vùng giáp ranh $[0.40, 0.60)$ $\rightarrow$ \textbf{\texttt{unresolved}}; bài báo đã xác thực nhưng kèm URL ngoài bị chết sẽ bật cờ \texttt{domain\_exception = True}. \\
+\textbf{15} & \texttt{R-ABSTENTION-\allowbreak BORDER}, \texttt{R-DOMAIN-EXCEPTION} & Độ tương đồng tiêu đề ở vùng giáp ranh $[0.40, 0.60)$ $\rightarrow$ \textbf{\texttt{unresolved}}; bài báo xác thực có URL ngoài chết bật \texttt{domain\_exception = True}. \\
 \hline
-\textbf{16} & \texttt{R-WEAK-EVIDENCE}, \texttt{R-HALLUCINATED-\allowbreak SOURCE} & Nhánh dự phòng cuối ($\texttt{title\_sim} < 0.40$): có $\ge 2$ API trực tuyến phản hồi sạch + độ chồng lấn tác giả thấp $\rightarrow$ \textbf{\texttt{suspected\_hallucination}}; ngược lại $\rightarrow$ \textbf{\texttt{unresolved}}. \\
+\textbf{16} & \texttt{R-WEAK-EVIDENCE}, \texttt{R-HALLUCINATED-\allowbreak SOURCE} & Nhánh cuối ($\texttt{title\_sim} < 0.40$): có $\ge 2$ API trực tuyến phản hồi sạch + chồng lấn tác giả thấp $\rightarrow$ \textbf{\texttt{suspected\_hallucination}}; ngược lại $\rightarrow$ \textbf{\texttt{unresolved}}. \\
 \hline
 \end{longtable}
 }
 
-Hai cơ chế bảo vệ theo nguồn gốc dữ liệu trong \texttt{SymbolicRules} giúp ngăn chặn triệt để tình trạng kết tội nhầm quá tự tin. Thứ nhất, Nhóm 4 (\texttt{R-NO-SCHOLARLY-RECORD}) chỉ kích hoạt khi có ít nhất hai API học thuật trực tuyến trả về mã HTTP 200 sạch với không kết quả khớp; nếu các API gặp lỗi mạng hoặc chạm ngưỡng giới hạn HTTP 429, Nhóm 5 lập tức thực thi từ chối phán quyết có chọn lọc dựa trên nguồn gốc và trả về \texttt{unresolved}. Thứ hai, khi nghi vấn ảo giác chỉ dựa đơn thuần vào sự vắng mặt trong các danh mục lập chỉ mục thay vì có bằng chứng mâu thuẫn trực tiếp (như DOI lai ghép hoặc DOI giả mạo), độ tin cậy sau hiệu chỉnh luôn bị chặn trần ở mức $\le 0.88$ nhằm phản ánh đúng giới hạn bao phủ hữu hạn của các kho dữ liệu học thuật.
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[width=\textwidth,keepaspectratio]{picture/figures/fig4_7_decision_flow.png}
+    \caption[Luồng quyết định lai Nơ-ron -- Ký hiệu có rào chắn qua Bậc 0 và Nhóm 1--16]{Luồng quyết định lai Nơ-ron -- Ký hiệu đầu--cuối minh họa cách CITRA định tuyến trích dẫn qua tiền sàng lọc Bậc 0, rào chắn ký hiệu ưu tiên cao (Nhóm 1--5), chấm điểm bằng chứng (Nhóm 6--16) và hiệu chỉnh Platt trên không gian logit.}
+    \label{fig:decision-flow}
+\end{figure}
 
-\subsection{Hồi quy Logistic 16 Đặc trưng và Hiệu chỉnh xác suất Platt}
+Hai cơ chế bảo vệ nguồn gốc ngăn ngừa cáo buộc sai quá tự tin: Nhóm 4 (\texttt{R-NO-SCHOLARLY-RECORD}) chỉ kích hoạt khi có ít nhất hai API trực tuyến trả mã HTTP 200 rỗng hợp lệ (ngược lại Nhóm 5 buộc trả \texttt{unresolved}), và mọi nghi vấn ảo giác chỉ dựa trên sự vắng mặt bản ghi luôn bị chặn trần độ tin cậy sau hiệu chỉnh ở mức $\le 0.88$.
 
-Để chuyển đổi các phán quyết ký hiệu rời rạc thành phân phối xác suất mượt và phản ánh đúng độ chính xác thực nghiệm, \texttt{HybridMLScorer} trích xuất vector đặc trưng 16 chiều $\mathbf{x} \in \mathbb{R}^{16}$ gồm mười đặc trưng cơ sở (\texttt{title\_sim\_fuzzy}, \texttt{title\_sim\_semantic}, \texttt{title\_sim\_max}, \texttt{author\_jaccard}, $\exp(-0.5 \min(|\Delta y|, 10))$, \texttt{doi\_exact\_match}, $\min(\text{consensus}, 4)/4$, \texttt{venue\_sim}, \texttt{content\_alignment\_signal}, \texttt{has\_candidate}) và sáu đặc trưng tương tác bậc hai (\texttt{title\_x\_author}, \texttt{title\_x\_year}, \texttt{title\_mismatch\_author}, \texttt{title\_mismatch\_year}, \texttt{doi\_mismatch\_title} và \texttt{abstention\_zone\_indicator}).
+\subsection{Hồi quy Logistic 16 đặc trưng, thuật toán hình thức và hiệu chỉnh Platt}
 
-Mô hình Hồi quy Logistic Đa lớp ($W \in \mathbb{R}^{4 \times 16}, \mathbf{b} \in \mathbb{R}^4$, điều chuẩn với hệ số $C = 0.25$ và trọng số lớp cân bằng trên 84,000 mẫu trích dẫn huấn luyện tách biệt hoàn toàn theo bài báo gốc) xuất ra phân phối xác suất $P_{\text{ML}}(y \mid \mathbf{x})$. Trong \texttt{SymbolicRules}, các hệ số điều chỉnh nguồn gốc truy hồi (\texttt{R-LOCAL\_DB}: $-0.05$, \texttt{R-API\_EXHAUSTED}: $-0.10$, \texttt{R-LOCAL\_DB\_ONLY}: $-0.15$) trước tiên hiệu chỉnh giảm độ tin cậy ký hiệu khi kết quả chỉ đến từ kho cục bộ hoặc bị giới hạn tốc độ API; sau đó, \texttt{HybridMLScorer} pha trộn độ tin cậy ký hiệu $C_{\text{sym}}^{(0)}$ với $P_{\text{ML}}(y_{\text{sym}} \mid \mathbf{x})$ theo Phương trình~\eqref{eq:platt-calib} sử dụng trọng số $\alpha = 0.72$ (tự động nâng lên $\alpha = 0.90$ khi $C_{\text{sym}}^{(0)} \ge 0.85$ và $|C_{\text{sym}}^{(0)} - P_{\text{ML}}| > 0.45$ để các rào chắn ký hiệu đối với bài báo bị rút lại hoặc URL giả mạo không bao giờ bị làm loãng). Cuối cùng, bộ hiệu chỉnh xác suất Platt \texttt{PlattCalibrator} ($a = 1.891263, b = 1.138599$, khớp trên 18,000 mẫu trích dẫn kiểm định), các mức phạt nhất quán định dạng toàn văn bản và trần $\le 0.88$ cho trường hợp vắng mặt bản ghi thuần túy sẽ tạo ra độ tin cậy hiệu chỉnh cuối cùng.
-
-\section{Chấm điểm Toàn vẹn và Giải thích Song ngữ}
-
-\subsection{Điểm toàn vẹn trích dẫn (CIS) Năm Thành phần}
-
-Phương thức \texttt{CISCalculator.compute()} tổng hợp chất lượng trích dẫn trên toàn bản thảo thành một điểm số dễ diễn giải thuộc đoạn $[0, 100]$. Các mục tài nguyên phi học thuật mang nhãn \texttt{resource} được loại khỏi mẫu số học thuật $N_{\text{acad}}$ để việc viện dẫn tài liệu hướng dẫn phần mềm chính thức hoặc văn bản pháp luật quốc gia không làm sai lệch tỷ lệ xác thực khoa học. Khi $N_{\text{acad}} \ge 1$, thành phần \texttt{metadata\_accuracy} ($s_{\text{meta}}$) áp dụng mức khấu trừ phân bậc đối với lỗi siêu dữ liệu thông thường ($N_{\text{meta\_std}}$, hệ số phạt $0.50$), tài liệu tham khảo khuyết thiếu nghiêm trọng ($N_{\text{meta\_incomp}}$, hệ số phạt $0.75$) và nguồn nghi ngờ ảo giác ($N_{\text{hall}}$, hệ số phạt $1.00$), như định nghĩa tại Phương trình~\eqref{eq:cis-meta}:
-\begin{equation}\label{eq:cis-meta}
-s_{\text{meta}} = \max\left(0,\; 1 - \frac{0.50\,N_{\text{meta\_std}} + 0.75\,N_{\text{meta\_incomp}} + 1.00\,N_{\text{hall}}}{N_{\text{acad}}}\right).
+Để chuyển đổi kết quả ký hiệu rời rạc thành xác suất hiệu chỉnh mượt, \texttt{HybridMLScorer.extract\_feature\_vector()} tạo véc-tơ $\mathbf{x} \in \mathbb{R}^{16}$ gồm mười tín hiệu cơ sở ($x_1 = t_{\text{fuzz}}$, $x_2 = t_{\text{sem}}$, $x_3 = t_{\max} = \max(t_{\text{fuzz}}, t_{\text{sem}})$, $x_4 = a_J$ [\texttt{author\_jaccard}], $x_5 = y_m = 0$ nếu $|\Delta y| \ge 50$ ngược lại $\exp(-0.5\min(|\Delta y|, 10))$, $x_6 = d_{\text{ok}} \in \{0, 1\}$, $x_7 = \min(\text{consensus}, 4)/4$, $x_8 = v_{\text{sim}}$, $x_9 = s_{\text{content}}$ nếu thẳng hàng và $\ge 0.45$ không có \texttt{contradiction\_risk}, $-0.6$ nếu mâu thuẫn hoặc không thẳng hàng với $0 < s_{\text{content}} < 0.46$, ngược lại $0$, $x_{10} = h_{\text{cand}} \in \{0, 1\}$) và sáu đặc trưng tương tác tại Phương trình~\eqref{eq:ml-interactions}:
+\begin{equation}\label{eq:ml-interactions}
+\begin{aligned}
+x_{11} &= t_{\max}\, a_J, & x_{12} &= t_{\max}\, y_m, \\
+x_{13} &= t_{\max}(1 - a_J)\,\mathbb{I}[t_{\max} \ge 0.60], & x_{14} &= t_{\max}(1 - y_m)\,\mathbb{I}[t_{\max} \ge 0.60], \\
+x_{15} &= d_{\text{ok}}(1 - t_{\max}), & x_{16} &= \mathbb{I}[\text{vùng từ chối phán quyết}],
+\end{aligned}
 \end{equation}
-Kết hợp cả năm thành phần trong Bảng~\ref{tab:cis} sẽ thu được Điểm toàn vẹn trích dẫn (CIS) cuối cùng theo Phương trình~\eqref{eq:cis-total}:
-\begin{equation}\label{eq:cis-total}
-\text{CIS} = 100 \times \bigl(0.35\,s_{\text{ver}} + 0.25\,s_{\text{meta}} + 0.25\,s_{\text{link}} + 0.10\,s_{\text{fmt}} + 0.05\,s_{\text{id}}\bigr).
-\end{equation}
+trong đó $x_{16} = 1$ khi (i)~$h_{\text{cand}} = 0$ kèm cạn hạn mức API hoặc \texttt{registered\_no\_csl}, hoặc (ii)~$d_{\text{ok}} = 0 \land h_{\text{cand}} = 1$ rơi vào dải tiêu đề giáp ranh ($0.40 \le t_{\max} < 0.60$ có tín hiệu tác giả/từ vựng/đồng thuận) hay dải xám tác giả bán phần ($0.25 \le t_{\max} < 0.60 \land a_J \ge 0.18 \land |\Delta y| \le 3$).
+
+\begin{citraalgo}{4.2}{\texttt{NeuroSymbolicVerifyAndCalibrate}$(r, \mathcal{S}, \mathbf{f}, \delta_{\text{style}})$}{alg:verify}
+\textbf{Đầu vào:} Mục tham khảo $r$, kết quả truy hồi $\mathcal{S}$, đặc trưng đối sánh $\mathbf{f}$, mức phạt phong cách $\delta_{\text{style}} \in [0, 0.10]$.\\
+\textbf{Đầu ra:} Phán quyết cuối $(y^*, P_{\text{cal}}, \mathcal{R}_{\text{rules}})$.\\
+1.\quad \textbf{Bậc 0:} Nếu $r$ là tài nguyên web/phần mềm/RFC hoặc văn bản pháp luật VN (\texttt{VNLegalVerifier}), kiểm tra URL giả/chết trước; trả về \texttt{resource} (hoặc \texttt{metadata\_error}/\texttt{suspected\_hallucination}) tương ứng.\\
+2.\quad \textbf{Nhánh nhanh công trình kinh điển:} Nếu $r$ khớp \texttt{\_KNOWN\_PAPERS} (101 bài báo), kiểm tra năm/tác giả/lập trường và trả về \texttt{verified} hoặc \texttt{metadata\_error} kèm \texttt{R-KNOWN-PAPER}.\\
+3.\quad \textbf{Cây ký hiệu:} Đánh giá Nhóm 1--16 trong \texttt{SymbolicRules.apply}$(r, \mathcal{S}, \mathbf{f}, \delta_{\text{style}})$ $\rightarrow (y_{\text{sym}}, C_{\text{sym}}^{(0)}, \mathcal{R}_{\text{rules}})$, áp dụng hệ số nguồn gốc (\texttt{R-LOCAL\_DB}: $-0.05$, \texttt{R-API\_EXHAUSTED}: $-0.10$, \texttt{R-LOCAL\_DB\_ONLY}: $-0.15$) và $\delta_{\text{style}}$ đồng nhất.\\
+4.\quad \textbf{Chấm điểm học máy:} Trích xuất $\mathbf{x} \in \mathbb{R}^{16}$ (Phương trình~\eqref{eq:ml-interactions}) và tính $P_{\text{ML}}(y \mid \mathbf{x}) = \operatorname{softmax}(W\mathbf{x} + \mathbf{b})_y$.\\
+5.\quad \textbf{Pha trộn thích ứng:} Đặt $\alpha \leftarrow 0.90$ nếu $C_{\text{sym}}^{(0)} \ge 0.85 \land |C_{\text{sym}}^{(0)} - P_{\text{ML}}(y_{\text{sym}} \mid \mathbf{x})| > 0.45$, ngược lại $\alpha \leftarrow 0.72$; tính $p_{\text{blend}} = \alpha C_{\text{sym}}^{(0)} + (1 - \alpha) P_{\text{ML}}(y_{\text{sym}} \mid \mathbf{x})$.\\
+6.\quad \textbf{Hiệu chỉnh Platt trên không gian logit:} Tính $P_{\text{cal}}$ theo Phương trình~\eqref{eq:platt-calib} với $(a_{\text{cal}}, b_{\text{cal}}) = (1.891263, 1.138599)$.\\
+7.\quad \textbf{Rào chắn hậu hiệu chỉnh:} Chặn $P_{\text{cal}} \le 0.50$ nếu kích hoạt \texttt{R-AMBIGUOUS-MAPPING}; chặn $P_{\text{cal}} \le 0.88$ nếu $y_{\text{sym}} = \texttt{suspected\_hallucination}$ chỉ dựa trên vắng mặt bản ghi; \textbf{trả về} $(y_{\text{sym}}, P_{\text{cal}}, \mathcal{R}_{\text{rules}})$.
+\end{citraalgo}
+
+Thuật toán~4.2 hình thức hóa toàn bộ luồng suy diễn và hiệu chỉnh trong \texttt{NeuroSymbolicChecker}. Mô hình Hồi quy Logistic Đa lớp ($W \in \mathbb{R}^{4 \times 16}, \mathbf{b} \in \mathbb{R}^4$, $C = 0.25$, trọng số lớp cân bằng trên 84,000 mẫu huấn luyện phân tách theo bài báo) bảo toàn quyền ưu tiên của luật ký hiệu đồng thời cung cấp mật độ xác suất liên tục; do $b_{\text{cal}} = +1.138599$ phản ánh độ chính xác tổng thể cao ($99.67\%$), các điểm \texttt{unresolved} quanh $p_{\text{blend}} = 0.50$ được hiệu chỉnh lên $0.7574$ (biểu thị mức tin cậy cao vào \emph{quyết định từ chối phán quyết}), trong khi \texttt{R-AMBIGUOUS-MAPPING} chủ động ghim trần ở $0.50$.
+
+\section{Chấm điểm toàn vẹn và giải thích song ngữ}
+
+\subsection{Điểm toàn vẹn trích dẫn (CIS) năm thành phần}
+
+Phương thức \texttt{CISCalculator.compute()} tổng hợp bằng chứng toàn bản thảo vào đoạn $[0, 100]$. Danh mục rỗng ($N = 0$) trả về $\text{CIS} = 0.00$. Các mục \texttt{resource} phi học thuật được loại khỏi mẫu số học thuật $N_{\text{acad}}$ để tài liệu kỹ thuật hoặc văn bản pháp luật không làm méo tỷ lệ xác thực khoa học. Trong trường hợp biên danh mục chỉ gồm tài nguyên web/pháp lý ($N \ge 1, N_{\text{acad}} = 0$), hệ thống tính $s_{\text{id}}$ trên mọi URL/DOI tài nguyên, và khi $N \ge 3$ có thông tin liên kết sẽ nhân điều chỉnh $s_{\text{ver}} = s_{\text{meta}} = (0.5 + 0.5\,\rho_{\text{cited}})\,s_{\text{id}}$ để các danh mục web không được trích dẫn trong bài không đạt điểm ảo.
+
+Với bản thảo có $N_{\text{acad}} \ge 1$, năm thành phần tại Bảng~\ref{tab:cis} được định nghĩa đầy đủ bởi Phương trình~\eqref{eq:cis-meta}--\eqref{eq:cis-total}:
+\begin{align}
+s_{\text{ver}} &= \frac{N_{\text{verified}}}{N_{\text{acad}}}, \qquad
+s_{\text{meta}} = \max\!\left(0,\; 1 - \frac{0.50\,N_{\text{meta\_std}} + 0.75\,N_{\text{meta\_incomp}} + 1.00\,N_{\text{hall}}}{N_{\text{acad}}}\right), \label{eq:cis-meta}\\
+s_{\text{link}} &= \max\!\left(0,\; 1 - \frac{\sum_{e \in \mathcal{L}} \pi(e) + 0.10\,N_{\text{uncited}} + 0.10\,N_{\text{dup}}}{|\mathcal{L}| + N_{\text{uncited}} + N_{\text{dup}}}\right), \label{eq:cis-link}\\
+\text{CIS} &= 100 \times \bigl(0.35\,s_{\text{ver}} + 0.25\,s_{\text{meta}} + 0.25\,s_{\text{link}} + 0.10\,s_{\text{fmt}} + 0.05\,s_{\text{id}}\bigr), \label{eq:cis-total}
+\end{align}
+trong đó $s_{\text{link}}$ bị chặn trần $\le 0.50$ khi $100\%$ mục tài liệu không được trích dẫn và không có liên kết nội văn nào khớp; $s_{\text{fmt}}$ ánh xạ từ độ tin cậy \texttt{StyleProfile} ($0.6 + 0.4\,\text{conf}$ khi đồng nhất, $0.5$ khi \texttt{UNKNOWN}, $0.4 + 0.2\,\text{conf}$ khi \texttt{MIXED}) trừ phạt lệch chuẩn từng mục; còn $s_{\text{id}} = N_{\text{valid\_id}} / N_{\text{with\_id}}$ (mặc định $1.00$ khi $N_{\text{with\_id}} = 0$ để không phạt oan các chuẩn nhân văn không ghi DOI).
+
+Bộ trọng số mặc định phân bổ $60\%$ cho tính xác thực nguồn ($0.35\,s_{\text{ver}} + 0.25\,s_{\text{meta}}$), $25\%$ cho kỷ luật liên kết cấu trúc ($s_{\text{link}}$) và $15\%$ cho định dạng cùng định danh ($0.10\,s_{\text{fmt}} + 0.05\,s_{\text{id}}$), đạt độ ổn định thứ hạng Spearman $\rho = 0.9987$ khi nhiễu loạn trọng số (Chương~\ref{chap:results}). Hai đặc tính biên được làm rõ cho giảng viên: (i)~việc không ghi DOI/URL cho $s_{\text{id}} = 1.00$ để tránh phạt bất công nguồn sách in; và (ii)~mục \texttt{unresolved} không nhận điểm ở $s_{\text{ver}}$ (mất tối đa $35$ điểm) nhưng không bị phạt siêu dữ liệu ở $s_{\text{meta}}$ nhằm bảo toàn nguyên tắc suy đoán vô tội. Vì vậy, \textbf{CITRA} luôn hiển thị số lượng \texttt{num\_unresolved} cùng bảng tách năm thành phần cạnh vòng điểm CIS để giảng viên rà soát mọi bài có nhiều mục chưa xác định thay vì chỉ nhìn một con số tổng.
 
 {\setlength{\tabcolsep}{3.5pt}
-\begin{longtable}{|L{0.31}|C{0.11}|L{0.58}|}
-\caption{Các thành phần và trọng số mặc định của Điểm toàn vẹn trích dẫn (CIS).}\label{tab:cis}\\
+\begin{table}[!htbp]
+\centering
+\caption{Các thành phần và trọng số mặc định của Điểm toàn vẹn trích dẫn (CIS).}\label{tab:cis}
+\begin{tabular}{|L{0.31}|C{0.11}|L{0.58}|}
 \hline
 \textbf{Thành phần} & \textbf{Trọng số} & \textbf{Định nghĩa chính xác trong \texttt{CISCalculator.compute()}} \\
 \hline
-\endfirsthead
-\multicolumn{3}{c}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
+\textbf{\texttt{verified\_ratio}} ($s_{\text{ver}}$) & \textbf{0.35} & $N_{\text{verified}} / N_{\text{acad}}$, tỷ lệ tài liệu tham khảo học thuật được xác thực. \\
 \hline
-\textbf{Thành phần} & \textbf{Trọng số} & \textbf{Định nghĩa chính xác trong \texttt{CISCalculator.compute()}} \\
+\textbf{\texttt{metadata\_accuracy}} ($s_{\text{meta}}$) & \textbf{0.25} & Điểm trung thực siêu dữ liệu phân bậc tại Phương trình~\eqref{eq:cis-meta}. \\
 \hline
-\endhead
+\textbf{\texttt{in\_text\_bib\_consistency}} ($s_{\text{link}}$) & \textbf{0.25} & Độ nhất quán liên kết hai phía (Phương trình~\eqref{eq:cis-link}, chặn $\le 0.50$ nếu 0\% trích dẫn). \\
 \hline
-\multicolumn{3}{r}{\itshape Xem tiếp trang sau}\\
-\endfoot
+\textbf{\texttt{format\_consistency}} ($s_{\text{fmt}}$) & \textbf{0.10} & Độ nhất quán chuẩn trình bày suy ra từ \texttt{StyleProfile} và độ lệch từng mục. \\
 \hline
-\endlastfoot
-\textbf{\texttt{verified\_ratio}} ($s_{\text{ver}}$) & \textbf{0.35} & $N_{\text{verified}} / N_{\text{acad}}$, đo lường tỷ lệ tài liệu tham khảo học thuật được đối chứng xác thực. \\
+\textbf{\texttt{identifier\_validity}} ($s_{\text{id}}$) & \textbf{0.05} & Tỷ lệ trích dẫn có DOI/URL phân giải hợp lệ không dính \texttt{dead\_link}, \texttt{fake\_domain}, \texttt{domain\_exception} ($1.00$ nếu không có). \\
 \hline
-\textbf{\texttt{metadata\_accuracy}} ($s_{\text{meta}}$) & \textbf{0.25} & Điểm độ trung thực siêu dữ liệu thư mục phân bậc theo Phương trình~\eqref{eq:cis-meta}. \\
-\hline
-\textbf{\texttt{in\_text\_bib\_consistency}} ($s_{\text{link}}$) & \textbf{0.25} & Phần bù từ $1$ trừ đi tổng mức phạt liên kết có trọng số (Bảng~\ref{tab:mapping-statuses}) trên các liên kết nội văn, mục không được trích dẫn và mục trùng lặp. \\
-\hline
-\textbf{\texttt{format\_consistency}} ($s_{\text{fmt}}$) & \textbf{0.10} & Độ nhất quán chuẩn trình bày toàn tài liệu suy ra từ \texttt{StyleProfile} và độ lệch chuẩn của từng mục. \\
-\hline
-\textbf{\texttt{identifier\_validity}} ($s_{\text{id}}$) & \textbf{0.05} & Tỷ lệ các trích dẫn có gắn DOI/URL phân giải hợp lệ mà không gặp lỗi \texttt{dead\_link}, \texttt{fake\_domain} hoặc \texttt{domain\_exception}. \\
-\hline
-\end{longtable}
+\end{tabular}
+\end{table}
 }
 
-\subsection{Giải thích Phán quyết Song ngữ và Tự động Chuẩn hóa Danh mục Tham khảo}
+\subsection{Giải thích phán quyết song ngữ và chuẩn hóa danh mục tham khảo}
 
-Mọi phán quyết đều đi kèm lời giải thích tất định bằng cả tiếng Anh và tiếng Việt (\texttt{logic/explanation.py} và \texttt{verdictExplanation.ts}), nêu rõ cơ sở dữ liệu đối chứng đã khớp, chi tiết sai khác từng trường siêu dữ liệu, điểm căn chỉnh ngữ nghĩa và các mã luật đã kích hoạt. Đối với các mục mang nhãn \texttt{metadata\_error} hoặc \texttt{verified}, nhóm mô-đun khắc phục (\texttt{export/bibliography\_formatter.py} và \texttt{export/docx\_exporter.py}) tự động tái tạo chuỗi trích dẫn chuẩn sạch theo định dạng APA 7th, IEEE, TDTU, BibTeX và RIS từ các trường dữ liệu gốc chuẩn xác của cơ sở dữ liệu học thuật, đồng thời xuất ra tệp bản thảo \texttt{.docx} đã sửa lỗi trong khi giữ tô sáng các mục \texttt{suspected\_hallucination} để tác giả chủ động rà soát và gỡ bỏ.
+Mọi phán quyết đi kèm lời giải thích song ngữ Anh -- Việt tất định (\texttt{logic/explanation.py} và \texttt{verdictExplanation.ts}) nêu rõ nguồn đối chứng, sai lệch từng trường, điểm ngữ nghĩa và mã luật kích hoạt. Với các mục \texttt{metadata\_error} hoặc \texttt{verified}, \texttt{bibliography\_formatter.py} và \texttt{docx\_exporter.py} tái tạo mục sạch chuẩn APA 7th, IEEE, TDTU, BibTeX và RIS từ siêu dữ liệu chính thống và xuất tệp \texttt{.docx} đã sửa lỗi trong khi cô lập mục \texttt{suspected\_hallucination} để tác giả tự loại bỏ.
 
-\section{Tầng Giao diện Web (CITRA)}
+\section{Tầng giao diện web (CITRA)}
 
-\subsection{Kiến trúc Frontend và Cơ chế Hiển thị Tiệm tiến}
+\subsection{Kiến trúc frontend và cơ chế hiển thị theo cấp độ}
 
-Ứng dụng khách nền web (\textbf{CITRA}) được hiện thực bằng React 18.3, TypeScript 5.8, Vite, TanStack React Query và Tailwind CSS v3.4. Cả hai giao diện Sáng (\texttt{\#FBFAF6}) và Tối (\texttt{\#13120F}) đều đạt tỷ lệ tương phản chuẩn trợ năng WCAG 2.1 mức AA và hỗ trợ hiển thị trọn vẹn dấu thanh tiếng Việt. Nhằm phục vụ đồng thời sinh viên không chuyên sâu kỹ thuật lẫn kiểm định viên kỹ thuật phần mềm, giao diện áp dụng nguyên lý \emph{hiển thị tiệm tiến}: các thẻ chính trình bày kết luận bằng ngôn ngữ tự nhiên dễ hiểu kèm nút sửa lỗi nhanh, trong khi mã luật ký hiệu gốc (\texttt{R-*}), vector đặc trưng và vết thực thi 5 giai đoạn chỉ mở rộng theo yêu cầu thông qua ngăn kéo hỗ trợ thuộc tính trợ năng \texttt{aria-expanded}. Trong quá trình tiếp nhận bản thảo dài, phương thức \texttt{DocumentParser.parse()} phát tín hiệu tiến độ từng pha con chính xác theo nhánh tại Bước~1 (trích xuất PyMuPDF, tra cứu bộ nhớ đệm TEI, phân tích bố cục GROBID trực tiếp và hợp nhất trích dẫn) qua \texttt{ProgressTracker}---được lưu bền vững vào SQLite cho các tiến trình đọc SSE chế độ \texttt{web\_only}---và hiển thị đơn điệu song ngữ theo nhãn \texttt{[01/08]} trên \texttt{ProcessingPage}, đồng thời cơ chế bàn giao thuần \texttt{pendingHandoffEssayId} trong \texttt{VerificationProgressContext} triệt tiêu các kết nối SSE nền bị hủy sớm (\texttt{HTTP 499}) khi chuyển tuyến từ \texttt{UploadPage}. Kỹ thuật tách gói mã nguồn của Rollup giữ dung lượng gói khởi tạo ở mức $228.42\text{\,kB}$ ($66.39\text{\,kB}$ sau nén gzip), với toàn bộ 60 gói định tuyến tải trễ đều có kích thước $\le 251.00\text{\,kB}$.
+Ứng dụng khách nền web (\textbf{CITRA}) xây dựng bằng React 18.3, TypeScript 5.9 (dải \texttt{\string^5.4.0}, khóa phiên bản \texttt{5.9.3}), Vite, TanStack React Query và Tailwind CSS v3.4. Hai giao diện Sáng (\texttt{\#FBFAF6}) và Tối (\texttt{\#13120F}) đạt chuẩn tương phản WCAG 2.1 AA và hiển thị chuẩn dấu thanh tiếng Việt. Để phục vụ cả sinh viên lẫn kiểm định viên kỹ thuật, giao diện áp dụng \emph{hiển thị theo cấp độ}: các thẻ báo cáo chính trình bày kết luận dễ hiểu trên bốn thẻ phân tích chính (\textit{Tổng quan}, \textit{Kiểm tra tài liệu tham khảo}, \textit{Kiểm tra tính nhất quán} và \textit{Xem trước tài liệu}), trong khi mã luật \texttt{R-*}, véc-tơ 16 chiều và vết thực thi 5 giai đoạn mở rộng theo yêu cầu qua khung mở rộng chi tiết có thuộc tính trợ năng \texttt{aria-expanded}. Trong quá trình tiếp nhận tệp dài, \texttt{DocumentParser.parse()} phát tiến độ đơn điệu song ngữ \texttt{[01/08]} qua \texttt{ProgressTracker} (lưu vào SQLite cho tiến trình \texttt{web\_only}), còn cơ chế bàn giao \texttt{pendingHandoffEssayId} trong \texttt{VerificationProgressContext} triệt tiêu kết nối SSE bị ngắt sớm (\texttt{HTTP 499}) khi chuyển trang. Tách gói Rollup giữ gói khởi động ở mức \textbf{$231.50\text{\,kB}$} ($67.50\text{\,kB}$ nén gzip) trên 60 gói tải trễ (gói định tuyến lớn nhất \texttt{EssayPage} đạt $250.58\text{\,kB}$ thô / $68.67\text{\,kB}$ nén gzip).
 
-\subsection{Không gian Làm việc Phân quyền theo Vai trò và Bề mặt Giám sát}
+\subsection{Không gian làm việc phân quyền và bề mặt giám sát}
 
-Các Hình~\ref{fig:ui-landing}--\ref{fig:ui-portals} giới thiệu giao diện thực tế của phiên bản \texttt{v3.90.9} trên cả các tuyến công khai lẫn các tuyến kiểm soát quyền theo vai trò. Hình~\ref{fig:ui-landing} minh họa trang chủ công khai ở hai chế độ Sáng và Tối. Hình~\ref{fig:ui-workspace} trình bày bảng điều khiển dành cho Sinh viên/Nhà nghiên cứu cùng hàng đợi kiểm chứng hàng loạt đa tệp (\texttt{.pdf}, \texttt{.docx}, \texttt{.bib}, \texttt{.ris}) hỗ trợ tải lên đồng thời ở quy mô lớp học. Hình~\ref{fig:ui-portals} hiển thị giao diện phân tích thống kê lớp học dành cho Giảng viên (làm nổi bật biểu đồ phân bố dải điểm và các trích dẫn ảo giác trùng lặp giữa nhiều sinh viên) đặt cạnh bảng điều khiển Giám sát Sức khỏe Hệ thống của Quản trị viên theo dõi trực tiếp GROBID, SQLite FTS5 và toàn bộ mười lăm cầu dao ngắt mạch của các API học thuật.
+Các Hình~\ref{fig:ui-landing}--\ref{fig:ui-portals} giới thiệu giao diện thực tế phiên bản \texttt{v3.90.9} bản địa hóa tiếng Việt, hiển thị toàn chiều rộng trang in sau khi cắt bỏ thanh điều hướng trái để tối đa hóa độ rõ nét. Hình~\ref{fig:ui-landing} minh họa trang chủ công khai chế độ Sáng (có nút chuyển nhanh sang chế độ Tối WCAG AA trên thanh đầu trang). Hình~\ref{fig:ui-workspace} trình bày bảng điều khiển Sinh viên (hiển thị thang điểm CIS \texttt{/100}) và hàng đợi tải lên hàng loạt đa định dạng (\texttt{.pdf}, \texttt{.docx}, \texttt{.bib}, \texttt{.ris}). Hình~\ref{fig:ui-portals} thể hiện không gian phân tích lớp học của Giảng viên (số bài nộp nhất quán và bảng luật chỉ lọc các lỗi thực sự) cùng bảng Giám sát Hệ thống của Quản trị viên hiển thị kho cục bộ 129,137 bản ghi, trạng thái GROBID và toàn bộ mười lăm bộ ngắt mạch API học thuật.
 
-\begin{figure}[H]
+\begin{figure}[!htbp]
     \centering
-    \includegraphics[width=0.49\textwidth,keepaspectratio]{picture/figures/01-landing-light.png}\hfill
-    \includegraphics[width=0.49\textwidth,keepaspectratio]{picture/figures/02-landing-dark.png}
-    \caption[Trang chủ CITRA đạt chuẩn tương phản WCAG AA ở giao diện Sáng và Tối]{Trang chủ công khai của CITRA (\texttt{v3.90.9}) hiển thị ở chế độ Sáng (trái) và chế độ Tối (phải).}
+    \fboxsep=0pt\fboxrule=0.4pt\fbox{\includegraphics[width=0.96\textwidth,keepaspectratio]{picture/figures/01-landing-light.png}}
+    \caption[Trang chủ CITRA chế độ Sáng đạt chuẩn tương phản WCAG AA]{Trang chủ công khai CITRA (\texttt{v3.90.9}) ở chế độ Sáng chuẩn WCAG 2.1 AA (hỗ trợ chuyển sang chế độ Tối trên thanh đầu trang).}
     \label{fig:ui-landing}
 \end{figure}
 
-\begin{figure}[H]
+\begin{figure}[!htbp]
     \centering
-    \includegraphics[width=0.49\textwidth,keepaspectratio]{picture/figures/03-dashboard-light.png}\hfill
-    \includegraphics[width=0.49\textwidth,keepaspectratio]{picture/figures/04-batch-upload.png}
-    \caption[Bảng điều khiển kiểm chứng của sinh viên và không gian tải lên hàng loạt đồng thời]{Bảng điều khiển kiểm chứng dành cho sinh viên (\texttt{/dashboard}, trái) và hàng đợi kiểm chứng hàng loạt đa định dạng (\texttt{/batch-upload}, phải).}
+    \fboxsep=0pt\fboxrule=0.4pt\fbox{\includegraphics[width=0.94\textwidth,keepaspectratio]{picture/figures/03-dashboard-light.png}}\\[6pt]
+    \fboxsep=0pt\fboxrule=0.4pt\fbox{\includegraphics[width=0.94\textwidth,keepaspectratio]{picture/figures/04-batch-upload.png}}
+    \caption[Bảng điều khiển sinh viên và hàng đợi tải lên hàng loạt đồng thời]{Bảng điều khiển kiểm chứng của sinh viên (\texttt{/dashboard}, trên) và hàng đợi kiểm chứng hàng loạt đa định dạng (\texttt{/batch-upload}, dưới), đã cắt thanh điều hướng trái để bảo đảm độ sắc nét trên khổ A4.}
     \label{fig:ui-workspace}
 \end{figure}
 
-\begin{figure}[H]
+\begin{figure}[!htbp]
     \centering
-    \includegraphics[width=0.49\textwidth,keepaspectratio]{picture/figures/10-teacher-classroom.png}\hfill
-    \includegraphics[width=0.49\textwidth,keepaspectratio]{picture/figures/11-admin-system-health.png}
-    \caption[Không gian phân tích lớp học của giảng viên và bảng giám sát sức khỏe hệ thống của quản trị viên]{Giao diện phân tích thống kê lớp học của giảng viên (\texttt{/teacher/classes/1}, trái) và bảng giám sát sức khỏe hệ thống của quản trị viên (\texttt{/admin/system}, phải).}
+    \fboxsep=0pt\fboxrule=0.4pt\fbox{\includegraphics[width=0.94\textwidth,keepaspectratio]{picture/figures/10-teacher-classroom.png}}\\[6pt]
+    \fboxsep=0pt\fboxrule=0.4pt\fbox{\includegraphics[width=0.94\textwidth,keepaspectratio]{picture/figures/11-admin-system-health.png}}
+    \caption[Không gian phân tích lớp học của giảng viên và bảng giám sát hệ thống]{Giao diện phân tích lớp học của giảng viên (\texttt{/teacher/classes/1}, trên) và bảng giám sát hệ thống của quản trị viên hiển thị GROBID cùng các bộ ngắt mạch API (\texttt{/admin/system}, dưới).}
     \label{fig:ui-portals}
 \end{figure}
 
-\section{Tóm tắt Chương}
+\section{Tóm tắt chương}
 
-Chương này đã trình bày chi tiết quá trình hiện thực hệ thống \textbf{CITRA} xuyên suốt tám tầng phần mềm: trích xuất đa định dạng trên 12 chuẩn trích dẫn, hợp nhất ở mức công trình kết hợp liên kết hai chiều 7 phương pháp, truy hồi phân tầng qua 15 API học thuật cùng kiểm tra URL/HTML ghim địa chỉ IP an toàn, đối sánh ngữ nghĩa xuyên ngôn ngữ \texttt{VI}$\leftrightarrow$\texttt{EN} bằng bộ mã hóa kép, kiểm chứng lai Nơ-ron -- Ký hiệu 68 mã luật kết hợp Hồi quy Logistic 16 chiều và hiệu chỉnh xác suất Platt, chấm Điểm toàn vẹn trích dẫn (CIS) năm thành phần, và không gian làm việc React tách gói tối ưu. Chương~\ref{chap:results} tiếp tục đánh giá thực nghiệm các thành phần này thông qua năm câu hỏi nghiên cứu.
+Chương này đã trình bày kiến trúc nội tại và các thuật toán hình thức của \textbf{CITRA} xuyên suốt tám tầng: trích xuất mười hai định dạng, hợp nhất mức công trình và liên kết hai chiều bảy phương pháp (Thuật toán~4.1), truy hồi bốn tầng với bảo vệ SSRF ghim IP, đối sánh ngữ nghĩa xuyên ngữ \texttt{VI}$\leftrightarrow$\texttt{EN} bằng bộ mã hóa kép, kiểm chứng lai Nơ-ron -- Ký hiệu 68 mã luật kết hợp Hồi quy Logistic 16 chiều và hiệu chỉnh Platt (Thuật toán~4.2 và Hình~\ref{fig:decision-flow}), công thức CIS năm thành phần đầy đủ cùng giao diện React 18.3 / TypeScript 5.9 tách gói tối ưu. Chương~\ref{chap:results} tiếp theo đánh giá thực nghiệm toàn bộ các thành phần này trên năm câu hỏi nghiên cứu.
