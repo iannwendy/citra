@@ -27,6 +27,11 @@
 \newcolumntype{P}[1]{p{#1\textwidth}}
 \newif\iftdtudatatable
 \newcommand{\rqanswer}[2]{\par\noindent\textbf{Answer to #1:} #2\par}
+\newcommand{\FloatBarrier}{}
+\newcounter{appsec}
+\renewcommand{\theappsec}{\Alph{appsec}}
+\newcommand{\appsection}[2]{\refstepcounter{appsec}\section*{Appendix~\theappsec: #1}}
+\newenvironment{citraalgo}[3]{\par\noindent\textbf{Algorithm~#1: #2}\par}{\par}
 
 \setstretch{1.5}
 \setlength{\parindent}{1.27cm}

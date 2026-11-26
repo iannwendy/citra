@@ -252,7 +252,7 @@ Thay vì phát tán mọi mục tham khảo tới toàn bộ API ngoài, \texttt
     \label{fig:retrieval}
 \end{figure}
 
-\subsection{Đồng thuận đa nguồn, bộ bảo vệ SSRF ghim IP và SafeHtmlMetaVerifier}
+\subsection[Đồng thuận đa nguồn, bảo vệ SSRF và SafeHtmlMetaVerifier]{Đồng thuận đa nguồn, bộ bảo vệ SSRF ghim IP và SafeHtmlMetaVerifier}
 \label{sec:consensus}
 
 Các ứng viên trả về được khử trùng lặp và chấm điểm đồng thuận đa nguồn (\texttt{title\_sim} $\ge 0.90$, \texttt{author\_jaccard} $\ge 0.50$, $|\Delta y| \le 1$), kế thừa chéo bản tóm tắt giữa các cơ sở dữ liệu nhất trí. Song song đó, \texttt{LinkValidator} thăm dò URL trích dẫn và ảnh chụp Internet Archive Wayback CDX~\cite{wayback-cdx}, gán một trong \textbf{sáu trạng thái \texttt{LinkStatus}}: \texttt{alive} (HTTP 200--399), \texttt{restricted\_alive} (HTTP 401/403/405/429 chống bot/tường phí), \texttt{archived\_alive} (khôi phục qua Wayback), \texttt{dead\_link} (HTTP 404/410 hoặc NXDOMAIN), \texttt{fake\_domain} (tên miền giữ chỗ theo RFC 2606~\cite{rfc2606}) hoặc \texttt{unchecked}. Với tài nguyên web truy cập được, \texttt{SafeHtmlMetaVerifier} đọc tối đa $128\text{\,KB}$ đầu trang (\texttt{MAX\_HTML\_HEAD\_BYTES = 131,072}) để bóc tách siêu dữ liệu Highwire Press, Dublin Core, OpenGraph và JSON-LD đồng thời phát hiện trang lỗi ``Soft-404'' song ngữ Anh/Việt dưới mã HTTP 200.
@@ -426,10 +426,10 @@ Thuật toán~4.2 hình thức hóa toàn bộ luồng suy diễn và hiệu ch�
 
 Phương thức \texttt{CISCalculator.compute()} tổng hợp bằng chứng toàn bản thảo vào đoạn $[0, 100]$. Danh mục rỗng ($N = 0$) trả về $\text{CIS} = 0.00$. Các mục \texttt{resource} phi học thuật được loại khỏi mẫu số học thuật $N_{\text{acad}}$ để tài liệu kỹ thuật hoặc văn bản pháp luật không làm méo tỷ lệ xác thực khoa học. Trong trường hợp biên danh mục chỉ gồm tài nguyên web/pháp lý ($N \ge 1, N_{\text{acad}} = 0$), hệ thống tính $s_{\text{id}}$ trên mọi URL/DOI tài nguyên, và khi $N \ge 3$ có thông tin liên kết sẽ nhân điều chỉnh $s_{\text{ver}} = s_{\text{meta}} = (0.5 + 0.5\,\rho_{\text{cited}})\,s_{\text{id}}$ để các danh mục web không được trích dẫn trong bài không đạt điểm ảo.
 
-Với bản thảo có $N_{\text{acad}} \ge 1$, năm thành phần tại Bảng~\ref{tab:cis} được định nghĩa đầy đủ bởi Phương trình~\eqref{eq:cis-meta}--\eqref{eq:cis-total}:
+Với bản thảo có $N_{\text{acad}} \ge 1$, năm thành phần tại Bảng~\ref{tab:cis} được định nghĩa đầy đủ bởi Phương trình~\eqref{eq:cis-ver}--\eqref{eq:cis-total}:
 \begin{align}
-s_{\text{ver}} &= \frac{N_{\text{verified}}}{N_{\text{acad}}}, \qquad
-s_{\text{meta}} = \max\!\left(0,\; 1 - \frac{0.50\,N_{\text{meta\_std}} + 0.75\,N_{\text{meta\_incomp}} + 1.00\,N_{\text{hall}}}{N_{\text{acad}}}\right), \label{eq:cis-meta}\\
+s_{\text{ver}} &= \frac{N_{\text{verified}}}{N_{\text{acad}}}, \label{eq:cis-ver}\\
+s_{\text{meta}} &= \max\!\left(0,\; 1 - \frac{0.50\,N_{\text{meta\_std}} + 0.75\,N_{\text{meta\_incomp}} + 1.00\,N_{\text{hall}}}{N_{\text{acad}}}\right), \label{eq:cis-meta}\\
 s_{\text{link}} &= \max\!\left(0,\; 1 - \frac{\sum_{e \in \mathcal{L}} \pi(e) + 0.10\,N_{\text{uncited}} + 0.10\,N_{\text{dup}}}{|\mathcal{L}| + N_{\text{uncited}} + N_{\text{dup}}}\right), \label{eq:cis-link}\\
 \text{CIS} &= 100 \times \bigl(0.35\,s_{\text{ver}} + 0.25\,s_{\text{meta}} + 0.25\,s_{\text{link}} + 0.10\,s_{\text{fmt}} + 0.05\,s_{\text{id}}\bigr), \label{eq:cis-total}
 \end{align}

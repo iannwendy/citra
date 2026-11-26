@@ -238,9 +238,9 @@ def verify_edition(folder_name: str, is_vn: bool) -> list[str]:
                         elif _approx_pt(s["size"], 13.0):
                             body_13pt_spans += 1
 
-    if caption_count != 53:
+    if caption_count != 54:
         errors.append(
-            f"[{folder_name}] Expected 53 captions (33 tables + 20 figures), found {caption_count}"
+            f"[{folder_name}] Expected 54 captions (34 tables + 20 figures), found {caption_count}"
         )
     if bad_captions:
         errors.append(

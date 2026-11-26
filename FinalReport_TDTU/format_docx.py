@@ -224,7 +224,14 @@ def cover_run_size(paragraph_index: int, run: ET.Element) -> str:
     """Restore the intended hierarchy on the two cover pages (Mau 1E vs Mau 2E)."""
 
     text = "".join(node.text or "" for node in run.findall(".//" + qn("t"))).strip()
-    if "AUTOMATED ESSAY GRADING" in text:
+    title_fragments = (
+        "CITRA:",
+        "NEURO-SYMBOLIC PLATFORM",
+        "AUTOMATED CITATION",
+        "INTEGRITY SCORING",
+        "HALLUCINATION DETECTION",
+    )
+    if any(frag in text for frag in title_fragments):
         return "48" if paragraph_index == 0 else "44"  # 24 pt on Cover 1, 22 pt on Cover 2
     if text in ("GRADUATION PROJECT", "MAJOR: SOFTWARE ENGINEERING", "SOFTWARE ENGINEERING"):
         return "44" if paragraph_index == 0 else "40"  # 22 pt on Cover 1, 20 pt on Cover 2

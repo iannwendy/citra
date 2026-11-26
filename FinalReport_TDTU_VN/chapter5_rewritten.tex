@@ -223,7 +223,7 @@ Nhằm tuân thủ nghiêm ngặt giả định độc lập i.i.d., Bảng~\ref
 \hline
 \textbf{Tổng gộp bộ OOD ($N = 2{,}400$)} & \textbf{Cả 6 nhóm} & 4.17 & 57.33 & \textbf{99.96} \\
 \hline
-\multicolumn{5}{l}{\scriptsize\textsuperscript{$\dagger$}\texttt{is\_retracted} và \texttt{url\_status} RFC 2606 nằm ngoài 16 đặc trưng liên tục của \texttt{B5}, minh họa mở rộng ký hiệu không cần huấn luyện lại.}
+\multicolumn{5}{p{\dimexpr\textwidth-2\tabcolsep\relax}}{\scriptsize\textsuperscript{$\dagger$}\texttt{is\_retracted} và \texttt{url\_status} RFC 2606 nằm ngoài 16 đặc trưng liên tục của \texttt{B5}, minh họa mở rộng ký hiệu không cần huấn luyện lại.}
 \end{tabular}
 \end{table}
 }
@@ -326,7 +326,7 @@ Kho pháp luật VN (Thực, trước v3.80) & 30 & 27 / 30 (90.0\%) & 164 (15 L
 \begin{table}[!htbp]
 \centering
 \caption{Kết quả kiểm định đầu--cuối tiêu biểu từ bộ kiểm toán từng dòng 21 PDF (329 TLTK) và bộ mẫu đồ án cài lỗi.}\label{tab:samples}
-\begin{tabular}{|L{0.31}|C{0.11}|C{0.08}|C{0.10}|C{0.08}|C{0.09}|C{0.09}|C{0.14}|}
+\begin{tabular}{|L{0.30}|C{0.11}|C{0.09}|C{0.10}|C{0.08}|C{0.09}|C{0.09}|C{0.14}|}
 \hline
 \textbf{Bản thảo kiểm toán} & \textbf{Chuẩn} & \textbf{TLTK} & \textbf{CIS} & \textbf{Ver.} & \textbf{Meta.} & \textbf{Hall.} & \textbf{Res./Unr.} \\
 \hline
@@ -346,20 +346,20 @@ Kho pháp luật VN (Thực, trước v3.80) & 30 & 27 / 30 (90.0\%) & 164 (15 L
 \hline
 \textbf{Báo cáo pháp lý VN (ESCO)} (13\,tr.) & TDTU & 18 & \textbf{80.00} & 2 & 1 & 0 & 15 / 0 \\
 \hline
-\textbf{Bộ mẫu đồ án cài lỗi} (Minh họa UI) & APA & 6 & \textbf{75.50} & 3 & \textbf{1} & \textbf{1} & 1 / 0 \\
+\textbf{Bộ mẫu đồ án cài lỗi} (Minh họa UI) & APA & 6 & \textbf{75.08} & 3 & \textbf{1} & \textbf{1} & 1 / 0 \\
 \hline
 \multicolumn{8}{l}{\scriptsize\textsuperscript{*}Xác nhận đồng nhất 100\% nhãn và CIS ở chế độ API trực tuyến thuần (tắt \texttt{local\_db} và \texttt{\_KNOWN\_PAPERS}).}
 \end{tabular}
 \end{table}
 }
 
-Các Hình~\ref{fig:demo-debugger}--\ref{fig:demo-consistency} trình bày giao diện chẩn đoán tiếng Việt \texttt{v3.90.10} trên bộ mẫu đồ án 6 TLTK ($\text{CIS} = 75.50 / 100$ khi đủ 6 liên kết; $75.08$ khi 1 mục chưa trích dẫn), hiển thị toàn chiều rộng trang in sau khi cắt thanh điều hướng trái. Hình~\ref{fig:demo-debugger} đối chiếu cảnh báo ảo giác DOI lai ghép AlphaFold2 (hiển thị kèm bản ghi Crossref gốc) và bảng sai lệch năm xuất bản (\texttt{2021} so với chuẩn \texttt{2019}). Hình~\ref{fig:demo-trace-context} minh họa đầy đủ vết suy diễn logic 5 bước tích hợp đối sánh song ngữ \texttt{VI}$\leftrightarrow$\texttt{EN} ONNX INT8 cùng luồng ngữ cảnh Trình kiểm tra tài liệu, còn Hình~\ref{fig:demo-consistency} phân tách trích dẫn mồ côi và mục chưa được trích dẫn.
+Các Hình~\ref{fig:demo-debugger}--\ref{fig:demo-consistency} trình bày giao diện chẩn đoán tiếng Việt \texttt{v3.90.10} trên bộ mẫu đồ án 6 TLTK ($\text{CIS} = 75.08 / 100$, hiển thị \texttt{75.1\%} khi có 1 mục chưa trích dẫn \texttt{[6]}; $75.50$ khi đủ cả 6 liên kết), hiển thị toàn chiều rộng trang in sau khi cắt thanh điều hướng trái. Hình~\ref{fig:demo-debugger} đối chiếu cảnh báo ảo giác DOI lai ghép AlphaFold2 (hiển thị kèm bản ghi Crossref gốc) và bảng sai lệch năm xuất bản (\texttt{2021} so với chuẩn \texttt{2019}). Hình~\ref{fig:demo-trace-context} minh họa đầy đủ vết suy diễn logic 5 bước tích hợp đối sánh song ngữ \texttt{VI}$\leftrightarrow$\texttt{EN} ONNX INT8 cùng luồng ngữ cảnh Trình kiểm tra tài liệu, còn Hình~\ref{fig:demo-consistency} phân tách trích dẫn mồ côi và mục chưa được trích dẫn.
 
 \begin{figure}[!htbp]
     \centering
     \fboxsep=0pt\fboxrule=0.4pt\fbox{\includegraphics[width=0.94\textwidth,keepaspectratio]{picture/figures/05-verification-report.png}}\\[6pt]
     \fboxsep=0pt\fboxrule=0.4pt\fbox{\includegraphics[width=0.94\textwidth,keepaspectratio]{picture/figures/06-reference-inspector.png}}
-    \caption[Trình kiểm tra tài liệu tham khảo đối chiếu DOI lai ghép và sai lệch năm xuất bản]{Giao diện Kiểm tra tài liệu tham khảo trên bộ mẫu đồ án ($\text{CIS} = 75.5/100$), cô lập cảnh báo \texttt{suspected\_hallucination} dùng DOI lai ghép đối chiếu bản ghi AlphaFold2 gốc (trên) và lỗi \texttt{metadata\_error} lệch năm (\texttt{2021} so với \texttt{2019}, dưới).}
+    \caption[Trình kiểm tra tài liệu tham khảo đối chiếu DOI lai ghép và sai lệch năm xuất bản]{Giao diện Kiểm tra tài liệu tham khảo trên bộ mẫu đồ án ($\text{CIS} = 75.1/100$, chính xác $75.08$), cô lập cảnh báo \texttt{suspected\_hallucination} dùng DOI lai ghép đối chiếu bản ghi AlphaFold2 gốc (trên) và lỗi \texttt{metadata\_error} lệch năm (\texttt{2021} so với \texttt{2019}, dưới).}
     \label{fig:demo-debugger}
 \end{figure}
 
@@ -444,7 +444,7 @@ Bài báo 12\,tr.\ --- WAN lạnh ($n=1$) & 76.2 & 243.1 & 8,635.8 & 9,407.6 & $
 \end{table}
 }
 
-Bảng~\ref{tab:nfr-deadline-stress} cô lập kiểm thử \textbf{tầng tải lên HTTP multipart, kế toán hạn mức CAS, ghi đồng thời SQLite WAL và hàng đợi FIFO \texttt{PipelineAdmissionController}} dưới tải đột biến 20 và 50 sinh viên trên tệp PDF mẫu 2 trang / 3 trích dẫn với \textbf{tầng NLP giả lập (stubbed)} nhằm tạo áp lực tối đa lên khóa CSDL và lập lịch hàng đợi. Toàn bộ $50/50$ lượt nộp hoàn tất với $0$ lỗi khóa SQLite và $0$ lỗi HTTP 5xx/429 ($11.57\text{\,bài/s}$ qua hàng đợi; $24.49\text{\,req/s}$ tiếp nhận HTTP). Theo định luật Little, khi chạy đủ AI trên CPU (\texttt{max\_concurrent=3}, $1.33\text{\,s}$ đệm ấm / $12.64\text{\,s}$ WAN lạnh mỗi đồ án 50 trang), thông lượng kiểm chứng thực tế đạt khoảng $\sim 2.2\text{\,bài/s}$ (đệm ấm) hoặc $\sim 0.24\text{\,bài/s}$ (WAN lạnh), còn hàng đợi điều phối hấp thụ êm toàn bộ 50 lượt nộp mà không từ chối yêu cầu.
+Bảng~\ref{tab:nfr-deadline-stress} cô lập kiểm thử \textbf{tầng tải lên HTTP multipart, kế toán hạn mức CAS, ghi đồng thời SQLite WAL và hàng đợi FIFO \texttt{Pipeline\allowbreak Admission\allowbreak Controller}} dưới tải đột biến 20 và 50 sinh viên trên tệp PDF mẫu 2 trang / 3 trích dẫn với \textbf{tầng NLP giả lập (stubbed)} nhằm tạo áp lực tối đa lên khóa CSDL và lập lịch hàng đợi. Toàn bộ $50/50$ lượt nộp hoàn tất với $0$ lỗi khóa SQLite và $0$ lỗi HTTP 5xx/429 ($11.57\text{\,bài/s}$ qua hàng đợi; $24.49\text{\,req/s}$ tiếp nhận HTTP). Theo định luật Little, khi chạy đủ AI trên CPU (\texttt{max\_concurrent=3}, $1.33\text{\,s}$ đệm ấm / $12.64\text{\,s}$ WAN lạnh mỗi đồ án 50 trang), thông lượng kiểm chứng thực tế đạt khoảng $\sim 2.2\text{\,bài/s}$ (đệm ấm) hoặc $\sim 0.24\text{\,bài/s}$ (WAN lạnh), còn hàng đợi điều phối hấp thụ êm toàn bộ 50 lượt nộp mà không từ chối yêu cầu.
 
 {\setlength{\tabcolsep}{3pt}
 \begin{table}[!htbp]

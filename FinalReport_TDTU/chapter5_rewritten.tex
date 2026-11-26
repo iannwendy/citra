@@ -346,20 +346,20 @@ VN Legal Corpus (Real, Pre-v3.80) & 30 & 27 / 30 (90.0\%) & 164 (15 Legal) & 109
 \hline
 \textbf{VN Legal Report (ESCO)} (13\,pp.) & TDTU & 18 & \textbf{80.00} & 2 & 1 & 0 & 15 / 0 \\
 \hline
-\textbf{Seeded Capstone Fixture} (UI demo) & APA & 6 & \textbf{75.50} & 3 & \textbf{1} & \textbf{1} & 1 / 0 \\
+\textbf{Seeded Capstone Fixture} (UI demo) & APA & 6 & \textbf{75.08} & 3 & \textbf{1} & \textbf{1} & 1 / 0 \\
 \hline
 \multicolumn{8}{l}{\scriptsize\textsuperscript{*}Confirmed 100\% identical verdicts and CIS in Pure-Live API mode (\texttt{local\_db} and \texttt{\_KNOWN\_PAPERS} disabled).}
 \end{tabular}
 \end{table}
 }
 
-Figures~\ref{fig:demo-debugger}--\ref{fig:demo-consistency} render the live \texttt{v3.90.10} diagnostic views on the 6-reference seeded capstone audit fixture ($\text{CIS} = 75.50 / 100$ when all 6 references are cited; $75.08$ with one uncited entry) at full printable width with navigation sidebars cropped for readability. Figure~\ref{fig:demo-debugger} highlights the chimeric AlphaFold2 DOI hallucination (with its canonical Crossref record resolved side by side) and the publication-year \texttt{metadata\_error} diff (\texttt{2021} vs.\ canonical \texttt{2019}). Figure~\ref{fig:demo-trace-context} shows the complete 5-stage logic trace with ONNX INT8 \texttt{VI}$\leftrightarrow$\texttt{EN} concept alignment alongside the inline Document Inspector context stream, while Figure~\ref{fig:demo-consistency} isolates orphan inline markers and uncited bibliography entries.
+Figures~\ref{fig:demo-debugger}--\ref{fig:demo-consistency} render the live \texttt{v3.90.10} diagnostic views on the 6-reference seeded capstone audit fixture ($\text{CIS} = 75.08 / 100$, displayed as \texttt{75.1\%} with one uncited entry \texttt{[6]}; $75.50$ when all 6 references are cited) at full printable width with navigation sidebars cropped for readability. Figure~\ref{fig:demo-debugger} highlights the chimeric AlphaFold2 DOI hallucination (with its canonical Crossref record resolved side by side) and the publication-year \texttt{metadata\_error} diff (\texttt{2021} vs.\ canonical \texttt{2019}). Figure~\ref{fig:demo-trace-context} shows the complete 5-stage logic trace with ONNX INT8 \texttt{VI}$\leftrightarrow$\texttt{EN} concept alignment alongside the inline Document Inspector context stream, while Figure~\ref{fig:demo-consistency} isolates orphan inline markers and uncited bibliography entries.
 
 \begin{figure}[!htbp]
     \centering
     \fboxsep=0pt\fboxrule=0.4pt\fbox{\includegraphics[width=0.94\textwidth,keepaspectratio]{picture/figures/05-verification-report.png}}\\[6pt]
     \fboxsep=0pt\fboxrule=0.4pt\fbox{\includegraphics[width=0.94\textwidth,keepaspectratio]{picture/figures/06-reference-inspector.png}}
-    \caption[Reference Inspector comparing chimeric DOI hallucination and metadata year drift]{CITRA Reference Inspector on the seeded capstone ($\text{CIS} = 75.5/100$), isolating a chimeric-DOI \texttt{suspected\_hallucination} against its resolved AlphaFold2 record (top) and a publication-year \texttt{metadata\_error} diff (\texttt{2021} vs.\ canonical \texttt{2019}, bottom).}
+    \caption[Reference Inspector comparing chimeric DOI hallucination and metadata year drift]{CITRA Reference Inspector on the seeded capstone ($\text{CIS} = 75.1/100$, exact $75.08$), isolating a chimeric-DOI \texttt{suspected\_hallucination} against its resolved AlphaFold2 record (top) and a publication-year \texttt{metadata\_error} diff (\texttt{2021} vs.\ canonical \texttt{2019}, bottom).}
     \label{fig:demo-debugger}
 \end{figure}
 
