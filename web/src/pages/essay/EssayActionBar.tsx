@@ -2,11 +2,9 @@ import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
-  AlertCircle,
   BookOpen,
   Check,
   FileSearch,
-  GitBranch,
   Link2,
   Lock,
   Network,
@@ -65,18 +63,16 @@ export function EssayActionBar({
   const currentPath = location.pathname;
 
   const isUnifiedMode = Boolean(onChangeWorkspaceMode);
-  const isIssues = !isUnifiedMode && currentPath.endsWith('/issues');
   const isDocument = isUnifiedMode
     ? workspaceMode === 'document'
     : currentPath.endsWith('/document');
   const isConsistency = isUnifiedMode
     ? workspaceMode === 'consistency'
     : currentPath.endsWith('/consistency');
-  const isTrace = !isUnifiedMode && currentPath.endsWith('/trace');
   const isGraphTabActive = isUnifiedMode && workspaceMode === 'graph';
   const isCitationsTabActive = isUnifiedMode
     ? workspaceMode === 'debugger'
-    : !isIssues && !isDocument && !isConsistency && !isTrace;
+    : !isDocument && !isConsistency;
 
   const activePillKey = isUnifiedMode
     ? workspaceMode
@@ -84,11 +80,7 @@ export function EssayActionBar({
       ? 'document'
       : isConsistency
         ? 'consistency'
-        : isIssues
-          ? 'issues'
-          : isTrace
-            ? 'trace'
-            : 'debugger';
+        : 'debugger';
 
   const { containerRef: tabsRef, pillStyle } = useSlidingPill<HTMLDivElement>(
     `${activePillKey}-${lang}`,
@@ -325,29 +317,6 @@ export function EssayActionBar({
             )}
             <span className="truncate">{isVi ? 'Sơ đồ' : 'Network'}</span>
           </button>
-        )}
-
-        {/* Contextual indicator ONLY when visiting companion /issues or /trace URL directly */}
-        {isIssues && (
-          <Link
-            to={`${basePath}/issues`}
-            data-pill-active="true"
-            className={tabBtnClass(true)}
-          >
-            <AlertCircle className="h-3.5 w-3.5 text-amber-500 shrink-0" />
-            <span>{isVi ? 'Danh sách vấn đề' : 'Issues'}</span>
-          </Link>
-        )}
-
-        {isTrace && (
-          <Link
-            to={`${basePath}/trace`}
-            data-pill-active="true"
-            className={tabBtnClass(true)}
-          >
-            <GitBranch className="h-3.5 w-3.5 text-violet-500 shrink-0" />
-            <span>{isVi ? 'Chi tiết kiểm tra' : 'Check Details'}</span>
-          </Link>
         )}
 
         {/* Standalone Remediation CTA (hidden when EssayHeader already renders Primary CTA above) */}

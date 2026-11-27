@@ -3486,6 +3486,7 @@ export function EssayPage() {
     setMobileDetailOpen(false);
     setDeepDrawerOpen(nextTraceFocus);
     setDeepTab(nextTraceFocus ? 'steps' : 'sources');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [essayId]);
 
   const handleCompareRevisionChange = async (targetPrevId: number) => {
