@@ -76,7 +76,7 @@ function getLocalTodayIso(): string {
 
 export function PromoManagementPage() {
   const { i18n } = useTranslation();
-  const lang = resolveAcademicLang(i18n.language);
+  const lang = resolveAcademicLang(i18n.resolvedLanguage || i18n.language);
   const { isAdmin } = useRole();
   const toast = useToast();
   const navigate = useNavigate();
@@ -100,6 +100,13 @@ export function PromoManagementPage() {
   const [formError, setFormError] = useState('');
   const [codeError, setCodeError] = useState('');
   const [expiresError, setExpiresError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<{
+    discountValue?: string;
+    maxDiscountUsd?: string;
+    minOrderUsd?: string;
+    maxUses?: string;
+    maxUsesPerUser?: string;
+  }>({});
 
   // Form fields
   const [code, setCode] = useState('');
@@ -179,6 +186,7 @@ export function PromoManagementPage() {
     setFormError('');
     setCodeError('');
     setExpiresError('');
+    setFieldErrors({});
     setModalOpen(true);
   };
 
@@ -203,6 +211,7 @@ export function PromoManagementPage() {
     setFormError('');
     setCodeError('');
     setExpiresError('');
+    setFieldErrors({});
     setModalOpen(true);
   };
 
@@ -272,6 +281,7 @@ export function PromoManagementPage() {
     setFormError('');
     setCodeError('');
     setExpiresError('');
+    setFieldErrors({});
 
     const normalizedCode = code.trim().toUpperCase();
     if (!editingPromo && !PROMO_REGEX.test(normalizedCode)) {
@@ -284,25 +294,26 @@ export function PromoManagementPage() {
             ? 'Mã giảm giá phải gồm đúng 6 ký tự chữ in hoa hoặc số (A-Z, 0-9).'
             : 'Promo code must be exactly 6 uppercase alphanumeric characters (A-Z, 0-9).';
       setCodeError(msg);
-      setFormError(msg);
       return;
     }
 
     const parsedValue = Number(discountValue);
     if (!Number.isFinite(parsedValue) || parsedValue <= 0) {
-      setFormError(
-        lang === 'vi'
-          ? 'Giá trị giảm giá phải lớn hơn 0.'
-          : 'Discount value must be greater than 0.',
-      );
+      setFieldErrors({
+        discountValue:
+          lang === 'vi'
+            ? 'Giá trị giảm giá phải lớn hơn 0.'
+            : 'Discount value must be greater than 0.',
+      });
       return;
     }
     if (discountType === 'percent' && parsedValue > 100) {
-      setFormError(
-        lang === 'vi'
-          ? 'Phần trăm giảm giá không được vượt quá 100%.'
-          : 'Percentage discount cannot exceed 100%.',
-      );
+      setFieldErrors({
+        discountValue:
+          lang === 'vi'
+            ? 'Phần trăm giảm giá không được vượt quá 100%.'
+            : 'Percentage discount cannot exceed 100%.',
+      });
       return;
     }
 
@@ -312,21 +323,23 @@ export function PromoManagementPage() {
       parsedMaxDiscount !== null &&
       (!Number.isFinite(parsedMaxDiscount) || parsedMaxDiscount <= 0)
     ) {
-      setFormError(
-        lang === 'vi'
-          ? 'Mức giảm tối đa (USD) phải lớn hơn 0.'
-          : 'Max discount cap (USD) must be greater than 0.',
-      );
+      setFieldErrors({
+        maxDiscountUsd:
+          lang === 'vi'
+            ? 'Mức giảm tối đa (USD) phải lớn hơn 0.'
+            : 'Max discount cap (USD) must be greater than 0.',
+      });
       return;
     }
 
     const parsedMinOrder = minOrderUsd.trim() !== '' ? Number(minOrderUsd) : 0;
     if (!Number.isFinite(parsedMinOrder) || parsedMinOrder < 0) {
-      setFormError(
-        lang === 'vi'
-          ? 'Giá trị đơn tối thiểu không hợp lệ.'
-          : 'Minimum order amount must be 0 or greater.',
-      );
+      setFieldErrors({
+        minOrderUsd:
+          lang === 'vi'
+            ? 'Giá trị đơn tối thiểu không hợp lệ.'
+            : 'Minimum order amount must be 0 or greater.',
+      });
       return;
     }
 
@@ -335,22 +348,24 @@ export function PromoManagementPage() {
       parsedMaxUses !== null &&
       (!Number.isFinite(parsedMaxUses) || parsedMaxUses < 1)
     ) {
-      setFormError(
-        lang === 'vi'
-          ? 'Giới hạn lượt dùng tối đa phải từ 1 trở lên.'
-          : 'Global max uses must be at least 1.',
-      );
+      setFieldErrors({
+        maxUses:
+          lang === 'vi'
+            ? 'Giới hạn lượt dùng tối đa phải từ 1 trở lên.'
+            : 'Global max uses must be at least 1.',
+      });
       return;
     }
 
     const parsedPerUser =
       maxUsesPerUser.trim() !== '' ? parseInt(maxUsesPerUser, 10) : 1;
     if (!Number.isFinite(parsedPerUser) || parsedPerUser < 1) {
-      setFormError(
-        lang === 'vi'
-          ? 'Giới hạn mỗi người dùng phải từ 1 trở lên.'
-          : 'Max uses per user must be at least 1.',
-      );
+      setFieldErrors({
+        maxUsesPerUser:
+          lang === 'vi'
+            ? 'Giới hạn mỗi người dùng phải từ 1 trở lên.'
+            : 'Max uses per user must be at least 1.',
+      });
       return;
     }
 
@@ -368,7 +383,6 @@ export function PromoManagementPage() {
           ? 'Ngày hết hạn không thể ở trong quá khứ.'
           : 'Expiration date cannot be in the past.';
       setExpiresError(msg);
-      setFormError(msg);
       return;
     }
 
@@ -981,7 +995,7 @@ export function PromoManagementPage() {
                       {lang === 'vi' ? 'Trạng thái' : 'Status'}
                     </TableHead>
                     <TableHead className="text-right font-mono text-[11px] uppercase tracking-wider whitespace-nowrap">
-                      {lang === 'vi' ? 'Kích hoạt / Thao tác' : 'Status / Actions'}
+                      {lang === 'vi' ? 'Thao tác' : 'Actions'}
                     </TableHead>
                   </TableRow>
                 </TableHeader>
@@ -1244,7 +1258,11 @@ export function PromoManagementPage() {
               >
                 <div className="flex-1 min-h-0 overflow-y-auto p-5 space-y-4">
                   {formError && (
-                    <Alert variant="destructive" className="p-3 rounded-xl">
+                    <Alert
+                      variant="destructive"
+                      data-testid="promo-form-server-error"
+                      className="p-3 rounded-xl"
+                    >
                       <AlertDescription className="text-xs">
                         {formError}
                       </AlertDescription>
@@ -1406,12 +1424,31 @@ export function PromoManagementPage() {
                         max={discountType === 'percent' ? '100' : undefined}
                         data-testid="promo-discount-value-input"
                         value={discountValue}
+                        aria-invalid={Boolean(fieldErrors.discountValue)}
                         onChange={(e) => {
                           setDiscountValue(e.target.value);
+                          if (fieldErrors.discountValue) {
+                            setFieldErrors((prev) => ({
+                              ...prev,
+                              discountValue: undefined,
+                            }));
+                          }
                           if (formError) setFormError('');
                         }}
-                        className="rounded-xl font-mono text-sm"
+                        className={`rounded-xl font-mono text-sm ${
+                          fieldErrors.discountValue
+                            ? 'border-rose-400 focus-visible:ring-rose-500/30'
+                            : ''
+                        }`}
                       />
+                      {fieldErrors.discountValue && (
+                        <p
+                          role="alert"
+                          className="mt-1 text-[11px] text-rose-600 dark:text-rose-400"
+                        >
+                          {fieldErrors.discountValue}
+                        </p>
+                      )}
                     </div>
                   </div>
 
@@ -1433,8 +1470,15 @@ export function PromoManagementPage() {
                         disabled={discountType !== 'percent'}
                         data-testid="promo-max-discount-input"
                         value={maxDiscountUsd}
+                        aria-invalid={Boolean(fieldErrors.maxDiscountUsd)}
                         onChange={(e) => {
                           setMaxDiscountUsd(e.target.value);
+                          if (fieldErrors.maxDiscountUsd) {
+                            setFieldErrors((prev) => ({
+                              ...prev,
+                              maxDiscountUsd: undefined,
+                            }));
+                          }
                           if (formError) setFormError('');
                         }}
                         placeholder={
@@ -1444,8 +1488,20 @@ export function PromoManagementPage() {
                               : 'No cap'
                             : 'N/A'
                         }
-                        className="rounded-xl font-mono text-sm"
+                        className={`rounded-xl font-mono text-sm ${
+                          fieldErrors.maxDiscountUsd
+                            ? 'border-rose-400 focus-visible:ring-rose-500/30'
+                            : ''
+                        }`}
                       />
+                      {fieldErrors.maxDiscountUsd && (
+                        <p
+                          role="alert"
+                          className="mt-1 text-[11px] text-rose-600 dark:text-rose-400"
+                        >
+                          {fieldErrors.maxDiscountUsd}
+                        </p>
+                      )}
                     </div>
 
                     <div className="min-w-0">
@@ -1464,12 +1520,31 @@ export function PromoManagementPage() {
                         min="0"
                         data-testid="promo-min-order-input"
                         value={minOrderUsd}
+                        aria-invalid={Boolean(fieldErrors.minOrderUsd)}
                         onChange={(e) => {
                           setMinOrderUsd(e.target.value);
+                          if (fieldErrors.minOrderUsd) {
+                            setFieldErrors((prev) => ({
+                              ...prev,
+                              minOrderUsd: undefined,
+                            }));
+                          }
                           if (formError) setFormError('');
                         }}
-                        className="rounded-xl font-mono text-sm"
+                        className={`rounded-xl font-mono text-sm ${
+                          fieldErrors.minOrderUsd
+                            ? 'border-rose-400 focus-visible:ring-rose-500/30'
+                            : ''
+                        }`}
                       />
+                      {fieldErrors.minOrderUsd && (
+                        <p
+                          role="alert"
+                          className="mt-1 text-[11px] text-rose-600 dark:text-rose-400"
+                        >
+                          {fieldErrors.minOrderUsd}
+                        </p>
+                      )}
                     </div>
                   </div>
 
@@ -1551,13 +1626,32 @@ export function PromoManagementPage() {
                         min="1"
                         data-testid="promo-max-uses-input"
                         value={maxUses}
+                        aria-invalid={Boolean(fieldErrors.maxUses)}
                         onChange={(e) => {
                           setMaxUses(e.target.value);
+                          if (fieldErrors.maxUses) {
+                            setFieldErrors((prev) => ({
+                              ...prev,
+                              maxUses: undefined,
+                            }));
+                          }
                           if (formError) setFormError('');
                         }}
                         placeholder={lang === 'vi' ? 'Vô hạn (∞)' : 'Unlimited (∞)'}
-                        className="rounded-xl font-mono text-sm"
+                        className={`rounded-xl font-mono text-sm ${
+                          fieldErrors.maxUses
+                            ? 'border-rose-400 focus-visible:ring-rose-500/30'
+                            : ''
+                        }`}
                       />
+                      {fieldErrors.maxUses && (
+                        <p
+                          role="alert"
+                          className="mt-1 text-[11px] text-rose-600 dark:text-rose-400"
+                        >
+                          {fieldErrors.maxUses}
+                        </p>
+                      )}
                     </div>
 
                     <div className="min-w-0">
@@ -1573,12 +1667,31 @@ export function PromoManagementPage() {
                         min="1"
                         data-testid="promo-max-uses-per-user-input"
                         value={maxUsesPerUser}
+                        aria-invalid={Boolean(fieldErrors.maxUsesPerUser)}
                         onChange={(e) => {
                           setMaxUsesPerUser(e.target.value);
+                          if (fieldErrors.maxUsesPerUser) {
+                            setFieldErrors((prev) => ({
+                              ...prev,
+                              maxUsesPerUser: undefined,
+                            }));
+                          }
                           if (formError) setFormError('');
                         }}
-                        className="rounded-xl font-mono text-sm"
+                        className={`rounded-xl font-mono text-sm ${
+                          fieldErrors.maxUsesPerUser
+                            ? 'border-rose-400 focus-visible:ring-rose-500/30'
+                            : ''
+                        }`}
                       />
+                      {fieldErrors.maxUsesPerUser && (
+                        <p
+                          role="alert"
+                          className="mt-1 text-[11px] text-rose-600 dark:text-rose-400"
+                        >
+                          {fieldErrors.maxUsesPerUser}
+                        </p>
+                      )}
                     </div>
 
                     <div className="min-w-0">

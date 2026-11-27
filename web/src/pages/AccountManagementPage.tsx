@@ -46,7 +46,7 @@ import {
 
 export function AccountManagementPage() {
   const { t, i18n } = useTranslation();
-  const lang = resolveAcademicLang(i18n.language);
+  const lang = resolveAcademicLang(i18n.resolvedLanguage || i18n.language);
   const { user: currentUser } = useAuth();
   const { isAdmin } = useRole();
   const navigate = useNavigate();

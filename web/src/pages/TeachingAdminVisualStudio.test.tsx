@@ -903,4 +903,241 @@ describe('Visual Action Studio Redesign — 6 Teaching & Admin Pages', () => {
       expect(screen.getByTestId('audit-unique-actors').textContent).toBe('5');
     });
   });
+
+  describe('Loop Round 2 — Stage 3 Ring Gauge, Admin Copy Polish & Teacher Class Detail Polish', () => {
+    it('SystemHealthPage: renders centered numeric hit rate inside Stage 3 ring (98%) and — when 0 lookups', async () => {
+      vi.spyOn(api, 'getSystemHealth').mockResolvedValueOnce({
+        status: 'ok',
+        totals: { users: 5, admins: 1, teachers: 1, students: 3, essays: 12, verdicts: 100 },
+        verdict_label_counts: { verified: 100 },
+        cache_stats: {
+          local_papers_count: 127102,
+          local_queries_count: 112,
+          hit_rate_percent: 98.2,
+        },
+      });
+
+      const { unmount } = renderWithProviders(<SystemHealthPage />, {
+        user: makeUser('admin', 'ultra'),
+      });
+
+      const ring = await screen.findByTestId('stage3-hit-rate-ring');
+      expect(ring.getAttribute('data-score')).toBe('98.2');
+      const valueEl = screen.getByTestId('stage3-hit-rate-value');
+      expect(ring.contains(valueEl)).toBe(true);
+      expect(valueEl.textContent?.trim()).toBe('98%');
+      expect(valueEl.className).toContain('text-slate-900');
+      expect(valueEl.className).toContain('dark:text-slate-100');
+      expect(valueEl.className).toContain('font-bold');
+      expect(ring.textContent?.trim()).toBe('98%');
+      unmount();
+
+      // 0 lookups -> renders — centered inside the ring
+      vi.spyOn(api, 'getSystemHealth').mockResolvedValueOnce({
+        status: 'ok',
+        totals: { users: 5, admins: 1, teachers: 1, students: 3, essays: 0, verdicts: 0 },
+        verdict_label_counts: {},
+        cache_stats: {
+          local_papers_count: 127102,
+          local_queries_count: 0,
+          total_hits: 0,
+          hit_rate_percent: 0,
+        },
+      });
+
+      renderWithProviders(<SystemHealthPage />, {
+        user: makeUser('admin', 'ultra'),
+      });
+
+      const zeroRing = await screen.findByTestId('stage3-hit-rate-ring');
+      expect(zeroRing.getAttribute('data-score')).toBe('0.0');
+      expect(screen.getByTestId('stage3-hit-rate-value').textContent?.trim()).toBe('—');
+    });
+
+    it('PromoManagementPage: uses clean STATUS / ACTIONS (TRẠNG THÁI / THAO TÁC) headers and renders validation error once inline (reserving top alert for API errors)', async () => {
+      const promoFixture = {
+        stats: { total_codes: 1, active_codes: 1, total_redemptions: 1, total_discount_usd: 10 },
+        promos: [
+          {
+            id: 1,
+            code: 'CITRA1',
+            description: 'Launch offer',
+            discount_type: 'percent' as const,
+            discount_value: 20,
+            max_discount_usd: null,
+            min_amount_usd: 0,
+            applicable_tiers: 'all' as const,
+            applicable_cycles: 'all' as const,
+            max_uses: 100,
+            used_count: 1,
+            max_uses_per_user: 1,
+            expires_at: null,
+            is_active: true,
+            is_expired: false,
+            is_exhausted: false,
+            effective_status: 'active' as const,
+            created_by: 1,
+            created_at: '2026-11-01T00:00:00Z',
+            updated_at: '2026-11-01T00:00:00Z',
+          },
+        ],
+      };
+      vi.spyOn(api, 'listAdminPromoCodes').mockResolvedValue(promoFixture);
+      const createSpy = vi
+        .spyOn(api, 'createAdminPromoCode')
+        .mockRejectedValueOnce(new Error('API 409: Promo code already exists'));
+
+      const { container, unmount } = renderWithProviders(<PromoManagementPage />, {
+        user: makeUser('admin', 'ultra'),
+        initialRoute: '/admin/promos',
+      });
+
+      await waitFor(() => expect(screen.getByTestId('promo-row-CITRA1')).toBeDefined());
+      const enHeaders = Array.from(container.querySelectorAll('thead th')).map((th) =>
+        th.textContent?.trim(),
+      );
+      expect(enHeaders).toContain('Status');
+      expect(enHeaders).toContain('Actions');
+      expect(enHeaders).not.toContain('Status / Actions');
+
+      // Submitting invalid promo code shows inline error ONCE and keeps top server alert hidden
+      fireEvent.click(screen.getByTestId('create-promo-btn'));
+      fireEvent.change(screen.getByTestId('promo-code-input'), {
+        target: { value: 'BAD' },
+      });
+      fireEvent.click(screen.getByTestId('promo-submit-btn'));
+
+      const inlineErr = await screen.findByTestId('promo-code-inline-error');
+      const expectedMsg =
+        'Promo code must be exactly 6 uppercase alphanumeric characters (A-Z, 0-9).';
+      expect(inlineErr.textContent).toBe(expectedMsg);
+      expect(screen.queryByTestId('promo-form-server-error')).toBeNull();
+      const modalText = screen.getByTestId('promo-form-modal').textContent ?? '';
+      expect(modalText.split(expectedMsg).length - 1).toBe(1);
+      expect(createSpy).not.toHaveBeenCalled();
+
+      // Valid submission that fails server-side renders inside top server alert
+      fireEvent.change(screen.getByTestId('promo-code-input'), {
+        target: { value: 'VALID6' },
+      });
+      fireEvent.click(screen.getByTestId('promo-submit-btn'));
+      const serverAlert = await screen.findByTestId('promo-form-server-error');
+      expect(serverAlert.textContent).toContain('Promo code already exists');
+      unmount();
+
+      // Vietnamese column headers: Trạng thái & Thao tác
+      await i18n.changeLanguage('vi');
+      vi.spyOn(api, 'listAdminPromoCodes').mockResolvedValue(promoFixture);
+      const { container: viContainer } = renderWithProviders(<PromoManagementPage />, {
+        user: makeUser('admin', 'ultra'),
+        initialRoute: '/admin/promos',
+      });
+      await waitFor(() => expect(screen.getByTestId('promo-row-CITRA1')).toBeDefined());
+      const viHeaders = Array.from(viContainer.querySelectorAll('thead th')).map((th) =>
+        th.textContent?.trim(),
+      );
+      expect(viHeaders).toContain('Trạng thái');
+      expect(viHeaders).toContain('Thao tác');
+      expect(viHeaders).not.toContain('Kích hoạt / Thao tác');
+    });
+
+    it('AccountManagementPage & UserFormDialog: renders clean Vietnamese "Gói dịch vụ" label without mixed "(Plan Tier)" suffix', async () => {
+      await i18n.changeLanguage('vi');
+      const selfAdmin = makeUser('admin', 'ultra', { id: 1, username: 'admin_root' });
+      const studentUser = makeUser('user', 'basic', {
+        id: 2,
+        username: 'sv_linh',
+        full_name: 'Lê Thị Linh',
+      });
+      vi.spyOn(api, 'listUsers').mockResolvedValue([selfAdmin, studentUser]);
+
+      renderWithProviders(<AccountManagementPage />, {
+        user: selfAdmin,
+        initialRoute: '/admin/users',
+      });
+
+      await waitFor(() => expect(screen.getByText(/sv_linh/)).toBeDefined());
+      fireEvent.click(screen.getByLabelText('Chỉnh sửa người dùng sv_linh'));
+
+      const planLabel = await waitFor(() => {
+        const el = document.querySelector('label[for="user-form-plan-tier-select"]');
+        expect(el).not.toBeNull();
+        return el!;
+      });
+      expect(planLabel.textContent?.trim()).toBe('Gói dịch vụ');
+      expect(planLabel.textContent).not.toContain('(Plan Tier)');
+    });
+
+    it('ClassDetailPage: displays clean full names without raw (user) suffix on submission rows & flagged citations and formats CIS strictly as XX.X / 100', async () => {
+      const cls = makeClassFixture({ id: 22, name: 'KLTN 2026', join_code: 'CITRA22' });
+      vi.spyOn(api, 'listMyClasses').mockResolvedValue([cls]);
+      vi.spyOn(api, 'listClassStudents').mockResolvedValue([
+        {
+          id: 2,
+          username: 'user',
+          email: 'student@citra.edu',
+          full_name: 'Nguyen Van A (user)',
+          is_active: true,
+        },
+      ]);
+      vi.spyOn(api, 'listClassEssays').mockResolvedValue([
+        {
+          id: 301,
+          filename: 'Thesis_Final.pdf',
+          num_pages: 28,
+          user_id: 2,
+          username: 'user',
+          uploaded_at: '2026-11-24T08:00:00Z',
+          job_status: 'completed',
+          cis_score: 92.6,
+        },
+      ]);
+      vi.spyOn(api, 'getClassAnalytics').mockResolvedValue({
+        class_id: 22,
+        class_name: 'KLTN 2026',
+        total_students: 1,
+        total_essays: 1,
+        avg_cis: 92.6,
+        recency_5yr_ratio: 75.0,
+        cis_distribution: { excellent: 1, good: 0, fair: 0, poor: 0 },
+        verdict_breakdown: { verified: 12, metadata_error: 1 },
+        top_triggered_rules: [],
+        shared_hallucinations: [
+          {
+            citation_raw: 'Doe, J. (2025). Unverified Reference Paper.',
+            label: 'suspected_hallucination',
+            student_count: 1,
+            occurrence_count: 2,
+            students: ['user'],
+            essay_ids: [301, 302],
+            is_shared: true,
+          },
+        ],
+      });
+
+      const { container } = renderWithProviders(
+        <Routes>
+          <Route path="/teacher/classes/:classId" element={<ClassDetailPage />} />
+        </Routes>,
+        {
+          user: makeUser('teacher', 'pro'),
+          initialRoute: '/teacher/classes/22',
+        },
+      );
+
+      const row = await screen.findByTestId('class-essay-row-301');
+      expect(row.textContent).toContain('Nguyen Van A');
+      expect(row.textContent).not.toContain('(user)');
+      expect(row.textContent).toContain('CIS 92.6 / 100');
+      expect(row.textContent).not.toContain('92.6%');
+
+      const avgCis = screen.getByTestId('cohort-avg-cis-value');
+      expect(avgCis.textContent?.trim()).toBe('92.6 / 100');
+      expect(avgCis.textContent).not.toContain('%');
+
+      // Flagged citations across submissions resolves 'user' -> clean full name 'Nguyen Van A'
+      expect(container.textContent).toContain('Shared in 2 papers · Nguyen Van A');
+      expect(container.textContent).not.toContain('(user)');
+    });
+  });
 });

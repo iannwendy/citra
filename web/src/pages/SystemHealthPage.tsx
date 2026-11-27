@@ -46,7 +46,6 @@ import {
   AccordionExpand,
   DonutChart,
   NumberPopIn,
-  ScoreRing,
   SymmetricChevron,
 } from '@/components/ui/transitions';
 
@@ -397,7 +396,7 @@ export function summarizeHealth(
 
 export function SystemHealthPage() {
   const { t, i18n } = useTranslation();
-  const lang = resolveAcademicLang(i18n.language);
+  const lang = resolveAcademicLang(i18n.resolvedLanguage || i18n.language);
   const toast = useToast();
   const [data, setData] = useState<SystemHealth | null>(null);
   const [fetchedAt, setFetchedAt] = useState<string | null>(null);
@@ -626,12 +625,35 @@ export function SystemHealthPage() {
           )
         : Number(rawCacheStats.total_hits ?? 0);
 
-  const cacheHitRatePct = Number(
+  const rawCacheHitRate =
     rawCacheStats.hit_rate_percent ??
-      rawCacheStats.local_hit_rate_percent ??
-      rawCacheStats.session_hit_rate_percent ??
-      0,
-  );
+    rawCacheStats.local_hit_rate_percent ??
+    rawCacheStats.session_hit_rate_percent;
+  const cacheHitRatePct =
+    rawCacheHitRate != null && Number.isFinite(Number(rawCacheHitRate))
+      ? Math.min(100, Math.max(0, Number(rawCacheHitRate)))
+      : 0;
+  const totalCacheLookups =
+    Number(rawCacheStats.local_queries_count ?? 0) +
+    Number(rawCacheStats.session_hits ?? 0) +
+    Number(rawCacheStats.session_misses ?? 0) +
+    Number(rawCacheStats.total_hits ?? 0) +
+    Number(rawCacheStats.persistent_hits ?? 0);
+  const hasCacheHitRateSample =
+    rawCacheHitRate != null &&
+    Number.isFinite(Number(rawCacheHitRate)) &&
+    (cacheHitRatePct > 0 || totalCacheLookups > 0);
+  const stage3RingSize = 54;
+  const stage3RingThickness = 4.5;
+  const stage3RingCenter = stage3RingSize / 2;
+  const stage3RingRadius = (stage3RingSize - stage3RingThickness) / 2 - 0.5;
+  const stage3RingCircumference = 2 * Math.PI * stage3RingRadius;
+  const stage3RingValue = hasCacheHitRateSample ? cacheHitRatePct : 0;
+  const stage3RingDashOffset =
+    stage3RingCircumference * (1 - stage3RingValue / 100);
+  const stage3HitRateDisplay = hasCacheHitRateSample
+    ? `${Math.round(cacheHitRatePct)}%`
+    : '—';
 
   const hasB1SessionTelemetry =
     rawCacheStats.session_hit_rate_percent != null ||
@@ -843,24 +865,79 @@ export function SystemHealthPage() {
               : 'cached lookups'}
         </p>
       ),
-      actionSlot:
-        cacheHitRatePct > 0 ? (
-          <div className="flex flex-col items-center gap-0.5 shrink-0">
-            <ScoreRing
-              value={cacheHitRatePct}
-              size={38}
-              thickness={3.8}
-              color="#10b981"
-            />
-            <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap">
-              {lang === 'vi' ? 'Tỷ lệ trúng %' : 'Hit rate %'}
+      actionSlot: (
+        <div className="flex flex-col items-center gap-1 shrink-0">
+          <div
+            data-testid="stage3-hit-rate-ring"
+            data-score={stage3RingValue.toFixed(1)}
+            role="img"
+            aria-label={
+              hasCacheHitRateSample
+                ? lang === 'vi'
+                  ? `Tỷ lệ trúng bộ nhớ đệm: ${formatMetricNumber(cacheHitRatePct)}%`
+                  : `Cache hit rate: ${formatMetricNumber(cacheHitRatePct)}%`
+                : lang === 'vi'
+                  ? 'Chưa có lượt tra cứu bộ nhớ đệm'
+                  : 'No cache lookups recorded yet'
+            }
+            title={
+              hasCacheHitRateSample
+                ? `${formatMetricNumber(cacheHitRatePct)}%`
+                : lang === 'vi'
+                  ? 'Chưa có lượt tra cứu'
+                  : 'No lookups yet'
+            }
+            className="relative inline-flex items-center justify-center shrink-0"
+            style={{ width: stage3RingSize, height: stage3RingSize }}
+          >
+            <svg
+              width={stage3RingSize}
+              height={stage3RingSize}
+              viewBox={`0 0 ${stage3RingSize} ${stage3RingSize}`}
+              className="block"
+              aria-hidden="true"
+            >
+              <circle
+                cx={stage3RingCenter}
+                cy={stage3RingCenter}
+                r={stage3RingRadius}
+                fill="none"
+                stroke="currentColor"
+                className="text-slate-200/80 dark:text-slate-700"
+                strokeWidth={stage3RingThickness}
+              />
+              {stage3RingValue > 0 && (
+                <circle
+                  data-testid="stage3-hit-rate-ring-progress"
+                  cx={stage3RingCenter}
+                  cy={stage3RingCenter}
+                  r={stage3RingRadius}
+                  fill="none"
+                  stroke="#10b981"
+                  strokeWidth={stage3RingThickness}
+                  strokeLinecap={stage3RingValue >= 99.5 ? 'butt' : 'round'}
+                  strokeDasharray={stage3RingCircumference.toFixed(3)}
+                  strokeDashoffset={stage3RingDashOffset.toFixed(3)}
+                  transform={`rotate(-90 ${stage3RingCenter} ${stage3RingCenter})`}
+                  style={{
+                    transition:
+                      'stroke-dashoffset 420ms cubic-bezier(0.22, 1, 0.36, 1), stroke 240ms ease',
+                  }}
+                />
+              )}
+            </svg>
+            <span
+              data-testid="stage3-hit-rate-value"
+              className="pointer-events-none absolute inset-0 flex items-center justify-center text-[11px] font-bold font-mono tabular-nums leading-none text-slate-900 dark:text-slate-100"
+            >
+              {stage3HitRateDisplay}
             </span>
           </div>
-        ) : (
-          <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-[10px] font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap shrink-0">
-            {lang === 'vi' ? 'Sẵn sàng' : 'Ready'}
+          <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap">
+            {lang === 'vi' ? 'Tỷ lệ trúng' : 'Hit rate'}
           </span>
-        ),
+        </div>
+      ),
     },
   ];
 

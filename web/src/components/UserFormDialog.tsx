@@ -44,7 +44,7 @@ export function UserFormDialog({
   onSuccess,
 }: UserFormDialogProps) {
   const { t, i18n } = useTranslation();
-  const lang = resolveAcademicLang(i18n.language);
+  const lang = resolveAcademicLang(i18n.resolvedLanguage || i18n.language);
   const { user: authUser } = useAuth();
   const isEdit = Boolean(user);
   const effectiveCurrentUserId = currentUserId ?? authUser?.id;
@@ -403,7 +403,7 @@ export function UserFormDialog({
 
               <div className="space-y-1.5">
                 <Label htmlFor="user-form-plan-tier-select">
-                  {lang === 'vi' ? 'Gói dịch vụ (Plan Tier)' : 'Plan Tier'}
+                  {lang === 'vi' ? 'Gói dịch vụ' : 'Plan Tier'}
                 </Label>
                 <Select
                   id="user-form-plan-tier-select"

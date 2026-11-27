@@ -70,6 +70,32 @@ function parseSubmissionTimestamp(value?: string | null): number {
   return Number.isFinite(ts) ? ts : 0;
 }
 
+function formatStudentDisplayName(
+  fullName?: string | null,
+  username?: string | null,
+): string {
+  const rawFull = (fullName ?? '').trim();
+  const rawUser = (username ?? '').trim();
+  if (rawFull) {
+    if (rawUser) {
+      const escaped = rawUser.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const stripped = rawFull
+        .replace(new RegExp(`\\s*\\(@?${escaped}\\)$`, 'i'), '')
+        .trim();
+      if (stripped) return stripped;
+    }
+    const strippedGeneric = rawFull.replace(/\s*\(user\)$/i, '').trim();
+    if (strippedGeneric) return strippedGeneric;
+    return rawFull;
+  }
+  if (rawUser) {
+    const strippedGeneric = rawUser.replace(/\s*\(user\)$/i, '').trim();
+    if (strippedGeneric) return strippedGeneric;
+    return rawUser;
+  }
+  return '—';
+}
+
 /**
  * ClassDetailPage — Visual Cohort Studio for a single class.
  *
@@ -323,12 +349,25 @@ export function ClassDetailPage() {
     [],
   );
 
-  // Map student full_name by user_id for richer search/display on submissions
+  // Map student full_name by user_id and username for clean search/display on submissions & flagged items
   const studentNameById = useMemo(() => {
     const map = new Map<number, string>();
     for (const s of students) {
       if (s.full_name?.trim()) {
-        map.set(s.id, s.full_name.trim());
+        map.set(s.id, formatStudentDisplayName(s.full_name, s.username));
+      }
+    }
+    return map;
+  }, [students]);
+
+  const studentNameByUsername = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const s of students) {
+      if (s.username?.trim() && s.full_name?.trim()) {
+        map.set(
+          s.username.trim().toLowerCase(),
+          formatStudentDisplayName(s.full_name, s.username),
+        );
       }
     }
     return map;
@@ -376,7 +415,12 @@ export function ClassDetailPage() {
         }
       }
       if (!q) return true;
-      const fullName = e.user_id != null ? studentNameById.get(e.user_id) ?? '' : '';
+      const fullName =
+        (e.user_id != null ? studentNameById.get(e.user_id) : undefined) ??
+        (e.username
+          ? studentNameByUsername.get(e.username.trim().toLowerCase())
+          : undefined) ??
+        '';
       return (
         e.filename.toLowerCase().includes(q) ||
         (e.username ?? '').toLowerCase().includes(q) ||
@@ -410,7 +454,14 @@ export function ClassDetailPage() {
       return parseSubmissionTimestamp(b.uploaded_at) - parseSubmissionTimestamp(a.uploaded_at);
     });
     return sorted;
-  }, [essays, studentNameById, submissionSearch, submissionStatusFilter, submissionSort]);
+  }, [
+    essays,
+    studentNameById,
+    studentNameByUsername,
+    submissionSearch,
+    submissionStatusFilter,
+    submissionSort,
+  ]);
 
   // BUG-01 defense-in-depth: strip positive/verified rules and replace chimeric jargon
   const filteredTopIssueRules = useMemo(
@@ -607,7 +658,7 @@ export function ClassDetailPage() {
       </div>
 
       {/* Visual Metric & Ring Gauge Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3.5 sm:gap-4">
         <Card className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm flex flex-col justify-between">
           <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
             {t('teacher.enrolledStudents')}
@@ -633,7 +684,7 @@ export function ClassDetailPage() {
             </span>
             <p
               data-testid="cohort-avg-cis-value"
-              className="mt-1.5 text-xl sm:text-2xl font-bold font-mono tabular-nums text-violet-600 dark:text-violet-400"
+              className="mt-1.5 text-xl sm:text-2xl font-bold font-mono tabular-nums whitespace-nowrap text-violet-600 dark:text-violet-400"
             >
               {analytics && hasAnySubmissions ? formatCisScore(avgCisSafe) : '—'}
             </p>
@@ -654,7 +705,7 @@ export function ClassDetailPage() {
             </span>
             <p
               data-testid="cohort-recency-value"
-              className="mt-1.5 text-xl sm:text-2xl font-bold font-mono tabular-nums text-amber-600 dark:text-amber-400"
+              className="mt-1.5 text-xl sm:text-2xl font-bold font-mono tabular-nums whitespace-nowrap text-amber-600 dark:text-amber-400"
             >
               {analytics && hasAnySubmissions ? `${recencySafe.toFixed(1)}%` : '—'}
             </p>
@@ -1055,6 +1106,17 @@ export function ClassDetailPage() {
                   <div className="space-y-2.5 max-h-64 overflow-y-auto pr-1">
                     {(analytics.shared_hallucinations ?? []).map((item, idx) => {
                       const verdictDisplay = getVerdictDisplay(item.label, lang);
+                      const resolvedStudentNames = Array.from(
+                        new Set(
+                          item.students.map((raw) => {
+                            const trimmed = raw.trim();
+                            return (
+                              studentNameByUsername.get(trimmed.toLowerCase()) ||
+                              formatStudentDisplayName(undefined, trimmed)
+                            );
+                          }),
+                        ),
+                      );
                       return (
                         <div
                           key={idx}
@@ -1073,9 +1135,9 @@ export function ClassDetailPage() {
                             <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
                               {item.is_shared
                                 ? lang === 'vi'
-                                  ? `Trùng ở ${item.essay_ids.length} bài (${item.students.join(', ')})`
-                                  : `Shared in ${item.essay_ids.length} papers (${item.students.join(', ')})`
-                                : item.students.join(', ')}
+                                  ? `Trùng ở ${item.essay_ids.length} bài · ${resolvedStudentNames.join(', ')}`
+                                  : `Shared in ${item.essay_ids.length} papers · ${resolvedStudentNames.join(', ')}`
+                                : resolvedStudentNames.join(', ')}
                             </span>
                           </div>
                           <p className="font-serif text-xs text-slate-800 dark:text-slate-200 line-clamp-2 break-words">
@@ -1138,37 +1200,45 @@ export function ClassDetailPage() {
               <p className="text-sm text-slate-500">{t('teacher.noStudentsYet')}</p>
             </div>
           ) : (
-            students.map((s) => (
-              <div
-                key={s.id}
-                className="flex items-center justify-between px-5 py-3.5 hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors"
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-8 h-8 rounded-full bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200/70 dark:border-indigo-800/70 flex items-center justify-center text-xs font-bold text-indigo-700 dark:text-indigo-300 shrink-0 uppercase">
-                    {(s.full_name || s.username).slice(0, 1)}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="font-medium text-sm text-slate-900 dark:text-slate-100 truncate">
-                      {s.full_name || s.username}
-                    </p>
-                    {s.full_name && (
-                      <p className="text-xs text-slate-500 truncate">{s.username}</p>
-                    )}
-                  </div>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setPendingRemove(s)}
-                  aria-label={
-                    lang === 'vi' ? `Xóa ${s.username} khỏi lớp` : `Remove ${s.username}`
-                  }
-                  className="text-rose-600 hover:bg-rose-50 hover:text-rose-700 dark:hover:bg-rose-950/30 rounded-lg"
+            students.map((s) => {
+              const displayName = formatStudentDisplayName(s.full_name, s.username);
+              const secondaryMeta = s.full_name
+                ? s.email?.trim() || `@${s.username}`
+                : s.email?.trim() || '';
+              return (
+                <div
+                  key={s.id}
+                  className="flex items-center justify-between px-5 py-3.5 hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors"
                 >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
-            ))
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-8 h-8 rounded-full bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200/70 dark:border-indigo-800/70 flex items-center justify-center text-xs font-bold text-indigo-700 dark:text-indigo-300 shrink-0 uppercase">
+                      {displayName.slice(0, 1)}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-medium text-sm text-slate-900 dark:text-slate-100 truncate">
+                        {displayName}
+                      </p>
+                      {secondaryMeta && (
+                        <p className="text-xs text-slate-500 truncate">
+                          {secondaryMeta}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setPendingRemove(s)}
+                    aria-label={
+                      lang === 'vi' ? `Xóa ${s.username} khỏi lớp` : `Remove ${s.username}`
+                    }
+                    className="text-rose-600 hover:bg-rose-50 hover:text-rose-700 dark:hover:bg-rose-950/30 rounded-lg"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              );
+            })
           )}
         </div>
       </section>
@@ -1434,10 +1504,15 @@ export function ClassDetailPage() {
                 e.cis_score != null && Number.isFinite(Number(e.cis_score))
                   ? Number(e.cis_score)
                   : null;
-              const studentDisplay =
-                (e.user_id != null ? studentNameById.get(e.user_id) : null) ||
-                e.username ||
-                '—';
+              const resolvedFullName =
+                (e.user_id != null ? studentNameById.get(e.user_id) : undefined) ||
+                (e.username
+                  ? studentNameByUsername.get(e.username.trim().toLowerCase())
+                  : undefined);
+              const studentDisplay = formatStudentDisplayName(
+                resolvedFullName,
+                e.username,
+              );
 
               return (
                 <Link
@@ -1520,7 +1595,7 @@ export function ClassDetailPage() {
                                       : '#f43f5e'
                               }
                             />
-                            <span className="text-xs font-mono font-bold text-slate-800 dark:text-slate-200 tabular-nums">
+                            <span className="text-xs font-mono font-bold text-slate-800 dark:text-slate-200 tabular-nums whitespace-nowrap">
                               CIS {formatCisScore(cisVal)}
                             </span>
                           </div>
