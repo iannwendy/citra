@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, Link, Navigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   Check,
@@ -13,7 +13,6 @@ import {
   AlertTriangle,
   AlertCircle,
   XCircle,
-  Terminal,
   Clock,
   ArrowRight,
   Upload,
@@ -25,8 +24,12 @@ import {
 import { useQueryClient } from '@tanstack/react-query';
 import { api, type EssayStatus } from '@/api/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { useVerificationProgress } from '@/contexts/VerificationProgressContext';
+import {
+  computeSingleCheckProgress,
+  useVerificationProgress,
+} from '@/contexts/VerificationProgressContext';
 import { streamEssayEvents } from '@/hooks/useEssayStream';
+import { formatUserError, resolveAcademicLang } from '@/lib/academicTaxonomy';
 import {
   SCHOLARLY_APIS_LABEL,
   SYMBOLIC_RULES_COUNT,
@@ -34,7 +37,6 @@ import {
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import {
@@ -46,7 +48,7 @@ import {
 } from '@/components/ui/transitions';
 
 /* ============================================================
-   ProcessingPage — Real-time pipeline progress (Scholarly Precision v2.0)
+   CITRA — ProcessingPage (Live Verification Progress)
    Streams SSE /essays/{id}/events with GET /essays/{id}/status fallback.
    ============================================================ */
 
@@ -55,63 +57,72 @@ const STEP_LABELS: Array<{
   labelVi: string;
   detailsEn: string;
   detailsVi: string;
-  tag: string;
+  tagEn: string;
+  tagVi: string;
 }> = [
   {
-    labelEn: 'Parsing document structure (GROBID TEI-XML & DOCX)',
-    labelVi: 'Phân tích cấu trúc tài liệu (GROBID TEI-XML & DOCX)',
-    detailsEn: 'Reading text and document layout',
-    detailsVi: 'Đọc nội dung và bố cục file',
-    tag: 'GROBID v0.9.1 · DOCX',
+    labelEn: 'Reading document structure',
+    labelVi: 'Đọc cấu trúc và nội dung tài liệu',
+    detailsEn: 'Extracting text, sections, and layout from your file',
+    detailsVi: 'Đọc văn bản, phân đoạn và bố cục của tệp tải lên',
+    tagEn: 'Document Reading',
+    tagVi: 'Đọc tài liệu',
   },
   {
     labelEn: 'Detecting citation style',
     labelVi: 'Nhận diện chuẩn trích dẫn học thuật',
-    detailsEn: 'Identifying format (APA, IEEE, MLA…)',
-    detailsVi: 'Nhận diện chuẩn APA, IEEE, MLA…',
-    tag: 'STYLE ENGINE',
+    detailsEn: 'Identifying format conventions (APA, IEEE, MLA, Harvard…)',
+    detailsVi: 'Xác định chuẩn trích dẫn như APA, IEEE, MLA, Harvard…',
+    tagEn: 'Citation Style',
+    tagVi: 'Chuẩn trích dẫn',
   },
   {
     labelEn: 'Extracting citations & references',
-    labelVi: 'Trích xuất trích dẫn trong bài & Danh mục tham khảo',
-    detailsEn: 'Finding citations and reference list',
-    detailsVi: 'Tìm trích dẫn và tài liệu tham khảo',
-    tag: 'LAYER 1 · PARSER',
+    labelVi: 'Bóc tách trích dẫn và danh mục tham khảo',
+    detailsEn: 'Finding in-text citations and bibliography entries',
+    detailsVi: 'Tìm các trích dẫn trong bài và danh sách tài liệu tham khảo',
+    tagEn: 'Extraction',
+    tagVi: 'Trích xuất',
   },
   {
     labelEn: 'Linking citations to references',
-    labelVi: 'Ánh xạ hai chiều Trích dẫn ↔ Tài liệu tham khảo',
-    detailsEn: 'Matching citations to references',
-    detailsVi: 'Ghép trích dẫn với tài liệu tham khảo',
-    tag: 'LINKING GRAPH',
+    labelVi: 'Liên kết trích dẫn với danh mục tham khảo',
+    detailsEn: 'Matching each in-text citation to its bibliography entry',
+    detailsVi: 'Đối nối từng trích dẫn trong văn bản với mục tham khảo tương ứng',
+    tagEn: 'Cross-Linking',
+    tagVi: 'Liên kết',
   },
   {
-    labelEn: `Retrieving source metadata across ${SCHOLARLY_APIS_LABEL} registries`,
-    labelVi: `Truy hồi dữ liệu từ hệ thống ${SCHOLARLY_APIS_LABEL} CSDL học thuật & tri thức liên hợp`,
-    detailsEn: 'Looking up papers in academic databases',
-    detailsVi: 'Tra cứu bài gốc trên thư viện học thuật',
-    tag: `${SCHOLARLY_APIS_LABEL} INDEXES`,
+    labelEn: `Looking up sources across ${SCHOLARLY_APIS_LABEL} academic libraries`,
+    labelVi: `Tra cứu nguồn gốc trên ${SCHOLARLY_APIS_LABEL} thư viện học thuật`,
+    detailsEn: 'Searching Crossref, OpenAlex, Semantic Scholar, arXiv, and more',
+    detailsVi: 'Tìm kiếm ấn phẩm gốc trên Crossref, OpenAlex, Semantic Scholar, arXiv…',
+    tagEn: `${SCHOLARLY_APIS_LABEL} Libraries`,
+    tagVi: `${SCHOLARLY_APIS_LABEL} thư viện`,
   },
   {
-    labelEn: 'Comparing candidate publications & neural evidence',
-    labelVi: 'Đối chiếu đa trường & bằng chứng ngữ nghĩa (Title, Authors, Year, Venue, DOI)',
-    detailsEn: 'Checking titles, authors, and years',
-    detailsVi: 'Kiểm tra tên bài, tác giả, năm xuất bản',
-    tag: 'NEURAL DIFF',
+    labelEn: 'Comparing publication details',
+    labelVi: 'Đối chiếu thông tin ấn phẩm gốc',
+    detailsEn: 'Verifying title, authors, publication year, journal, and DOI',
+    detailsVi: 'Kiểm tra khớp tiêu đề, tác giả, năm xuất bản, tạp chí và mã DOI',
+    tagEn: 'Comparison',
+    tagVi: 'Đối chiếu',
   },
   {
-    labelEn: `Applying ${SYMBOLIC_RULES_COUNT} neuro-symbolic rules & Platt calibration`,
-    labelVi: `Kích hoạt hệ ${SYMBOLIC_RULES_COUNT} luật suy diễn hình thức & hiệu chỉnh Platt`,
-    detailsEn: 'Checking for errors, broken links, or retractions',
-    detailsVi: 'Kiểm tra sai sót, link hỏng, bài bị rút',
-    tag: `${SYMBOLIC_RULES_COUNT} SYMBOLIC RULES`,
+    labelEn: 'Evaluating citation accuracy & integrity',
+    labelVi: 'Kiểm tra độ chính xác và tính toàn vẹn trích dẫn',
+    detailsEn: 'Checking for metadata errors, broken links, or retracted papers',
+    detailsVi: 'Rà soát sai lệch thông tin, liên kết hỏng hoặc bài báo đã bị rút',
+    tagEn: `${SYMBOLIC_RULES_COUNT} Checks`,
+    tagVi: `${SYMBOLIC_RULES_COUNT} tiêu chí`,
   },
   {
-    labelEn: 'Generating verification report',
-    labelVi: 'Tổng hợp báo cáo & Điểm Toàn vẹn Trích dẫn (CIS)',
-    detailsEn: 'Calculating score and building report',
-    detailsVi: 'Tính điểm tin cậy và tạo báo cáo',
-    tag: 'CIS REPORT',
+    labelEn: 'Building verification report',
+    labelVi: 'Tổng hợp báo cáo và điểm toàn vẹn trích dẫn (CIS)',
+    detailsEn: 'Calculating Citation Integrity Score and preparing your report',
+    detailsVi: 'Tính điểm toàn vẹn trích dẫn (CIS) và hoàn thiện báo cáo chi tiết',
+    tagEn: 'CIS Report',
+    tagVi: 'Báo cáo CIS',
   },
 ];
 
@@ -160,6 +171,21 @@ const SOURCE_DISPLAY_NAMES: Record<string, string> = {
   known_papers: 'Known Papers',
 };
 
+function pluralEn(n: number, singular: string, plural: string): string {
+  return `${n} ${n === 1 ? singular : plural}`;
+}
+
+function fixEnglishPluralization(text: string): string {
+  return text
+    .replace(/\b1\s+files\b/gi, '1 file')
+    .replace(/\b1\s+databases\b/gi, '1 database')
+    .replace(/\b1\s+registries\b/gi, '1 registry')
+    .replace(/\b1\s+pages\b/gi, '1 page')
+    .replace(/\b1\s+citations\b/gi, '1 citation')
+    .replace(/\b1\s+references\b/gi, '1 reference')
+    .replace(/\b1\s+source hits\b/gi, '1 source hit');
+}
+
 function formatLiveSourceName(key: string): string {
   const normalized = key.trim().toLowerCase();
   return (
@@ -191,58 +217,182 @@ function formatStep1SubStageLine(
   const pageCount = pageMatch ? Number(pageMatch[1]) : null;
   const refMatch = clean.match(/(\d+)\s+references?/i);
   const refCount = refMatch ? Number(refMatch[1]) : null;
-  const fmtPagesEn = (n: number) => `${n} ${n === 1 ? 'page' : 'pages'}`;
-  const fmtRefsEn = (n: number) => `${n} ${n === 1 ? 'reference' : 'references'}`;
 
   if (lower.includes('loaded cached grobid')) {
     return lang === 'vi'
-      ? `[01/08] CACHE · Tải bố cục GROBID từ bộ nhớ đệm${pageCount ? ` (${pageCount} trang)` : ''}`
-      : `[01/08] CACHE · Loaded cached GROBID layout${pageCount ? ` (${fmtPagesEn(pageCount)})` : ''}`;
+      ? `[01/08] Đã tải nhanh cấu trúc tài liệu từ bộ nhớ đệm${pageCount ? ` (${pageCount} trang)` : ''}`
+      : `[01/08] Loaded cached document structure${pageCount ? ` (${pluralEn(pageCount, 'page', 'pages')})` : ''}`;
   }
 
   if (lower.includes('checking grobid layout cache')) {
     return lang === 'vi'
-      ? `[01/08] PYMUPDF · Đã trích xuất văn bản${pageCount ? ` (${pageCount} trang)` : ''} · Kiểm tra cache GROBID`
-      : `[01/08] PYMUPDF · Extracted text${pageCount ? ` (${fmtPagesEn(pageCount)})` : ''} · Checking GROBID cache`;
+      ? `[01/08] Đã đọc văn bản${pageCount ? ` (${pageCount} trang)` : ''} · Kiểm tra dữ liệu bố cục`
+      : `[01/08] Extracted document text${pageCount ? ` (${pluralEn(pageCount, 'page', 'pages')})` : ''} · Checking cached layout`;
   }
 
   if (lower.includes('analyzing') && lower.includes('grobid')) {
     return lang === 'vi'
-      ? `[01/08] GROBID · Đang phân tích cấu trúc TEI-XML${pageCount ? ` (${pageCount} trang)` : ''}…`
-      : `[01/08] GROBID · Analyzing TEI-XML structure${pageCount ? ` (${fmtPagesEn(pageCount)})` : ''}…`;
+      ? `[01/08] Đang phân tích cấu trúc tài liệu${pageCount ? ` (${pageCount} trang)` : ''}…`
+      : `[01/08] Analyzing document structure${pageCount ? ` (${pluralEn(pageCount, 'page', 'pages')})` : ''}…`;
   }
 
   if (lower.includes('grobid parsed')) {
     return lang === 'vi'
-      ? `[01/08] MERGE · GROBID bóc tách ${refCount ?? 0} tài liệu TK · Hợp nhất trích dẫn`
-      : `[01/08] MERGE · GROBID parsed ${fmtRefsEn(refCount ?? 0)} · Merging citations`;
+      ? `[01/08] Đã tách ${refCount ?? 0} tài liệu tham khảo · Hợp nhất trích dẫn`
+      : `[01/08] Parsed ${pluralEn(refCount ?? 0, 'reference', 'references')} · Merging citations`;
   }
 
-  if (lower.includes('falling back to regex') || lower.includes('using regex parser')) {
+  if (
+    lower.includes('falling back to regex') ||
+    lower.includes('using regex parser')
+  ) {
     const isFallback = lower.includes('grobid') || lower.includes('falling back');
     if (isFallback) {
       return lang === 'vi'
-        ? `[01/08] FALLBACK · Chuyển sang bộ phân tích regex${pageCount ? ` (${pageCount} trang)` : ''}`
-        : `[01/08] FALLBACK · Running regex structural parser${pageCount ? ` (${fmtPagesEn(pageCount)})` : ''}`;
+        ? `[01/08] Chuyển sang phân tích cấu trúc văn bản dự phòng${pageCount ? ` (${pageCount} trang)` : ''}`
+        : `[01/08] Switching to fallback structural text parser${pageCount ? ` (${pluralEn(pageCount, 'page', 'pages')})` : ''}`;
     }
     return lang === 'vi'
-      ? `[01/08] REGEX · Phân tích cấu trúc bằng bộ quy tắc regex${pageCount ? ` (${pageCount} trang)` : ''}`
-      : `[01/08] REGEX · Running regex structural parser${pageCount ? ` (${fmtPagesEn(pageCount)})` : ''}`;
+      ? `[01/08] Đang phân tích cấu trúc văn bản${pageCount ? ` (${pageCount} trang)` : ''}`
+      : `[01/08] Analyzing structural text layout${pageCount ? ` (${pluralEn(pageCount, 'page', 'pages')})` : ''}`;
   }
 
   if (lower.includes('scanned pdf detected')) {
     return lang === 'vi'
-      ? `[01/08] SCAN · Phát hiện PDF ảnh quét${pageCount ? ` (${pageCount} trang)` : ''} · Kiểm tra nhánh dự phòng`
-      : `[01/08] SCAN · Scanned PDF detected${pageCount ? ` (${fmtPagesEn(pageCount)})` : ''} · Running fallback checks`;
+      ? `[01/08] Phát hiện PDF dạng ảnh quét${pageCount ? ` (${pageCount} trang)` : ''} · Kiểm tra khôi phục văn bản`
+      : `[01/08] Scanned PDF detected${pageCount ? ` (${pluralEn(pageCount, 'page', 'pages')})` : ''} · Running text recovery checks`;
   }
 
   if (lower.includes('segmenting sections')) {
     return lang === 'vi'
-      ? `[01/08] DOCX · Đã đọc nội dung${pageCount ? ` (${pageCount} trang)` : ''} · Phân vùng & trích dẫn`
-      : `[01/08] DOCX · Extracted document${pageCount ? ` (${fmtPagesEn(pageCount)})` : ''} · Segmenting sections`;
+      ? `[01/08] Đã đọc nội dung tài liệu${pageCount ? ` (${pageCount} trang)` : ''} · Phân vùng các mục`
+      : `[01/08] Extracted document content${pageCount ? ` (${pluralEn(pageCount, 'page', 'pages')})` : ''} · Segmenting sections`;
   }
 
   return null;
+}
+
+function localizeLiveStatusMessage(
+  rawMessage: string | null | undefined,
+  lang: 'vi' | 'en',
+  stepIndex: number,
+  queuePos: number | null,
+): string {
+  const clean = (rawMessage ?? '').replace(/[\r\n]+/g, ' ').trim();
+  const safeStep = STEP_LABELS[Math.max(0, Math.min(stepIndex, STEP_LABELS.length - 1))];
+
+  if (!clean) {
+    return lang === 'vi' ? `${safeStep.detailsVi}…` : `${safeStep.detailsEn}…`;
+  }
+
+  const lower = clean.toLowerCase();
+
+  if (lang === 'en') {
+    const sanitizedEn = fixEnglishPluralization(clean)
+      .replace(/\bGROBID\s+TEI-XML\b/gi, 'document structure')
+      .replace(/\bwith\s+GROBID\b/gi, 'structure')
+      .replace(/\bGROBID\s+layout\s+cache\b/gi, 'cached layout')
+      .replace(/\bGROBID\b/gi, 'document parser');
+    return sanitizedEn;
+  }
+
+  // Vietnamese localization for live backend SSE messages
+  const pageMatch = clean.match(/(\d+)\s*(?:-|\s*)pages?/i);
+  const pageCount = pageMatch ? Number(pageMatch[1]) : null;
+  const refMatch = clean.match(/(\d+)\s+references?/i);
+  const refCount = refMatch ? Number(refMatch[1]) : null;
+  const citMatch = clean.match(/(\d+)\s+citations?/i);
+  const citCount = citMatch ? Number(citMatch[1]) : null;
+
+  if (lower.includes('queued') || lower.includes('fifo queue') || lower.includes('admission queue')) {
+    const posMatch = clean.match(/#(\d+)/);
+    const pos = posMatch ? Number(posMatch[1]) : queuePos;
+    return pos != null
+      ? `Đang xếp hàng chờ xử lý (Vị trí #${pos})…`
+      : 'Đang xếp hàng chờ xử lý…';
+  }
+  if (lower.includes('starting analysis')) {
+    return 'Đang khởi tạo quá trình kiểm chứng tài liệu…';
+  }
+  if (lower.includes('loaded cached grobid')) {
+    return pageCount
+      ? `Đã tải nhanh cấu trúc tài liệu (${pageCount} trang) từ bộ nhớ đệm…`
+      : 'Đã tải nhanh cấu trúc tài liệu từ bộ nhớ đệm…';
+  }
+  if (lower.includes('checking grobid layout cache')) {
+    return pageCount
+      ? `Đã đọc văn bản từ ${pageCount} trang · Đang chuẩn bị phân tích cấu trúc…`
+      : 'Đã đọc văn bản · Đang chuẩn bị phân tích cấu trúc…';
+  }
+  if (lower.includes('analyzing') && (lower.includes('grobid') || lower.includes('layout'))) {
+    return pageCount
+      ? `Đang phân tích cấu trúc tài liệu (${pageCount} trang)…`
+      : 'Đang phân tích cấu trúc tài liệu…';
+  }
+  if (lower.includes('grobid parsed')) {
+    return `Đã bóc tách ${refCount ?? 0} tài liệu tham khảo · Đang hợp nhất trích dẫn…`;
+  }
+  if (lower.includes('regex parser') || lower.includes('falling back to regex')) {
+    return pageCount
+      ? `Đang phân tích cấu trúc văn bản (${pageCount} trang)…`
+      : 'Đang phân tích cấu trúc văn bản…';
+  }
+  if (lower.includes('scanned pdf detected')) {
+    return pageCount
+      ? `Phát hiện tài liệu PDF dạng ảnh quét (${pageCount} trang) · Đang kiểm tra khôi phục văn bản…`
+      : 'Phát hiện tài liệu PDF dạng ảnh quét · Đang kiểm tra khôi phục văn bản…';
+  }
+  if (lower.includes('parsing')) {
+    return 'Đang đọc cấu trúc và nội dung tài liệu…';
+  }
+  if (lower.includes('detecting citation style') || lower.includes('style')) {
+    return 'Đang nhận diện chuẩn trích dẫn học thuật…';
+  }
+  const linkedPairMatch = clean.match(/linked\s+(\d+)\s+of\s+(\d+)\s+references?/i);
+  if (linkedPairMatch) {
+    return `Đã liên kết ${linkedPairMatch[1]} / ${linkedPairMatch[2]} tài liệu tham khảo`;
+  }
+  if (lower.includes('linking')) {
+    return 'Đang liên kết trích dẫn trong bài với danh mục tham khảo…';
+  }
+  if (lower.includes('extract')) {
+    if (citCount != null && refCount != null) {
+      return `Đã tìm thấy ${citCount} trích dẫn và ${refCount} tài liệu tham khảo`;
+    }
+    return 'Đang bóc tách trích dẫn và danh mục tham khảo…';
+  }
+  const comparedMatch = clean.match(/compared\s+(\d+)\s+source\s+hits?\s+across\s+(\d+)\s+databases?/i);
+  if (comparedMatch) {
+    return `Đã đối chiếu ${comparedMatch[1]} kết quả từ ${comparedMatch[2]} thư viện học thuật`;
+  }
+  if (
+    lower.includes('querying') ||
+    lower.includes('retrieving') ||
+    lower.includes('searching') ||
+    lower.includes('looking up')
+  ) {
+    return 'Đang tra cứu nguồn trên các thư viện học thuật…';
+  }
+  if (lower.includes('comparing') || lower.includes('matching')) {
+    return 'Đang đối chiếu tiêu đề, tác giả, năm xuất bản và mã DOI…';
+  }
+  if (lower.includes('rule') || lower.includes('checking') || lower.includes('evaluating') || lower.includes('verif')) {
+    return 'Đang kiểm tra độ chính xác và tính toàn vẹn của từng trích dẫn…';
+  }
+  if (lower.includes('cis') || lower.includes('scoring') || lower.includes('generating report')) {
+    return 'Đang tính điểm toàn vẹn trích dẫn (CIS) và tạo báo cáo…';
+  }
+  if (lower.includes('complete') || lower === 'done') {
+    return 'Kiểm chứng hoàn tất!';
+  }
+
+  // If the backend already sent a Vietnamese message (contains Vietnamese diacritics), keep it
+  if (/[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i.test(clean)) {
+    return clean;
+  }
+
+  // Otherwise show the friendly localized step description instead of raw English logs
+  return `${safeStep.detailsVi}…`;
 }
 
 function buildPipelineReasoningLines(
@@ -256,8 +406,8 @@ function buildPipelineReasoningLines(
 
   lines.push(
     lang === 'vi'
-      ? '[01/08] GROBID TEI-XML · Bóc tách bố cục & phân vùng tài liệu'
-      : '[01/08] GROBID TEI-XML · Structural section & layout segmentation',
+      ? '[01/08] Đọc cấu trúc & phân vùng nội dung tài liệu'
+      : '[01/08] Reading document layout and section structure',
   );
 
   for (const subLine of step1SubLines) {
@@ -269,24 +419,28 @@ function buildPipelineReasoningLines(
   if (effectiveStepIndex >= 1) {
     lines.push(
       lang === 'vi'
-        ? '[02/08] STYLE ENGINE · Nhận diện quy chuẩn trích dẫn học thuật'
-        : '[02/08] STYLE ENGINE · Citation format & delimiter classification',
+        ? '[02/08] Nhận diện chuẩn trích dẫn học thuật (APA, IEEE, MLA…)'
+        : '[02/08] Identifying citation style conventions (APA, IEEE, MLA…)',
     );
   }
 
-  if (effectiveStepIndex >= 2 || status.citations_found > 0 || status.references_found > 0) {
+  if (
+    effectiveStepIndex >= 2 ||
+    status.citations_found > 0 ||
+    status.references_found > 0
+  ) {
     lines.push(
       lang === 'vi'
-        ? `[03/08] PARSER · Bóc tách ${status.citations_found} trích dẫn & ${status.references_found} tài liệu tham khảo`
-        : `[03/08] PARSER · Extracted ${status.citations_found} in-text markers & ${status.references_found} references`,
+        ? `[03/08] Bóc tách ${status.citations_found} trích dẫn & ${status.references_found} tài liệu tham khảo`
+        : `[03/08] Extracted ${pluralEn(status.citations_found, 'in-text citation', 'in-text citations')} & ${pluralEn(status.references_found, 'reference', 'references')}`,
     );
   }
 
   if (effectiveStepIndex >= 3 || status.linked > 0) {
     lines.push(
       lang === 'vi'
-        ? `[04/08] LINKER · Ánh xạ hai chiều ${status.linked} liên kết In-text ↔ Bibliography`
-        : `[04/08] LINKER · Resolved ${status.linked} bidirectional In-text ↔ Bibliography edges`,
+        ? `[04/08] Đã liên kết ${status.linked} cặp trích dẫn với danh mục tham khảo`
+        : `[04/08] Linked ${pluralEn(status.linked, 'citation', 'citations')} to bibliography entries`,
     );
   }
 
@@ -296,35 +450,41 @@ function buildPipelineReasoningLines(
         .slice(0, 4)
         .map(([k]) => formatLiveSourceName(k))
         .join(' · ') || 'Crossref · OpenAlex';
-    const countLabel = liveSourcesEntries.length > 0 ? String(liveSourcesEntries.length) : SCHOLARLY_APIS_LABEL;
+    const hasExactCount = liveSourcesEntries.length > 0;
+    const countTextEn = hasExactCount
+      ? pluralEn(liveSourcesEntries.length, 'academic library', 'academic libraries')
+      : `${SCHOLARLY_APIS_LABEL} academic libraries`;
+    const countTextVi = hasExactCount
+      ? `${liveSourcesEntries.length} thư viện học thuật`
+      : `${SCHOLARLY_APIS_LABEL} thư viện học thuật`;
     lines.push(
       lang === 'vi'
-        ? `[05/08] FEDERATED IO · Truy vấn ${countLabel} CSDL (${sourcePreview})`
-        : `[05/08] FEDERATED IO · Querying ${countLabel} registries (${sourcePreview})`,
+        ? `[05/08] Đang tra cứu ${countTextVi} (${sourcePreview})`
+        : `[05/08] Searching ${countTextEn} (${sourcePreview})`,
     );
   }
 
   if (effectiveStepIndex >= 5) {
     lines.push(
       lang === 'vi'
-        ? '[06/08] NEURAL DIFF · Đối sánh ngữ nghĩa Bi-Encoder & Cross-Encoder'
-        : '[06/08] NEURAL DIFF · Bi-Encoder & Cross-Encoder metadata comparison',
+        ? '[06/08] Đối chiếu tiêu đề, tác giả, năm xuất bản và mã DOI với ấn phẩm gốc'
+        : '[06/08] Comparing titles, authors, publication years, and DOIs',
     );
   }
 
   if (effectiveStepIndex >= 6) {
     lines.push(
       lang === 'vi'
-        ? `[07/08] SYMBOLIC ENGINE · Rà soát ${SYMBOLIC_RULES_COUNT} luật hình thức & hiệu chỉnh Platt`
-        : `[07/08] SYMBOLIC ENGINE · Evaluating ${SYMBOLIC_RULES_COUNT} formal rules & Platt calibration`,
+        ? `[07/08] Rà soát ${SYMBOLIC_RULES_COUNT} tiêu chí toàn vẹn trích dẫn & kiểm tra liên kết`
+        : `[07/08] Checking ${SYMBOLIC_RULES_COUNT} citation accuracy & integrity rules`,
     );
   }
 
   if (effectiveStepIndex >= 7) {
     lines.push(
       lang === 'vi'
-        ? '[08/08] CIS SCORER · Tổng hợp điểm Toàn vẹn Trích dẫn & báo cáo'
-        : '[08/08] CIS SCORER · Aggregating Citation Integrity Score & report',
+        ? '[08/08] Tổng hợp điểm toàn vẹn trích dẫn (CIS) và tạo báo cáo'
+        : '[08/08] Calculating Citation Integrity Score (CIS) and building report',
     );
   }
 
@@ -409,7 +569,7 @@ export function ProcessingPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { t, i18n } = useTranslation();
-  const lang = i18n.language?.startsWith('vi') ? 'vi' : 'en';
+  const lang = resolveAcademicLang(i18n.resolvedLanguage || i18n.language);
   const { refreshUser } = useAuth();
   const {
     activeSingleCheck,
@@ -421,6 +581,14 @@ export function ProcessingPage() {
   const numericId = id ? parseInt(id, 10) : null;
   const essayId = numericId !== null && !isNaN(numericId) ? numericId : null;
 
+  const initialSeededStep =
+    essayId !== null &&
+    activeSingleCheck?.essayId === essayId &&
+    activeSingleCheck.status === 'processing' &&
+    activeSingleCheck.stepIndex > 0
+      ? Math.min(activeSingleCheck.stepIndex, STEP_LABELS.length - 1)
+      : 0;
+
   const [statusEntry, setStatusEntry] = useState<{
     essayId: number;
     snap: EssayStatus;
@@ -429,23 +597,34 @@ export function ProcessingPage() {
     essayId !== null && statusEntry?.essayId === essayId
       ? statusEntry.snap
       : null;
-  const [displayedStepIndex, setDisplayedStepIndex] = useState<number>(0);
+  const [displayedStepIndex, setDisplayedStepIndex] =
+    useState<number>(initialSeededStep);
   const [step1SubMessages, setStep1SubMessages] = useState<string[]>([]);
   const [redirecting, setRedirecting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [finalElapsedSeconds, setFinalElapsedSeconds] = useState<number | null>(null);
+  const [finalElapsedSeconds, setFinalElapsedSeconds] = useState<number | null>(
+    null,
+  );
   const [retryRunSeq, setRetryRunSeq] = useState(0);
   const [reanalyzing, setReanalyzing] = useState(false);
   const refundedRunKeyRef = useRef<string | null>(null);
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    setDisplayedStepIndex(0);
+    const seeded =
+      essayId !== null &&
+      activeSingleCheck?.essayId === essayId &&
+      activeSingleCheck.status === 'processing' &&
+      activeSingleCheck.stepIndex > 0
+        ? Math.min(activeSingleCheck.stepIndex, STEP_LABELS.length - 1)
+        : 0;
+    setDisplayedStepIndex(seeded);
     setStep1SubMessages([]);
     setRedirecting(false);
     setErrorMsg(null);
     setFinalElapsedSeconds(null);
     refundedRunKeyRef.current = null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [essayId]);
 
   useEffect(() => {
@@ -492,7 +671,11 @@ export function ProcessingPage() {
         return { essayId, snap: merged };
       });
       syncSingleCheckFromStatus(essayId, snap);
-      if (snap.status === 'processing' && snap.step === 'parsing' && snap.message) {
+      if (
+        snap.status === 'processing' &&
+        snap.step === 'parsing' &&
+        snap.message
+      ) {
         const cleanMsg = snap.message.replace(/[\r\n]+/g, ' ').trim();
         if (cleanMsg && formatStep1SubStageLine(cleanMsg, 'en') !== null) {
           setStep1SubMessages((prev) =>
@@ -559,7 +742,11 @@ export function ProcessingPage() {
     };
 
     void (async () => {
-      const streamed = await streamEssayEvents(essayId, applySnap, controller.signal);
+      const streamed = await streamEssayEvents(
+        essayId,
+        applySnap,
+        controller.signal,
+      );
       if (cancelled || streamed) return;
       void tick();
       timer = setInterval(tick, 800);
@@ -573,7 +760,12 @@ export function ProcessingPage() {
   }, [essayId, retryRunSeq, queryClient, syncSingleCheckFromStatus]);
 
   const handleRetryAnalysis = async () => {
-    if (essayId === null || reanalyzing || typeof api.reanalyzeEssay !== 'function') return;
+    if (
+      essayId === null ||
+      reanalyzing ||
+      typeof api.reanalyzeEssay !== 'function'
+    )
+      return;
     setReanalyzing(true);
     try {
       await api.reanalyzeEssay(essayId);
@@ -588,7 +780,15 @@ export function ProcessingPage() {
       void queryClient.invalidateQueries({ queryKey: ['essays'] });
       setRetryRunSeq((s) => s + 1);
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : 'Retry failed');
+      setErrorMsg(
+        formatUserError(
+          err,
+          lang,
+          lang === 'vi'
+            ? 'Không thể thử lại lúc này. Vui lòng thử lại sau.'
+            : 'Unable to retry analysis right now.',
+        ),
+      );
     } finally {
       setReanalyzing(false);
     }
@@ -599,7 +799,10 @@ export function ProcessingPage() {
       ? status.step_index
       : (STEP_KEY_TO_INDEX[status.step] ?? 0)
     : 0;
-  const backendIndex = Math.max(0, Math.min(rawStepIndex, STEP_LABELS.length - 1));
+  const backendIndex = Math.max(
+    0,
+    Math.min(rawStepIndex, STEP_LABELS.length - 1),
+  );
 
   const isDone = status?.status === 'completed';
   const isFailed = status?.status === 'failed';
@@ -621,6 +824,7 @@ export function ProcessingPage() {
       : backendIndex;
 
   useEffect(() => {
+    if (essayId === null) return;
     if (isQueued) {
       setDisplayedStepIndex(0);
       return;
@@ -636,10 +840,11 @@ export function ProcessingPage() {
       setDisplayedStepIndex((prev) => Math.min(prev + 1, targetStepIndex));
     }, 220);
     return () => clearTimeout(stepTimer);
-  }, [displayedStepIndex, targetStepIndex, isQueued, isFailed, backendIndex]);
+  }, [essayId, displayedStepIndex, targetStepIndex, isQueued, isFailed, backendIndex]);
 
   const effectiveStepIndex = isFailed ? backendIndex : displayedStepIndex;
-  const visualDone = isDone && !isFailed && displayedStepIndex >= STEP_LABELS.length;
+  const visualDone =
+    isDone && !isFailed && displayedStepIndex >= STEP_LABELS.length;
 
   useEffect(() => {
     if (essayId === null) return;
@@ -673,19 +878,91 @@ export function ProcessingPage() {
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [essayId, visualDone, isFailed, id, navigate, queryClient, acknowledgeSingleCheck]);
+  }, [
+    essayId,
+    visualDone,
+    isFailed,
+    id,
+    navigate,
+    queryClient,
+    acknowledgeSingleCheck,
+  ]);
 
-  const progress = status
-    ? Math.round(
-        (Math.min(effectiveStepIndex, STEP_LABELS.length) /
-          STEP_LABELS.length) *
-          100,
-      )
-    : 0;
+  // BUG-24: When navigated to /verification/processing without an :id,
+  // either reconnect to an active in-flight single check OR show a friendly empty state.
+  if (essayId === null) {
+    if (
+      activeSingleCheck?.essayId != null &&
+      (activeSingleCheck.status === 'queued' ||
+        activeSingleCheck.status === 'processing')
+    ) {
+      return (
+        <Navigate
+          to={`/verification/processing/${activeSingleCheck.essayId}`}
+          replace
+        />
+      );
+    }
 
-  const effectiveProgress = isQueued ? 0 : progress;
+    return (
+      <div
+        data-testid="processing-empty-state"
+        className="citra-cq-page-narrow w-full max-w-2xl mx-auto py-12 px-4"
+      >
+        <Card className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-8 sm:p-10 text-center shadow-sm space-y-5">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200/70 dark:border-indigo-800/70 mx-auto">
+            <FileCheck className="h-8 w-8 text-indigo-600 dark:text-indigo-400" />
+          </div>
+          <div className="space-y-2">
+            <h1 className="font-display text-2xl font-bold text-slate-900 dark:text-white">
+              {lang === 'vi'
+                ? 'Hiện không có bài viết nào đang xử lý'
+                : 'No active verification in progress'}
+            </h1>
+            <p className="text-sm text-slate-600 dark:text-slate-400 max-w-md mx-auto leading-relaxed">
+              {lang === 'vi'
+                ? 'Tải lên một tài liệu mới để theo dõi quá trình kiểm chứng theo thời gian thực, hoặc xem lại các báo cáo đã hoàn tất trong lịch sử.'
+                : 'Upload a new document to follow live citation verification, or review your completed reports in History.'}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+            <Button
+              asChild
+              className="h-10 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold"
+            >
+              <Link to="/upload">
+                <Upload className="h-4 w-4" />
+                <span>
+                  {lang === 'vi' ? 'Kiểm tra tài liệu mới' : 'New Verification'}
+                </span>
+              </Link>
+            </Button>
+            <Button asChild variant="outline" className="h-10 px-5 rounded-xl">
+              <Link to="/history">
+                <History className="h-4 w-4" />
+                <span>
+                  {lang === 'vi' ? 'Xem lịch sử báo cáo' : 'View History'}
+                </span>
+              </Link>
+            </Button>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  // BUG-24: Synchronize progress percentage with VerificationProgressContext's canonical formula
+  const effectiveProgress = isQueued
+    ? 0
+    : visualDone
+      ? 100
+      : status
+        ? computeSingleCheckProgress(status)
+        : activeSingleCheck?.essayId === essayId
+          ? activeSingleCheck.progress
+          : 0;
+
   const trackedFilename =
-    essayId !== null &&
     activeSingleCheck?.essayId === essayId &&
     activeSingleCheck.filename &&
     !activeSingleCheck.filename.startsWith('ID #')
@@ -701,40 +978,49 @@ export function ProcessingPage() {
     .map((msg) => formatStep1SubStageLine(msg, lang))
     .filter((line): line is string => Boolean(line));
 
+  const statusPillLabel = isFailed
+    ? lang === 'vi'
+      ? 'Gặp sự cố'
+      : 'Failed'
+    : visualDone
+      ? lang === 'vi'
+        ? 'Hoàn tất'
+        : 'Complete'
+      : isQueued
+        ? lang === 'vi'
+          ? `Đang xếp hàng${queuePos ? ` (#${queuePos})` : ''}`
+          : `Queued${queuePos ? ` (#${queuePos})` : ''}`
+        : lang === 'vi'
+          ? 'Đang xử lý'
+          : 'In progress';
+
+  const localizedLiveMessage = status
+    ? localizeLiveStatusMessage(status.message, lang, effectiveStepIndex, queuePos)
+    : '';
+
   return (
     <div className="citra-cq-page-narrow w-full max-w-4xl mx-auto space-y-6 pb-10 transition-[max-width] duration-300">
-      {/* Executive Header Banner */}
+      {/* Header Banner */}
       <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 sm:p-6 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="space-y-1.5 min-w-0">
-          <div className="flex items-center gap-2.5 flex-wrap">
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200/70 dark:border-indigo-800/70 text-[11px] font-mono font-semibold text-indigo-700 dark:text-indigo-300">
-              <Terminal className="h-3 w-3" />
-              {lang === 'vi'
-                ? 'TIẾN TRÌNH KIỂM CHỨNG THỜI GIAN THỰC'
-                : 'LIVE VERIFICATION TELEMETRY'}
-            </span>
-            {essayId && (
-              <Badge variant="secondary" className="font-mono text-[11px]">
-                ID #{essayId}
-              </Badge>
-            )}
+        <div className="space-y-2 min-w-0 flex-1">
+          <div className="flex items-center gap-2 flex-wrap">
             {trackedFilename && (
               <Badge
                 variant="outline"
                 data-testid="processing-filename-badge"
                 title={trackedFilename}
-                className="font-mono text-[11px] max-w-[200px] sm:max-w-[260px] truncate"
+                className="font-mono text-[11px] max-w-[200px] sm:max-w-[280px] overflow-hidden"
               >
-                {trackedFilename}
+                <span className="block truncate min-w-0">{trackedFilename}</span>
               </Badge>
             )}
             {isQueued && queuePos !== null && (
-              <Badge className="font-mono text-[11px] bg-amber-100 text-amber-800 hover:bg-amber-100 dark:bg-amber-950 dark:text-amber-300 border border-amber-300/70 dark:border-amber-700/70">
+              <Badge className="font-mono text-[11px] whitespace-nowrap shrink-0 bg-amber-100 text-amber-800 hover:bg-amber-100 dark:bg-amber-950 dark:text-amber-300 border border-amber-300/70 dark:border-amber-700/70">
                 {lang === 'vi' ? `Hàng đợi #${queuePos}` : `Queue #${queuePos}`}
               </Badge>
             )}
             <LiveElapsedTimer
-              key={essayId ?? 'none'}
+              key={essayId}
               status={status}
               frozenElapsedSeconds={finalElapsedSeconds}
             />
@@ -753,25 +1039,25 @@ export function ProcessingPage() {
                     ? `Đang xếp hàng xử lý${queuePos ? ` (Vị trí #${queuePos})` : ''}`
                     : `Queued for analysis${queuePos ? ` (Position #${queuePos})` : ''}`
                   : lang === 'vi'
-                    ? 'Đang phân tích tài liệu học thuật'
-                    : 'Analyzing document'}
+                    ? 'Đang kiểm chứng tài liệu học thuật'
+                    : 'Verifying your document'}
           </h1>
           <p className="text-sm text-slate-600 dark:text-slate-400">
             {isFailed
               ? lang === 'vi'
-                ? 'Quá trình phân tích đã dừng lại do gặp sự cố kỹ thuật — không chuyển hướng tự động.'
-                : 'The verification pipeline stopped due to an error — inspect details or upload another file below.'
+                ? 'Quá trình phân tích đã dừng lại do gặp sự cố — bạn có thể xem chi tiết và thử lại bên dưới.'
+                : 'The verification stopped due to an error — inspect details or retry below.'
               : visualDone
                 ? lang === 'vi'
                   ? 'Đang chuyển hướng tới báo cáo kiểm chứng chi tiết…'
-                  : 'Redirecting to your verification report…'
+                  : 'Opening your verification report…'
                 : isQueued
                   ? lang === 'vi'
-                    ? 'Hệ thống đang điều phối lưu lượng theo thứ tự nộp (FIFO) để đảm bảo tốc độ ổn định và tránh giới hạn truy cập từ các CSDL học thuật.'
-                    : 'Your submission is queued in FIFO order to prevent external scholarly API rate limiting during peak traffic.'
+                    ? 'Hệ thống đang điều phối lưu lượng theo thứ tự nộp để đảm bảo tốc độ ổn định khi tra cứu thư viện học thuật.'
+                    : 'Your submission is queued in order to keep scholarly database lookups fast and reliable during peak traffic.'
                   : lang === 'vi'
-                    ? 'Quá trình bóc tách GROBID và đối chiếu đa CSDL học thuật có thể mất 30–60 giây tùy độ dài PDF.'
-                    : 'This may take a few minutes depending on document size.'}
+                    ? 'Quá trình đọc tài liệu và đối chiếu thư viện học thuật thường mất 20–60 giây tùy độ dài tài liệu.'
+                    : 'Reading your document and checking academic libraries typically takes 20–60 seconds depending on document length.'}
           </p>
         </div>
 
@@ -780,7 +1066,7 @@ export function ProcessingPage() {
             asChild
             variant="outline"
             size="sm"
-            className="rounded-xl shrink-0"
+            className="rounded-xl shrink-0 whitespace-nowrap"
           >
             <Link to="/upload?new=1" data-testid="processing-new-upload-btn">
               <Upload className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
@@ -788,17 +1074,36 @@ export function ProcessingPage() {
             </Link>
           </Button>
           {id && !isFailed && (
-            <Button asChild variant="outline" size="sm" className="rounded-xl shrink-0">
-              <Link
-                to={`/verification/report/${id}`}
-                onClick={() => {
-                  if (essayId !== null) acknowledgeSingleCheck(essayId);
-                }}
+            isDone ? (
+              <Button
+                asChild
+                size="sm"
+                className="rounded-xl shrink-0 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold whitespace-nowrap"
               >
-                <span>{lang === 'vi' ? 'Mở Báo cáo' : 'Open Report'}</span>
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </Button>
+                <Link
+                  to={`/verification/report/${id}`}
+                  data-testid="processing-open-report-btn"
+                  onClick={() => acknowledgeSingleCheck(essayId)}
+                >
+                  <span>{lang === 'vi' ? 'Mở báo cáo' : 'Open Report'}</span>
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled
+                data-testid="processing-building-report-btn"
+                className="rounded-xl shrink-0 opacity-65 cursor-not-allowed whitespace-nowrap"
+              >
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <span>
+                  {lang === 'vi' ? 'Đang tạo báo cáo...' : 'Building report...'}
+                </span>
+              </Button>
+            )
           )}
         </div>
       </div>
@@ -819,7 +1124,7 @@ export function ProcessingPage() {
             <p className="mt-0.5 text-indigo-800/90 dark:text-indigo-300/90">
               {lang === 'vi'
                 ? 'Trang này sẽ tự động cập nhật ngay khi tới lượt phân tích tài liệu của bạn — không cần tải lại trang.'
-                : 'This page updates automatically as soon as a worker slot opens — no refresh needed.'}
+                : 'This page updates automatically as soon as a slot opens — no refresh needed.'}
             </p>
           </div>
         </div>
@@ -838,11 +1143,13 @@ export function ProcessingPage() {
           </AlertTitle>
           <AlertDescription className="space-y-3 mt-1.5">
             <p className="text-sm leading-relaxed">
-              {errorMsg ??
-                status?.error ??
-                (lang === 'vi'
+              {formatUserError(
+                errorMsg ?? status?.error,
+                lang,
+                lang === 'vi'
                   ? 'Đã xảy ra lỗi không xác định — vui lòng thử tải lại tài liệu.'
-                  : 'Unknown error — please try uploading the document again.')}
+                  : 'Unknown error — please try uploading the document again.',
+              )}
             </p>
 
             {status?.quota_charged === false && (
@@ -860,7 +1167,7 @@ export function ProcessingPage() {
             )}
 
             <div className="flex flex-wrap items-center gap-2.5 pt-1">
-              {essayId !== null && typeof api.reanalyzeEssay === 'function' && (
+              {typeof api.reanalyzeEssay === 'function' && (
                 <Button
                   type="button"
                   size="sm"
@@ -869,7 +1176,9 @@ export function ProcessingPage() {
                   onClick={() => void handleRetryAnalysis()}
                   className="rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-semibold"
                 >
-                  <RefreshCw className={`h-3.5 w-3.5 ${reanalyzing ? 'animate-spin' : ''}`} />
+                  <RefreshCw
+                    className={`h-3.5 w-3.5 ${reanalyzing ? 'animate-spin' : ''}`}
+                  />
                   <span>
                     {lang === 'vi' ? 'Thử lại phân tích' : 'Retry Analysis'}
                   </span>
@@ -883,13 +1192,13 @@ export function ProcessingPage() {
                 <Link
                   to="/upload"
                   data-testid="failed-upload-another-btn"
-                  onClick={() => {
-                    if (essayId !== null) acknowledgeSingleCheck(essayId);
-                  }}
+                  onClick={() => acknowledgeSingleCheck(essayId)}
                 >
                   <Upload className="h-3.5 w-3.5" />
                   <span>
-                    {lang === 'vi' ? 'Tải lại tài liệu khác' : 'Upload Another Document'}
+                    {lang === 'vi'
+                      ? 'Tải lại tài liệu khác'
+                      : 'Upload Another Document'}
                   </span>
                 </Link>
               </Button>
@@ -902,9 +1211,7 @@ export function ProcessingPage() {
                 <Link
                   to="/history"
                   data-testid="failed-back-history-btn"
-                  onClick={() => {
-                    if (essayId !== null) acknowledgeSingleCheck(essayId);
-                  }}
+                  onClick={() => acknowledgeSingleCheck(essayId)}
                 >
                   <History className="h-3.5 w-3.5" />
                   <span>
@@ -927,13 +1234,13 @@ export function ProcessingPage() {
           <div>
             <p className="font-bold font-display">
               {lang === 'vi'
-                ? 'Phát hiện tài liệu PDF dạng ảnh quét (Scanned PDF — Thiếu lớp văn bản số hóa)'
+                ? 'Phát hiện tài liệu PDF dạng ảnh quét (Thiếu lớp văn bản số hóa)'
                 : 'Scanned / Image-Only PDF Detected (Missing Digital Text Layer)'}
             </p>
             <p className="mt-0.5">
               {diagnostics.warning_message ||
                 (lang === 'vi'
-                  ? 'Tài liệu có mật độ văn bản số hóa rất thấp; hệ thống tự động kích hoạt nhánh khôi phục OCR nếu khả dụng.'
+                  ? 'Tài liệu có mật độ văn bản số hóa rất thấp; hệ thống tự động khôi phục văn bản OCR khi khả dụng.'
                   : 'Low extractable text density detected; OCR fallback recovery will run where supported.')}
             </p>
           </div>
@@ -951,7 +1258,7 @@ export function ProcessingPage() {
             <p className="font-semibold font-display">
               {lang === 'vi'
                 ? `Phát hiện bảng mã tiếng Việt cũ (${String(legacyEncoding).toUpperCase()}) — Đã tự động chuyển mã sang chuẩn Unicode NFC${legacyPagesCount ? ` (${legacyPagesCount} trang)` : ''}`
-                : `Legacy Vietnamese encoding detected (${String(legacyEncoding).toUpperCase()}) — Automatically transcoded to Unicode NFC${legacyPagesCount ? ` (${legacyPagesCount} ${legacyPagesCount === 1 ? 'page' : 'pages'})` : ''}`}
+                : `Legacy Vietnamese encoding detected (${String(legacyEncoding).toUpperCase()}) — Automatically transcoded to Unicode NFC${legacyPagesCount ? ` (${pluralEn(legacyPagesCount, 'page', 'pages')})` : ''}`}
             </p>
           </div>
         </div>
@@ -968,25 +1275,29 @@ export function ProcessingPage() {
             <p className="font-semibold font-display">
               {lang === 'vi'
                 ? `Đã khôi phục lớp văn bản OCR tự động trên ${ocrRecoveredPages.length} trang (${ocrRecoveredPages.map((p) => `tr.${p}`).join(', ')})`
-                : `OCR text layer automatically recovered on ${ocrRecoveredPages.length} ${ocrRecoveredPages.length === 1 ? 'page' : 'pages'} (${ocrRecoveredPages.map((p) => `p.${p}`).join(', ')})`}
+                : `OCR text layer automatically recovered on ${pluralEn(ocrRecoveredPages.length, 'page', 'pages')} (${ocrRecoveredPages.map((p) => `p.${p}`).join(', ')})`}
             </p>
           </div>
         </div>
       )}
 
-      {/* 4 Live Telemetry Stat Cards */}
+      {/* 4 Live Progress Stat Cards */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <StatCard
           idx="01"
-          icon={<Quote className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />}
+          icon={
+            <Quote className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+          }
           value={status?.citations_found ?? '—'}
           label={lang === 'vi' ? 'Trích dẫn' : 'Citations'}
         />
         <StatCard
           idx="02"
-          icon={<FileText className="h-4 w-4 text-slate-600 dark:text-slate-400" />}
+          icon={
+            <FileText className="h-4 w-4 text-slate-600 dark:text-slate-400" />
+          }
           value={status?.references_found ?? '—'}
-          label={lang === 'vi' ? 'Tài liệu TK' : 'References'}
+          label={lang === 'vi' ? 'Tài liệu tham khảo' : 'References'}
         />
         <StatCard
           idx="03"
@@ -1013,37 +1324,35 @@ export function ProcessingPage() {
         />
       </div>
 
-      {/* IDE Pipeline Execution Window */}
+      {/* Live Pipeline Progress Card */}
       <Card className="p-0 overflow-hidden rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
-        {/* Top Window Chrome */}
-        <div className="px-4 sm:px-6 py-3.5 bg-slate-50/80 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800 flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-red-400/80 inline-block" />
-              <span className="w-2.5 h-2.5 rounded-full bg-amber-400/80 inline-block" />
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400/80 inline-block" />
-            </div>
-            <Separator orientation="vertical" className="h-4" />
-            <span className="font-mono text-xs font-semibold text-slate-700 dark:text-slate-300">
-              {lang === 'vi'
-                ? 'Tiến trình kiểm chứng trích dẫn trực tiếp'
-                : 'Live Verification Pipeline'}
-            </span>
-          </div>
+        {/* Clean Card Header */}
+        <div className="px-4 sm:px-6 py-3.5 bg-slate-50/80 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
+          <h2 className="font-display text-sm font-bold text-slate-800 dark:text-slate-200">
+            {lang === 'vi'
+              ? 'Tiến trình kiểm chứng trích dẫn'
+              : 'Live Verification Progress'}
+          </h2>
 
-          <div className="flex items-center gap-2.5">
-            <span className="font-mono text-xs text-slate-500 dark:text-slate-400">
-              {isFailed
-                ? 'FAILED'
-                : visualDone
-                  ? 'COMPLETE'
-                  : isQueued
-                    ? `QUEUED${queuePos ? ` (#${queuePos})` : ''}`
-                    : 'EXECUTING'}
+          <div className="flex items-center gap-2 shrink-0">
+            <span
+              data-testid="processing-status-pill"
+              className={`text-xs font-medium px-2.5 py-0.5 rounded-full border whitespace-nowrap ${
+                isFailed
+                  ? 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-800'
+                  : visualDone
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800'
+                    : isQueued
+                      ? 'bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800'
+                      : 'bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-300 dark:border-indigo-800'
+              }`}
+            >
+              {statusPillLabel}
             </span>
             <Badge
               variant="secondary"
-              className={`font-mono text-xs ${
+              data-testid="processing-progress-percent"
+              className={`font-mono text-xs whitespace-nowrap ${
                 isFailed
                   ? 'bg-rose-50 text-rose-700 dark:bg-rose-950 dark:text-rose-300'
                   : 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300'
@@ -1055,13 +1364,17 @@ export function ProcessingPage() {
         </div>
 
         <div className="p-4 sm:p-6 space-y-6">
-          {/* Progress Bar & Live #29 ReasoningStream Telemetry */}
+          {/* Progress Bar & Live Localized Status Stream */}
           <div>
             <Progress value={effectiveProgress} className="h-2.5" />
             {status && !visualDone && !isFailed && (
               <>
-                <p className="text-xs font-mono text-slate-500 dark:text-slate-400 mt-2">
-                  &gt; <ThinkingStateText text={status.message} />
+                <p className="text-xs text-slate-600 dark:text-slate-300 mt-2.5 flex items-center gap-2">
+                  <span
+                    className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse shrink-0"
+                    aria-hidden="true"
+                  />
+                  <ThinkingStateText text={localizedLiveMessage} />
                 </p>
                 {!isQueued && (
                   <ReasoningStream
@@ -1076,7 +1389,7 @@ export function ProcessingPage() {
                     visibleLines={3}
                     lineHeightPx={20}
                     stepMs={360}
-                    className="mt-2.5 rounded-xl bg-slate-50/90 dark:bg-slate-950/60 border border-slate-200/70 dark:border-slate-800/80 px-3 py-1.5 font-mono text-[11px] text-slate-600 dark:text-slate-300"
+                    className="mt-2.5 rounded-xl bg-slate-50/90 dark:bg-slate-950/60 border border-slate-200/70 dark:border-slate-800/80 px-3 py-1.5 text-xs text-slate-600 dark:text-slate-300"
                   />
                 )}
               </>
@@ -1149,14 +1462,14 @@ export function ProcessingPage() {
                         {s === 'error' && (
                           <span
                             data-testid={`pipeline-step-error-badge-${idx + 1}`}
-                            className="inline-flex items-center gap-1 text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-rose-100 dark:bg-rose-950 border border-rose-300 dark:border-rose-800 text-rose-700 dark:text-rose-300"
+                            className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded bg-rose-100 dark:bg-rose-950 border border-rose-300 dark:border-rose-800 text-rose-700 dark:text-rose-300"
                           >
                             <AlertCircle className="h-3 w-3" />
                             {lang === 'vi' ? 'Lỗi' : 'Failed'}
                           </span>
                         )}
-                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-700 text-slate-500 dark:text-slate-400">
-                          {step.tag}
+                        <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-700 text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                          {lang === 'vi' ? step.tagVi : step.tagEn}
                         </span>
                         <span className="text-xs font-mono tabular-nums text-slate-400 dark:text-slate-500">
                           0{idx + 1}/0{STEP_LABELS.length}
@@ -1172,11 +1485,23 @@ export function ProcessingPage() {
                       <div className="flex flex-wrap gap-2 sm:gap-3 mt-2 text-xs font-mono">
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300">
                           <Quote className="h-3 w-3 text-indigo-500" />
-                          {status.citations_found} citations
+                          {lang === 'vi'
+                            ? `${status.citations_found} trích dẫn`
+                            : pluralEn(
+                                status.citations_found,
+                                'citation',
+                                'citations',
+                              )}
                         </span>
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300">
                           <FileText className="h-3 w-3 text-emerald-500" />
-                          {status.references_found} references
+                          {lang === 'vi'
+                            ? `${status.references_found} tài liệu tham khảo`
+                            : pluralEn(
+                                status.references_found,
+                                'reference',
+                                'references',
+                              )}
                         </span>
                       </div>
                     )}
@@ -1185,7 +1510,9 @@ export function ProcessingPage() {
                       <div className="flex gap-3 mt-2 text-xs font-mono">
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300">
                           <Check className="h-3 w-3" />
-                          {status.linked} linked
+                          {lang === 'vi'
+                            ? `${status.linked} đã liên kết`
+                            : `${status.linked} linked`}
                         </span>
                       </div>
                     )}
@@ -1196,13 +1523,15 @@ export function ProcessingPage() {
                         className="flex flex-wrap items-center gap-1.5 mt-2.5"
                       >
                         {liveSourcesEntries.map(([sourceKey, sourceState]) => {
-                          const tone = classifyLiveSourceTone(String(sourceState));
+                          const tone = classifyLiveSourceTone(
+                            String(sourceState),
+                          );
                           return (
                             <span
                               key={sourceKey}
                               data-testid={`live-source-pill-${sourceKey}`}
                               data-source-status={String(sourceState)}
-                              className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md border text-[11px] font-mono ${tone.pillClass}`}
+                              className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md border text-[11px] font-medium ${tone.pillClass}`}
                             >
                               <span
                                 className={`w-1.5 h-1.5 rounded-full shrink-0 ${tone.dotClass}`}
@@ -1215,7 +1544,9 @@ export function ProcessingPage() {
                                   data-testid={`live-source-rate-limited-${sourceKey}`}
                                   className="px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/70 border border-amber-300/80 dark:border-amber-700/80 text-[10px] font-bold tracking-tight text-amber-800 dark:text-amber-200"
                                 >
-                                  {lang === 'vi' ? 'Tạm giới hạn' : 'Rate-Limited'}
+                                  {lang === 'vi'
+                                    ? 'Tạm giới hạn'
+                                    : 'Rate-Limited'}
                                 </span>
                               )}
                             </span>
@@ -1243,10 +1574,10 @@ export function ProcessingPage() {
           <h3 className="font-display text-lg font-bold text-emerald-800 dark:text-emerald-200 mb-1">
             {lang === 'vi' ? 'Kiểm chứng hoàn tất!' : 'Analysis Complete'}
           </h3>
-          <p className="text-sm font-mono text-emerald-700 dark:text-emerald-300">
+          <p className="text-sm text-emerald-700 dark:text-emerald-300">
             {lang === 'vi'
-              ? 'Đang mở báo cáo Citation Debugger…'
-              : 'Redirecting to verification report…'}
+              ? 'Đang mở báo cáo kiểm chứng chi tiết…'
+              : 'Opening your verification report…'}
           </p>
         </div>
       )}
@@ -1286,7 +1617,9 @@ function StatCard({
       >
         <SubtleNumber value={value} />
       </p>
-      <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mt-1">{label}</p>
+      <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mt-1">
+        {label}
+      </p>
     </Card>
   );
 }
@@ -1393,10 +1726,10 @@ function LiveElapsedTimer({
   return (
     <span
       data-testid="processing-elapsed-time"
-      className="inline-flex items-center gap-1 text-xs font-mono tabular-nums text-slate-500 dark:text-slate-400"
+      className="inline-flex items-center gap-1 whitespace-nowrap shrink-0 px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800/80 border border-slate-200/70 dark:border-slate-700 text-xs font-mono tabular-nums text-slate-600 dark:text-slate-300"
     >
-      <Clock className="h-3.5 w-3.5" />
-      {shownSeconds.toFixed(1)}s
+      <Clock className="h-3.5 w-3.5 shrink-0" />
+      <span>{shownSeconds.toFixed(1)}s</span>
     </span>
   );
 }

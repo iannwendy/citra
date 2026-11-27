@@ -73,8 +73,12 @@ export function ConfirmationModal({
             </div>
           )}
           <DialogHeader className="flex-1 min-w-0 text-left">
-            <DialogTitle>{title}</DialogTitle>
-            <DialogDescription className="mt-1.5">{message}</DialogDescription>
+            <DialogTitle className="leading-snug break-words [overflow-wrap:anywhere] pr-6">
+              {title}
+            </DialogTitle>
+            <DialogDescription className="mt-1.5 break-words [overflow-wrap:anywhere]">
+              {message}
+            </DialogDescription>
           </DialogHeader>
         </div>
 

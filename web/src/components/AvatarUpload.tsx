@@ -13,6 +13,7 @@ import {
   ImagePlus,
 } from 'lucide-react';
 import { api } from '@/api/client';
+import { formatUserError, resolveAcademicLang } from '@/lib/academicTaxonomy';
 import { Button } from '@/components/ui/button';
 
 const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
@@ -79,7 +80,8 @@ export function AvatarUpload({
   onSuccess,
   size = 'md',
 }: AvatarUploadProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const lang = resolveAcademicLang(i18n.resolvedLanguage || i18n.language);
   const inputRef = useRef<HTMLInputElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
@@ -191,28 +193,39 @@ export function AvatarUpload({
     }
   };
 
-  const handleFileSelect = (file: File) => {
-    setError('');
-    if (!ACCEPTED_TYPES.includes(file.type)) {
-      setError('Only JPG, PNG, and WEBP images are allowed.');
-      return;
-    }
-    if (file.size > MAX_BYTES) {
-      setError('File size must be under 2MB.');
-      return;
-    }
-    setSelectedFile(file);
-    setSourceMime(file.type || 'image/jpeg');
-    setOffset({ x: 0, y: 0 });
-    setZoom(1);
-    setIsAdjusting(true);
+  const handleFileSelect = useCallback(
+    (file: File) => {
+      setError('');
+      if (!ACCEPTED_TYPES.includes(file.type)) {
+        setError(
+          lang === 'vi'
+            ? 'Chỉ hỗ trợ ảnh định dạng JPG, PNG hoặc WEBP.'
+            : 'Only JPG, PNG, and WEBP images are allowed.',
+        );
+        return;
+      }
+      if (file.size > MAX_BYTES) {
+        setError(
+          lang === 'vi'
+            ? 'Dung lượng ảnh phải nhỏ hơn 2 MB.'
+            : 'File size must be under 2 MB.',
+        );
+        return;
+      }
+      setSelectedFile(file);
+      setSourceMime(file.type || 'image/jpeg');
+      setOffset({ x: 0, y: 0 });
+      setZoom(1);
+      setIsAdjusting(true);
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      setPreview(e.target?.result as string);
-    };
-    reader.readAsDataURL(file);
-  };
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setPreview(e.target?.result as string);
+      };
+      reader.readAsDataURL(file);
+    },
+    [lang],
+  );
 
   const enterAdjustExisting = useCallback(() => {
     if (!currentAvatarUrl) return;
@@ -232,12 +245,15 @@ export function AvatarUpload({
     setIsAdjusting(true);
   }, [currentAvatarUrl]);
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setDraggingFile(false);
-    const file = e.dataTransfer.files[0];
-    if (file) handleFileSelect(file);
-  }, []);
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setDraggingFile(false);
+      const file = e.dataTransfer.files[0];
+      if (file) handleFileSelect(file);
+    },
+    [handleFileSelect],
+  );
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -479,7 +495,15 @@ export function AvatarUpload({
       setZoom(1);
       if (inputRef.current) inputRef.current.value = '';
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Upload failed');
+      setError(
+        formatUserError(
+          err,
+          lang,
+          lang === 'vi'
+            ? 'Tải ảnh đại diện thất bại. Vui lòng thử lại.'
+            : 'Avatar upload failed. Please try again.',
+        ),
+      );
     } finally {
       setUploading(false);
     }
@@ -503,14 +527,55 @@ export function AvatarUpload({
 
   const displayUrl = preview || currentAvatarUrl;
 
+  const handleViewportKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!isAdjusting) {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        inputRef.current?.click();
+      }
+      return;
+    }
+
+    const step = 4;
+    if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      setOffset((prev) => clampOffset({ x: prev.x - step, y: prev.y }));
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      setOffset((prev) => clampOffset({ x: prev.x + step, y: prev.y }));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setOffset((prev) => clampOffset({ x: prev.x, y: prev.y - step }));
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setOffset((prev) => clampOffset({ x: prev.x, y: prev.y + step }));
+    } else if (e.key === '+' || e.key === '=') {
+      e.preventDefault();
+      handleZoomChange(zoom + 0.1);
+    } else if (e.key === '-') {
+      e.preventDefault();
+      handleZoomChange(zoom - 0.1);
+    }
+  };
+
   return (
     <div className="flex flex-col items-center gap-3 w-full">
       {/* Interactive circular avatar frame */}
       <div
         ref={viewportRef}
         data-testid="avatar-crop-viewport"
+        role={isAdjusting ? 'group' : 'button'}
+        tabIndex={0}
+        aria-label={
+          isAdjusting
+            ? t('profile.dragToAdjust')
+            : displayUrl
+              ? t('profile.changePhoto')
+              : t('profile.clickOrDrag')
+        }
+        onKeyDown={handleViewportKeyDown}
         style={displayUrl ? { backgroundColor: bgColor } : undefined}
-        className={`relative ${sizeClasses[size]} rounded-full overflow-hidden bg-slate-100 dark:bg-slate-800 border-2 border-dashed flex items-center justify-center select-none touch-none transition-colors group ${
+        className={`relative ${sizeClasses[size]} rounded-full overflow-hidden bg-slate-100 dark:bg-slate-800 border-2 border-dashed flex items-center justify-center select-none touch-none transition-colors group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 ${
           draggingFile
             ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950'
             : isAdjusting
@@ -604,6 +669,7 @@ export function AvatarUpload({
         ref={inputRef}
         type="file"
         accept={ACCEPTED_TYPES.join(',')}
+        aria-label={t('profile.changePhoto')}
         onChange={handleInputChange}
         className="hidden"
       />

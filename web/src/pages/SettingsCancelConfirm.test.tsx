@@ -97,4 +97,30 @@ describe('SettingsPage cancel auto-renew confirmation', () => {
     fireEvent.click(revokeBtn);
     await waitFor(() => expect(revokeSpy).toHaveBeenCalledWith(7));
   });
+
+  it('portals Delete Account modal to document.body with !mt-0, disables confirm until password entered, and preserves accessible switch & input sizing', async () => {
+    renderWithProviders(<SettingsPage />, { user: proUser() });
+
+    // Accessible notification switch and mobile-safe non-crushed API key input
+    const notifSwitch = await screen.findByRole('switch');
+    expect(notifSwitch.getAttribute('aria-label')).toBeTruthy();
+
+    const apiKeyInput = screen.getByTestId('api-key-name-input');
+    expect(apiKeyInput.getAttribute('aria-label')).toBeTruthy();
+    expect(apiKeyInput.className).toContain('min-h-[44px]');
+
+    // Open Delete Account modal
+    fireEvent.click(screen.getByTestId('settings-delete-account-btn'));
+    const modal = await screen.findByTestId('delete-account-modal');
+    expect(modal.parentElement).toBe(document.body);
+    expect(modal.className).toContain('!mt-0');
+
+    const confirmBtn = screen.getByTestId('delete-account-confirm-btn') as HTMLButtonElement;
+    expect(confirmBtn.disabled).toBe(true);
+
+    fireEvent.change(screen.getByTestId('delete-account-password-input'), {
+      target: { value: 'Secret123!' },
+    });
+    expect(confirmBtn.disabled).toBe(false);
+  });
 });

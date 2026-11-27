@@ -1,5 +1,5 @@
 import { useCallback, useState, useRef, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import {
@@ -11,7 +11,6 @@ import {
   RefreshCw,
   ExternalLink,
   Trash2,
-  Layers,
   GraduationCap,
   ArrowRight,
   ShieldCheck,
@@ -27,16 +26,17 @@ import {
   type BatchFileStatus,
 } from '@/contexts/VerificationProgressContext';
 import { FileFormatIcon } from '@/components/FileFormatIcon';
+import { DecisionSupportBanner } from '@/components/DecisionSupportBanner';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Select } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { Separator } from '@/components/ui/separator';
 import { UpgradeModal } from '@/components/UpgradeModal';
 import { useToast } from '@/contexts/ToastContext';
-import { isUnlimitedValue } from '@/lib/quotaDisplay';
+import { getQuotaView, isUnlimitedValue } from '@/lib/quotaDisplay';
+import { formatUserError, resolveAcademicLang } from '@/lib/academicTaxonomy';
 import {
   NumberPopIn,
   MatrixDotLoader,
@@ -47,17 +47,17 @@ import {
 export { BATCH_CONCURRENCY, batchTiming };
 
 /* ============================================================
-   Batch Upload Page (Scholarly Precision shadcn/ui v2.0)
-   Upload multiple PDFs for concurrent analysis with persistent
-   background queue across SPA route transitions.
+   CITRA — Batch Upload Page
+   Upload multiple PDF, DOCX, BibTeX, or RIS files for batch
+   citation verification with persistent background queue.
    ============================================================ */
 
 const ACCEPTED_EXTENSIONS = ['.pdf', '.docx', '.bib', '.ris'];
 
 function formatBytes(bytes: number): string {
-  if (bytes < 1024) return bytes + ' B';
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-  return (bytes / 1024 / 1024).toFixed(2) + ' MB';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
 }
 
 function getStatusIcon(status: BatchFileStatus) {
@@ -142,7 +142,6 @@ export function BatchUploadPage() {
     retryBatchFile,
     retryFailedBatchFiles,
     startBatchQueue,
-    markBatchAutoNavigated,
     registerBatchPageMount,
   } = useVerificationProgress();
 
@@ -152,11 +151,18 @@ export function BatchUploadPage() {
   const [dragActive, setDragActive] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const navigateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isMountedRef = useRef(true);
-  const navigate = useNavigate();
 
-  const lang = i18n.language?.startsWith('vi') ? 'vi' : 'en';
+  const lang = resolveAcademicLang(i18n.resolvedLanguage || i18n.language);
+  const quotaView = getQuotaView(quota, lang, { isAdmin });
+  const isBatchLimitUnlimited =
+    isAdmin || isUnlimitedValue(quota.max_batch_files);
+  const batchLimitText = isBatchLimitUnlimited
+    ? lang === 'vi'
+      ? 'Không giới hạn tệp / lô'
+      : 'Unlimited files / batch'
+    : lang === 'vi'
+      ? `Tối đa ${quota.max_batch_files} tệp / lô`
+      : `Up to ${quota.max_batch_files} ${quota.max_batch_files === 1 ? 'file' : 'files'} / batch`;
 
   useEffect(() => registerBatchPageMount(), [registerBatchPageMount]);
 
@@ -168,51 +174,6 @@ export function BatchUploadPage() {
         .catch(() => setClasses([]));
     }
   }, [isTeacher, isAdmin]);
-
-  useEffect(() => {
-    isMountedRef.current = true;
-    return () => {
-      isMountedRef.current = false;
-      if (navigateTimerRef.current) clearTimeout(navigateTimerRef.current);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (
-      !queueState.isProcessing &&
-      !queueState.hasAutoNavigated &&
-      files.length > 0 &&
-      stats.pending === 0 &&
-      stats.processing === 0 &&
-      stats.failed === 0 &&
-      stats.completed > 0
-    ) {
-      const completedFiles = files.filter(
-        (f) => f.status === 'completed' && f.essayId !== undefined,
-      );
-      if (completedFiles.length === 0) return;
-
-      markBatchAutoNavigated();
-      navigateTimerRef.current = setTimeout(() => {
-        if (!isMountedRef.current) return;
-        if (completedFiles.length === 1 && completedFiles[0].essayId) {
-          navigate(`/verification/report/${completedFiles[0].essayId}`);
-        } else {
-          navigate('/history');
-        }
-      }, 1200);
-    }
-  }, [
-    queueState.isProcessing,
-    queueState.hasAutoNavigated,
-    files,
-    stats.pending,
-    stats.processing,
-    stats.failed,
-    stats.completed,
-    markBatchAutoNavigated,
-    navigate,
-  ]);
 
   /**
    * Client-side plan pre-check (mirrors backend quota) so users get an
@@ -280,10 +241,6 @@ export function BatchUploadPage() {
   const addFiles = useCallback(
     (newFiles: File[]) => {
       if (newFiles.length === 0) return;
-      if (navigateTimerRef.current) {
-        clearTimeout(navigateTimerRef.current);
-        navigateTimerRef.current = null;
-      }
       addBatchFiles(newFiles);
     },
     [addBatchFiles],
@@ -298,7 +255,8 @@ export function BatchUploadPage() {
       const rawFiles = Array.from(e.dataTransfer.files);
       const droppedFiles = rawFiles.filter((file) => {
         const dotIdx = file.name.lastIndexOf('.');
-        const ext = dotIdx >= 0 ? file.name.substring(dotIdx).toLowerCase() : '';
+        const ext =
+          dotIdx >= 0 ? file.name.substring(dotIdx).toLowerCase() : '';
         return ACCEPTED_EXTENSIONS.includes(ext);
       });
       if (droppedFiles.length < rawFiles.length) {
@@ -315,7 +273,8 @@ export function BatchUploadPage() {
       const rawFiles = Array.from(e.target.files);
       const selectedFiles = rawFiles.filter((file) => {
         const dotIdx = file.name.lastIndexOf('.');
-        const ext = dotIdx >= 0 ? file.name.substring(dotIdx).toLowerCase() : '';
+        const ext =
+          dotIdx >= 0 ? file.name.substring(dotIdx).toLowerCase() : '';
         return ACCEPTED_EXTENSIONS.includes(ext);
       });
       if (selectedFiles.length < rawFiles.length) {
@@ -326,23 +285,22 @@ export function BatchUploadPage() {
     }
   };
 
+  const handleDropzoneKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      fileInputRef.current?.click();
+    }
+  };
+
   const removeFile = (id: string) => {
     removeBatchFile(id);
   };
 
   const clearAll = () => {
-    if (navigateTimerRef.current) {
-      clearTimeout(navigateTimerRef.current);
-      navigateTimerRef.current = null;
-    }
     clearBatchFiles();
   };
 
   const retryFile = (id: string) => {
-    if (navigateTimerRef.current) {
-      clearTimeout(navigateTimerRef.current);
-      navigateTimerRef.current = null;
-    }
     retryBatchFile(id);
   };
 
@@ -356,14 +314,17 @@ export function BatchUploadPage() {
       setUpgradeOpen(true);
       return;
     }
-    if (navigateTimerRef.current) {
-      clearTimeout(navigateTimerRef.current);
-      navigateTimerRef.current = null;
-    }
     void startBatchQueue();
   };
 
   const pendingCount = stats.pending;
+  const isAllCompleted =
+    !isBatchActive &&
+    files.length > 0 &&
+    stats.pending === 0 &&
+    stats.processing === 0 &&
+    stats.completed > 0 &&
+    stats.failed === 0;
 
   const queueMetrics = [
     {
@@ -385,7 +346,8 @@ export function BatchUploadPage() {
       label: t('batchUpload.completed'),
       value: stats.completed,
       tone: 'text-emerald-600 dark:text-emerald-400',
-      badge: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
+      badge:
+        'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
     },
     {
       idx: '04',
@@ -396,28 +358,28 @@ export function BatchUploadPage() {
     },
   ];
 
+  const fileCountLabel =
+    lang === 'vi'
+      ? `${files.length} tệp`
+      : `${files.length} ${files.length === 1 ? 'file' : 'files'}`;
+
+  const batchPrivacyNoticeBody =
+    lang === 'vi'
+      ? `Khi tải hàng loạt bài nộp của sinh viên hoặc đồng tác giả (${isBatchLimitUnlimited ? 'không giới hạn số tệp' : `tối đa ${quota.max_batch_files} tệp/lô`}), Giảng viên / Người tải lên xác nhận có thẩm quyền học thuật hoặc sự đồng ý của tác giả bản thảo, và đã thông báo việc trích xuất danh mục tham khảo gửi đối chiếu qua các thư viện học thuật quốc tế (Crossref, OpenAlex, DBLP, arXiv, DataCite…).`
+      : `When uploading multiple student or co-author manuscripts (${isBatchLimitUnlimited ? 'unlimited files per batch' : `up to ${quota.max_batch_files} ${quota.max_batch_files === 1 ? 'file' : 'files'} per batch`}), you confirm academic authorization or author consent, and acknowledge that extracted reference metadata is cross-checked against public scholarly libraries (Crossref, OpenAlex, DBLP, arXiv, DataCite…).`;
+
   return (
     <div className="citra-cq-page-wide w-full max-w-5xl mx-auto space-y-6 pb-10 transition-[max-width] duration-300">
-      {/* Executive Header Banner */}
+      {/* Page Header Banner */}
       <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 sm:p-6 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="space-y-1.5">
-          <div className="flex items-center gap-2.5 flex-wrap">
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200/70 dark:border-indigo-800/70 text-[11px] font-mono font-semibold text-indigo-700 dark:text-indigo-300">
-              <Layers className="h-3 w-3" />
-              {lang === 'vi'
-                ? 'HÀNG ĐỢI ĐA BẢN THẢO · BATCH ENGINE'
-                : 'MULTI-MANUSCRIPT QUEUE · BATCH ENGINE'}
-            </span>
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 text-[11px] font-mono text-slate-600 dark:text-slate-300">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              {t('batchUpload.concurrentWorkers', { count: BATCH_CONCURRENCY })}
-            </span>
-          </div>
+        <div className="space-y-1.5 min-w-0">
           <h1 className="font-display text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-white">
             {t('batchUpload.title')}
           </h1>
           <p className="text-sm text-slate-600 dark:text-slate-400">
-            {t('batchUpload.subtitle')}
+            {lang === 'vi'
+              ? 'Tải lên nhiều tệp PDF, Word (.docx), BibTeX (.bib) hoặc RIS (.ris) để kiểm chứng trích dẫn cùng lúc.'
+              : 'Upload multiple PDF, Word (.docx), BibTeX (.bib), or RIS (.ris) files to verify citations in one batch.'}
           </p>
         </div>
 
@@ -425,13 +387,52 @@ export function BatchUploadPage() {
           asChild
           variant="outline"
           size="sm"
-          className="h-10 rounded-xl font-medium shrink-0"
+          className="h-10 rounded-xl font-medium shrink-0 whitespace-nowrap"
         >
           <Link to="/upload">
             <Upload className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
             <span>{t('nav.newCheck')}</span>
           </Link>
         </Button>
+      </div>
+
+      {/* Plan Batch Quota Strip (reads actual user quota.max_batch_files) */}
+      <div
+        data-testid="batch-quota-banner"
+        className="rounded-2xl bg-gradient-to-r from-slate-50 via-white to-indigo-50/40 dark:from-slate-900 dark:via-slate-900 dark:to-indigo-950/30 border border-slate-200/90 dark:border-slate-800 px-4 py-3.5 shadow-sm flex flex-wrap items-center justify-between gap-2.5 text-xs"
+      >
+        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
+          <Badge
+            className={`whitespace-nowrap shrink-0 ${
+              planTier === 'ultra'
+                ? 'bg-violet-600 text-white font-mono uppercase'
+                : planTier === 'pro'
+                  ? 'bg-indigo-600 text-white font-mono uppercase'
+                  : 'bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-mono uppercase'
+            }`}
+          >
+            {lang === 'vi'
+              ? `GÓI ${planTier.toUpperCase()}`
+              : `${planTier.toUpperCase()} PLAN`}
+          </Badge>
+          <span
+            data-testid="batch-limit-label"
+            className="font-mono font-semibold text-slate-800 dark:text-slate-200 whitespace-nowrap"
+          >
+            {batchLimitText}
+          </span>
+          <span
+            className="hidden sm:inline text-slate-400"
+            aria-hidden="true"
+          >
+            ·
+          </span>
+          <span className="text-slate-600 dark:text-slate-400 font-mono whitespace-nowrap">
+            {lang === 'vi'
+              ? `Lượt tháng: ${quotaView.usage} · Tối đa ${quotaView.fileSize}/tệp`
+              : `Monthly checks: ${quotaView.usage} · Max ${quotaView.fileSize}/file`}
+          </span>
+        </div>
       </div>
 
       {/* Live Background Persistence Banner when Batch is Actively Processing */}
@@ -480,37 +481,41 @@ export function BatchUploadPage() {
         </div>
       )}
 
-      {/* Completed-in-Background Notice when User Returns After All-Succeeded Batch */}
-      {!isBatchActive &&
-        queueState.hasAutoNavigated &&
-        stats.completed > 0 &&
-        stats.pending === 0 &&
-        stats.failed === 0 && (
-          <div
-            data-testid="batch-background-completed-notice"
-            className="rounded-2xl border border-emerald-200 dark:border-emerald-800/80 bg-emerald-50/85 dark:bg-emerald-950/35 px-4 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-emerald-950 dark:text-emerald-200 shadow-sm"
-          >
-            <div className="flex items-center gap-2.5 min-w-0">
-              <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-              <span className="font-semibold break-words [overflow-wrap:anywhere]">
-                {t('batchUpload.backgroundCompletedNotice', {
-                  completed: stats.completed,
-                  total: files.length,
-                })}
-              </span>
+      {/* Persistent Completed Summary Card — stays visible on screen with direct links, NO forced redirect */}
+      {isAllCompleted && (
+        <div
+          data-testid="batch-background-completed-notice"
+          className="rounded-2xl border border-emerald-200 dark:border-emerald-800/80 bg-emerald-50/85 dark:bg-emerald-950/35 px-4 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-emerald-950 dark:text-emerald-200 shadow-sm"
+        >
+          <div className="flex items-start gap-2.5 min-w-0">
+            <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+            <div className="space-y-0.5 min-w-0">
+              <p className="font-bold text-sm break-words [overflow-wrap:anywhere]">
+                {lang === 'vi'
+                  ? `Đã hoàn tất kiểm chứng ${stats.completed}/${files.length} tài liệu!`
+                  : `Completed verification for ${stats.completed}/${files.length} ${files.length === 1 ? 'file' : 'files'}!`}
+              </p>
+              <p className="text-xs text-emerald-800/90 dark:text-emerald-300/90">
+                {lang === 'vi'
+                  ? 'Bạn có thể mở từng báo cáo trực tiếp bên dưới hoặc chuyển sang xem toàn bộ lịch sử.'
+                  : 'Open any individual report below, or browse all completed reports in History.'}
+              </p>
             </div>
-            <Button
-              asChild
-              size="sm"
-              className="h-8 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shrink-0 w-full sm:w-auto"
-            >
-              <Link to="/history">
-                <span>{t('batchUpload.openHistory')}</span>
-                <ArrowRight className="h-3.5 w-3.5" />
-              </Link>
-            </Button>
           </div>
-        )}
+          <Button
+            asChild
+            size="sm"
+            className="h-9 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shrink-0 w-full sm:w-auto whitespace-nowrap"
+          >
+            <Link to="/history" data-testid="batch-view-history-link">
+              <span>
+                {lang === 'vi' ? 'Xem toàn bộ lịch sử' : 'View History'}
+              </span>
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          </Button>
+        </div>
+      )}
 
       {/* Mixed-Outcome Summary Banner when Batch Finishes with Both Completed & Failed Items */}
       {!isBatchActive &&
@@ -537,13 +542,7 @@ export function BatchUploadPage() {
                 type="button"
                 size="sm"
                 data-testid="batch-retry-failed-btn"
-                onClick={() => {
-                  if (navigateTimerRef.current) {
-                    clearTimeout(navigateTimerRef.current);
-                    navigateTimerRef.current = null;
-                  }
-                  retryFailedBatchFiles();
-                }}
+                onClick={() => retryFailedBatchFiles()}
                 className="h-8 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold shrink-0 w-full sm:w-auto"
               >
                 <RefreshCw className="h-3.5 w-3.5" />
@@ -555,7 +554,7 @@ export function BatchUploadPage() {
           </div>
         )}
 
-      {/* 4 Queue Telemetry Cards */}
+      {/* 4 Queue Status Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {queueMetrics.map((m) => (
           <Card
@@ -579,28 +578,30 @@ export function BatchUploadPage() {
         ))}
       </div>
 
-      {/* Main IDE Batch Ingestion Container */}
+      {/* Main Batch Upload Card */}
       <Card className="p-0 overflow-hidden rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
-        {/* Top Window Chrome */}
-        <div className="px-4 sm:px-6 py-3.5 bg-slate-50/80 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800 flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-red-400/80 inline-block" />
-              <span className="w-2.5 h-2.5 rounded-full bg-amber-400/80 inline-block" />
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400/80 inline-block" />
-            </div>
-            <Separator orientation="vertical" className="h-4" />
-            <span className="font-mono text-xs text-slate-700 dark:text-slate-300 font-semibold">
-              {lang === 'vi' ? 'Hàng đợi kiểm tra hàng loạt' : 'Batch Verification Queue'} ·{' '}
-              {files.length} {lang === 'vi' ? 'tệp' : t('batchUpload.files').toLowerCase()}
-            </span>
+        {/* Clean Card Header */}
+        <div className="px-4 sm:px-6 py-3.5 bg-slate-50/80 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <h2 className="font-display text-sm font-bold text-slate-800 dark:text-slate-200">
+              {lang === 'vi'
+                ? 'Hàng đợi kiểm tra hàng loạt'
+                : 'Batch Verification Queue'}
+            </h2>
+            <Badge
+              variant="secondary"
+              data-testid="batch-file-count-badge"
+              className="font-mono text-[11px] bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/60"
+            >
+              {fileCountLabel}
+            </Badge>
           </div>
 
           <Badge
             variant="outline"
-            className="font-mono text-[11px] bg-white dark:bg-slate-950 text-slate-600 dark:text-slate-400"
+            className="font-mono text-[11px] whitespace-nowrap bg-white dark:bg-slate-950 text-slate-600 dark:text-slate-400"
           >
-            {t('batchUpload.pdfOnly')}
+            PDF · DOCX · BIB · RIS
           </Badge>
         </div>
 
@@ -647,15 +648,24 @@ export function BatchUploadPage() {
             </div>
           )}
 
-          {/* Dropzone */}
+          {/* Keyboard-Accessible Dropzone */}
           <div
+            role="button"
+            tabIndex={0}
+            data-testid="batch-dropzone"
+            aria-label={
+              lang === 'vi'
+                ? 'Chọn hoặc kéo thả nhiều tệp PDF, Word (.docx), BibTeX (.bib) hoặc RIS (.ris)'
+                : 'Select or drop multiple PDF, Word (.docx), BibTeX (.bib), or RIS (.ris) files'
+            }
             onDragEnter={handleDrag}
             onDragLeave={handleDrag}
             onDragOver={handleDrag}
             onDrop={handleDrop}
             onClick={() => fileInputRef.current?.click()}
+            onKeyDown={handleDropzoneKeyDown}
             className={`
-              relative border-2 border-dashed rounded-2xl p-6 sm:p-10 text-center transition-all duration-200 cursor-pointer
+              relative border-2 border-dashed rounded-2xl p-6 sm:p-10 text-center transition-all duration-200 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2
               ${
                 dragActive
                   ? 'border-indigo-500 bg-indigo-50/70 dark:bg-indigo-950/50 scale-[1.01]'
@@ -668,6 +678,11 @@ export function BatchUploadPage() {
               type="file"
               accept=".pdf,.docx,.bib,.ris"
               multiple
+              aria-label={
+                lang === 'vi'
+                  ? 'Chọn nhiều tệp tài liệu để kiểm chứng hàng loạt'
+                  : 'Choose multiple files for batch verification'
+              }
               onChange={handleFileInput}
               className="hidden"
             />
@@ -682,10 +697,12 @@ export function BatchUploadPage() {
               <FileFormatIcon format="ris" size="md" />
             </AvatarGroupHover>
             <p className="font-display text-lg font-bold text-slate-900 dark:text-white mb-1">
-              {t('batchUpload.dropPdfs')}
+              {lang === 'vi'
+                ? 'Kéo và thả tệp PDF, Word (.docx), BibTeX (.bib) hoặc RIS (.ris) vào đây'
+                : 'Drop PDF, Word (.docx), BibTeX (.bib), or RIS (.ris) files here'}
             </p>
-            <p className="text-xs font-mono text-slate-500 dark:text-slate-400 mb-3">
-              {t('batchUpload.orClickBrowse')} · {t('batchUpload.pdfOnly')}
+            <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
+              {t('batchUpload.orClickBrowse')} · {batchLimitText}
             </p>
           </div>
 
@@ -701,7 +718,7 @@ export function BatchUploadPage() {
               <span className="font-semibold">
                 {t('privacyCompliance.batchNoticeTitle')}:{' '}
               </span>
-              {t('privacyCompliance.batchNoticeBody')}{' '}
+              {batchPrivacyNoticeBody}{' '}
               <Link
                 to="/privacy#third-parties"
                 className="inline-flex items-center gap-1 font-semibold underline underline-offset-4 hover:opacity-80 transition-opacity"
@@ -717,9 +734,11 @@ export function BatchUploadPage() {
           {files.length > 0 && (
             <div className="space-y-3 pt-2">
               <div className="flex items-center justify-between">
-                <h2 className="font-mono text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">
-                  {t('batchUpload.files')} ({files.length})
-                </h2>
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">
+                  {lang === 'vi'
+                    ? `Danh sách tệp (${files.length})`
+                    : `${files.length === 1 ? 'File' : 'Files'} (${files.length})`}
+                </h3>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -752,7 +771,6 @@ export function BatchUploadPage() {
                       </p>
                       <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
                         {formatBytes(fileItem.fileSize)}
-                        {fileItem.essayId && ` · ID #${fileItem.essayId}`}
                       </p>
                     </div>
 
@@ -760,7 +778,7 @@ export function BatchUploadPage() {
                       {getStatusIcon(fileItem.status)}
                       <Badge
                         variant={getStatusVariant(fileItem.status)}
-                        className={`font-mono text-[11px] ${
+                        className={`font-mono text-[11px] whitespace-nowrap ${
                           fileItem.status === 'queued'
                             ? 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800'
                             : ''
@@ -779,7 +797,7 @@ export function BatchUploadPage() {
                         fileItem.quotaCharged === false && (
                           <span
                             data-testid={`batch-refund-badge-${fileItem.id}`}
-                            className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800/70"
+                            className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800/70 whitespace-nowrap"
                           >
                             {lang === 'vi' ? 'Đã hoàn lượt' : 'Credit Refunded'}
                           </span>
@@ -821,19 +839,20 @@ export function BatchUploadPage() {
                       </div>
                     )}
 
-                    <div className="flex items-center gap-1 shrink-0">
+                    <div className="flex items-center gap-1.5 shrink-0">
                       {fileItem.status === 'completed' && fileItem.essayId && (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            navigate(`/verification/report/${fileItem.essayId}`)
-                          }
-                          className="p-2 rounded-lg text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 transition-colors"
+                        <Link
+                          to={`/verification/report/${fileItem.essayId}`}
+                          data-testid={`batch-open-report-${fileItem.id}`}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/80 hover:bg-indigo-600 hover:text-white dark:hover:bg-indigo-600 dark:hover:text-white transition-colors whitespace-nowrap"
                           title={t('dashboard.viewReport')}
-                          aria-label={`${t('dashboard.viewReport')} ${fileItem.fileName}`}
+                          aria-label={`${lang === 'vi' ? 'Mở báo cáo' : 'Open Report'} ${fileItem.fileName}`}
                         >
-                          <ExternalLink className="h-4 w-4" />
-                        </button>
+                          <span>
+                            {lang === 'vi' ? 'Mở báo cáo' : 'Open Report'}
+                          </span>
+                          <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                        </Link>
                       )}
                       {fileItem.status === 'failed' &&
                         Boolean(fileItem.file || fileItem.essayId != null) && (
@@ -869,9 +888,10 @@ export function BatchUploadPage() {
                 .map((f) => (
                   <div
                     key={f.id}
-                    className="text-xs font-mono text-red-600 dark:text-red-400 px-3 py-2 rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60 break-words [overflow-wrap:anywhere]"
+                    className="text-xs text-red-700 dark:text-red-300 px-3 py-2 rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60 break-words [overflow-wrap:anywhere]"
                   >
-                    {f.fileName}: {f.error}
+                    <span className="font-semibold">{f.fileName}:</span>{' '}
+                    {formatUserError(f.error, lang)}
                   </div>
                 ))}
             </div>
@@ -890,32 +910,24 @@ export function BatchUploadPage() {
             </div>
           )}
 
+          <DecisionSupportBanner variant="compact" lang={lang} />
+
           {/* Action Footer */}
           <div className="pt-4 border-t border-slate-200/80 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              {t('batchUpload.disclaimer')}
-            </p>
-
-            <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
+            <div className="flex items-center gap-2 text-xs">
               {!queueState.isProcessing &&
-                !queueState.hasAutoNavigated &&
                 files.length > 0 &&
                 stats.pending === 0 &&
-                stats.processing === 0 && (
-                  <>
-                    {stats.completed > 0 && stats.failed === 0 ? (
-                      <span className="text-xs font-mono text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        {t('batchUpload.allProcessedOpening')}
-                      </span>
-                    ) : stats.completed === 0 ? (
-                      <span className="text-xs font-mono text-red-600 dark:text-red-400">
-                        {t('batchUpload.allFailedNotice')}
-                      </span>
-                    ) : null}
-                  </>
+                stats.processing === 0 &&
+                stats.completed === 0 &&
+                stats.failed > 0 && (
+                  <span className="text-red-600 dark:text-red-400 font-medium">
+                    {t('batchUpload.allFailedNotice')}
+                  </span>
                 )}
+            </div>
 
+            <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
               <Button
                 size="lg"
                 onClick={handleStartVerification}

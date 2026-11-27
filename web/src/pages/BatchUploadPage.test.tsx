@@ -110,19 +110,37 @@ describe('BatchUploadPage', () => {
     expect(screen.queryByTestId('batch-quota-errors')).toBeNull();
   });
 
-  it('advertises PDF & DOCX support in both languages', async () => {
-    const { unmount } = renderWithProviders(<BatchUploadPage />, { user: makeUser('teacher') });
+  it('advertises all 4 supported formats, real batch quota limit, keyboard dropzone, and omits engine jargon in both languages', async () => {
+    const { unmount } = renderWithProviders(<BatchUploadPage />, {
+      user: makeUser('teacher', 'pro'),
+    });
     await waitFor(() => expect(api.listMyClasses).toHaveBeenCalledTimes(1));
-    expect(screen.getAllByText(/PDF & DOCX/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/\.bib, \.ris/i).length).toBeGreaterThan(0);
+    expect(screen.getByTestId('batch-limit-label').textContent).toContain(
+      'Up to 10 files / batch',
+    );
+    expect(document.body.textContent).toMatch(/Word \(\.docx\)/);
+    expect(document.body.textContent).toMatch(/BibTeX \(\.bib\)/);
+    expect(document.body.textContent).toMatch(/RIS \(\.ris\)/);
     expect(document.body.textContent).not.toMatch(/PDF Only/i);
+    expect(document.body.textContent).not.toMatch(/BATCH ENGINE|CONCURRENT WORKERS/i);
+    const dropzone = screen.getByTestId('batch-dropzone');
+    expect(dropzone.getAttribute('role')).toBe('button');
+    expect(dropzone.getAttribute('tabindex')).toBe('0');
     unmount();
+
     await i18n.changeLanguage('vi');
-    renderWithProviders(<BatchUploadPage />, { user: makeUser('teacher') });
+    renderWithProviders(<BatchUploadPage />, {
+      user: makeUser('teacher', 'pro'),
+    });
     await waitFor(() => expect(api.listMyClasses).toHaveBeenCalledTimes(2));
-    expect(screen.getAllByText(/PDF & DOCX/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/\.bib, \.ris/i).length).toBeGreaterThan(0);
-    expect(document.body.textContent).toContain('3 LUỒNG XỬ LÝ SONG SONG');
+    expect(screen.getByTestId('batch-limit-label').textContent).toContain(
+      'Tối đa 10 tệp / lô',
+    );
+    expect(screen.getByTestId('batch-file-count-badge').textContent).toBe('0 tệp');
+    expect(document.body.textContent).toMatch(/Word \(\.docx\)/);
+    expect(document.body.textContent).toMatch(/BibTeX \(\.bib\)/);
+    expect(document.body.textContent).not.toContain('BATCH ENGINE');
+    expect(document.body.textContent).not.toContain('LUỒNG XỬ LÝ SONG SONG');
   });
 
   it('does not auto-redirect on mixed success/failure batch and retries failed file immediately', async () => {

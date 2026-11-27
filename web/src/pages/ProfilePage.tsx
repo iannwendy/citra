@@ -8,27 +8,32 @@ import {
   AlertCircle,
   CheckCircle2,
   ShieldCheck,
-  Terminal,
   UserCheck,
   Mail,
   Sparkles,
   LogOut,
+  GraduationCap,
+  User as UserIcon,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import { AvatarUpload } from '@/components/AvatarUpload';
 import { api, type Class } from '@/api/client';
 import { validatePasswordClient } from '@/lib/utils';
+import {
+  formatLocalizedDate,
+  formatUserError,
+  resolveAcademicLang,
+} from '@/lib/academicTaxonomy';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
 export function ProfilePage() {
   const { t, i18n } = useTranslation();
-  const lang = i18n.language?.startsWith('vi') ? 'vi' : 'en';
+  const lang = resolveAcademicLang(i18n.resolvedLanguage || i18n.language);
   const { user: authUser, refreshUser } = useAuth();
   const toast = useToast();
 
@@ -87,10 +92,20 @@ export function ProfilePage() {
       await api.leaveClass(cls.id);
       setEnrolledClasses((prev) => prev.filter((c) => c.id !== cls.id));
       toast.success(
-        lang === 'vi' ? `Đã rời khỏi lớp ${cls.name}` : `Left class ${cls.name}`,
+        lang === 'vi'
+          ? `Đã rời khỏi lớp ${cls.name}`
+          : `Left class ${cls.name}`,
       );
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to leave class');
+      toast.error(
+        formatUserError(
+          err,
+          lang,
+          lang === 'vi'
+            ? 'Không thể rời lớp học. Vui lòng thử lại.'
+            : 'Failed to leave class. Please try again.',
+        ),
+      );
     }
   };
 
@@ -117,12 +132,26 @@ export function ProfilePage() {
       }
     }
 
+    const trimmedEmail = email.trim();
+    if (
+      !isGoogleEmailLocked &&
+      trimmedEmail &&
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)
+    ) {
+      setProfileError(
+        lang === 'vi'
+          ? 'Địa chỉ email không đúng định dạng.'
+          : 'Please enter a valid email address.',
+      );
+      return;
+    }
+
     setProfileLoading(true);
     try {
       const updated = await api.updateMe({
         ...(canSetUsername ? { username: trimmedUsername } : {}),
         full_name: fullName || undefined,
-        ...(!isGoogleEmailLocked ? { email: email || undefined } : {}),
+        ...(!isGoogleEmailLocked ? { email: trimmedEmail || undefined } : {}),
       });
       await refreshUser();
       setUsername(updated.username ?? '');
@@ -130,19 +159,16 @@ export function ProfilePage() {
       setEmail(updated.email ?? '');
       setProfileSuccess(true);
       toast.success(
-        lang === 'vi' ? 'Đã lưu hồ sơ học thuật' : 'Profile Updated',
+        lang === 'vi' ? 'Đã lưu hồ sơ cá nhân' : 'Profile Updated',
         lang === 'vi'
-          ? 'Thông tin định danh của bạn đã được cập nhật.'
-          : 'Your scholar identity profile has been saved.',
-        { category: 'IDENTITY · SYNC' }
+          ? 'Thông tin tài khoản của bạn đã được cập nhật.'
+          : 'Your account profile has been saved.',
       );
       setTimeout(() => setProfileSuccess(false), 3000);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : t('profile.failedToSave');
+      const msg = formatUserError(err, lang, t('profile.failedToSave'));
       setProfileError(msg);
-      toast.error(lang === 'vi' ? 'Lỗi cập nhật hồ sơ' : 'Update Failed', msg, {
-        category: 'IDENTITY · ERR',
-      });
+      toast.error(lang === 'vi' ? 'Lỗi cập nhật hồ sơ' : 'Update Failed', msg);
     } finally {
       setProfileLoading(false);
     }
@@ -153,12 +179,29 @@ export function ProfilePage() {
     setPasswordError('');
     setPasswordSuccess('');
 
+    if (hasPassword && !currentPassword.trim()) {
+      setPasswordError(
+        lang === 'vi'
+          ? 'Vui lòng nhập mật khẩu hiện tại.'
+          : 'Please enter your current password.',
+      );
+      return;
+    }
+
     const pwCheck = validatePasswordClient(newPassword, lang);
     if (!pwCheck.valid) {
       setPasswordError(
         pwCheck.reason === 'too_short'
           ? t('profile.passwordMinLengthError')
           : pwCheck.error || t('profile.passwordMinLengthError'),
+      );
+      return;
+    }
+    if (!confirmPassword) {
+      setPasswordError(
+        lang === 'vi'
+          ? 'Vui lòng nhập lại mật khẩu mới để xác nhận.'
+          : 'Please confirm your new password.',
       );
       return;
     }
@@ -183,7 +226,7 @@ export function ProfilePage() {
           ? t('profile.passwordChangedSuccess')
           : lang === 'vi'
             ? 'Thiết lập mật khẩu thành công! Giờ đây bạn có thể đăng nhập bằng cả Google hoặc Tên đăng nhập + Mật khẩu.'
-            : 'Password set successfully! You can now sign in with either Google or Username + Password.'
+            : 'Password set successfully! You can now sign in with either Google or Username + Password.',
       );
       setCurrentPassword('');
       setNewPassword('');
@@ -191,7 +234,7 @@ export function ProfilePage() {
       setTimeout(() => setPasswordSuccess(''), 6000);
     } catch (err) {
       setPasswordError(
-        err instanceof Error ? err.message : t('profile.passwordChangeFailed')
+        formatUserError(err, lang, t('profile.passwordChangeFailed')),
       );
     } finally {
       setPasswordLoading(false);
@@ -205,50 +248,49 @@ export function ProfilePage() {
     try {
       await api.sendPasswordSetupEmail(lang);
       setPasswordSuccess(
-        lang === 'vi'
-          ? `Đã gửi liên kết đặt mật khẩu tới ${authUser?.email}! Vui lòng kiểm tra hộp thư Gmail của bạn.`
-          : `Password setup link sent to ${authUser?.email}! Please check your email inbox.`
+        hasPassword
+          ? lang === 'vi'
+            ? `Đã gửi liên kết đặt lại mật khẩu tới ${authUser?.email}! Vui lòng kiểm tra hộp thư của bạn.`
+            : `Password reset link sent to ${authUser?.email}! Please check your email inbox.`
+          : lang === 'vi'
+            ? `Đã gửi liên kết đặt mật khẩu tới ${authUser?.email}! Vui lòng kiểm tra hộp thư của bạn.`
+            : `Password setup link sent to ${authUser?.email}! Please check your email inbox.`,
       );
     } catch (err) {
       setPasswordError(
-        err instanceof Error
-          ? err.message
-          : lang === 'vi'
-            ? 'Không thể gửi email thiết lập mật khẩu. Vui lòng thử lại.'
-            : 'Could not send password setup email. Please try again.'
+        formatUserError(
+          err,
+          lang,
+          lang === 'vi'
+            ? 'Không thể gửi email đặt mật khẩu lúc này. Vui lòng thử lại sau.'
+            : 'Could not send password email right now. Please try again later.',
+        ),
       );
     } finally {
       setEmailLinkSending(false);
     }
   };
 
-  const dateLocale = i18n.language?.startsWith('vi') ? 'vi-VN' : 'en-US';
-
   return (
     <div className="citra-cq-page-narrow space-y-6 w-full max-w-4xl mx-auto pb-10 transition-[max-width] duration-300">
-      {/* Executive Header Card */}
+      {/* Header Card */}
       <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 sm:p-6 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2.5 flex-wrap mb-2.5">
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200/70 dark:border-indigo-800/70 text-[11px] font-mono font-semibold text-indigo-700 dark:text-indigo-300">
-                <ShieldCheck className="h-3.5 w-3.5" />
-                {lang === 'vi' ? 'ĐỊNH DANH NGƯỜI DÙNG HỌC THUẬT' : 'SCHOLAR IDENTITY PROFILE'}
-              </span>
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/70 border border-emerald-200/70 dark:border-emerald-800/70 text-[11px] font-mono text-emerald-700 dark:text-emerald-300">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                @{authUser?.username ?? 'user'}
-              </span>
-            </div>
-
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200/70 dark:border-indigo-800/70 flex items-center justify-center shrink-0">
                 <UserCheck className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
               </div>
-              <div>
-                <h1 className="font-display text-2xl sm:text-3xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
-                  {t('profile.title')}
-                </h1>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h1 className="font-display text-2xl sm:text-3xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
+                    {t('profile.title')}
+                  </h1>
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/70 border border-emerald-200/70 dark:border-emerald-800/70 text-xs font-mono text-emerald-700 dark:text-emerald-300">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                    @{authUser?.username ?? 'user'}
+                  </span>
+                </div>
                 <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
                   {t('profile.subtitle')}
                 </p>
@@ -258,7 +300,7 @@ export function ProfilePage() {
         </div>
       </div>
 
-      {/* Architectural Identity Summary Cards */}
+      {/* Account Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm">
           <div className="flex items-center justify-between mb-1">
@@ -290,13 +332,7 @@ export function ProfilePage() {
             </span>
           </div>
           <p className="font-mono font-semibold text-sm text-slate-900 dark:text-slate-100">
-            {authUser?.created_at
-              ? new Date(authUser.created_at).toLocaleDateString(dateLocale, {
-                  month: 'long',
-                  day: 'numeric',
-                  year: 'numeric',
-                })
-              : '—'}
+            {formatLocalizedDate(authUser?.created_at, lang)}
           </p>
         </Card>
 
@@ -310,31 +346,19 @@ export function ProfilePage() {
             </span>
           </div>
           <p className="font-mono font-semibold text-sm text-slate-900 dark:text-slate-100">
-            {authUser?.last_login_at
-              ? new Date(authUser.last_login_at).toLocaleDateString(dateLocale, {
-                  month: 'long',
-                  day: 'numeric',
-                  year: 'numeric',
-                })
-              : '—'}
+            {formatLocalizedDate(authUser?.last_login_at, lang)}
           </p>
         </Card>
       </div>
 
-      {/* Avatar + Basic Info IDE Container */}
+      {/* Avatar + Basic Info Card */}
       <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
-        <div className="flex items-center justify-between gap-3 px-4 py-3 bg-slate-50/90 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800">
+        <div className="flex items-center justify-between gap-3 px-4 sm:px-5 py-3.5 bg-slate-50/90 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800">
           <div className="flex items-center gap-2.5">
-            <div className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-red-400/80" />
-              <span className="w-2.5 h-2.5 rounded-full bg-amber-400/80" />
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400/80" />
-            </div>
-            <Separator orientation="vertical" className="h-4" />
-            <Terminal className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
-            <span className="text-xs font-mono font-semibold text-slate-700 dark:text-slate-200">
-              identity_profile.config
-            </span>
+            <UserIcon className="h-4 w-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+            <h2 className="font-display text-sm font-semibold text-slate-900 dark:text-slate-100">
+              {lang === 'vi' ? 'Thông tin cá nhân' : 'Personal Information'}
+            </h2>
           </div>
         </div>
 
@@ -345,29 +369,35 @@ export function ProfilePage() {
               <AvatarUpload
                 currentAvatarUrl={authUser?.avatar_url ?? null}
                 onSuccess={() => {
-                  refreshUser();
+                  void refreshUser();
                 }}
                 size="lg"
               />
               <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400 text-center max-w-[9rem]">
-                {t('profile.avatarTypes')}{' '}
-                <br />
+                {t('profile.avatarTypes')} <br />
                 {t('profile.avatarMax')}
               </p>
             </div>
 
             {/* Profile form */}
-            <div className="flex-1 space-y-4 min-w-0">
+            <form
+              onSubmit={handleProfileSave}
+              noValidate
+              className="flex-1 space-y-4 min-w-0"
+            >
               <div>
                 <div className="flex items-center justify-between gap-2 flex-wrap">
-                  <Label htmlFor="profile-username-field" className="input-label">
+                  <Label
+                    htmlFor="profile-username-field"
+                    className="input-label"
+                  >
                     {t('profile.username')}
                   </Label>
                   {canSetUsername && (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200/70 dark:border-indigo-800/70 text-[11px] font-mono font-medium text-indigo-700 dark:text-indigo-300">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200/70 dark:border-indigo-800/70 text-[11px] font-medium text-indigo-700 dark:text-indigo-300">
                       <Sparkles className="h-3 w-3" />
                       {lang === 'vi'
-                        ? 'Tài khoản Google · Đặt username lần đầu'
+                        ? 'Tài khoản Google · Đặt tên đăng nhập lần đầu'
                         : 'Google Account · First-time username setup'}
                     </span>
                   )}
@@ -375,14 +405,21 @@ export function ProfilePage() {
                 {canSetUsername ? (
                   <>
                     <div className="relative mt-1.5">
-                      <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-mono text-sm select-none">
+                      <span
+                        className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-mono text-sm select-none"
+                        aria-hidden="true"
+                      >
                         @
                       </span>
                       <Input
                         id="profile-username-field"
                         type="text"
+                        aria-label={t('profile.username')}
                         value={username}
-                        onChange={(e) => setUsername(e.target.value)}
+                        onChange={(e) => {
+                          setUsername(e.target.value);
+                          if (profileError) setProfileError('');
+                        }}
                         maxLength={50}
                         className="pl-8 rounded-xl font-mono"
                         placeholder="your_username"
@@ -391,7 +428,7 @@ export function ProfilePage() {
                     </div>
                     <p className="text-xs text-indigo-600 dark:text-indigo-400 mt-1">
                       {lang === 'vi'
-                        ? 'Bạn có thể đặt tên đăng nhập (username) 1 lần cho tài khoản Google của mình, sau đó nhấn Lưu thay đổi.'
+                        ? 'Bạn có thể đặt tên đăng nhập 1 lần cho tài khoản Google của mình, sau đó nhấn Lưu thay đổi.'
                         : 'You can customize your username once for your Google account, then click Save Changes.'}
                     </p>
                   </>
@@ -400,6 +437,7 @@ export function ProfilePage() {
                     <Input
                       id="profile-username-field"
                       type="text"
+                      aria-label={t('profile.username')}
                       value={authUser?.username ?? ''}
                       readOnly
                       disabled
@@ -414,7 +452,10 @@ export function ProfilePage() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="profile-fullname-field" className="input-label">
+                  <Label
+                    htmlFor="profile-fullname-field"
+                    className="input-label"
+                  >
                     {t('profile.fullName')}
                   </Label>
                   <Input
@@ -439,7 +480,10 @@ export function ProfilePage() {
                     value={email}
                     readOnly={isGoogleEmailLocked}
                     disabled={isGoogleEmailLocked}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      if (profileError) setProfileError('');
+                    }}
                     className={`mt-1.5 rounded-xl ${
                       isGoogleEmailLocked ? 'opacity-65 cursor-not-allowed' : ''
                     }`}
@@ -448,7 +492,7 @@ export function ProfilePage() {
                   {isGoogleEmailLocked && (
                     <p className="text-xs text-slate-400 mt-1">
                       {lang === 'vi'
-                        ? 'Email đã liên kết Google OAuth được khóa bảo mật.'
+                        ? 'Email đã liên kết Google được khóa bảo mật.'
                         : 'Google-linked email address is verified and locked.'}
                     </p>
                   )}
@@ -457,7 +501,7 @@ export function ProfilePage() {
 
               <div className="flex flex-wrap items-center gap-3 pt-1">
                 <Button
-                  onClick={handleProfileSave}
+                  type="submit"
                   disabled={profileLoading}
                   className="gap-2 rounded-xl"
                 >
@@ -482,44 +526,43 @@ export function ProfilePage() {
                 )}
 
                 {profileError && (
-                  <span className="flex items-center gap-1 text-sm text-red-600 dark:text-red-400">
-                    <AlertCircle className="h-4 w-4" />
+                  <span
+                    role="alert"
+                    className="flex items-center gap-1 text-sm text-red-600 dark:text-red-400"
+                  >
+                    <AlertCircle className="h-4 w-4 shrink-0" />
                     {profileError}
                   </span>
                 )}
               </div>
-            </div>
+            </form>
           </div>
         </div>
       </div>
 
-      {/* Change Password IDE Container */}
+      {/* Password & Security Card */}
       <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
-        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 bg-slate-50/90 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800">
+        <div className="flex flex-wrap items-center justify-between gap-3 px-4 sm:px-5 py-3.5 bg-slate-50/90 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800">
           <div className="flex items-center gap-2.5">
-            <div className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-red-400/80" />
-              <span className="w-2.5 h-2.5 rounded-full bg-amber-400/80" />
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400/80" />
-            </div>
-            <Separator orientation="vertical" className="h-4" />
-            <Lock className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+            <Lock className="h-4 w-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
             <h2 className="font-display text-sm font-semibold text-slate-900 dark:text-slate-100">
               {t('profile.changePassword')}
             </h2>
           </div>
-          <span className="text-[11px] font-mono text-slate-400">
-            credential_security.vault
-          </span>
         </div>
 
         <div className="p-4 sm:p-6">
-          <form onSubmit={handlePasswordChange} className="space-y-4">
-            {/* Hidden username field for accessibility (WCAG 1.3.5) */}
+          <form
+            onSubmit={handlePasswordChange}
+            noValidate
+            className="space-y-4"
+          >
+            {/* Hidden username field for password-manager accessibility (WCAG 1.3.5) */}
             <input
               type="text"
               name="username"
               autoComplete="username"
+              aria-label={t('profile.username')}
               value={authUser?.username ?? ''}
               readOnly
               tabIndex={-1}
@@ -550,21 +593,34 @@ export function ProfilePage() {
               <div className="rounded-xl bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200/80 dark:border-indigo-800/70 p-3.5 text-xs sm:text-sm text-indigo-900 dark:text-indigo-200 leading-relaxed">
                 {lang === 'vi' ? (
                   <>
-                    Tài khoản của bạn đăng nhập qua <strong>Google</strong> và chưa có mật khẩu riêng. Bạn có thể{' '}
-                    <strong>thiết lập mật khẩu lần đầu trực tiếp bên dưới</strong> (không cần mật khẩu hiện tại) hoặc{' '}
-                    <strong>nhận liên kết đặt mật khẩu qua email Google</strong> của bạn.
+                    Tài khoản của bạn đăng nhập qua <strong>Google</strong> và
+                    chưa có mật khẩu riêng. Bạn có thể{' '}
+                    <strong>
+                      thiết lập mật khẩu lần đầu trực tiếp bên dưới
+                    </strong>{' '}
+                    (không cần mật khẩu hiện tại) hoặc{' '}
+                    <strong>nhận liên kết đặt mật khẩu qua email Google</strong>{' '}
+                    của bạn.
                   </>
                 ) : (
                   <>
-                    Your account was created via <strong>Google Sign-In</strong> and does not have a local password yet. You can{' '}
-                    <strong>set your initial password directly below</strong> (no current password required) or{' '}
-                    <strong>send a password setup link to your Google email</strong>.
+                    Your account was created via <strong>Google Sign-In</strong>{' '}
+                    and does not have a local password yet. You can{' '}
+                    <strong>set your initial password directly below</strong>{' '}
+                    (no current password required) or{' '}
+                    <strong>
+                      send a password setup link to your Google email
+                    </strong>
+                    .
                   </>
                 )}
               </div>
             ) : (
               <div>
-                <Label htmlFor="profile-current-password" className="input-label">
+                <Label
+                  htmlFor="profile-current-password"
+                  className="input-label"
+                >
                   {t('profile.currentPassword')}
                 </Label>
                 <Input
@@ -572,8 +628,10 @@ export function ProfilePage() {
                   type="password"
                   autoComplete="current-password"
                   value={currentPassword}
-                  onChange={(e) => setCurrentPassword(e.target.value)}
-                  required
+                  onChange={(e) => {
+                    setCurrentPassword(e.target.value);
+                    if (passwordError) setPasswordError('');
+                  }}
                   className="mt-1.5 rounded-xl"
                   placeholder={t('profile.currentPasswordPlaceholder')}
                 />
@@ -590,9 +648,10 @@ export function ProfilePage() {
                   type="password"
                   autoComplete="new-password"
                   value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  required
-                  minLength={6}
+                  onChange={(e) => {
+                    setNewPassword(e.target.value);
+                    if (passwordError) setPasswordError('');
+                  }}
                   maxLength={128}
                   className="mt-1.5 rounded-xl"
                   placeholder={t('profile.newPasswordPlaceholder')}
@@ -600,7 +659,10 @@ export function ProfilePage() {
               </div>
 
               <div>
-                <Label htmlFor="profile-confirm-password" className="input-label">
+                <Label
+                  htmlFor="profile-confirm-password"
+                  className="input-label"
+                >
                   {t('profile.confirmNewPassword')}
                 </Label>
                 <Input
@@ -608,8 +670,10 @@ export function ProfilePage() {
                   type="password"
                   autoComplete="new-password"
                   value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  required
+                  onChange={(e) => {
+                    setConfirmPassword(e.target.value);
+                    if (passwordError) setPasswordError('');
+                  }}
                   maxLength={128}
                   className="mt-1.5 rounded-xl"
                   placeholder={t('profile.confirmNewPasswordPlaceholder')}
@@ -617,53 +681,71 @@ export function ProfilePage() {
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-3 pt-1">
-              <Button
-                type="submit"
-                variant="secondary"
-                disabled={passwordLoading}
-                className="gap-2 rounded-xl"
-              >
-                {passwordLoading ? (
-                  <>
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    {t('profile.updating')}
-                  </>
-                ) : (
-                  <>
-                    <Lock className="h-3.5 w-3.5" />
-                    {hasPassword
-                      ? t('profile.updatePassword')
-                      : lang === 'vi'
-                        ? 'Thiết lập mật khẩu'
-                        : 'Set Password'}
-                  </>
-                )}
-              </Button>
-
-              {authUser?.email && (
+            <div className="space-y-2 pt-1">
+              <div className="flex flex-wrap items-center gap-3">
                 <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleSendPasswordSetupEmail}
-                  disabled={emailLinkSending}
-                  className="gap-2 rounded-xl text-xs sm:text-sm"
-                  data-testid="send-password-setup-email-btn"
+                  type="submit"
+                  variant="secondary"
+                  disabled={passwordLoading}
+                  className="gap-2 rounded-xl"
                 >
-                  {emailLinkSending ? (
+                  {passwordLoading ? (
                     <>
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      {lang === 'vi' ? 'Đang gửi email...' : 'Sending email...'}
+                      {t('profile.updating')}
                     </>
                   ) : (
                     <>
-                      <Mail className="h-3.5 w-3.5" />
-                      {lang === 'vi'
-                        ? 'Gửi link đặt mật khẩu qua Email'
-                        : 'Send password setup link to email'}
+                      <Lock className="h-3.5 w-3.5" />
+                      {hasPassword
+                        ? t('profile.updatePassword')
+                        : lang === 'vi'
+                          ? 'Thiết lập mật khẩu'
+                          : 'Set Password'}
                     </>
                   )}
                 </Button>
+
+                {authUser?.email && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleSendPasswordSetupEmail}
+                    disabled={emailLinkSending}
+                    className="gap-2 rounded-xl text-xs sm:text-sm"
+                    data-testid="send-password-setup-email-btn"
+                  >
+                    {emailLinkSending ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        {lang === 'vi' ? 'Đang gửi email...' : 'Sending email...'}
+                      </>
+                    ) : (
+                      <>
+                        <Mail className="h-3.5 w-3.5" />
+                        {hasPassword
+                          ? lang === 'vi'
+                            ? 'Gửi link đặt lại mật khẩu qua Email'
+                            : 'Send password reset link via email'
+                          : lang === 'vi'
+                            ? 'Gửi link đặt mật khẩu qua Email'
+                            : 'Send password setup link via email'}
+                      </>
+                    )}
+                  </Button>
+                )}
+              </div>
+
+              {authUser?.email && (
+                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                  {hasPassword
+                    ? lang === 'vi'
+                      ? 'Quên mật khẩu hiện tại? Nhấn nút gửi link qua email để tạo mật khẩu mới mà không cần nhập mật khẩu cũ.'
+                      : 'Forgot your current password? Send a reset link to your email to create a new password without entering your current one.'
+                    : lang === 'vi'
+                      ? 'Liên kết qua email cho phép bạn tạo mật khẩu đăng nhập trực tiếp bên cạnh đăng nhập bằng Google.'
+                      : 'The email link lets you create a local password so you can sign in with either Google or a password.'}
+                </p>
               )}
             </div>
           </form>
@@ -675,14 +757,14 @@ export function ProfilePage() {
           data-testid="profile-enrolled-classes"
           className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden"
         >
-          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 bg-slate-50/90 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800">
+          <div className="flex flex-wrap items-center justify-between gap-3 px-4 sm:px-5 py-3.5 bg-slate-50/90 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800">
             <div className="flex items-center gap-2.5">
-              <Terminal className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
+              <GraduationCap className="h-4 w-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
               <h2 className="font-display text-sm font-semibold text-slate-900 dark:text-slate-100">
                 {lang === 'vi' ? 'Lớp học đã tham gia' : 'Enrolled Classes'}
               </h2>
             </div>
-            <span className="text-[11px] font-mono text-slate-400">
+            <span className="text-xs font-mono text-slate-500 dark:text-slate-400">
               {enrolledClasses.length}
             </span>
           </div>
@@ -696,8 +778,9 @@ export function ProfilePage() {
                   <p className="text-sm font-semibold text-slate-900 dark:text-white">
                     {cls.name}
                   </p>
-                  <p className="text-xs font-mono text-slate-500">
-                    {lang === 'vi' ? 'Giảng viên:' : 'Instructor:'} {cls.teacher_username}
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {lang === 'vi' ? 'Giảng viên:' : 'Instructor:'}{' '}
+                    {cls.teacher_username}
                   </p>
                 </div>
                 <Button
@@ -706,7 +789,7 @@ export function ProfilePage() {
                   size="sm"
                   data-testid={`profile-leave-class-${cls.id}`}
                   onClick={() => void handleLeaveClass(cls)}
-                  className="gap-1.5 rounded-xl text-rose-600 border-rose-200 hover:bg-rose-50 dark:border-rose-800 dark:hover:bg-rose-950/50 text-xs font-mono"
+                  className="gap-1.5 rounded-xl text-rose-600 border-rose-200 hover:bg-rose-50 dark:border-rose-800 dark:hover:bg-rose-950/50 text-xs"
                 >
                   <LogOut className="h-3.5 w-3.5" />
                   {lang === 'vi' ? 'Rời lớp' : 'Leave Class'}
@@ -717,24 +800,15 @@ export function ProfilePage() {
         </div>
       )}
 
-      {/* Personal Data Rights & Account Deletion IDE Container (DLCN-03) */}
+      {/* Personal Data Rights & Account Deletion Card (DLCN-03) */}
       <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
-        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 bg-slate-50/90 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800">
+        <div className="flex flex-wrap items-center justify-between gap-3 px-4 sm:px-5 py-3.5 bg-slate-50/90 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800">
           <div className="flex items-center gap-2.5">
-            <div className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-red-400/80" />
-              <span className="w-2.5 h-2.5 rounded-full bg-amber-400/80" />
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400/80" />
-            </div>
-            <Separator orientation="vertical" className="h-4" />
-            <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <ShieldCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
             <h2 className="font-display text-sm font-semibold text-slate-900 dark:text-slate-100">
               {t('privacyCompliance.settingsSectionTitle')}
             </h2>
           </div>
-          <span className="text-[11px] font-mono text-slate-400">
-            personal_data.rights
-          </span>
         </div>
 
         <div className="p-4 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">

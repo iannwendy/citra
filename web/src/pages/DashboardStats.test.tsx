@@ -76,5 +76,31 @@ describe('DashboardPage aggregate cards', () => {
     renderWithProviders(<DashboardPage />, { user: makeUser('user', 'pro') });
     await waitFor(() => expect(screen.getByText('16')).toBeDefined());
     expect(screen.getByText('50%')).toBeDefined();
+    expect(screen.getByText('70.0 / 100')).toBeDefined();
+    expect(screen.getByTestId('essay-cis-1').textContent).toBe('80.0 / 100');
+  });
+
+  it('renders Teacher Overview banner with live pending review count and omits dev cosplay tags', async () => {
+    vi.spyOn(api, 'getEssayStats').mockResolvedValue(remoteStats);
+    vi.spyOn(api, 'getTeacherDashboard').mockResolvedValue({
+      total_classes: 3,
+      total_students: 48,
+      total_essays: 12,
+      pending_reviews: 7,
+      classes: [],
+    });
+
+    renderWithProviders(<DashboardPage />, { user: makeUser('teacher', 'pro') });
+    const overview = await screen.findByTestId('dashboard-teacher-overview');
+    expect(overview.textContent).toContain('3 classes');
+    expect(screen.getByTestId('dashboard-teacher-classes-link').getAttribute('href')).toBe(
+      '/teacher/classes',
+    );
+    expect(screen.getByTestId('dashboard-teacher-reviews-link').getAttribute('href')).toBe(
+      '/teacher/reviews',
+    );
+    expect(screen.getByTestId('dashboard-teacher-pending-count').textContent).toBe('7');
+    expect(document.body.textContent).not.toContain('GROBID TEI');
+    expect(document.body.textContent).not.toContain('OPENXML');
   });
 });

@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import {
+  Link,
+  Navigate,
+  useLocation,
+  useNavigate,
+  useSearchParams,
+} from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   Upload,
@@ -19,13 +25,13 @@ import { api, type Class } from '../api/client';
 import { useVerificationProgress } from '@/contexts/VerificationProgressContext';
 import { useRole } from '@/hooks/useRole';
 import { getQuotaView } from '@/lib/quotaDisplay';
+import { formatUserError, resolveAcademicLang } from '@/lib/academicTaxonomy';
 import { useToast } from '@/contexts/ToastContext';
 import { UpgradeModal } from '@/components/UpgradeModal';
 import { FileFormatIcon } from '@/components/FileFormatIcon';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   CardResize,
@@ -36,14 +42,16 @@ import {
 } from '@/components/ui/transitions';
 
 /* ============================================================
-   SourceLogic — Upload Page Component (Scholarly Precision v2.0)
+   CITRA — Upload Page Component
    Academic Source Verification Workspace
    ============================================================ */
 
 const ACCEPTED_EXTENSIONS = ['.pdf', '.docx', '.bib', '.ris'];
 const ACCEPTED_MIME = {
   'application/pdf': ['.pdf'],
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': [
+    '.docx',
+  ],
   'application/x-bibtex': ['.bib'],
   'application/x-research-info-systems': ['.ris'],
 };
@@ -56,23 +64,21 @@ function formatUploadFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
-function formatUploadMimeAndParser(
+function formatFriendlyDocumentType(
   filename: string,
-  includeParserTag: boolean,
-  parserMode: 'grobid' | 'regex',
+  lang: 'vi' | 'en',
 ): string {
   const lower = filename.trim().toLowerCase();
   if (lower.endsWith('.docx')) {
-    return `application/vnd.openxmlformats (.docx)${includeParserTag ? ' · OPENXML' : ''}`;
+    return lang === 'vi' ? 'Tài liệu Word (.docx)' : 'Word Document (.docx)';
   }
   if (lower.endsWith('.bib')) {
-    return `application/x-bibtex (.bib)${includeParserTag ? ' · BIBTEX PARSER' : ''}`;
+    return lang === 'vi' ? 'Tệp BibTeX (.bib)' : 'BibTeX File (.bib)';
   }
   if (lower.endsWith('.ris')) {
-    return `application/x-research-info-systems (.ris)${includeParserTag ? ' · RIS PARSER' : ''}`;
+    return lang === 'vi' ? 'Tệp RIS (.ris)' : 'RIS Bibliography (.ris)';
   }
-  const pdfParser = parserMode === 'grobid' ? 'GROBID / PYMUPDF' : 'PYMUPDF / REGEX';
-  return `application/pdf${includeParserTag ? ` · ${pdfParser}` : ''}`;
+  return lang === 'vi' ? 'Tài liệu PDF (.pdf)' : 'PDF Document (.pdf)';
 }
 
 export function UploadPage() {
@@ -86,14 +92,14 @@ export function UploadPage() {
     registerUploadPageMount,
   } = useVerificationProgress();
   const toast = useToast();
-  const { isUser, isAdmin, planTier, isBasic, quota, canBatchUpload } = useRole();
+  const { isUser, isAdmin, planTier, isBasic, quota, canBatchUpload } =
+    useRole();
   const [dragActive, setDragActive] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [enrolledClasses, setEnrolledClasses] = useState<Class[]>([]);
   const [selectedClassId, setSelectedClassId] = useState<number | null>(null);
-  const [parserMode, setParserMode] = useState<'grobid' | 'regex'>('grobid');
   const [joinCodeInput, setJoinCodeInput] = useState('');
   const [joiningClass, setJoiningClass] = useState(false);
   const {
@@ -113,7 +119,7 @@ export function UploadPage() {
   const [searchParams] = useSearchParams();
   const forceNewUpload = searchParams.get('new') === '1';
 
-  const lang = i18n.language?.startsWith('vi') ? 'vi' : 'en';
+  const lang = resolveAcademicLang(i18n.resolvedLanguage || i18n.language);
   const quotaView = getQuotaView(quota, lang, { isAdmin });
 
   useEffect(() => {
@@ -132,38 +138,6 @@ export function UploadPage() {
       .catch(() => setEnrolledClasses([]));
   }, []);
 
-  useEffect(() => {
-    if (isUser) return;
-    const controller = new AbortController();
-    fetch('/api/health', { signal: controller.signal })
-      .then((res) => (res.ok ? res.json() : null))
-      .then(
-        (
-          payload: {
-            grobid?: { available?: boolean };
-            parser_mode?: string;
-          } | null,
-        ) => {
-          if (!payload) return;
-          if (
-            payload.grobid?.available === true ||
-            payload.parser_mode === 'grobid'
-          ) {
-            setParserMode('grobid');
-          } else if (
-            payload.grobid?.available === false ||
-            payload.parser_mode === 'regex'
-          ) {
-            setParserMode('regex');
-          }
-        },
-      )
-      .catch(() => {
-        // Keep safe default when /api/health is unavailable or unmocked
-      });
-    return () => controller.abort();
-  }, [isUser]);
-
   const handleJoinClass = async () => {
     const code = joinCodeInput.trim().toUpperCase();
     if (!code) return;
@@ -171,7 +145,7 @@ export function UploadPage() {
     try {
       const joined = await api.joinClassByCode(code);
       setEnrolledClasses((prev) =>
-        prev.some((c) => c.id === joined.id) ? prev : [joined, ...prev]
+        prev.some((c) => c.id === joined.id) ? prev : [joined, ...prev],
       );
       setSelectedClassId(joined.id);
       setJoinCodeInput('');
@@ -179,16 +153,18 @@ export function UploadPage() {
       toast.success(
         lang === 'vi'
           ? `Đã tham gia lớp học "${joined.name}" thành công!`
-          : `Successfully enrolled in "${joined.name}"!`
+          : `Successfully enrolled in "${joined.name}"!`,
       );
     } catch (e) {
       triggerJoinCodeError();
       toast.error(
-        e instanceof Error
-          ? e.message
-          : lang === 'vi'
-            ? 'Mã tham gia lớp không hợp lệ'
-            : 'Invalid class join code'
+        formatUserError(
+          e,
+          lang,
+          lang === 'vi'
+            ? 'Mã tham gia lớp không đúng. Vui lòng kiểm tra lại với giảng viên.'
+            : 'Invalid class join code. Please check with your instructor.',
+        ),
       );
     } finally {
       setJoiningClass(false);
@@ -209,9 +185,9 @@ export function UploadPage() {
       setDragActive(false);
       if (e.dataTransfer.files && e.dataTransfer.files[0]) {
         const droppedFile = e.dataTransfer.files[0];
-        const ext = droppedFile.name
-          .substring(droppedFile.name.lastIndexOf('.'))
-          .toLowerCase();
+        const dotIdx = droppedFile.name.lastIndexOf('.');
+        const ext =
+          dotIdx >= 0 ? droppedFile.name.substring(dotIdx).toLowerCase() : '';
         if (!ACCEPTED_EXTENSIONS.includes(ext)) {
           setError(t('upload.onlyPdfSupported'));
           return;
@@ -220,15 +196,15 @@ export function UploadPage() {
         setFile(droppedFile);
       }
     },
-    [t]
+    [t],
   );
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const picked = e.target.files[0];
-      const ext = picked.name
-        .substring(picked.name.lastIndexOf('.'))
-        .toLowerCase();
+      const dotIdx = picked.name.lastIndexOf('.');
+      const ext =
+        dotIdx >= 0 ? picked.name.substring(dotIdx).toLowerCase() : '';
       if (!ACCEPTED_EXTENSIONS.includes(ext)) {
         setError(t('upload.onlyPdfSupported'));
         return;
@@ -245,16 +221,16 @@ export function UploadPage() {
     if (!quotaView.uploadsUnlimited && quota.monthly_uploads_remaining <= 0) {
       const msg =
         lang === 'vi'
-          ? `Bạn đã sử dụng hết hạn mức ${quota.monthly_uploads_limit} lượt kiểm tra PDF/tháng của gói ${planTier.toUpperCase()}. Vui lòng nâng cấp lên gói Pro (50 bài/tháng) hoặc Ultra (1.000 bài/tháng).`
-          : `You have reached the monthly limit of ${quota.monthly_uploads_limit} PDF checks on the ${planTier.toUpperCase()} plan. Upgrade to Pro (50 checks/mo) or Ultra (1,000 checks/mo).`;
+          ? `Bạn đã sử dụng hết hạn mức ${quota.monthly_uploads_limit} lượt kiểm tra/tháng của gói ${planTier.toUpperCase()}. Vui lòng nâng cấp lên gói Pro (50 bài/tháng) hoặc Ultra (1.000 bài/tháng).`
+          : `You have reached the monthly limit of ${quota.monthly_uploads_limit} checks on the ${planTier.toUpperCase()} plan. Upgrade to Pro (50 checks/mo) or Ultra (1,000 checks/mo).`;
       setError(msg);
       setUpgradeReason({
         title:
           lang === 'vi'
-            ? 'Đã hết lượt kiểm tra PDF trong tháng'
-            : 'Monthly PDF Upload Quota Reached',
+            ? 'Đã hết lượt kiểm tra trong tháng'
+            : 'Monthly Upload Quota Reached',
         description: msg,
-        feature: '50–1,000 Monthly PDF Checks',
+        feature: '50–1,000 Monthly Checks',
       });
       setUpgradeModalOpen(true);
       return;
@@ -265,16 +241,16 @@ export function UploadPage() {
     if (file.size > maxBytes) {
       const msg =
         lang === 'vi'
-          ? `File vượt quá giới hạn dung lượng gói ${planTier.toUpperCase()} (${quota.max_file_size_mb} MB). Vui lòng nâng cấp lên gói Pro (25 MB) hoặc Ultra (100 MB).`
+          ? `Tệp vượt quá giới hạn dung lượng gói ${planTier.toUpperCase()} (${quota.max_file_size_mb} MB). Vui lòng nâng cấp lên gói Pro (25 MB) hoặc Ultra (100 MB).`
           : `File exceeds the ${planTier.toUpperCase()} plan size limit (${quota.max_file_size_mb} MB). Upgrade to Pro (25 MB) or Ultra (100 MB).`;
       setError(msg);
       setUpgradeReason({
         title:
           lang === 'vi'
-            ? 'Tài liệu vượt quá dung lượng gói Basic (5 MB)'
+            ? `Tài liệu vượt quá dung lượng gói ${planTier.toUpperCase()} (${quota.max_file_size_mb} MB)`
             : 'Manuscript Exceeds Plan File Size Limit',
         description: msg,
-        feature: '25MB–100MB PDF Upload',
+        feature: '25MB–100MB File Upload',
       });
       setUpgradeModalOpen(true);
       return;
@@ -289,22 +265,23 @@ export function UploadPage() {
       }
     } catch (e) {
       if (!isMountedRef.current) return;
-      const errMsg = e instanceof Error ? e.message : t('upload.uploadFailed');
-      setError(errMsg);
+      const rawErrMsg = e instanceof Error ? e.message : '';
+      const friendlyErr = formatUserError(e, lang, t('upload.uploadFailed'));
+      setError(friendlyErr);
       setUploading(false);
       if (
-        errMsg.includes('402') ||
-        errMsg.includes('413') ||
-        errMsg.toLowerCase().includes('quota') ||
-        errMsg.toLowerCase().includes('limit') ||
-        errMsg.toLowerCase().includes('upgrade')
+        rawErrMsg.includes('402') ||
+        rawErrMsg.includes('413') ||
+        rawErrMsg.toLowerCase().includes('quota') ||
+        rawErrMsg.toLowerCase().includes('limit') ||
+        rawErrMsg.toLowerCase().includes('upgrade')
       ) {
         setUpgradeReason({
           title:
             lang === 'vi'
               ? 'Đã chạm giới hạn gói cước hiện tại'
               : 'Plan Quota or Limit Reached',
-          description: errMsg.replace(/^API \d+:\s*/, ''),
+          description: friendlyErr,
           feature: 'Elevated Upload Quota & Page Limit',
         });
         setUpgradeModalOpen(true);
@@ -321,7 +298,12 @@ export function UploadPage() {
     activeSingleCheck?.essayId != null &&
     location.pathname === '/upload'
   ) {
-    return <Navigate to={`/verification/processing/${activeSingleCheck.essayId}`} replace />;
+    return (
+      <Navigate
+        to={`/verification/processing/${activeSingleCheck.essayId}`}
+        replace
+      />
+    );
   }
 
   const isUploadingInBackground =
@@ -341,66 +323,75 @@ export function UploadPage() {
           <Loader2 className="h-5 w-5 text-indigo-600 dark:text-indigo-400 animate-spin shrink-0" />
           <div className="min-w-0 flex-1">
             <p className="font-semibold truncate">
-              {t('upload.uploadingInBackground', { filename: activeSingleCheck.filename })}
+              {t('upload.uploadingInBackground', {
+                filename: activeSingleCheck.filename,
+              })}
             </p>
           </div>
         </div>
       )}
 
       {/* Live banner when user clicked "Check Another File" (?new=1) while a check is still running */}
-      {forceNewUpload && isSingleCheckInFlight && activeSingleCheck?.essayId != null && (
-        <div
-          data-testid="active-single-check-banner"
-          className="rounded-2xl border border-indigo-200 dark:border-indigo-800/80 bg-indigo-50/85 dark:bg-indigo-950/45 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-indigo-900 dark:text-indigo-200 shadow-sm"
-        >
-          <div className="flex items-start gap-3 min-w-0">
-            <Loader2 className="h-5 w-5 text-indigo-600 dark:text-indigo-400 animate-spin shrink-0 mt-0.5" />
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <p className="font-bold font-display text-sm">
-                  {t('upload.activeBackgroundTitle')}
-                </p>
-                <Badge variant="secondary" className="font-mono text-[10px]">
-                  ID #{activeSingleCheck.essayId} · {activeSingleCheck.progress}%
-                </Badge>
-                {activeSingleCheck.status === 'queued' && (
-                  <Badge
-                    data-testid="active-single-queue-badge"
-                    variant="outline"
-                    className="font-mono text-[10px] bg-amber-100/80 text-amber-800 border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800"
-                  >
-                    {activeSingleCheck.queuePosition != null
-                      ? `#${activeSingleCheck.queuePosition}`
-                      : lang === 'vi'
-                        ? 'Đang xếp hàng'
-                        : 'Queued'}
-                  </Badge>
-                )}
-              </div>
-              <p className="mt-0.5 text-indigo-800/90 dark:text-indigo-300/90 break-words [overflow-wrap:anywhere]">
-                {t('upload.activeBackgroundDesc', { filename: activeSingleCheck.filename })}
-              </p>
-            </div>
-          </div>
-
-          <Button
-            asChild
-            size="sm"
-            className="h-9 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold shrink-0 w-full sm:w-auto"
+      {forceNewUpload &&
+        isSingleCheckInFlight &&
+        activeSingleCheck?.essayId != null && (
+          <div
+            data-testid="active-single-check-banner"
+            className="rounded-2xl border border-indigo-200 dark:border-indigo-800/80 bg-indigo-50/85 dark:bg-indigo-950/45 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-indigo-900 dark:text-indigo-200 shadow-sm"
           >
-            <Link to={`/verification/processing/${activeSingleCheck.essayId}`}>
-              <span>{t('upload.viewLiveProgress')}</span>
-              <ArrowRight className="h-3.5 w-3.5" />
-            </Link>
-          </Button>
-        </div>
-      )}
+            <div className="flex items-start gap-3 min-w-0">
+              <Loader2 className="h-5 w-5 text-indigo-600 dark:text-indigo-400 animate-spin shrink-0 mt-0.5" />
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="font-bold font-display text-sm">
+                    {t('upload.activeBackgroundTitle')}
+                  </p>
+                  <Badge variant="secondary" className="font-mono text-[10px]">
+                    {activeSingleCheck.progress}%
+                  </Badge>
+                  {activeSingleCheck.status === 'queued' && (
+                    <Badge
+                      data-testid="active-single-queue-badge"
+                      variant="outline"
+                      className="font-mono text-[10px] bg-amber-100/80 text-amber-800 border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800"
+                    >
+                      {activeSingleCheck.queuePosition != null
+                        ? `#${activeSingleCheck.queuePosition}`
+                        : lang === 'vi'
+                          ? 'Đang xếp hàng'
+                          : 'Queued'}
+                    </Badge>
+                  )}
+                </div>
+                <p className="mt-0.5 text-indigo-800/90 dark:text-indigo-300/90 break-words [overflow-wrap:anywhere]">
+                  {t('upload.activeBackgroundDesc', {
+                    filename: activeSingleCheck.filename,
+                  })}
+                </p>
+              </div>
+            </div>
+
+            <Button
+              asChild
+              size="sm"
+              className="h-9 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold shrink-0 w-full sm:w-auto"
+            >
+              <Link
+                to={`/verification/processing/${activeSingleCheck.essayId}`}
+              >
+                <span>{t('upload.viewLiveProgress')}</span>
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            </Button>
+          </div>
+        )}
 
       {/* Recent background check completed / failed notice so user knows their prior file finished */}
       {!isSingleCheckInFlight &&
         activeSingleCheck &&
         !activeSingleCheck.acknowledged &&
-        (activeSingleCheck.status === 'completed' || activeSingleCheck.status === 'failed') && (
+        (activeSingleCheck.status === 'completed' ||
+          activeSingleCheck.status === 'failed') && (
           <div
             data-testid="recent-single-check-banner"
             className={`rounded-2xl border p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm ${
@@ -419,14 +410,18 @@ export function UploadPage() {
                 <div className="flex items-center gap-2 flex-wrap">
                   <p className="font-bold font-display text-sm break-words [overflow-wrap:anywhere]">
                     {activeSingleCheck.status === 'completed'
-                      ? t('upload.recentCompletedTitle', { filename: activeSingleCheck.filename })
-                      : t('upload.recentFailedTitle', { filename: activeSingleCheck.filename })}
+                      ? t('upload.recentCompletedTitle', {
+                          filename: activeSingleCheck.filename,
+                        })
+                      : t('upload.recentFailedTitle', {
+                          filename: activeSingleCheck.filename,
+                        })}
                   </p>
                   {activeSingleCheck.status === 'failed' &&
                     activeSingleCheck.quotaCharged === false && (
                       <span
                         data-testid="recent-single-refund-badge"
-                        className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800/70"
+                        className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800/70"
                       >
                         {lang === 'vi' ? 'Đã hoàn lượt' : 'Credit Refunded'}
                       </span>
@@ -435,7 +430,11 @@ export function UploadPage() {
                 <p className="text-xs opacity-90 mt-0.5 break-words [overflow-wrap:anywhere]">
                   {activeSingleCheck.status === 'completed'
                     ? t('upload.recentCompletedDesc')
-                    : activeSingleCheck.error || t('upload.uploadFailed')}
+                    : formatUserError(
+                        activeSingleCheck.error,
+                        lang,
+                        t('upload.uploadFailed'),
+                      )}
                 </p>
               </div>
             </div>
@@ -457,7 +456,11 @@ export function UploadPage() {
                         ? `/verification/report/${activeSingleCheck.essayId}`
                         : `/verification/processing/${activeSingleCheck.essayId}`
                     }
-                    onClick={() => acknowledgeSingleCheck(activeSingleCheck.essayId ?? undefined)}
+                    onClick={() =>
+                      acknowledgeSingleCheck(
+                        activeSingleCheck.essayId ?? undefined,
+                      )
+                    }
                   >
                     <span>
                       {activeSingleCheck.status === 'completed'
@@ -482,35 +485,16 @@ export function UploadPage() {
           </div>
         )}
 
-      {/* Executive Header Banner */}
+      {/* Page Header Banner */}
       <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 sm:p-6 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="space-y-1.5">
-          {!isUser && (
-            <div className="flex items-center gap-2.5 flex-wrap">
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200/70 dark:border-indigo-800/70 text-[11px] font-mono font-semibold text-indigo-700 dark:text-indigo-300">
-                <Sparkles className="h-3 w-3" />
-                {lang === 'vi'
-                  ? 'KIỂM CHỨNG ĐƠN TÀI LIỆU · LAYER 1–2'
-                  : 'SINGLE MANUSCRIPT VERIFICATION · LAYER 1–2'}
-              </span>
-              <span
-                data-testid="upload-parser-status"
-                className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 text-[11px] font-mono text-slate-600 dark:text-slate-300"
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                {parserMode === 'grobid'
-                  ? 'GROBID TEI-XML ONLINE'
-                  : lang === 'vi'
-                    ? 'BỘ PHÂN TÍCH REGEX SẴN SÀNG'
-                    : 'REGEX PARSER READY'}
-              </span>
-            </div>
-          )}
+        <div className="space-y-1.5 min-w-0">
           <h1 className="font-display text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-white">
             {t('upload.title')}
           </h1>
           <p className="text-sm text-slate-600 dark:text-slate-400">
-            {t('upload.subtitle')}
+            {lang === 'vi'
+              ? 'Tải lên tài liệu PDF, Word (.docx), BibTeX (.bib) hoặc RIS (.ris) để kiểm chứng trích dẫn và tài liệu tham khảo.'
+              : 'Upload your PDF, Word (.docx), BibTeX (.bib), or RIS (.ris) file to verify citations and references.'}
           </p>
         </div>
 
@@ -519,7 +503,7 @@ export function UploadPage() {
             asChild
             variant="outline"
             size="sm"
-            className="h-10 rounded-xl font-medium"
+            className="h-10 rounded-xl font-medium whitespace-nowrap"
           >
             <Link to="/sandbox" data-testid="upload-open-sandbox-link">
               <FlaskConical className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
@@ -531,7 +515,7 @@ export function UploadPage() {
               asChild
               variant="outline"
               size="sm"
-              className="h-10 rounded-xl font-medium"
+              className="h-10 rounded-xl font-medium whitespace-nowrap"
             >
               <Link to="/batch-upload" data-testid="batch-check-link">
                 <Layers className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
@@ -542,35 +526,40 @@ export function UploadPage() {
         </div>
       </div>
 
-      {/* Subscription Plan Quota & Limits Strip */}
+      {/* Subscription Plan Quota & Limits Strip (mobile-safe without dangling dot) */}
       <div
         className="rounded-2xl bg-gradient-to-r from-slate-50 via-white to-indigo-50/40 dark:from-slate-900 dark:via-slate-900 dark:to-indigo-950/30 border border-slate-200/90 dark:border-slate-800 px-4 py-3.5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3"
         data-testid="upload-quota-banner"
       >
-        <div className="flex flex-wrap items-center gap-2.5 text-xs">
+        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 text-xs">
           <Badge
-            className={
+            className={`whitespace-nowrap shrink-0 ${
               planTier === 'ultra'
                 ? 'bg-violet-600 text-white font-mono uppercase'
                 : planTier === 'pro'
                   ? 'bg-indigo-600 text-white font-mono uppercase'
                   : 'bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-mono uppercase'
-            }
+            }`}
           >
             {lang === 'vi'
               ? `GÓI ${planTier.toUpperCase()}`
               : `${planTier.toUpperCase()} PLAN`}
           </Badge>
-          <span className="font-mono font-semibold text-slate-800 dark:text-slate-200">
+          <span className="font-mono font-semibold text-slate-800 dark:text-slate-200 whitespace-nowrap">
             {lang === 'vi'
               ? `Lượt kiểm tra tháng: ${quotaView.usage}`
               : `Monthly Checks: ${quotaView.usage}`}
           </span>
-          <span className="text-slate-400">·</span>
-          <span className="text-slate-600 dark:text-slate-400 font-mono">
+          <span
+            className="hidden sm:inline text-slate-400"
+            aria-hidden="true"
+          >
+            ·
+          </span>
+          <span className="text-slate-600 dark:text-slate-400 font-mono whitespace-nowrap">
             {lang === 'vi'
-              ? `Tối đa ${quotaView.fileSize} · ${quotaView.pages} trang / PDF`
-              : `Max ${quotaView.fileSize} · ${quotaView.pages} pages / PDF`}
+              ? `Tối đa ${quotaView.fileSize} · ${quotaView.pages} trang`
+              : `Max ${quotaView.fileSize} · ${quotaView.pages} pages`}
           </span>
         </div>
 
@@ -587,7 +576,7 @@ export function UploadPage() {
               });
               setUpgradeModalOpen(true);
             }}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold transition-colors shrink-0 cursor-pointer"
+            className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold transition-colors shrink-0 cursor-pointer whitespace-nowrap"
           >
             <Sparkles className="h-3.5 w-3.5" />
             <span>
@@ -599,35 +588,29 @@ export function UploadPage() {
         )}
       </div>
 
-      {/* Main IDE Dropzone Container */}
+      {/* Main Upload Dropzone Card */}
       <Card className="p-0 overflow-hidden rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
-        {/* Top Window Chrome */}
+        {/* Clean Card Header Bar */}
         <div className="px-4 sm:px-6 py-3.5 bg-slate-50/80 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2.5">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="flex items-center gap-1.5 shrink-0">
-              <span className="w-2.5 h-2.5 rounded-full bg-red-400/80 inline-block" />
-              <span className="w-2.5 h-2.5 rounded-full bg-amber-400/80 inline-block" />
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400/80 inline-block" />
-            </div>
-            <Separator orientation="vertical" className="h-4 shrink-0" />
-            <span className="font-mono text-xs text-slate-600 dark:text-slate-300 font-medium truncate">
-              manuscript_ingest.pdf / .docx / .bib / .ris
-            </span>
-          </div>
+          <h2 className="font-display text-sm font-bold text-slate-800 dark:text-slate-200">
+            {lang === 'vi'
+              ? 'Tải lên tài liệu cần kiểm chứng'
+              : 'Upload Document for Verification'}
+          </h2>
           <div className="flex flex-wrap items-center gap-2">
             <Badge
               variant="outline"
               className="font-mono text-[10px] whitespace-nowrap shrink-0 bg-indigo-50/80 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800"
             >
-              PDF + DOCX + BIB + RIS
+              PDF · DOCX · BIB · RIS
             </Badge>
             <Badge
               variant="outline"
               className="font-mono text-[11px] whitespace-nowrap shrink-0 bg-white dark:bg-slate-950 text-slate-600 dark:text-slate-400"
             >
               {lang === 'vi'
-                ? `Tối đa: ${quota.max_file_size_mb}MB`
-                : `Max size: ${quota.max_file_size_mb}MB`}
+                ? `Tối đa ${quota.max_file_size_mb} MB`
+                : `Max ${quota.max_file_size_mb} MB`}
             </Badge>
           </div>
         </div>
@@ -656,20 +639,29 @@ export function UploadPage() {
             <div className="flex flex-wrap items-center gap-2 w-full md:w-auto min-w-0">
               {enrolledClasses.length > 0 && (
                 <select
-                  aria-label="Select class"
+                  aria-label={
+                    lang === 'vi' ? 'Chọn lớp học' : 'Select enrolled class'
+                  }
                   data-testid="upload-class-select"
                   value={selectedClassId ?? ''}
                   onChange={(e) =>
-                    setSelectedClassId(e.target.value ? Number(e.target.value) : null)
+                    setSelectedClassId(
+                      e.target.value ? Number(e.target.value) : null,
+                    )
                   }
                   className="h-9 px-3 rounded-xl text-xs font-mono w-full sm:w-auto max-w-full truncate bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200"
                 >
                   <option value="">
-                    {lang === 'vi' ? '— Kiểm tra cá nhân —' : '— Personal Check —'}
+                    {lang === 'vi'
+                      ? '— Kiểm tra cá nhân —'
+                      : '— Personal Check —'}
                   </option>
                   {enrolledClasses.map((c) => (
                     <option key={c.id} value={c.id}>
-                      {c.name.length > 36 ? `${c.name.slice(0, 35)}…` : c.name} {c.join_code ? `(${c.join_code})` : ''}
+                      {c.name.length > 36
+                        ? `${c.name.slice(0, 35)}…`
+                        : c.name}{' '}
+                      {c.join_code ? `(${c.join_code})` : ''}
                     </option>
                   ))}
                 </select>
@@ -678,10 +670,20 @@ export function UploadPage() {
               {isUser && (
                 <div className="flex items-center gap-1.5 w-full sm:w-auto">
                   <div className="relative flex-1 sm:flex-initial min-w-0">
-                    <KeyRound className="h-3.5 w-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                    <label htmlFor="join-class-code-input" className="sr-only">
+                      {lang === 'vi' ? 'Mã tham gia lớp học' : 'Class join code'}
+                    </label>
+                    <KeyRound
+                      className="h-3.5 w-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none"
+                      aria-hidden="true"
+                    />
                     <input
+                      id="join-class-code-input"
                       type="text"
                       data-testid="join-class-code-input"
+                      aria-label={
+                        lang === 'vi' ? 'Mã tham gia lớp học' : 'Class join code'
+                      }
                       value={joinCodeInput}
                       onChange={(e) => {
                         setJoinCodeInput(e.target.value.toUpperCase());
@@ -701,7 +703,7 @@ export function UploadPage() {
                     data-testid="join-class-submit-btn"
                     disabled={!joinCodeInput.trim() || joiningClass}
                     onClick={handleJoinClass}
-                    className="h-9 rounded-xl text-xs font-semibold"
+                    className="h-9 rounded-xl text-xs font-semibold whitespace-nowrap shrink-0"
                   >
                     {joiningClass ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -715,6 +717,7 @@ export function UploadPage() {
               )}
             </div>
           </div>
+
           {/* Interactive Dropzone */}
           <div
             onDragEnter={handleDrag}
@@ -722,7 +725,7 @@ export function UploadPage() {
             onDragOver={handleDrag}
             onDrop={handleDrop}
             className={`
-              relative border-2 border-dashed rounded-2xl p-6 sm:p-12 text-center transition-all duration-200 cursor-pointer
+              relative border-2 border-dashed rounded-2xl p-6 sm:p-12 text-center transition-all duration-200 cursor-pointer focus-within:ring-2 focus-within:ring-indigo-500/40
               ${
                 dragActive
                   ? 'border-indigo-500 bg-indigo-50/70 dark:bg-indigo-950/50 scale-[1.01] shadow-inner'
@@ -732,72 +735,91 @@ export function UploadPage() {
               }
             `}
           >
+            <label htmlFor="upload-file-input" className="sr-only">
+              {lang === 'vi'
+                ? 'Chọn tệp PDF, Word (.docx), BibTeX (.bib) hoặc RIS (.ris) để kiểm chứng'
+                : 'Choose a PDF, Word (.docx), BibTeX (.bib), or RIS (.ris) file to verify'}
+            </label>
             <input
+              id="upload-file-input"
               type="file"
               accept={Object.values(ACCEPTED_MIME).flat().join(',')}
+              aria-label={
+                lang === 'vi'
+                  ? 'Chọn tệp PDF, Word (.docx), BibTeX (.bib) hoặc RIS (.ris)'
+                  : 'Choose a PDF, Word (.docx), BibTeX (.bib), or RIS (.ris) file'
+              }
               onChange={handleChange}
               className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
             />
 
             <CardResize>
-            {file ? (
-              /* File selected state */
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 max-w-xl w-full mx-auto bg-white dark:bg-slate-900 p-3.5 sm:p-4 rounded-2xl border border-emerald-200 dark:border-emerald-800/80 shadow-sm overflow-hidden">
-                <div className="flex items-center gap-3 min-w-0 w-full sm:w-auto sm:flex-1">
-                  <FileFormatIcon filename={file.name} size="lg" />
-                  <div className="text-left min-w-0 flex-1">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <p
-                        className="font-semibold text-sm sm:text-base text-slate-900 dark:text-white truncate min-w-0 flex-1"
-                        title={file.name}
-                      >
-                        {file.name}
+              {file ? (
+                /* File selected state */
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 max-w-xl w-full mx-auto bg-white dark:bg-slate-900 p-3.5 sm:p-4 rounded-2xl border border-emerald-200 dark:border-emerald-800/80 shadow-sm overflow-hidden">
+                  <div className="flex items-center gap-3 min-w-0 w-full sm:w-auto sm:flex-1">
+                    <FileFormatIcon filename={file.name} size="lg" />
+                    <div className="text-left min-w-0 flex-1">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <p
+                          className="font-semibold text-sm sm:text-base text-slate-900 dark:text-white truncate min-w-0 flex-1"
+                          title={file.name}
+                        >
+                          {file.name}
+                        </p>
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 shrink-0 whitespace-nowrap">
+                          <SuccessCheck size={12} strokeWidth={2.5} />
+                          <span>{lang === 'vi' ? 'Sẵn sàng' : 'Ready'}</span>
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate">
+                        {formatUploadFileSize(file.size)} ·{' '}
+                        {formatFriendlyDocumentType(file.name, lang)}
                       </p>
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 shrink-0">
-                        <SuccessCheck size={12} strokeWidth={2.5} /> READY
-                      </span>
                     </div>
-                    <p className="text-xs font-mono text-slate-500 dark:text-slate-400 mt-0.5 truncate">
-                      {formatUploadFileSize(file.size)} ·{' '}
-                      {formatUploadMimeAndParser(file.name, !isUser, parserMode)}
-                    </p>
                   </div>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setFile(null);
+                      setError(null);
+                    }}
+                    aria-label={
+                      lang === 'vi' ? 'Bỏ chọn tệp' : 'Remove selected file'
+                    }
+                    className="relative z-10 shrink-0 p-2 rounded-xl text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/50 transition-colors"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
                 </div>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setFile(null);
-                    setError(null);
-                  }}
-                  aria-label="Remove file"
-                  className="relative z-10 shrink-0 p-2 rounded-xl text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/50 transition-colors"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-            ) : (
-              /* Dropzone default state */
-              <div className="max-w-md mx-auto">
-                <AvatarGroupHover className="flex items-center justify-center gap-2.5 mb-4">
-                  <FileFormatIcon format="pdf" size="md" />
-                  <FileFormatIcon format="docx" size="md" />
-                  <div className="w-14 h-14 rounded-2xl bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200/70 dark:border-indigo-800/70 flex items-center justify-center shadow-sm">
-                    <Upload className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
-                  </div>
-                  <FileFormatIcon format="bib" size="md" />
-                  <FileFormatIcon format="ris" size="md" />
-                </AvatarGroupHover>
-                <p className="font-display text-lg sm:text-xl font-bold text-slate-900 dark:text-white mb-1.5">
-                  {t('upload.dropDocument')}
-                </p>
-                <p className="text-xs font-mono text-slate-500 dark:text-slate-400 mb-4">
-                  PDF, DOCX, BibTeX (.bib) &amp; RIS (.ris) · APA, IEEE, MLA, Chicago, Harvard, Vancouver
-                </p>
-                <span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-indigo-600 dark:text-indigo-400 shadow-sm">
-                  {t('upload.orBrowse')}
-                </span>
-              </div>
-            )}
+              ) : (
+                /* Dropzone default state */
+                <div className="max-w-lg mx-auto">
+                  <AvatarGroupHover className="flex items-center justify-center gap-2.5 mb-4">
+                    <FileFormatIcon format="pdf" size="md" />
+                    <FileFormatIcon format="docx" size="md" />
+                    <div className="w-14 h-14 rounded-2xl bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200/70 dark:border-indigo-800/70 flex items-center justify-center shadow-sm">
+                      <Upload className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
+                    </div>
+                    <FileFormatIcon format="bib" size="md" />
+                    <FileFormatIcon format="ris" size="md" />
+                  </AvatarGroupHover>
+                  <p className="font-display text-lg sm:text-xl font-bold text-slate-900 dark:text-white mb-1.5">
+                    {lang === 'vi'
+                      ? 'Kéo và thả tệp PDF, Word (.docx), BibTeX (.bib) hoặc RIS (.ris) vào đây'
+                      : 'Drop your PDF, Word (.docx), BibTeX (.bib), or RIS (.ris) file here'}
+                  </p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
+                    {lang === 'vi'
+                      ? 'Hỗ trợ đầy đủ chuẩn trích dẫn APA, IEEE, MLA, Chicago, Harvard, Vancouver'
+                      : 'Supports APA, IEEE, MLA, Chicago, Harvard, and Vancouver citation styles'}
+                  </p>
+                  <span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-indigo-600 dark:text-indigo-400 shadow-sm">
+                    {t('upload.orBrowse')}
+                  </span>
+                </div>
+              )}
             </CardResize>
           </div>
 

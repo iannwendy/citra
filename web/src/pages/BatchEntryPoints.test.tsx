@@ -67,7 +67,7 @@ describe('Batch Check entry points', () => {
     expect(screen.queryByRole('link', { name: /batch check/i })).toBeNull();
   });
 
-  it('omits Live Sandbox from the workspace sidebar while keeping core workspace order', () => {
+  it('keeps core workspace sidebar navigation order including Live Sandbox and Batch Check', () => {
     renderWithProviders(
       <AppLayout>
         <div />
@@ -75,7 +75,7 @@ describe('Batch Check entry points', () => {
       { user: makeUser('user', 'pro') },
     );
 
-    expect(screen.queryByRole('link', { name: /live sandbox/i })).toBeNull();
+    expect(screen.getAllByRole('link', { name: /sandbox/i }).length).toBeGreaterThan(0);
 
     const navLinks = screen
       .getAllByRole('link')
@@ -89,6 +89,7 @@ describe('Batch Check entry points', () => {
     expect(orderedUnique).toEqual([
       '/dashboard',
       '/upload',
+      '/sandbox',
       '/batch-upload',
       '/history',
     ]);

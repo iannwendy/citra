@@ -1,8 +1,9 @@
 /**
- * Settings Page (Scholarly Precision shadcn/ui v2.0)
- * Central configuration hub for user preferences
+ * CITRA — Settings Page
+ * Central configuration hub for user preferences, billing, API keys & data rights
  */
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
@@ -13,7 +14,6 @@ import {
   Info,
   Check,
   ShieldCheck,
-  Terminal,
   Sun,
   Moon,
   Monitor,
@@ -39,29 +39,63 @@ import { useRole } from '@/hooks/useRole';
 import { useModalA11y } from '@/hooks/useModalA11y';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
 import { getQuotaView } from '@/lib/quotaDisplay';
+import {
+  formatLocalizedDate,
+  formatLocalizedDateTime,
+  formatUserError,
+  resolveAcademicLang,
+} from '@/lib/academicTaxonomy';
 import { useTheme, type Theme } from '@/contexts/ThemeContext';
 import { useToast } from '@/contexts/ToastContext';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { Separator } from '@/components/ui/separator';
-import { IconSwap, TextMorph, useErrorShake } from '@/components/ui/transitions';
+import {
+  IconSwap,
+  TextMorph,
+  useErrorShake,
+} from '@/components/ui/transitions';
 import { APP_BUILD_DATE, APP_VERSION } from '@/version';
 
 // ============================================================
-// Types
+// Types & Helpers
 // ============================================================
 
 interface SettingsState {
   notifications: boolean;
 }
 
-// ============================================================
-// Constants
-// ============================================================
-
 const STORAGE_KEY_NOTIFICATIONS = 'settings_notifications';
+const USD_TO_VND_RATE = 25500;
+
+function formatTransactionAmount(
+  tx: BillingTransactionItem,
+  lang: 'vi' | 'en',
+): string {
+  const usdFormatted = new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(tx.amount_usd);
+
+  if (typeof tx.amount_vnd === 'number' && tx.amount_vnd > 0) {
+    const vndFormatted = `${Math.round(tx.amount_vnd)
+      .toString()
+      .replace(/\B(?=(\d{3})+(?!\d))/g, '.')} ₫`;
+    return `${vndFormatted} (${usdFormatted})`;
+  }
+
+  if (lang === 'vi' && tx.amount_usd > 0) {
+    const approxVnd = `${Math.round(tx.amount_usd * USD_TO_VND_RATE)
+      .toString()
+      .replace(/\B(?=(\d{3})+(?!\d))/g, '.')} ₫`;
+    return `${usdFormatted} (~${approxVnd})`;
+  }
+
+  return usdFormatted;
+}
 
 // ============================================================
 // Component
@@ -75,8 +109,15 @@ export function SettingsPage(): JSX.Element {
   const { user, refreshUser, logout } = useAuth();
   const { planTier, isBasic, quota, isAdmin } = useRole();
 
-  const [subscription, setSubscription] = useState<SubscriptionSummary | null>(null);
-  const [transactions, setTransactions] = useState<BillingTransactionItem[]>([]);
+  const lang = resolveAcademicLang(i18n.resolvedLanguage || i18n.language);
+  const currentLang = lang;
+
+  const [subscription, setSubscription] = useState<SubscriptionSummary | null>(
+    null,
+  );
+  const [transactions, setTransactions] = useState<BillingTransactionItem[]>(
+    [],
+  );
   const [billingLoading, setBillingLoading] = useState(false);
   const [confirmCancelOpen, setConfirmCancelOpen] = useState(false);
 
@@ -86,9 +127,14 @@ export function SettingsPage(): JSX.Element {
   const [deleteConfirmUsername, setDeleteConfirmUsername] = useState('');
   const [deleteError, setDeleteError] = useState('');
   const [deletingAccount, setDeletingAccount] = useState(false);
-  const { isShaking: isDeleteShaking, triggerError: triggerDeleteShake } = useErrorShake();
+  const { isShaking: isDeleteShaking, triggerError: triggerDeleteShake } =
+    useErrorShake();
 
   const userHasPassword = user?.has_password !== false;
+  const canSubmitDelete = userHasPassword
+    ? deletePassword.trim().length > 0
+    : deleteConfirmUsername.trim() === user?.username;
+
   const deleteDialog = useModalA11y<HTMLDivElement>(
     deleteModalOpen && Boolean(user),
     () => setDeleteModalOpen(false),
@@ -101,10 +147,10 @@ export function SettingsPage(): JSX.Element {
     setDeleteError('');
 
     if (userHasPassword) {
-      if (!deletePassword) {
+      if (!deletePassword.trim()) {
         triggerDeleteShake();
         setDeleteError(
-          i18n.language?.startsWith('vi')
+          lang === 'vi'
             ? 'Vui lòng nhập mật khẩu hiện tại để xác nhận.'
             : 'Please enter your current password to confirm.',
         );
@@ -114,7 +160,7 @@ export function SettingsPage(): JSX.Element {
       if (deleteConfirmUsername.trim() !== user.username) {
         triggerDeleteShake();
         setDeleteError(
-          i18n.language?.startsWith('vi')
+          lang === 'vi'
             ? `Vui lòng nhập chính xác tên đăng nhập "${user.username}".`
             : `Please type your exact username "${user.username}".`,
         );
@@ -135,11 +181,13 @@ export function SettingsPage(): JSX.Element {
     } catch (err) {
       triggerDeleteShake();
       setDeleteError(
-        err instanceof Error
-          ? err.message
-          : i18n.language?.startsWith('vi')
+        formatUserError(
+          err,
+          lang,
+          lang === 'vi'
             ? 'Không thể xóa tài khoản. Vui lòng kiểm tra lại thông tin xác nhận.'
             : 'Could not delete account. Please check your confirmation input.',
+        ),
       );
     } finally {
       setDeletingAccount(false);
@@ -150,7 +198,8 @@ export function SettingsPage(): JSX.Element {
   const [apiKeys, setApiKeys] = useState<ApiKeyItem[]>([]);
   const [newKeyName, setNewKeyName] = useState('');
   const [creatingKey, setCreatingKey] = useState(false);
-  const [newlyCreatedKey, setNewlyCreatedKey] = useState<CreatedApiKeyResponse | null>(null);
+  const [newlyCreatedKey, setNewlyCreatedKey] =
+    useState<CreatedApiKeyResponse | null>(null);
   const [copiedRawKey, setCopiedRawKey] = useState(false);
 
   const canManageApiKeys =
@@ -164,7 +213,9 @@ export function SettingsPage(): JSX.Element {
       .then((res) => {
         if (!active) return;
         setSubscription(res?.subscription ?? null);
-        setTransactions(Array.isArray(res?.transactions) ? res.transactions : []);
+        setTransactions(
+          Array.isArray(res?.transactions) ? res.transactions : [],
+        );
       })
       .catch(() => {
         // Fallback silently if unauthenticated in isolated unit tests
@@ -196,13 +247,13 @@ export function SettingsPage(): JSX.Element {
       setNewKeyName('');
       setApiKeys((prev) => [created, ...prev]);
       toast.success(
-        currentLang === 'vi' ? 'Đã tạo khóa API mới' : 'API Key Created',
+        lang === 'vi' ? 'Đã tạo khóa API mới' : 'API Key Created',
         `${created.name} (${created.key_prefix}…)`,
       );
     } catch (err) {
       toast.error(
-        currentLang === 'vi' ? 'Không thể tạo khóa API' : 'Failed to create API key',
-        err instanceof Error ? err.message : 'Error',
+        lang === 'vi' ? 'Không thể tạo khóa API' : 'Failed to create API key',
+        formatUserError(err, lang),
       );
     } finally {
       setCreatingKey(false);
@@ -216,13 +267,13 @@ export function SettingsPage(): JSX.Element {
       if (newlyCreatedKey?.id === keyId) {
         setNewlyCreatedKey(null);
       }
-      toast.success(
-        currentLang === 'vi' ? 'Đã thu hồi khóa API' : 'API Key Revoked',
-      );
+      toast.success(lang === 'vi' ? 'Đã thu hồi khóa API' : 'API Key Revoked');
     } catch (err) {
       toast.error(
-        currentLang === 'vi' ? 'Không thể thu hồi khóa API' : 'Failed to revoke API key',
-        err instanceof Error ? err.message : 'Error',
+        lang === 'vi'
+          ? 'Không thể thu hồi khóa API'
+          : 'Failed to revoke API key',
+        formatUserError(err, lang),
       );
     }
   };
@@ -247,15 +298,13 @@ export function SettingsPage(): JSX.Element {
       setSubscription(res.subscription);
       await refreshUser();
       toast.success(
-        currentLang === 'vi' ? 'Đã cập nhật gói cước' : 'Subscription Updated',
+        lang === 'vi' ? 'Đã cập nhật gói cước' : 'Subscription Updated',
         res.message,
-        { category: 'STRIPE · BILLING' }
       );
     } catch (err) {
       toast.error(
-        currentLang === 'vi' ? 'Lỗi' : 'Error',
-        err instanceof Error ? err.message : 'Failed to cancel subscription',
-        { category: 'STRIPE · BILLING' }
+        lang === 'vi' ? 'Không thể hủy gia hạn' : 'Error',
+        formatUserError(err, lang),
       );
     } finally {
       setBillingLoading(false);
@@ -269,15 +318,13 @@ export function SettingsPage(): JSX.Element {
       setSubscription(res.subscription);
       await refreshUser();
       toast.success(
-        currentLang === 'vi' ? 'Đã kích hoạt lại gia hạn' : 'Subscription Reactivated',
+        lang === 'vi' ? 'Đã kích hoạt lại gia hạn' : 'Subscription Reactivated',
         res.message,
-        { category: 'STRIPE · BILLING' }
       );
     } catch (err) {
       toast.error(
-        currentLang === 'vi' ? 'Lỗi' : 'Error',
-        err instanceof Error ? err.message : 'Failed to reactivate subscription',
-        { category: 'STRIPE · BILLING' }
+        lang === 'vi' ? 'Không thể bật lại gia hạn' : 'Error',
+        formatUserError(err, lang),
       );
     } finally {
       setBillingLoading(false);
@@ -304,20 +351,17 @@ export function SettingsPage(): JSX.Element {
   const languages = [
     {
       code: 'vi',
-      shortCode: 'VIE',
+      shortCode: 'VI',
       localeTag: 'vi-VN',
       label: 'Tiếng Việt',
     },
     {
       code: 'en',
-      shortCode: 'ENG',
+      shortCode: 'EN',
       localeTag: 'en-US',
       label: 'English',
     },
   ];
-
-  // Get current language from i18n (reactive) — no reload needed
-  const currentLang = (i18n.resolvedLanguage || i18n.language || 'en').split('-')[0];
 
   // Toggle setting
   const toggleSetting = (key: keyof SettingsState): void => {
@@ -330,7 +374,7 @@ export function SettingsPage(): JSX.Element {
       newValue
         ? t('settings.notificationsEnabled')
         : t('settings.notificationsDisabled'),
-      { force: true }
+      { force: true },
     );
   };
 
@@ -342,73 +386,182 @@ export function SettingsPage(): JSX.Element {
     const fixedT = i18n.getFixedT(langCode);
     toast.success(
       fixedT('settings.languageUpdated'),
-      langCode === 'vi' ? 'Tiếng Việt' : 'English'
+      langCode === 'vi' ? 'Tiếng Việt' : 'English',
     );
   };
 
-  return (
-    <div className="citra-cq-page-wide space-y-6 w-full max-w-5xl mx-auto pb-10 transition-[max-width] duration-300">
-      {/* Executive Header Card */}
-      <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 sm:p-6 shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2.5 flex-wrap mb-2.5">
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200/70 dark:border-indigo-800/70 text-[11px] font-mono font-semibold text-indigo-700 dark:text-indigo-300">
-                <ShieldCheck className="h-3.5 w-3.5" />
-                {currentLang === 'vi'
-                  ? 'CẤU HÌNH MÔI TRƯỜNG LÀM VIỆC'
-                  : 'WORKSPACE ENVIRONMENT CONFIG'}
-              </span>
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/70 border border-emerald-200/70 dark:border-emerald-800/70 text-[11px] font-mono text-emerald-700 dark:text-emerald-300">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                v{APP_VERSION}
-              </span>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200/70 dark:border-indigo-800/70 flex items-center justify-center shrink-0">
-                <Settings className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+  const deleteModalMarkup =
+    deleteModalOpen && user ? (
+      <div
+        data-testid="delete-account-modal"
+        className="!mt-0 fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4 animate-[fadeIn_180ms_ease-out]"
+      >
+        <div
+          {...deleteDialog.dialogProps}
+          className="t-modal is-open w-full max-w-md rounded-2xl border border-red-200 dark:border-red-900/60 bg-white dark:bg-slate-900 shadow-2xl overflow-hidden outline-none"
+        >
+          <div className="h-1.5 w-full bg-gradient-to-r from-red-600 via-red-500 to-amber-500" />
+          <form onSubmit={handleDeleteMyAccount} className="p-6 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="p-2 rounded-xl bg-red-100 dark:bg-red-950/60 text-red-600 dark:text-red-400 shrink-0 animate-icon-pop">
+                <AlertTriangle className="h-5 w-5" />
               </div>
               <div>
+                <h3
+                  id={deleteDialog.titleId}
+                  className="font-display text-base font-bold text-slate-900 dark:text-slate-100"
+                >
+                  {t('privacyCompliance.deleteModalTitle')}
+                </h3>
+                <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 leading-relaxed">
+                  {t('privacyCompliance.deleteAccountZoneDesc')}
+                </p>
+              </div>
+            </div>
+
+            {deleteError && (
+              <div
+                role="alert"
+                className="rounded-xl border border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950/50 px-3 py-2 text-xs text-red-700 dark:text-red-300 font-medium animate-error-shake"
+              >
+                {deleteError}
+              </div>
+            )}
+
+            {userHasPassword ? (
+              <div className="space-y-1.5">
+                <Label
+                  htmlFor="delete-account-password"
+                  className="text-xs font-semibold"
+                >
+                  {t('privacyCompliance.deleteModalPasswordLabel')}
+                </Label>
+                <input
+                  id="delete-account-password"
+                  type="password"
+                  value={deletePassword}
+                  onChange={(e) => {
+                    setDeletePassword(e.target.value);
+                    if (deleteError) setDeleteError('');
+                  }}
+                  placeholder={t(
+                    'privacyCompliance.deleteModalPasswordPlaceholder',
+                  )}
+                  data-testid="delete-account-password-input"
+                  autoComplete="current-password"
+                  className={`t-input ${deleteError ? 'is-error' : ''} ${isDeleteShaking ? 'is-shaking' : ''} w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-red-500`}
+                />
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                <Label
+                  htmlFor="delete-account-username"
+                  className="text-xs font-semibold"
+                >
+                  {t('privacyCompliance.deleteModalUsernameLabel', {
+                    username: user.username,
+                  })}
+                </Label>
+                <input
+                  id="delete-account-username"
+                  type="text"
+                  value={deleteConfirmUsername}
+                  onChange={(e) => {
+                    setDeleteConfirmUsername(e.target.value);
+                    if (deleteError) setDeleteError('');
+                  }}
+                  placeholder={t(
+                    'privacyCompliance.deleteModalUsernamePlaceholder',
+                  )}
+                  data-testid="delete-account-username-input"
+                  className={`t-input ${deleteError ? 'is-error' : ''} ${isDeleteShaking ? 'is-shaking' : ''} w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-sm font-mono text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-red-500`}
+                />
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={deletingAccount}
+                onClick={() => setDeleteModalOpen(false)}
+                className="rounded-xl text-xs"
+              >
+                {t('privacyCompliance.deleteModalCancelBtn')}
+              </Button>
+              <Button
+                type="submit"
+                variant="destructive"
+                disabled={deletingAccount || !canSubmitDelete}
+                data-testid="delete-account-confirm-btn"
+                className="rounded-xl text-xs font-semibold cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {deletingAccount ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                    <span>...</span>
+                  </>
+                ) : (
+                  t('privacyCompliance.deleteModalConfirmBtn')
+                )}
+              </Button>
+            </div>
+          </form>
+        </div>
+      </div>
+    ) : null;
+
+  return (
+    <div className="citra-cq-page-wide space-y-6 w-full max-w-5xl mx-auto pb-10 transition-[max-width] duration-300">
+      {/* Header Card */}
+      <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 sm:p-6 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200/70 dark:border-indigo-800/70 flex items-center justify-center shrink-0">
+              <Settings className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h1 className="font-display text-2xl sm:text-3xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
                   {t('settings.title')}
                 </h1>
-                <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-                  {t('settings.subtitle')}
-                </p>
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/70 border border-emerald-200/70 dark:border-emerald-800/70 text-[11px] font-mono text-emerald-700 dark:text-emerald-300 whitespace-nowrap">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                  v{APP_VERSION}
+                </span>
               </div>
+              <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+                {t('settings.subtitle')}
+              </p>
             </div>
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Appearance Section */}
+      {/* 01 Appearance & 02 Language — stack cleanly below xl so 1024px & 375px never truncate */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        {/* 01: Appearance Section */}
         <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden flex flex-col">
-          <div className="flex items-center justify-between gap-3 px-4 py-3 bg-slate-50/90 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800">
-            <div className="flex items-center gap-2.5">
-              <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-red-400/80" />
-                <span className="w-2.5 h-2.5 rounded-full bg-amber-400/80" />
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400/80" />
-              </div>
-              <Separator orientation="vertical" className="h-4" />
-              <Palette className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+          <div className="flex items-center justify-between gap-3 px-4 sm:px-5 py-3.5 bg-slate-50/90 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <Palette className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
               <h2 className="text-sm font-display font-semibold text-slate-900 dark:text-slate-100">
                 {t('settings.appearance')}
               </h2>
             </div>
-            <span className="text-[11px] font-mono text-slate-400">01</span>
+            <span className="text-[11px] font-mono text-slate-400 whitespace-nowrap shrink-0">
+              01
+            </span>
           </div>
 
           <div className="p-4 sm:p-6 flex-1 flex flex-col justify-between gap-4">
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <Label className="input-label mb-0">{t('settings.theme')}</Label>
               <p className="text-xs text-slate-500 dark:text-slate-400">
                 {t('settings.themeDescription')}
               </p>
             </div>
-            <div className="grid grid-cols-3 gap-2.5">
+            <div className="grid grid-cols-3 gap-2 sm:gap-2.5">
               {themeOptions.map((opt) => {
                 const Icon = opt.icon;
                 const isActive = theme === opt.value;
@@ -418,7 +571,7 @@ export function SettingsPage(): JSX.Element {
                     type="button"
                     onClick={() => setTheme(opt.value)}
                     aria-pressed={isActive}
-                    className={`group relative flex flex-col items-center justify-center gap-2 p-3 rounded-xl border text-center transform-gpu transition-[transform,border-color,background-color,box-shadow] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-[1px] active:translate-y-0 active:scale-[0.968] cursor-pointer select-none ${
+                    className={`group relative flex flex-col items-center justify-center gap-2 p-2.5 sm:p-3 rounded-xl border text-center min-w-0 transform-gpu transition-[transform,border-color,background-color,box-shadow] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-[1px] active:translate-y-0 active:scale-[0.968] cursor-pointer select-none ${
                       isActive
                         ? 'border-indigo-500/90 dark:border-indigo-500/80 bg-gradient-to-br from-indigo-50/90 via-indigo-50/40 to-white dark:from-indigo-950/70 dark:via-indigo-950/30 dark:to-slate-900 ring-2 ring-indigo-500/15 dark:ring-indigo-400/20 shadow-sm'
                         : 'border-slate-200/90 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-900/50 hover:bg-white dark:hover:bg-slate-800/60 hover:border-indigo-200 dark:hover:border-indigo-800/80 hover:shadow-sm'
@@ -434,7 +587,7 @@ export function SettingsPage(): JSX.Element {
                       <Icon className="w-4 h-4" />
                     </span>
                     <span
-                      className={`font-semibold text-xs leading-tight truncate ${
+                      className={`font-semibold text-xs leading-tight whitespace-nowrap ${
                         isActive
                           ? 'text-indigo-950 dark:text-indigo-100'
                           : 'text-slate-700 group-hover:text-slate-900 dark:text-slate-300 dark:group-hover:text-slate-100'
@@ -449,75 +602,73 @@ export function SettingsPage(): JSX.Element {
           </div>
         </div>
 
-        {/* Language Section */}
+        {/* 02: Language Section */}
         <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden flex flex-col">
-          <div className="flex items-center justify-between gap-3 px-4 py-3 bg-slate-50/90 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800">
-            <div className="flex items-center gap-2.5">
-              <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-red-400/80" />
-                <span className="w-2.5 h-2.5 rounded-full bg-amber-400/80" />
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400/80" />
-              </div>
-              <Separator orientation="vertical" className="h-4" />
-              <Globe className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+          <div className="flex items-center justify-between gap-3 px-4 sm:px-5 py-3.5 bg-slate-50/90 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <Globe className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
               <h2 className="text-sm font-display font-semibold text-slate-900 dark:text-slate-100">
                 {t('settings.language')}
               </h2>
             </div>
-            <span className="text-[11px] font-mono text-slate-400">02</span>
+            <span className="text-[11px] font-mono text-slate-400 whitespace-nowrap shrink-0">
+              02
+            </span>
           </div>
 
           <div className="p-4 sm:p-6 flex-1 flex flex-col justify-between gap-4">
-            <div className="flex items-center justify-between gap-2">
-              <Label className="input-label mb-0">{t('settings.language')}</Label>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Label className="input-label mb-0">
+                {t('settings.language')}
+              </Label>
               <span className="text-xs font-mono text-slate-400 dark:text-slate-500">
                 vi-VN / en-US
               </span>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              {languages.map((lang) => {
-                const isActive = currentLang === lang.code;
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {languages.map((langOpt) => {
+                const isActive = currentLang === langOpt.code;
                 return (
                   <button
-                    key={lang.code}
+                    key={langOpt.code}
                     type="button"
-                    onClick={() => changeLanguage(lang.code)}
+                    onClick={() => changeLanguage(langOpt.code)}
                     aria-pressed={isActive}
-                    className={`group relative flex items-center justify-between gap-2.5 sm:gap-3 p-3 sm:p-3.5 rounded-xl border text-left transform-gpu transition-[transform,border-color,background-color,box-shadow] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-[1px] active:translate-y-0 active:scale-[0.972] cursor-pointer select-none ${
+                    className={`group relative flex items-center justify-between gap-3 p-3.5 rounded-xl border text-left min-w-0 w-full transform-gpu transition-[transform,border-color,background-color,box-shadow] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-[1px] active:translate-y-0 active:scale-[0.972] cursor-pointer select-none ${
                       isActive
                         ? 'border-indigo-500/90 dark:border-indigo-500/80 bg-gradient-to-br from-indigo-50/90 via-indigo-50/40 to-white dark:from-indigo-950/70 dark:via-indigo-950/30 dark:to-slate-900 ring-2 ring-indigo-500/15 dark:ring-indigo-400/20 shadow-sm'
                         : 'border-slate-200/90 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-900/50 hover:bg-white dark:hover:bg-slate-800/60 hover:border-indigo-200 dark:hover:border-indigo-800/80 hover:shadow-sm'
                     }`}
                   >
-                    <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                    <div className="flex items-center gap-3 min-w-0">
                       <span
-                        className={`w-9 h-9 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center shrink-0 font-mono text-[11px] font-bold tracking-wider transition-colors duration-200 ${
+                        className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 font-mono text-xs font-bold tracking-wider transition-colors duration-200 ${
                           isActive
                             ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-500/30 dark:bg-indigo-500 dark:text-white'
                             : 'bg-slate-100 text-slate-600 border border-slate-200/80 group-hover:bg-indigo-50 group-hover:text-indigo-600 group-hover:border-indigo-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700/80 dark:group-hover:bg-indigo-950/70 dark:group-hover:text-indigo-300 dark:group-hover:border-indigo-800/70'
                         }`}
                       >
-                        {lang.shortCode}
+                        {langOpt.shortCode}
                       </span>
 
                       <div className="min-w-0">
                         <span
-                          className={`block font-semibold text-sm leading-tight truncate ${
+                          className={`block font-semibold text-sm leading-tight whitespace-nowrap ${
                             isActive
                               ? 'text-indigo-950 dark:text-indigo-100'
                               : 'text-slate-700 group-hover:text-slate-900 dark:text-slate-300 dark:group-hover:text-slate-100'
                           }`}
                         >
-                          {lang.label}
+                          {langOpt.label}
                         </span>
                         <span
-                          className={`block text-[11px] font-mono mt-0.5 truncate ${
+                          className={`block text-[11px] font-mono mt-0.5 whitespace-nowrap ${
                             isActive
                               ? 'text-indigo-600/80 dark:text-indigo-300/80'
                               : 'text-slate-400 dark:text-slate-500'
                           }`}
                         >
-                          {lang.localeTag}
+                          {langOpt.localeTag}
                         </span>
                       </div>
                     </div>
@@ -539,29 +690,23 @@ export function SettingsPage(): JSX.Element {
         </div>
       </div>
 
-      {/* Notifications Section */}
+      {/* 03: Notifications Section */}
       <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
-        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 bg-slate-50/90 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800">
-          <div className="flex items-center gap-2.5">
-            <div className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-red-400/80" />
-              <span className="w-2.5 h-2.5 rounded-full bg-amber-400/80" />
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400/80" />
-            </div>
-            <Separator orientation="vertical" className="h-4" />
-            <Bell className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+        <div className="flex items-center justify-between gap-3 px-4 sm:px-5 py-3.5 bg-slate-50/90 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <Bell className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
             <h2 className="text-sm font-display font-semibold text-slate-900 dark:text-slate-100">
               {t('settings.notifications')}
             </h2>
           </div>
-          <span className="text-[11px] font-mono text-slate-400 flex items-center gap-1">
-            <Terminal className="w-3 h-3" />
-            workspace_preferences.json
+          <span className="text-[11px] font-mono text-slate-400 whitespace-nowrap shrink-0">
+            03
           </span>
         </div>
 
         <div className="p-4 sm:p-6">
           <ToggleSetting
+            id="settings-notifications-switch"
             label={t('settings.enableNotifications')}
             description={t('settings.enableNotificationsDesc')}
             checked={settings.notifications}
@@ -570,51 +715,50 @@ export function SettingsPage(): JSX.Element {
         </div>
       </div>
 
-      {/* Subscription & Billing Section (v2.2) */}
+      {/* 04: Subscription & Billing Section */}
       <div
         className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden"
         data-testid="settings-billing-section"
       >
-        <div className="flex items-center justify-between gap-3 px-4 py-3 bg-slate-50/90 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800">
-          <div className="flex items-center gap-2.5">
-            <div className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-red-400/80" />
-              <span className="w-2.5 h-2.5 rounded-full bg-amber-400/80" />
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400/80" />
-            </div>
-            <Separator orientation="vertical" className="h-4" />
-            <CreditCard className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+        <div className="flex items-center justify-between gap-3 px-4 sm:px-5 py-3.5 bg-slate-50/90 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <CreditCard className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
             <h2 className="text-sm font-display font-semibold text-slate-900 dark:text-slate-100">
-              {currentLang === 'vi'
-                ? 'Gói Cước & Thanh Toán (Stripe · VNPay)'
+              {lang === 'vi'
+                ? 'Gói cước & Thanh toán (Stripe · VNPay)'
                 : 'Subscription & Billing (Stripe · VNPay)'}
             </h2>
           </div>
-          <span className="text-[11px] font-mono text-slate-400">04</span>
+          <span className="text-[11px] font-mono text-slate-400 whitespace-nowrap shrink-0">
+            04
+          </span>
         </div>
 
-        <div className="p-5 sm:p-6 space-y-5">
+        <div className="p-4 sm:p-6 space-y-5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800">
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-2.5">
-                <span className="text-xs font-mono uppercase text-slate-500">
-                  {currentLang === 'vi' ? 'Gói hiện tại:' : 'Active Tier:'}
+            <div className="space-y-1.5 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-medium uppercase text-slate-500 whitespace-nowrap">
+                  {lang === 'vi' ? 'Gói hiện tại:' : 'Active Tier:'}
                 </span>
                 <Badge
                   data-testid="settings-active-tier-badge"
-                  className={
+                  className={`whitespace-nowrap shrink-0 font-mono uppercase ${
                     planTier === 'ultra'
-                      ? 'bg-violet-600 text-white font-mono uppercase'
+                      ? 'bg-violet-600 text-white'
                       : planTier === 'pro'
-                        ? 'bg-indigo-600 text-white font-mono uppercase'
-                        : 'bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-mono uppercase'
-                  }
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200'
+                  }`}
                 >
                   CITRA {planTier.toUpperCase()}
                 </Badge>
                 {subscription?.billing_cycle && (
-                  <Badge variant="outline" className="font-mono text-[11px] uppercase">
-                    {currentLang === 'vi'
+                  <Badge
+                    variant="outline"
+                    className="font-mono text-[11px] uppercase whitespace-nowrap shrink-0"
+                  >
+                    {lang === 'vi'
                       ? subscription.billing_cycle === 'annual'
                         ? 'Hàng năm'
                         : subscription.billing_cycle === 'monthly'
@@ -626,23 +770,23 @@ export function SettingsPage(): JSX.Element {
               </div>
               <p
                 data-testid="settings-quota-line"
-                className="text-xs text-slate-600 dark:text-slate-300 font-mono"
+                className="text-xs text-slate-600 dark:text-slate-300 font-mono leading-relaxed"
               >
                 {(() => {
-                  const qv = getQuotaView(quota, currentLang === 'vi' ? 'vi' : 'en', { isAdmin });
+                  const qv = getQuotaView(quota, lang, { isAdmin });
                   if (qv.uploadsUnlimited) {
-                    return currentLang === 'vi'
-                      ? `Hạn mức tháng: ${qv.usage} · Tối đa ${qv.fileSize} · Số trang/PDF: ${qv.pages}`
-                      : `Monthly Quota: ${qv.usage} · Max ${qv.fileSize} · Pages/PDF: ${qv.pages}`;
+                    return lang === 'vi'
+                      ? `Hạn mức tháng: ${qv.usage} · Tối đa ${qv.fileSize} · Số trang: ${qv.pages}`
+                      : `Monthly Quota: ${qv.usage} · Max ${qv.fileSize} · Pages: ${qv.pages}`;
                   }
-                  return currentLang === 'vi'
-                    ? `Hạn mức tháng: Đã dùng ${qv.usage} tài liệu · Tối đa ${qv.fileSize} & ${qv.pages} trang/PDF`
-                    : `Monthly Quota: ${qv.usage} checks used · Max ${qv.fileSize} & ${qv.pages} pages/PDF`;
+                  return lang === 'vi'
+                    ? `Hạn mức tháng: Đã dùng ${qv.usage} tài liệu · Tối đa ${qv.fileSize} & ${qv.pages} trang`
+                    : `Monthly Quota: ${qv.usage} checks used · Max ${qv.fileSize} & ${qv.pages} pages`;
                 })()}
               </p>
               {subscription?.cancel_at_period_end && (
                 <p className="text-xs text-amber-600 dark:text-amber-400 font-medium">
-                  {currentLang === 'vi'
+                  {lang === 'vi'
                     ? 'Đã tắt tự động gia hạn. Bạn vẫn giữ quyền lợi gói đến hết chu kỳ hiện tại.'
                     : 'Auto-renewal is turned off. Paid benefits remain active until the end of the billing cycle.'}
                 </p>
@@ -655,28 +799,28 @@ export function SettingsPage(): JSX.Element {
                   data-testid="settings-admin-plan-note"
                   className="text-xs text-slate-500 dark:text-slate-400 max-w-xs"
                 >
-                  {currentLang === 'vi'
+                  {lang === 'vi'
                     ? 'Quản trị viên luôn có toàn quyền Ultra, không giới hạn — không cần nâng cấp.'
                     : 'Administrators always have unlimited Ultra access — no upgrade needed.'}
                 </span>
               ) : (
-              <Button
-                asChild
-                size="sm"
-                data-testid="settings-upgrade-plan-btn"
-                className="rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold"
-              >
-                <Link to="/pricing">
-                  <Sparkles className="h-3.5 w-3.5 mr-1.5" />
-                  {isBasic
-                    ? currentLang === 'vi'
-                      ? 'Nâng cấp Pro / Ultra'
-                      : 'Upgrade to Pro / Ultra'
-                    : currentLang === 'vi'
-                      ? 'Đổi gói / Chu kỳ'
-                      : 'Change Plan / Cycle'}
-                </Link>
-              </Button>
+                <Button
+                  asChild
+                  size="sm"
+                  data-testid="settings-upgrade-plan-btn"
+                  className="rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold whitespace-nowrap"
+                >
+                  <Link to="/pricing">
+                    <Sparkles className="h-3.5 w-3.5 mr-1.5" />
+                    {isBasic
+                      ? lang === 'vi'
+                        ? 'Nâng cấp Pro / Ultra'
+                        : 'Upgrade to Pro / Ultra'
+                      : lang === 'vi'
+                        ? 'Đổi gói / Chu kỳ'
+                        : 'Change Plan / Cycle'}
+                  </Link>
+                </Button>
               )}
 
               {!isBasic && user?.role !== 'admin' && (
@@ -689,10 +833,14 @@ export function SettingsPage(): JSX.Element {
                       disabled={billingLoading}
                       data-testid="settings-reactivate-sub-btn"
                       onClick={handleReactivateSubscription}
-                      className="rounded-xl text-xs"
+                      className="rounded-xl text-xs whitespace-nowrap"
                     >
-                      {billingLoading && <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />}
-                      {currentLang === 'vi' ? 'Bật lại gia hạn' : 'Reactivate Auto-Renew'}
+                      {billingLoading && (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                      )}
+                      {lang === 'vi'
+                        ? 'Bật lại gia hạn'
+                        : 'Reactivate Auto-Renew'}
                     </Button>
                   ) : (
                     <Button
@@ -702,10 +850,12 @@ export function SettingsPage(): JSX.Element {
                       disabled={billingLoading}
                       data-testid="settings-cancel-sub-btn"
                       onClick={() => setConfirmCancelOpen(true)}
-                      className="rounded-xl text-xs text-red-600 border-red-200 hover:bg-red-50 dark:border-red-900 dark:hover:bg-red-950/30"
+                      className="rounded-xl text-xs text-red-600 border-red-200 hover:bg-red-50 dark:border-red-900 dark:hover:bg-red-950/30 whitespace-nowrap"
                     >
-                      {billingLoading && <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />}
-                      {currentLang === 'vi' ? 'Hủy gia hạn' : 'Cancel Auto-Renew'}
+                      {billingLoading && (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                      )}
+                      {lang === 'vi' ? 'Hủy gia hạn' : 'Cancel Auto-Renew'}
                     </Button>
                   )}
                 </>
@@ -716,8 +866,8 @@ export function SettingsPage(): JSX.Element {
           {/* Transaction History */}
           {transactions.length > 0 && (
             <div className="space-y-2" data-testid="settings-transactions-list">
-              <p className="text-xs font-mono font-bold uppercase tracking-wider text-slate-400">
-                {currentLang === 'vi'
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                {lang === 'vi'
                   ? 'Lịch sử giao dịch gần đây (Stripe & VNPay)'
                   : 'Recent Billing Transactions (Stripe & VNPay)'}
               </p>
@@ -729,10 +879,12 @@ export function SettingsPage(): JSX.Element {
                   >
                     <div className="flex items-center gap-2.5 flex-wrap">
                       <Badge
-                        variant={tx.status === 'succeeded' ? 'default' : 'secondary'}
-                        className="font-mono text-[10px] uppercase"
+                        variant={
+                          tx.status === 'succeeded' ? 'default' : 'secondary'
+                        }
+                        className="font-mono text-[10px] uppercase whitespace-nowrap"
                       >
-                        {currentLang === 'vi'
+                        {lang === 'vi'
                           ? tx.status === 'succeeded'
                             ? 'Thành công'
                             : tx.status === 'pending'
@@ -744,7 +896,7 @@ export function SettingsPage(): JSX.Element {
                       </Badge>
                       <span className="font-semibold text-slate-800 dark:text-slate-200">
                         CITRA {tx.plan_name} (
-                        {currentLang === 'vi'
+                        {lang === 'vi'
                           ? tx.billing_cycle === 'annual'
                             ? 'năm'
                             : tx.billing_cycle === 'monthly'
@@ -759,8 +911,8 @@ export function SettingsPage(): JSX.Element {
                         </span>
                       )}
                     </div>
-                    <div className="flex items-center gap-3 font-mono text-slate-600 dark:text-slate-400">
-                      <span>
+                    <div className="flex items-center gap-3 font-mono text-slate-600 dark:text-slate-400 flex-wrap">
+                      <span className="whitespace-nowrap">
                         {tx.payment_method === 'vnpay'
                           ? `VNPAY · ${(tx.vnp_bank_code || tx.card_brand || 'NCB').toUpperCase()} •••• ${tx.card_last4 || '2198'}`
                           : tx.payment_method === 'apple_pay'
@@ -769,10 +921,8 @@ export function SettingsPage(): JSX.Element {
                               ? `GOOGLE PAY •••• ${tx.card_last4 || '4242'}`
                               : `${(tx.card_brand || 'visa').toUpperCase()} •••• ${tx.card_last4 || '4242'}`}
                       </span>
-                      <span className="font-bold text-slate-900 dark:text-white">
-                        {tx.payment_method === 'vnpay' && tx.amount_vnd
-                          ? `${Math.round(tx.amount_vnd).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.')} ₫ ($${tx.amount_usd.toFixed(2)})`
-                          : `$${tx.amount_usd.toFixed(2)}`}
+                      <span className="font-bold text-slate-900 dark:text-white whitespace-nowrap">
+                        {formatTransactionAmount(tx, lang)}
                       </span>
                     </div>
                   </div>
@@ -783,29 +933,30 @@ export function SettingsPage(): JSX.Element {
         </div>
       </div>
 
-      {/* Personal Developer API Keys Section (X-API-Key, Task 6.4) */}
+      {/* 05: Personal Developer API Keys Section */}
       <div
         className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden"
         data-testid="settings-api-keys-section"
       >
-        <div className="flex items-center justify-between gap-3 px-4 py-3 bg-slate-50/90 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800">
-          <div className="flex items-center gap-2.5">
-            <div className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-red-400/80" />
-              <span className="w-2.5 h-2.5 rounded-full bg-amber-400/80" />
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400/80" />
-            </div>
-            <Separator orientation="vertical" className="h-4" />
-            <KeyRound className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+        <div className="flex flex-wrap items-center justify-between gap-2.5 px-4 sm:px-5 py-3.5 bg-slate-50/90 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800">
+          <div className="flex items-center gap-2.5 min-w-0 flex-wrap">
+            <KeyRound className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
             <h2 className="text-sm font-display font-semibold text-slate-900 dark:text-slate-100">
               {t('settings.apiKeysTitle')}
             </h2>
           </div>
-          <span className="text-[11px] font-mono text-slate-400">X-API-Key</span>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 whitespace-nowrap">
+              X-API-Key
+            </span>
+            <span className="text-[11px] font-mono text-slate-400 whitespace-nowrap">
+              05
+            </span>
+          </div>
         </div>
 
-        <div className="p-5 sm:p-6 space-y-4">
-          <p className="text-xs text-slate-600 dark:text-slate-400">
+        <div className="p-4 sm:p-6 space-y-4">
+          <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
             {t('settings.apiKeysSubtitle')}
           </p>
 
@@ -816,12 +967,12 @@ export function SettingsPage(): JSX.Element {
             >
               <div className="space-y-1">
                 <p className="text-xs font-semibold text-amber-900 dark:text-amber-200">
-                  {currentLang === 'vi'
+                  {lang === 'vi'
                     ? 'Khóa API cá nhân (X-API-Key) yêu cầu gói CITRA Pro hoặc Ultra'
                     : 'Personal Developer API Keys (X-API-Key) require CITRA Pro or Ultra'}
                 </p>
                 <p className="text-[11px] text-amber-700 dark:text-amber-300/90">
-                  {currentLang === 'vi'
+                  {lang === 'vi'
                     ? 'Nâng cấp gói để tự động hóa kiểm tra trích dẫn qua tập lệnh CLI, Zotero và CI/CD.'
                     : 'Upgrade your plan to automate citation verification via CLI scripts, Zotero, and CI/CD.'}
                 </p>
@@ -829,29 +980,36 @@ export function SettingsPage(): JSX.Element {
               <Button
                 asChild
                 size="sm"
-                className="rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold shrink-0"
+                className="rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold shrink-0 whitespace-nowrap"
               >
                 <Link to="/pricing">
                   <Sparkles className="h-3.5 w-3.5 mr-1.5" />
-                  {currentLang === 'vi' ? 'Nâng cấp Pro' : 'Upgrade to Pro'}
+                  {lang === 'vi' ? 'Nâng cấp Pro' : 'Upgrade to Pro'}
                 </Link>
               </Button>
             </div>
           ) : (
             <div className="space-y-4">
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+                <Label htmlFor="settings-api-key-name" className="sr-only">
+                  {lang === 'vi' ? 'Tên khóa API mới' : 'New API key name'}
+                </Label>
                 <input
+                  id="settings-api-key-name"
                   type="text"
                   data-testid="api-key-name-input"
+                  aria-label={
+                    lang === 'vi' ? 'Tên khóa API mới' : 'New API key name'
+                  }
                   value={newKeyName}
                   onChange={(e) => setNewKeyName(e.target.value)}
                   placeholder={
-                    currentLang === 'vi'
+                    lang === 'vi'
                       ? 'Tên khóa API (VD: Zotero Script, GitHub Actions...)'
                       : 'API key name (e.g. Zotero Script, GitHub Actions...)'
                   }
                   maxLength={120}
-                  className="flex-1 h-10 px-3.5 rounded-xl text-xs font-mono bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="flex-none sm:flex-1 w-full h-11 min-h-[44px] shrink-0 px-3.5 rounded-xl text-xs font-mono bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
                 <Button
                   type="button"
@@ -859,7 +1017,7 @@ export function SettingsPage(): JSX.Element {
                   data-testid="create-api-key-btn"
                   disabled={!newKeyName.trim() || creatingKey}
                   onClick={handleCreateApiKey}
-                  className="h-10 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shrink-0"
+                  className="h-11 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shrink-0 whitespace-nowrap"
                 >
                   {creatingKey ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
@@ -890,15 +1048,17 @@ export function SettingsPage(): JSX.Element {
                       <IconSwap
                         active={copiedRawKey}
                         iconA={<Copy className="h-3.5 w-3.5" />}
-                        iconB={<Check className="h-3.5 w-3.5 text-emerald-600" />}
+                        iconB={
+                          <Check className="h-3.5 w-3.5 text-emerald-600" />
+                        }
                       />
                       <TextMorph
                         text={
                           copiedRawKey
-                            ? i18n.language?.startsWith('vi')
+                            ? lang === 'vi'
                               ? 'Đã chép!'
                               : 'Copied!'
-                            : i18n.language?.startsWith('vi')
+                            : lang === 'vi'
                               ? 'Sao chép'
                               : 'Copy'
                         }
@@ -936,10 +1096,10 @@ export function SettingsPage(): JSX.Element {
                         </div>
                         <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
                           {k.last_used_at
-                            ? i18n.language?.startsWith('vi')
-                              ? `Dùng lần cuối: ${new Date(k.last_used_at).toLocaleDateString('vi-VN')}`
-                              : `Last used: ${new Date(k.last_used_at).toLocaleDateString()}`
-                            : i18n.language?.startsWith('vi')
+                            ? lang === 'vi'
+                              ? `Dùng lần cuối: ${formatLocalizedDate(k.last_used_at, lang)}`
+                              : `Last used: ${formatLocalizedDate(k.last_used_at, lang)}`
+                            : lang === 'vi'
                               ? 'Chưa từng dùng'
                               : 'Never used'}
                         </p>
@@ -964,28 +1124,24 @@ export function SettingsPage(): JSX.Element {
         </div>
       </div>
 
-      {/* Personal Data Protection & Account Deletion Section (DLCN-03) */}
+      {/* 06: Personal Data Protection & Account Deletion Section (DLCN-03) */}
       <div
         data-testid="settings-privacy-section"
         className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden"
       >
-        <div className="flex items-center justify-between gap-3 px-4 py-3 bg-slate-50/90 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800">
-          <div className="flex items-center gap-2.5">
-            <div className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-red-400/80" />
-              <span className="w-2.5 h-2.5 rounded-full bg-amber-400/80" />
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400/80" />
-            </div>
-            <Separator orientation="vertical" className="h-4" />
-            <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+        <div className="flex items-center justify-between gap-3 px-4 sm:px-5 py-3.5 bg-slate-50/90 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
             <h2 className="text-sm font-display font-semibold text-slate-900 dark:text-slate-100">
               {t('privacyCompliance.settingsSectionTitle')}
             </h2>
           </div>
-          <span className="text-[11px] font-mono text-slate-400">05</span>
+          <span className="text-[11px] font-mono text-slate-400 whitespace-nowrap shrink-0">
+            06
+          </span>
         </div>
 
-        <div className="p-6 space-y-5">
+        <div className="p-4 sm:p-6 space-y-5">
           <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
             {t('privacyCompliance.settingsSectionSubtitle')}
           </p>
@@ -999,31 +1155,36 @@ export function SettingsPage(): JSX.Element {
                 {user?.privacy_consented_at ? (
                   <Badge
                     variant="outline"
-                    className="text-[11px] font-mono border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 bg-emerald-50/70 dark:bg-emerald-950/50"
+                    className="text-[11px] font-mono border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 bg-emerald-50/70 dark:bg-emerald-950/50 whitespace-nowrap"
                   >
                     {t('privacyCompliance.consentedBadge')} · v
                     {user.privacy_policy_version || '1.0'}
                   </Badge>
                 ) : (
-                  <Badge variant="outline" className="text-[11px] font-mono">
+                  <Badge
+                    variant="outline"
+                    className="text-[11px] font-mono whitespace-nowrap"
+                  >
                     {t('privacyCompliance.legacyAccountBadge')}
                   </Badge>
                 )}
               </div>
               {user?.privacy_consented_at && (
                 <p className="text-xs font-mono text-slate-500 dark:text-slate-400">
-                  {new Date(user.privacy_consented_at).toLocaleString(
-                    currentLang === 'vi' ? 'vi-VN' : 'en-US',
-                  )}
+                  {formatLocalizedDateTime(user.privacy_consented_at, lang)}
                 </p>
               )}
             </div>
 
             <Link
               to="/privacy"
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-semibold text-slate-800 dark:text-slate-200 transition-colors shrink-0"
+              className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-semibold text-slate-800 dark:text-slate-200 transition-colors shrink-0 whitespace-nowrap"
             >
-              <span>{t('privacyCompliance.viewPolicyBtn')}</span>
+              <span>
+                {lang === 'vi'
+                  ? 'Xem Chính sách bảo vệ dữ liệu'
+                  : 'Read Personal Data Policy'}
+              </span>
               <ExternalLink className="h-3.5 w-3.5" />
             </Link>
           </div>
@@ -1049,7 +1210,7 @@ export function SettingsPage(): JSX.Element {
                 setDeleteError('');
                 setDeleteModalOpen(true);
               }}
-              className="shrink-0 rounded-xl text-xs font-semibold cursor-pointer"
+              className="shrink-0 rounded-xl text-xs font-semibold cursor-pointer whitespace-nowrap"
             >
               <Trash2 className="h-3.5 w-3.5 mr-1.5" />
               {t('privacyCompliance.deleteAccountBtn')}
@@ -1058,155 +1219,53 @@ export function SettingsPage(): JSX.Element {
         </div>
       </div>
 
-      {/* About Section */}
+      {/* 07: About Section */}
       <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
-        <div className="flex items-center justify-between gap-3 px-4 py-3 bg-slate-50/90 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800">
-          <div className="flex items-center gap-2.5">
-            <div className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-red-400/80" />
-              <span className="w-2.5 h-2.5 rounded-full bg-amber-400/80" />
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400/80" />
-            </div>
-            <Separator orientation="vertical" className="h-4" />
-            <Info className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+        <div className="flex items-center justify-between gap-3 px-4 sm:px-5 py-3.5 bg-slate-50/90 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <Info className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
             <h2 className="text-sm font-display font-semibold text-slate-900 dark:text-slate-100">
               {t('settings.about')}
             </h2>
           </div>
-          <span className="text-[11px] font-mono text-slate-400">06</span>
+          <span className="text-[11px] font-mono text-slate-400 whitespace-nowrap shrink-0">
+            07
+          </span>
         </div>
 
-        <div className="p-6 space-y-3">
+        <div className="p-4 sm:p-6 space-y-3">
           <InfoRow label={t('settings.version')} value={APP_VERSION} />
-          <InfoRow
-            label={t('settings.buildDate')}
-            value={APP_BUILD_DATE}
-          />
+          <InfoRow label={t('settings.buildDate')} value={APP_BUILD_DATE} />
         </div>
       </div>
 
-      {/* Self-service Account Deletion Confirmation Modal */}
-      {deleteModalOpen && user && (
-        <div
-          data-testid="delete-account-modal"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4 animate-[fadeIn_180ms_ease-out]"
-        >
-          <div
-            {...deleteDialog.dialogProps}
-            className="t-modal is-open w-full max-w-md rounded-2xl border border-red-200 dark:border-red-900/60 bg-white dark:bg-slate-900 shadow-2xl overflow-hidden outline-none"
-          >
-            <div className="h-1.5 w-full bg-gradient-to-r from-red-600 via-red-500 to-amber-500" />
-            <form onSubmit={handleDeleteMyAccount} className="p-6 space-y-4">
-              <div className="flex items-start gap-3">
-                <div className="p-2 rounded-xl bg-red-100 dark:bg-red-950/60 text-red-600 dark:text-red-400 shrink-0 animate-icon-pop">
-                  <AlertTriangle className="h-5 w-5" />
-                </div>
-                <div>
-                  <h3
-                    id={deleteDialog.titleId}
-                    className="font-display text-base font-bold text-slate-900 dark:text-slate-100"
-                  >
-                    {t('privacyCompliance.deleteModalTitle')}
-                  </h3>
-                  <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 leading-relaxed">
-                    {t('privacyCompliance.deleteAccountZoneDesc')}
-                  </p>
-                </div>
-              </div>
+      {/* Self-service Account Deletion Confirmation Modal — portaled to body to prevent space-y-6 strip */}
+      {deleteModalMarkup &&
+        (typeof document !== 'undefined'
+          ? createPortal(deleteModalMarkup, document.body)
+          : deleteModalMarkup)}
 
-              {deleteError && (
-                <div className="rounded-xl border border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950/50 px-3 py-2 text-xs text-red-700 dark:text-red-300 font-medium animate-error-shake">
-                  {deleteError}
-                </div>
-              )}
-
-              {userHasPassword ? (
-                <div className="space-y-1.5">
-                  <Label htmlFor="delete-account-password" className="text-xs font-semibold">
-                    {t('privacyCompliance.deleteModalPasswordLabel')}
-                  </Label>
-                  <input
-                    id="delete-account-password"
-                    type="password"
-                    value={deletePassword}
-                    onChange={(e) => setDeletePassword(e.target.value)}
-                    placeholder={t('privacyCompliance.deleteModalPasswordPlaceholder')}
-                    data-testid="delete-account-password-input"
-                    autoComplete="current-password"
-                    className={`t-input ${deleteError ? 'is-error' : ''} ${isDeleteShaking ? 'is-shaking' : ''} w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-red-500`}
-                  />
-                </div>
-              ) : (
-                <div className="space-y-1.5">
-                  <Label htmlFor="delete-account-username" className="text-xs font-semibold">
-                    {t('privacyCompliance.deleteModalUsernameLabel', {
-                      username: user.username,
-                    })}
-                  </Label>
-                  <input
-                    id="delete-account-username"
-                    type="text"
-                    value={deleteConfirmUsername}
-                    onChange={(e) => setDeleteConfirmUsername(e.target.value)}
-                    placeholder={t('privacyCompliance.deleteModalUsernamePlaceholder')}
-                    data-testid="delete-account-username-input"
-                    className={`t-input ${deleteError ? 'is-error' : ''} ${isDeleteShaking ? 'is-shaking' : ''} w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-sm font-mono text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-red-500`}
-                  />
-                </div>
-              )}
-
-              <div className="flex items-center justify-end gap-2.5 pt-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={deletingAccount}
-                  onClick={() => setDeleteModalOpen(false)}
-                  className="rounded-xl text-xs"
-                >
-                  {t('privacyCompliance.deleteModalCancelBtn')}
-                </Button>
-                <Button
-                  type="submit"
-                  variant="destructive"
-                  disabled={deletingAccount}
-                  data-testid="delete-account-confirm-btn"
-                  className="rounded-xl text-xs font-semibold cursor-pointer"
-                >
-                  {deletingAccount ? (
-                    <>
-                      <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
-                      <span>...</span>
-                    </>
-                  ) : (
-                    t('privacyCompliance.deleteModalConfirmBtn')
-                  )}
-                </Button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
       <ConfirmationModal
         isOpen={confirmCancelOpen}
         variant="danger"
         title={
-          currentLang === 'vi' ? 'Tắt tự động gia hạn?' : 'Turn off auto-renewal?'
+          lang === 'vi' ? 'Tắt tự động gia hạn?' : 'Turn off auto-renewal?'
         }
         message={
-          currentLang === 'vi'
+          lang === 'vi'
             ? `Gói ${planTier.toUpperCase()} sẽ không được gia hạn. Bạn vẫn giữ toàn bộ quyền lợi đến ${
                 subscription?.current_period_end
-                  ? new Date(subscription.current_period_end).toLocaleDateString('vi-VN')
+                  ? formatLocalizedDate(subscription.current_period_end, lang)
                   : 'hết chu kỳ hiện tại'
               }, sau đó tài khoản chuyển về gói Basic.`
             : `Your ${planTier.toUpperCase()} plan will not renew. You keep all paid benefits until ${
                 subscription?.current_period_end
-                  ? new Date(subscription.current_period_end).toLocaleDateString('en-US')
+                  ? formatLocalizedDate(subscription.current_period_end, lang)
                   : 'the end of the current billing cycle'
               }, then the account moves to Basic.`
         }
-        confirmLabel={currentLang === 'vi' ? 'Tắt gia hạn' : 'Turn off auto-renew'}
-        cancelLabel={currentLang === 'vi' ? 'Giữ gói' : 'Keep my plan'}
+        confirmLabel={lang === 'vi' ? 'Tắt gia hạn' : 'Turn off auto-renew'}
+        cancelLabel={lang === 'vi' ? 'Giữ gói' : 'Keep my plan'}
         onConfirm={async () => {
           setConfirmCancelOpen(false);
           await handleCancelSubscription(false);
@@ -1222,6 +1281,7 @@ export function SettingsPage(): JSX.Element {
 // ============================================================
 
 interface ToggleSettingProps {
+  id: string;
   label: string;
   description?: string;
   checked: boolean;
@@ -1229,6 +1289,7 @@ interface ToggleSettingProps {
 }
 
 function ToggleSetting({
+  id,
   label,
   description,
   checked,
@@ -1237,16 +1298,24 @@ function ToggleSetting({
   return (
     <div className="flex items-center justify-between gap-4">
       <div>
-        <p className="font-medium text-sm text-slate-900 dark:text-slate-100">
+        <Label
+          htmlFor={id}
+          className="font-medium text-sm text-slate-900 dark:text-slate-100 cursor-pointer"
+        >
           {label}
-        </p>
+        </Label>
         {description && (
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
             {description}
           </p>
         )}
       </div>
-      <Switch checked={checked} onCheckedChange={onChange} />
+      <Switch
+        id={id}
+        aria-label={label}
+        checked={checked}
+        onCheckedChange={onChange}
+      />
     </div>
   );
 }

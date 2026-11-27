@@ -52,7 +52,7 @@ describe('ProcessingPage FIFO Admission Queue UI', () => {
     expect(
       screen.getByText('Submission in smart admission queue — Current position: #4'),
     ).toBeDefined();
-    expect(screen.getByText('QUEUED (#4)')).toBeDefined();
+    expect(screen.getByText('Queued (#4)')).toBeDefined();
   });
 
   it('renders FIFO queue position badge and banner in Vietnamese when status is queued', async () => {
@@ -80,7 +80,7 @@ describe('ProcessingPage FIFO Admission Queue UI', () => {
       screen.getByText('Bài nộp đang trong hàng đợi thông minh — Vị trí hiện tại: #2'),
     ).toBeDefined();
     expect(screen.getByText('Hàng đợi #2')).toBeDefined();
-    expect(screen.getByText('QUEUED (#2)')).toBeDefined();
+    expect(screen.getByText('Đang xếp hàng (#2)')).toBeDefined();
   });
 
   it('progresses smoothly step-by-step from 01/08 to 04/08 without jumping over intermediate steps', async () => {
@@ -418,10 +418,12 @@ describe('ProcessingPage Step 1 sub-stage telemetry & ReasoningStream invariants
       await vi.advanceTimersByTimeAsync(0);
     });
     expect(
-      screen.getByText('[01/08] PYMUPDF · Extracted text (117 pages) · Checking GROBID cache'),
+      screen.getByText(
+        '[01/08] Extracted document text (117 pages) · Checking cached layout',
+      ),
     ).toBeDefined();
 
-    // Next Step 1 sub-stage arrives: Analyzing layout with GROBID
+    // Next Step 1 sub-stage arrives: Analyzing document layout
     await act(async () => {
       const frame2: EssayStatus = {
         status: 'processing',
@@ -442,7 +444,7 @@ describe('ProcessingPage Step 1 sub-stage telemetry & ReasoningStream invariants
       await vi.advanceTimersByTimeAsync(0);
     });
     expect(
-      screen.getByText('[01/08] GROBID · Analyzing TEI-XML structure (117 pages)…'),
+      screen.getByText('[01/08] Analyzing document structure (117 pages)…'),
     ).toBeDefined();
 
     // Advance to Step 2 — previous Step 1 sub-stage lines MUST stay in ReasoningStream (monotonic prefix)
@@ -473,13 +475,17 @@ describe('ProcessingPage Step 1 sub-stage telemetry & ReasoningStream invariants
       await vi.advanceTimersByTimeAsync(450);
     });
     expect(
-      screen.getByText('[01/08] PYMUPDF · Extracted text (117 pages) · Checking GROBID cache'),
+      screen.getByText(
+        '[01/08] Extracted document text (117 pages) · Checking cached layout',
+      ),
     ).toBeDefined();
     expect(
-      screen.getByText('[01/08] GROBID · Analyzing TEI-XML structure (117 pages)…'),
+      screen.getByText('[01/08] Analyzing document structure (117 pages)…'),
     ).toBeDefined();
     expect(
-      screen.getByText('[02/08] STYLE ENGINE · Citation format & delimiter classification'),
+      screen.getByText(
+        '[02/08] Identifying citation style conventions (APA, IEEE, MLA…)',
+      ),
     ).toBeDefined();
 
     // Switching language to Vietnamese re-renders stored sub-messages cleanly in Vietnamese
@@ -487,7 +493,7 @@ describe('ProcessingPage Step 1 sub-stage telemetry & ReasoningStream invariants
       await i18n.changeLanguage('vi');
     });
     expect(
-      screen.getByText('[01/08] GROBID · Đang phân tích cấu trúc TEI-XML (117 trang)…'),
+      screen.getByText('[01/08] Đang phân tích cấu trúc tài liệu (117 trang)…'),
     ).toBeDefined();
 
     ctrlRef.current?.close();
@@ -531,11 +537,11 @@ describe('ProcessingPage Step 1 sub-stage telemetry & ReasoningStream invariants
     // Even though effectiveStepIndex starts at 0 during stepper catch-up, snap.step !== 'parsing'
     // so it must NOT be recorded as a Step 1 sub-stage line!
     expect(
-      screen.queryByText('[01/08] GROBID · Analyzing TEI-XML structure (40 pages)…'),
+      screen.queryByText('[01/08] Analyzing document structure (40 pages)…'),
     ).toBeNull();
   });
 
-  it('uses singular English grammar for 1 page / 1 reference and distinguishes REGEX vs FALLBACK tags', async () => {
+  it('uses singular English grammar for 1 page / 1 reference and renders humanized structural parser lines', async () => {
     await i18n.changeLanguage('en');
     vi.useFakeTimers();
 
@@ -588,7 +594,7 @@ describe('ProcessingPage Step 1 sub-stage telemetry & ReasoningStream invariants
       await vi.advanceTimersByTimeAsync(0);
     });
     expect(
-      screen.getByText('[01/08] REGEX · Running regex structural parser (1 page)'),
+      screen.getByText('[01/08] Analyzing structural text layout (1 page)'),
     ).toBeDefined();
 
     await act(async () => {
@@ -611,9 +617,62 @@ describe('ProcessingPage Step 1 sub-stage telemetry & ReasoningStream invariants
       await vi.advanceTimersByTimeAsync(0);
     });
     expect(
-      screen.getByText('[01/08] MERGE · GROBID parsed 1 reference · Merging citations'),
+      screen.getByText('[01/08] Parsed 1 reference · Merging citations'),
     ).toBeDefined();
 
     ctrlRef.current?.close();
+  });
+
+  it('renders empty state at /verification/processing without :id and disables Open Report while processing', async () => {
+    await i18n.changeLanguage('en');
+
+    const { unmount } = renderWithProviders(
+      <Routes>
+        <Route path="/verification/processing" element={<ProcessingPage />} />
+      </Routes>,
+      {
+        user: makeUser('user'),
+        initialRoute: '/verification/processing',
+      },
+    );
+
+    expect(screen.getByTestId('processing-empty-state')).toBeDefined();
+    expect(screen.getByText('No active verification in progress')).toBeDefined();
+    unmount();
+
+    vi.spyOn(api, 'getEssayStatus').mockResolvedValue({
+      status: 'processing',
+      queue_position: null,
+      step: 'comparing',
+      step_index: 5,
+      total_steps: 8,
+      message: 'Comparing candidate publications...',
+      citations_found: 10,
+      references_found: 8,
+      linked: 8,
+      sources_queried: { crossref: 'ok' },
+      elapsed_seconds: 4.1,
+      finished_at: null,
+      error: null,
+    });
+
+    renderWithProviders(
+      <Routes>
+        <Route path="/verification/processing/:id" element={<ProcessingPage />} />
+      </Routes>,
+      {
+        user: makeUser('user'),
+        initialRoute: '/verification/processing/200',
+      },
+    );
+
+    const buildingBtn = (await screen.findByTestId(
+      'processing-building-report-btn',
+    )) as HTMLButtonElement;
+    expect(buildingBtn.disabled).toBe(true);
+    expect(screen.queryByTestId('processing-open-report-btn')).toBeNull();
+    expect(screen.getByTestId('processing-progress-percent').textContent).toContain(
+      '63%',
+    );
   });
 });

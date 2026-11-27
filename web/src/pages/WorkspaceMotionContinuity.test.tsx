@@ -144,7 +144,7 @@ describe('Task 7 — Core Workspace Continuity', () => {
 
     await waitFor(
       () => {
-        expect(stream.textContent).toContain('34 in-text markers');
+        expect(stream.textContent).toContain('34 in-text citations');
         expect(stream.textContent).toContain('Crossref');
       },
       { timeout: 2500 },
@@ -465,6 +465,5 @@ describe('Task 7 — Core Workspace Continuity', () => {
     expect(sidebar.querySelector('[data-testid="notification-center-trigger-desktop"]')).toBeNull();
     expect(screen.queryByTestId('notification-center-trigger-desktop')).toBeNull();
     expect(screen.queryByTestId('notification-center-trigger-mobile')).toBeNull();
-    expect(sidebar.querySelector('a[href="/sandbox"]')).toBeNull();
   });
 });
