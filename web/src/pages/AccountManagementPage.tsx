@@ -198,14 +198,14 @@ export function AccountManagementPage() {
           className="gap-2 rounded-xl h-9 shadow-sm shrink-0"
         >
           <UserPlus className="h-4 w-4" />
-          {t('admin.createUser')}
+          {lang === 'vi' ? 'Tạo tài khoản' : 'Create Account'}
         </Button>
       </div>
 
-      {/* Visual Member Ecosystem Summary — Distinct Role vs Plan Tier Palettes */}
+      {/* Visual Member Ecosystem Summary — Unified Role Palette matching RoleBadge (Slate / Emerald / Violet) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
         <Card className="lg:col-span-6 p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row items-start sm:items-center gap-4">
-          {/* Role Distribution (Donut + Distinct Role Palette: Emerald / Sky / Violet) */}
+          {/* Role Distribution (Donut aligned 1:1 with RoleBadge: Student=Slate, Teacher=Emerald, Admin=Violet) */}
           <div className="flex items-center gap-3.5 shrink-0">
             <DonutChart
               size={78}
@@ -213,8 +213,8 @@ export function AccountManagementPage() {
               segments={
                 users.length > 0
                   ? [
-                      { value: studentCount, color: '#10b981' },
-                      { value: teacherCount, color: '#0ea5e9' },
+                      { value: studentCount, color: '#64748b' },
+                      { value: teacherCount, color: '#10b981' },
                       { value: adminCount, color: '#8b5cf6' },
                     ]
                   : [{ value: 1, color: '#cbd5e1' }]
@@ -231,14 +231,14 @@ export function AccountManagementPage() {
               </p>
               <div className="flex flex-col gap-1 text-[11px] text-slate-600 dark:text-slate-400">
                 <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                  <span className="w-2 h-2 rounded-full bg-slate-500 shrink-0" />
                   {lang === 'vi' ? 'Sinh viên' : 'Students'}:{' '}
                   <strong className="font-mono text-slate-800 dark:text-slate-200">
                     {studentCount}
                   </strong>
                 </span>
                 <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
-                  <span className="w-2 h-2 rounded-full bg-sky-500 shrink-0" />
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
                   {t('admin.teachers')}:{' '}
                   <strong className="font-mono text-slate-800 dark:text-slate-200">
                     {teacherCount}
@@ -331,7 +331,7 @@ export function AccountManagementPage() {
 
           <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm flex flex-col justify-between">
             <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
-              {t('admin.active')}
+              {lang === 'vi' ? 'Tài khoản đang hoạt động' : 'Active Accounts'}
             </span>
             <p className="mt-2 text-2xl font-bold font-mono tabular-nums text-emerald-600 dark:text-emerald-400">
               <NumberPopIn value={activeCount} />
@@ -339,10 +339,10 @@ export function AccountManagementPage() {
           </Card>
 
           <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm flex flex-col justify-between">
-            <span className="text-xs font-medium text-sky-600 dark:text-sky-400">
+            <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
               {t('admin.teachers')}
             </span>
-            <p className="mt-2 text-2xl font-bold font-mono tabular-nums text-sky-600 dark:text-sky-400">
+            <p className="mt-2 text-2xl font-bold font-mono tabular-nums text-emerald-600 dark:text-emerald-400">
               <NumberPopIn value={teacherCount} />
             </p>
           </Card>
@@ -367,7 +367,7 @@ export function AccountManagementPage() {
       {/* Member Directory Studio */}
       <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
         <StudioWindowHeader
-          title={lang === 'vi' ? 'DANH BẠ TÀI KHOẢN' : 'MEMBER DIRECTORY'}
+          title={lang === 'vi' ? 'Danh sách tài khoản' : 'User Accounts'}
           badge={
             <Badge
               variant="secondary"
@@ -499,7 +499,7 @@ export function AccountManagementPage() {
                   {t('admin.tableRole')}
                 </TableHead>
                 <TableHead className="text-left py-3 px-2.5 xl:px-3 text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap">
-                  {lang === 'vi' ? 'Gói / Hạn ngạch' : 'Plan / Quota'}
+                  {lang === 'vi' ? 'Gói & lượt kiểm tra' : 'Plan & Usage'}
                 </TableHead>
                 <TableHead className="text-left py-3 px-2.5 xl:px-3 text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap">
                   {t('admin.tableStatus')}
@@ -508,7 +508,7 @@ export function AccountManagementPage() {
                   {institutionColumnLabel}
                 </TableHead>
                 <TableHead className="text-left py-3 px-2.5 xl:px-3 text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap">
-                  {t('admin.tableLastLogin')}
+                  {lang === 'vi' ? 'Lần đăng nhập gần nhất' : 'Last Sign-In'}
                 </TableHead>
                 <TableHead className="lg:sticky lg:right-0 bg-slate-50 dark:bg-slate-800/95 text-right py-3 px-2.5 xl:px-3 text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap">
                   {t('admin.tableActions')}
@@ -521,6 +521,9 @@ export function AccountManagementPage() {
                 const effectiveTier = getEffectivePlanTier(u);
                 const limit = u.quota?.monthly_uploads_limit ?? 0;
                 const used = u.quota?.monthly_uploads_used ?? 0;
+                const quotaView = u.quota
+                  ? getQuotaView(u.quota, lang, { isAdmin: isUserAdmin })
+                  : null;
                 const hasFiniteQuota = !isUserAdmin && Boolean(u.quota) && limit > 0;
                 const clampedQuotaPct = hasFiniteQuota
                   ? Math.min(100, Math.max(0, Math.round((used / limit) * 100)))
@@ -533,7 +536,9 @@ export function AccountManagementPage() {
                       : 'bg-indigo-500';
                 const formattedLogin = u.last_login_at
                   ? formatLocalizedDate(u.last_login_at, lang)
-                  : '—';
+                  : lang === 'vi'
+                    ? 'Chưa đăng nhập'
+                    : 'Never';
 
                 return (
                   <TableRow
@@ -584,7 +589,7 @@ export function AccountManagementPage() {
                       className="flex lg:table-cell items-center justify-between gap-2 p-0 lg:py-3 lg:px-2.5 xl:px-3 whitespace-nowrap"
                     >
                       <span className="lg:hidden text-[11px] font-mono uppercase text-slate-400">
-                        {lang === 'vi' ? 'Gói / Hạn ngạch' : 'Plan / Quota'}
+                        {lang === 'vi' ? 'Gói & lượt kiểm tra' : 'Plan & Usage'}
                       </span>
                       <div className="space-y-1.5 min-w-[118px]">
                         <div className="inline-flex items-center gap-1.5 font-mono text-xs whitespace-nowrap">
@@ -597,14 +602,25 @@ export function AccountManagementPage() {
                                   : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200/80 dark:border-slate-700'
                             }`}
                           >
-                            {(u.plan_tier || 'basic').toUpperCase()}
+                            {effectiveTier.toUpperCase()}
                           </span>
-                          <span className="inline-flex items-center gap-1 tabular-nums text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                          <span
+                            title={
+                              quotaView && !quotaView.uploadsUnlimited
+                                ? lang === 'vi'
+                                  ? 'Số lượt kiểm tra tài liệu đã dùng trong tháng này'
+                                  : 'Document checks used this month'
+                                : undefined
+                            }
+                            className="inline-flex items-center gap-1 tabular-nums text-slate-600 dark:text-slate-300 whitespace-nowrap"
+                          >
                             {isUserAdmin && (
                               <InfinityIcon className="h-3 w-3 text-amber-600 dark:text-amber-400 shrink-0" />
                             )}
-                            {u.quota
-                              ? getQuotaView(u.quota, lang, { isAdmin: isUserAdmin }).usage
+                            {quotaView
+                              ? quotaView.uploadsUnlimited
+                                ? quotaView.usage
+                                : `${quotaView.usage} ${lang === 'vi' ? 'lượt' : 'checks'}`
                               : '—'}
                           </span>
                         </div>
@@ -641,47 +657,53 @@ export function AccountManagementPage() {
 
                     <TableCell className="flex lg:table-cell items-center justify-between gap-2 p-0 lg:py-3 lg:px-2.5 xl:px-3 text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap font-mono tabular-nums">
                       <span className="lg:hidden text-[11px] font-mono uppercase text-slate-400 font-sans">
-                        {t('admin.tableLastLogin')}
+                        {lang === 'vi' ? 'Lần đăng nhập gần nhất' : 'Last Sign-In'}
                       </span>
                       <span className="whitespace-nowrap">{formattedLogin}</span>
                     </TableCell>
 
                     <TableCell className="block lg:table-cell lg:sticky lg:right-0 bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800/60 p-0 pt-2 lg:pt-0 border-t border-slate-100 dark:border-slate-800/80 lg:border-0 lg:py-3 lg:px-2.5 xl:px-3 whitespace-nowrap">
-                      <div className="flex items-center justify-end gap-1">
+                      <div className="flex items-center justify-end gap-1.5">
                         <button
                           type="button"
                           onClick={() => handleEdit(u)}
-                          className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 transition-colors cursor-pointer"
-                          title={lang === 'vi' ? 'Chỉnh sửa người dùng' : 'Edit user'}
+                          className="inline-flex items-center gap-1 px-2 py-1.5 lg:p-1.5 rounded-lg text-xs font-medium text-slate-600 hover:text-indigo-600 dark:text-slate-300 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 transition-colors cursor-pointer"
+                          title={lang === 'vi' ? 'Chỉnh sửa tài khoản' : 'Edit account'}
                           aria-label={
                             lang === 'vi'
-                              ? `Chỉnh sửa người dùng ${u.username}`
-                              : `Edit user ${u.username}`
+                              ? `Chỉnh sửa tài khoản ${u.username}`
+                              : `Edit account ${u.username}`
                           }
                         >
-                          <UserCog className="h-4 w-4" />
+                          <UserCog className="h-4 w-4 shrink-0" />
+                          <span className="lg:hidden">
+                            {lang === 'vi' ? 'Sửa' : 'Edit'}
+                          </span>
                         </button>
                         <button
                           type="button"
                           onClick={() => handleDelete(u)}
                           disabled={u.id === currentUser?.id}
-                          className="p-1.5 rounded-lg text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-950/50 transition-colors disabled:opacity-30 disabled:text-slate-400 disabled:hover:bg-transparent disabled:cursor-not-allowed cursor-pointer"
+                          className="inline-flex items-center gap-1 px-2 py-1.5 lg:p-1.5 rounded-lg text-xs font-medium text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-950/50 transition-colors disabled:opacity-30 disabled:text-slate-400 disabled:hover:bg-transparent disabled:cursor-not-allowed cursor-pointer"
                           title={
                             u.id === currentUser?.id
                               ? t('admin.cannotDeleteSelf')
                               : lang === 'vi'
-                                ? 'Xóa người dùng'
-                                : 'Delete user'
+                                ? 'Xóa tài khoản'
+                                : 'Delete account'
                           }
                           aria-label={
                             u.id === currentUser?.id
                               ? t('admin.cannotDeleteSelf')
                               : lang === 'vi'
-                                ? `Xóa người dùng ${u.username}`
-                                : `Delete user ${u.username}`
+                                ? `Xóa tài khoản ${u.username}`
+                                : `Delete account ${u.username}`
                           }
                         >
-                          <Trash2 className="h-4 w-4" />
+                          <Trash2 className="h-4 w-4 shrink-0" />
+                          <span className="lg:hidden">
+                            {lang === 'vi' ? 'Xóa' : 'Delete'}
+                          </span>
                         </button>
                       </div>
                     </TableCell>

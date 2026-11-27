@@ -72,9 +72,14 @@ export function DeleteUserDialog({
             <p className="text-sm text-slate-600 dark:text-slate-400">
               {t('admin.deleteUserConfirmPrefix')}{' '}
               <span className="font-semibold text-slate-900 dark:text-white">
-                {user.username}
+                {user.full_name?.trim() ? `${user.full_name} (@${user.username})` : user.username}
               </span>
               {t('admin.deleteUserConfirmSuffix')}
+            </p>
+            <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
+              {lang === 'vi'
+                ? 'Tất cả bài nộp, báo cáo và phiên đăng nhập của tài khoản này sẽ bị xóa vĩnh viễn. Nếu chỉ muốn tạm ngưng quyền truy cập, bạn có thể tắt trạng thái hoạt động trong mục Chỉnh sửa.'
+                : 'All submissions, reports, and active sessions for this account will be permanently removed. To temporarily suspend access instead, turn off Account Active in Edit.'}
             </p>
           </div>
         </div>

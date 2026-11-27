@@ -13,6 +13,7 @@ import {
   MessageSquareQuote,
   RefreshCw,
   Download,
+  Link2,
   User as UserIcon,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -23,9 +24,11 @@ import { api, type AuditLogEntry } from '@/api/client';
 import {
   formatLocalizedDateTime,
   formatUserError,
+  getMappingStatusDisplay,
   getVerdictDisplay,
   normalizeVerdictKey,
   resolveAcademicLang,
+  type AcademicLang,
   type CanonicalVerdictKey,
 } from '@/lib/academicTaxonomy';
 import { Card } from '@/components/ui/card';
@@ -50,6 +53,67 @@ function escapeCsvCell(raw: string | number | null | undefined): string {
   const str = String(raw ?? '');
   const safe = /^[=+\-@\t\r]/.test(str) ? `'${str}` : str;
   return `"${safe.replace(/"/g, '""')}"`;
+}
+
+interface ParsedMappingChange {
+  fromLabel?: string;
+  toLabel: string;
+}
+
+interface ParsedAuditNote {
+  cleanNote: string;
+  mappingChange: ParsedMappingChange | null;
+}
+
+function localizeSystemAuditNote(note: string, lang: AcademicLang): string {
+  if (!note || lang !== 'vi') return note;
+  const trimmed = note.trim();
+  if (/^Approved as valid from faculty review queue\.?$/i.test(trimmed)) {
+    return 'Giảng viên xác nhận hợp lệ từ danh sách chờ duyệt';
+  }
+  if (/^Restored original label(?:\s+after automated verification)?\.?$/i.test(trimmed)) {
+    return 'Khôi phục kết quả kiểm tra tự động ban đầu';
+  }
+  if (/^Flagged from faculty review queue\.?$/i.test(trimmed)) {
+    return 'Giảng viên đánh dấu cần rà soát từ danh sách chờ duyệt';
+  }
+  const updatedMatch = trimmed.match(
+    /^Updated classification \(([^)]+)\) from faculty review queue\.?$/i,
+  );
+  if (updatedMatch) {
+    return `Giảng viên cập nhật phân loại (${getVerdictDisplay(updatedMatch[1], 'vi').label}) từ danh sách chờ duyệt`;
+  }
+  return trimmed;
+}
+
+function parseAuditNote(
+  rawNote: string | null | undefined,
+  lang: AcademicLang,
+): ParsedAuditNote {
+  if (!rawNote) {
+    return { cleanNote: '', mappingChange: null };
+  }
+  const tagMatch = rawNote.match(/\s*\[mapping_status:\s*([^\]]+)\]\s*$/i);
+  let mappingChange: ParsedMappingChange | null = null;
+  if (tagMatch && tagMatch[1]) {
+    const inner = tagMatch[1].trim();
+    const arrowParts = inner.split(/\s*(?:->|→)\s*/);
+    if (arrowParts.length >= 2 && arrowParts[0] && arrowParts[1]) {
+      mappingChange = {
+        fromLabel: getMappingStatusDisplay(arrowParts[0], lang).label,
+        toLabel: getMappingStatusDisplay(arrowParts[1], lang).label,
+      };
+    } else if (inner) {
+      mappingChange = {
+        toLabel: getMappingStatusDisplay(inner, lang).label,
+      };
+    }
+  }
+  const stripped = rawNote.replace(/\s*\[mapping_status:[^\]]+\]\s*$/i, '').trim();
+  return {
+    cleanNote: localizeSystemAuditNote(stripped, lang),
+    mappingChange,
+  };
 }
 
 export function AuditLogPage() {
@@ -205,21 +269,40 @@ export function AuditLogPage() {
 
   const handleExportCsv = () => {
     if (visibleEntries.length === 0) return;
-    const headers = [
-      'ID',
-      'Logged At',
-      'Reviewer',
-      'Essay ID',
-      'Essay Filename',
-      'Student',
-      'Verdict ID',
-      'Original Label',
-      'New Label',
-      'Note',
-    ];
+    const headers =
+      lang === 'vi'
+        ? [
+            'Mã bản ghi',
+            'Thời gian duyệt',
+            'Người duyệt',
+            'Mã tài liệu',
+            'Tên tệp tài liệu',
+            'Sinh viên',
+            'Mã trích dẫn',
+            'Kết quả trước',
+            'Kết quả sau',
+            'Liên kết trong bài',
+            'Ghi chú',
+          ]
+        : [
+            'Entry ID',
+            'Reviewed At',
+            'Reviewer',
+            'Document ID',
+            'Document Filename',
+            'Student',
+            'Citation ID',
+            'Previous Outcome',
+            'Updated Outcome',
+            'In-Text Link',
+            'Note',
+          ];
     const rows = visibleEntries.map((e) => {
-      const cleanNote = e.note
-        ? e.note.replace(/\s*\[mapping_status:[^\]]+\]\s*$/, '').trim()
+      const { cleanNote, mappingChange } = parseAuditNote(e.note, lang);
+      const mappingCsvText = mappingChange
+        ? mappingChange.fromLabel
+          ? `${mappingChange.fromLabel} → ${mappingChange.toLabel}`
+          : mappingChange.toLabel
         : '';
       return [
         escapeCsvCell(e.id),
@@ -233,6 +316,7 @@ export function AuditLogPage() {
         escapeCsvCell(e.verdict_id ?? ''),
         escapeCsvCell(getVerdictDisplay(e.original_label, lang).label),
         escapeCsvCell(getVerdictDisplay(e.new_label, lang).label),
+        escapeCsvCell(mappingCsvText),
         escapeCsvCell(cleanNote),
       ].join(',');
     });
@@ -242,7 +326,10 @@ export function AuditLogPage() {
     const link = document.createElement('a');
     const dateStamp = new Date().toISOString().slice(0, 10);
     link.href = url;
-    link.download = `citation_review_log_${dateStamp}.csv`;
+    link.download =
+      lang === 'vi'
+        ? `nhat_ky_duyet_trich_dan_${dateStamp}.csv`
+        : `citation_review_log_${dateStamp}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -250,8 +337,8 @@ export function AuditLogPage() {
     toast.success(
       lang === 'vi' ? 'Đã xuất tệp CSV' : 'CSV Exported',
       lang === 'vi'
-        ? `Đã tải xuống ${visibleEntries.length} bản ghi duyệt trích dẫn.`
-        : `Downloaded ${visibleEntries.length} citation review entries.`,
+        ? `Đã tải xuống ${visibleEntries.length} bản ghi trên trang ${page}.`
+        : `Downloaded ${visibleEntries.length} review entries from page ${page}.`,
     );
   };
 
@@ -299,10 +386,15 @@ export function AuditLogPage() {
             data-testid="audit-export-csv-btn"
             disabled={visibleEntries.length === 0}
             onClick={handleExportCsv}
+            title={
+              lang === 'vi'
+                ? `Xuất ${visibleEntries.length} bản ghi đang hiển thị ở trang ${page} sang tệp CSV`
+                : `Export the ${visibleEntries.length} records currently shown on page ${page} as CSV`
+            }
             className="gap-1.5 rounded-xl text-xs cursor-pointer"
           >
             <Download className="h-3.5 w-3.5" />
-            {lang === 'vi' ? 'Xuất CSV' : 'Export CSV'}
+            {lang === 'vi' ? 'Xuất CSV (trang này)' : 'Export CSV (current view)'}
           </Button>
         </div>
       </div>
@@ -323,7 +415,7 @@ export function AuditLogPage() {
 
         <Card className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm flex flex-col justify-between">
           <span className="text-xs font-medium text-indigo-600 dark:text-indigo-400">
-            {lang === 'vi' ? 'Giảng viên / Quản trị tham gia' : 'Active Reviewers'}
+            {lang === 'vi' ? 'Người tham gia duyệt' : 'Active Reviewers'}
           </span>
           <p
             data-testid="audit-unique-actors"
@@ -337,11 +429,15 @@ export function AuditLogPage() {
           <div className="flex items-center justify-between text-xs gap-2">
             <span className="font-medium text-slate-600 dark:text-slate-300">
               {lang === 'vi'
-                ? 'Tỷ lệ kết quả trên trang này'
-                : 'Decisions on Current Page'}
+                ? 'Kết quả duyệt (trang này)'
+                : 'Outcomes (Current Page)'}
             </span>
             <span className="font-mono font-semibold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
-              {visibleEntries.length > 0 ? `${outcomeSummary.approvedPct}%` : '—'}
+              {visibleEntries.length > 0
+                ? lang === 'vi'
+                  ? `${outcomeSummary.approvedPct}% đã xác minh`
+                  : `${outcomeSummary.approvedPct}% verified`
+                : '—'}
             </span>
           </div>
           <div className="h-2 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden flex">
@@ -381,7 +477,7 @@ export function AuditLogPage() {
             <span className="inline-flex items-center gap-1 whitespace-nowrap">
               <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
               {lang === 'vi'
-                ? `${outcomeSummary.flagged} giữ cảnh báo`
+                ? `${outcomeSummary.flagged} cần rà soát / cảnh báo`
                 : `${outcomeSummary.flagged} flagged`}
             </span>
             {outcomeSummary.neutral > 0 && (
@@ -417,8 +513,8 @@ export function AuditLogPage() {
               className="font-mono text-[11px] bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/60 whitespace-nowrap"
             >
               {lang === 'vi'
-                ? `${visibleEntries.length} hoạt động`
-                : `${visibleEntries.length} entries`}
+                ? `${visibleEntries.length} lượt duyệt`
+                : `${visibleEntries.length} reviews`}
             </Badge>
           }
         />
@@ -431,10 +527,14 @@ export function AuditLogPage() {
               type="text"
               value={userFilter}
               onChange={(e) => setUserFilter(e.target.value)}
-              placeholder={t('admin.filterByUsername')}
+              placeholder={
+                lang === 'vi'
+                  ? 'Tìm theo tên đăng nhập người duyệt…'
+                  : 'Filter by reviewer username…'
+              }
               aria-label={
                 lang === 'vi'
-                  ? 'Lọc nhật ký duyệt trích dẫn theo tên đăng nhập'
+                  ? 'Lọc nhật ký duyệt trích dẫn theo tên đăng nhập người duyệt'
                   : 'Filter audit log by username'
               }
               className="pl-10 pr-9 rounded-xl"
@@ -502,9 +602,13 @@ export function AuditLogPage() {
                     : 'No review records match your filters'}
                 </p>
                 <p className="text-slate-400 text-xs">
-                  {lang === 'vi'
-                    ? 'Thử thay đổi tên đăng nhập hoặc bộ lọc kết quả.'
-                    : 'Try adjusting the reviewer search or verdict filter.'}
+                  {verdictFilter !== 'all' && hasNext
+                    ? lang === 'vi'
+                      ? `Bộ lọc kết quả chỉ áp dụng trên trang ${page}. Hãy thử chuyển sang trang sau hoặc đặt lại bộ lọc.`
+                      : `The outcome filter applies to page ${page}. Try checking the next page or resetting filters.`
+                    : lang === 'vi'
+                      ? 'Thử thay đổi tên đăng nhập người duyệt hoặc bộ lọc kết quả.'
+                      : 'Try adjusting the reviewer search or outcome filter.'}
                 </p>
                 {hasActiveFilters && (
                   <div className="pt-1">
@@ -535,9 +639,8 @@ export function AuditLogPage() {
             {visibleEntries.map((e) => {
               const fromMeta = getVerdictDisplay(e.original_label, lang);
               const toMeta = getVerdictDisplay(e.new_label, lang);
-              const cleanNote = e.note
-                ? e.note.replace(/\s*\[mapping_status:[^\]]+\]\s*$/, '').trim()
-                : '';
+              const verdictChanged = fromMeta.key !== toMeta.key;
+              const { cleanNote, mappingChange } = parseAuditNote(e.note, lang);
               const studentDisplay = e.student_name || e.student_username;
 
               return (
@@ -565,7 +668,7 @@ export function AuditLogPage() {
                             data-testid={`audit-time-${e.id}`}
                             className="text-xs text-slate-500 dark:text-slate-400 font-mono whitespace-nowrap"
                           >
-                            · {formatLocalizedDateTime(e.logged_at, lang)}
+                            {formatLocalizedDateTime(e.logged_at, lang)}
                           </span>
                         )}
                       </div>
@@ -576,9 +679,18 @@ export function AuditLogPage() {
                             <Link
                               to={`/verification/report/${e.essay_id}?citation=${e.verdict_id}`}
                               data-testid={`audit-verdict-link-${e.id}`}
+                              title={
+                                lang === 'vi'
+                                  ? `Mở trích dẫn #${e.verdict_id} trong báo cáo kiểm tra`
+                                  : `Open citation #${e.verdict_id} in verification report`
+                              }
                               className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 border border-slate-200 dark:border-slate-700 text-xs font-mono font-semibold text-indigo-600 dark:text-indigo-400 transition-colors whitespace-nowrap"
                             >
-                              <span>#{e.verdict_id}</span>
+                              <span>
+                                {lang === 'vi'
+                                  ? `Mục #${e.verdict_id}`
+                                  : `Entry #${e.verdict_id}`}
+                              </span>
                               <ExternalLink className="h-3 w-3 shrink-0" />
                             </Link>
                           ) : (
@@ -586,7 +698,9 @@ export function AuditLogPage() {
                               variant="outline"
                               className="font-mono text-xs whitespace-nowrap"
                             >
-                              #{e.verdict_id}
+                              {lang === 'vi'
+                                ? `Mục #${e.verdict_id}`
+                                : `Entry #${e.verdict_id}`}
                             </Badge>
                           )
                         ) : (
@@ -594,7 +708,7 @@ export function AuditLogPage() {
                             variant="secondary"
                             className="text-xs whitespace-nowrap"
                           >
-                            {lang === 'vi' ? 'Hệ thống' : 'System'}
+                            {lang === 'vi' ? 'Sự kiện hệ thống' : 'System Event'}
                           </Badge>
                         )}
                       </div>
@@ -631,21 +745,88 @@ export function AuditLogPage() {
                       </div>
                     )}
 
-                    {/* Visual State Transition Diagram — Arrow Grouped with Target to Prevent Dangling Arrow on Mobile */}
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span
-                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-medium whitespace-nowrap ${fromMeta.badgeClass}`}
-                      >
+                    {/* Visual State Transition — Shows actual mapping change when verdict label is unchanged */}
+                    {verdictChanged ? (
+                      <div className="flex flex-wrap items-center gap-2">
                         <span
-                          className={`w-1.5 h-1.5 rounded-full shrink-0 ${fromMeta.dotClass}`}
-                        />
-                        {fromMeta.label}
-                      </span>
-                      <span className="inline-flex items-center gap-2">
-                        <ArrowRight
-                          className="h-3.5 w-3.5 text-slate-400 shrink-0"
-                          aria-hidden="true"
-                        />
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-medium whitespace-nowrap ${fromMeta.badgeClass}`}
+                        >
+                          <span
+                            className={`w-1.5 h-1.5 rounded-full shrink-0 ${fromMeta.dotClass}`}
+                          />
+                          {fromMeta.label}
+                        </span>
+                        <span className="inline-flex items-center gap-2">
+                          <ArrowRight
+                            className="h-3.5 w-3.5 text-slate-400 shrink-0"
+                            aria-hidden="true"
+                          />
+                          <span
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-semibold whitespace-nowrap ${toMeta.badgeClass}`}
+                          >
+                            <span
+                              className={`w-1.5 h-1.5 rounded-full shrink-0 ${toMeta.dotClass}`}
+                            />
+                            {toMeta.label}
+                          </span>
+                        </span>
+                        {mappingChange && (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-indigo-200/80 dark:border-indigo-800/70 bg-indigo-50/70 dark:bg-indigo-950/50 text-xs text-indigo-700 dark:text-indigo-300 whitespace-nowrap">
+                            <Link2 className="h-3 w-3 shrink-0" />
+                            <span>
+                              {lang === 'vi' ? 'Liên kết:' : 'Link:'}{' '}
+                              {mappingChange.fromLabel
+                                ? `${mappingChange.fromLabel} → ${mappingChange.toLabel}`
+                                : mappingChange.toLabel}
+                            </span>
+                          </span>
+                        )}
+                      </div>
+                    ) : mappingChange ? (
+                      <div
+                        data-testid={`audit-mapping-transition-${e.id}`}
+                        className="flex flex-wrap items-center gap-2"
+                      >
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-indigo-200/80 dark:border-indigo-800/70 bg-indigo-50/70 dark:bg-indigo-950/50 text-xs font-medium text-indigo-700 dark:text-indigo-300 whitespace-nowrap">
+                          <Link2 className="h-3.5 w-3.5 shrink-0" />
+                          <span>
+                            {lang === 'vi'
+                              ? 'Cập nhật liên kết trong bài:'
+                              : 'In-text link updated:'}
+                          </span>
+                          {mappingChange.fromLabel ? (
+                            <span className="inline-flex items-center gap-1 font-semibold">
+                              <span>{mappingChange.fromLabel}</span>
+                              <ArrowRight
+                                className="h-3 w-3 shrink-0"
+                                aria-hidden="true"
+                              />
+                              <span>{mappingChange.toLabel}</span>
+                            </span>
+                          ) : (
+                            <span className="font-semibold">
+                              {mappingChange.toLabel}
+                            </span>
+                          )}
+                        </span>
+                        <span
+                          className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg border text-[11px] font-medium whitespace-nowrap ${toMeta.badgeClass}`}
+                        >
+                          <span
+                            className={`w-1.5 h-1.5 rounded-full shrink-0 ${toMeta.dotClass}`}
+                          />
+                          {lang === 'vi'
+                            ? `Kết quả: ${toMeta.label}`
+                            : `Outcome: ${toMeta.label}`}
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs text-slate-500 dark:text-slate-400">
+                          {lang === 'vi'
+                            ? 'Xác nhận kết quả:'
+                            : 'Confirmed outcome:'}
+                        </span>
                         <span
                           className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-semibold whitespace-nowrap ${toMeta.badgeClass}`}
                         >
@@ -654,8 +835,8 @@ export function AuditLogPage() {
                           />
                           {toMeta.label}
                         </span>
-                      </span>
-                    </div>
+                      </div>
+                    )}
 
                     {cleanNote && (
                       <div className="flex items-start gap-2 text-xs text-slate-600 dark:text-slate-300 bg-white/80 dark:bg-slate-900/60 rounded-xl px-3 py-2 border border-slate-200/60 dark:border-slate-800">
@@ -683,7 +864,7 @@ export function AuditLogPage() {
               className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 font-mono text-[11px] text-slate-500 dark:text-slate-400"
             >
               {lang === 'vi'
-                ? `${AUDIT_PAGE_SIZE} / TRANG`
+                ? `${AUDIT_PAGE_SIZE} mục / trang`
                 : `${AUDIT_PAGE_SIZE} / PAGE`}
             </span>
           </div>
@@ -698,7 +879,7 @@ export function AuditLogPage() {
               data-testid="audit-prev-page"
             >
               <ChevronLeft className="h-3.5 w-3.5" />
-              {lang === 'vi' ? 'Trước' : 'Prev'}
+              {lang === 'vi' ? 'Trang trước' : 'Previous'}
             </Button>
             <Button
               type="button"
@@ -708,7 +889,7 @@ export function AuditLogPage() {
               onClick={() => setOffset((o) => o + AUDIT_PAGE_SIZE)}
               data-testid="audit-next-page"
             >
-              {lang === 'vi' ? 'Sau' : 'Next'}
+              {lang === 'vi' ? 'Trang sau' : 'Next'}
               <ChevronRight className="h-3.5 w-3.5" />
             </Button>
           </div>

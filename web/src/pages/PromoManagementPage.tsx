@@ -56,6 +56,7 @@ import {
 } from '@/components/ui/table';
 
 const PROMO_REGEX = /^[A-Z0-9]{6}$/;
+const USD_TO_VND_RATE = 25000;
 
 function generateFallback6CharCode(): string {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -74,6 +75,84 @@ function getLocalTodayIso(): string {
   return `${y}-${m}-${d}`;
 }
 
+/**
+ * Serialize a calendar date (YYYY-MM-DD) as local end-of-day (23:59:59+HH:MM)
+ * so Vietnam GMT+7 dates never roll over to +1 day via UTC midnight drift.
+ */
+function toLocalEndOfDayIso(dateYmd: string): string {
+  const [y, m, d] = dateYmd.split('-').map(Number);
+  const localEnd = new Date(y, m - 1, d, 23, 59, 59, 0);
+  const tzOffsetMin = -localEnd.getTimezoneOffset();
+  const sign = tzOffsetMin >= 0 ? '+' : '-';
+  const absMin = Math.abs(tzOffsetMin);
+  const hh = String(Math.floor(absMin / 60)).padStart(2, '0');
+  const mm = String(absMin % 60).padStart(2, '0');
+  return `${dateYmd}T23:59:59${sign}${hh}:${mm}`;
+}
+
+/**
+ * Extract the intended calendar date (YYYY-MM-DD) from a stored promo expires_at
+ * string without UTC+7 rollover on legacy UTC midnight/end-of-day sentinels.
+ */
+function extractPromoExpiryYmd(
+  raw: string | null | undefined,
+  lang: 'vi' | 'en',
+): string | null {
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  if (
+    /^\d{4}-\d{2}-\d{2}(?:$|[T ](?:00:00:00|23:59:59)(?:\.\d+)?(?:Z|\+00:00)?$)/i.test(
+      trimmed,
+    )
+  ) {
+    return trimmed.slice(0, 10);
+  }
+  const dt = new Date(trimmed);
+  if (Number.isNaN(dt.getTime())) return trimmed.slice(0, 10);
+  if (lang === 'vi') {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Ho_Chi_Minh',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(dt);
+    const map: Record<string, string> = {};
+    for (const part of parts) {
+      if (part.type !== 'literal') map[part.type] = part.value;
+    }
+    if (map.year && map.month && map.day) {
+      return `${map.year}-${map.month}-${map.day}`;
+    }
+  }
+  const y = dt.getFullYear();
+  const m = String(dt.getMonth() + 1).padStart(2, '0');
+  const d = String(dt.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function formatPromoExpiryDate(
+  raw: string | null | undefined,
+  lang: 'vi' | 'en',
+): string {
+  const ymd = extractPromoExpiryYmd(raw, lang);
+  if (!ymd) return '—';
+  return formatLocalizedDate(ymd, lang);
+}
+
+/** Format USD amount cleanly without rounding fractional cents (e.g. $12.50 -> $12.50, $20.00 -> $20). */
+function formatUsdAmount(value: number): string {
+  if (!Number.isFinite(value)) return '$0';
+  const rounded = Math.round(value * 100) / 100;
+  return Number.isInteger(rounded) ? `$${rounded}` : `$${rounded.toFixed(2)}`;
+}
+
+function formatVndApprox(usd: number): string {
+  if (!Number.isFinite(usd) || usd <= 0) return '';
+  const vnd = Math.round(usd * USD_TO_VND_RATE);
+  return `≈ ${vnd.toLocaleString('vi-VN')} ₫`;
+}
+
 export function PromoManagementPage() {
   const { i18n } = useTranslation();
   const lang = resolveAcademicLang(i18n.resolvedLanguage || i18n.language);
@@ -90,7 +169,9 @@ export function PromoManagementPage() {
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<'all' | 'percent' | 'fixed'>('all');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [statusFilter, setStatusFilter] = useState<
+    'all' | 'active' | 'paused' | 'ended'
+  >('all');
 
   // Create / Edit Modal state
   const [modalOpen, setModalOpen] = useState(false);
@@ -206,7 +287,7 @@ export function PromoManagementPage() {
     );
     setMaxUses(promo.max_uses != null ? String(promo.max_uses) : '');
     setMaxUsesPerUser(String(promo.max_uses_per_user ?? 1));
-    setExpiresAt(promo.expires_at ? promo.expires_at.slice(0, 10) : '');
+    setExpiresAt(extractPromoExpiryYmd(promo.expires_at, lang) ?? '');
     setIsActive(promo.is_active);
     setFormError('');
     setCodeError('');
@@ -246,23 +327,54 @@ export function PromoManagementPage() {
   };
 
   const handleToggleActive = async (promo: PromoCodeItem) => {
+    if (promo.is_expired || promo.is_exhausted) {
+      toast.info(
+        lang === 'vi'
+          ? 'Không thể bật/tắt mã đã kết thúc'
+          : 'Cannot toggle ended promo code',
+        promo.is_expired
+          ? lang === 'vi'
+            ? `Mã ${promo.code} đã hết hạn — hãy bấm Chỉnh sửa để gia hạn ngày sử dụng.`
+            : `${promo.code} has expired — click Edit to extend its expiration date.`
+          : lang === 'vi'
+            ? `Mã ${promo.code} đã hết lượt dùng — hãy bấm Chỉnh sửa để tăng giới hạn lượt.`
+            : `${promo.code} is depleted — click Edit to increase its usage limit.`,
+      );
+      return;
+    }
+
     try {
       const updated = await api.updateAdminPromoCode(promo.id, {
         is_active: !promo.is_active,
       });
       setPromos((prev) => prev.map((item) => (item.id === promo.id ? updated : item)));
-      toast.success(
-        lang === 'vi' ? 'Đã cập nhật trạng thái mã' : 'Promo Status Updated',
-        `${promo.code} · ${
-          updated.is_active
-            ? lang === 'vi'
-              ? 'Đang chạy'
-              : 'Active'
-            : lang === 'vi'
-              ? 'Tạm dừng'
-              : 'Paused'
-        }`,
-      );
+      if (updated.is_expired || updated.is_exhausted) {
+        toast.info(
+          lang === 'vi' ? 'Đã lưu trạng thái mã' : 'Promo Status Saved',
+          `${promo.code} · ${
+            updated.is_expired
+              ? lang === 'vi'
+                ? 'Hết hạn'
+                : 'Expired'
+              : lang === 'vi'
+                ? 'Hết lượt'
+                : 'Depleted'
+          }`,
+        );
+      } else {
+        toast.success(
+          lang === 'vi' ? 'Đã cập nhật trạng thái mã' : 'Promo Status Updated',
+          `${promo.code} · ${
+            updated.is_active
+              ? lang === 'vi'
+                ? 'Đang chạy'
+                : 'Active'
+              : lang === 'vi'
+                ? 'Tạm dừng'
+                : 'Paused'
+          }`,
+        );
+      }
     } catch (err) {
       setError(
         formatUserError(
@@ -370,9 +482,7 @@ export function PromoManagementPage() {
     }
 
     const trimmedExpiry = expiresAt.trim();
-    const originalExpiry = editingPromo?.expires_at
-      ? editingPromo.expires_at.slice(0, 10)
-      : '';
+    const originalExpiry = extractPromoExpiryYmd(editingPromo?.expires_at, lang) ?? '';
     if (
       trimmedExpiry &&
       trimmedExpiry < todayIso &&
@@ -386,7 +496,7 @@ export function PromoManagementPage() {
       return;
     }
 
-    const expiresIso = trimmedExpiry ? `${trimmedExpiry}T23:59:59+00:00` : null;
+    const expiresIso = trimmedExpiry ? toLocalEndOfDayIso(trimmedExpiry) : null;
 
     setSubmitting(true);
     try {
@@ -407,6 +517,10 @@ export function PromoManagementPage() {
         setPromos((prev) =>
           prev.map((item) => (item.id === editingPromo.id ? updated : item)),
         );
+        toast.success(
+          lang === 'vi' ? 'Đã cập nhật mã giảm giá' : 'Promo Code Updated',
+          updated.code,
+        );
       } else {
         const payload: PromoCodeCreatePayload = {
           code: normalizedCode,
@@ -425,15 +539,15 @@ export function PromoManagementPage() {
         const created = await api.createAdminPromoCode(payload);
         setPromos((prev) => [created, ...prev]);
         toast.success(
-          lang === 'vi' ? 'Đã tạo mã khuyến mãi mới' : 'Promo Code Created',
+          lang === 'vi' ? 'Đã tạo mã giảm giá mới' : 'Promo Code Created',
           `${created.code} · ${
             created.discount_type === 'percent'
               ? lang === 'vi'
                 ? `Giảm ${created.discount_value}%`
-                : `${created.discount_value}% OFF`
+                : `${created.discount_value}% off`
               : lang === 'vi'
-                ? `Giảm $${created.discount_value}`
-                : `$${created.discount_value} OFF`
+                ? `Giảm ${formatUsdAmount(created.discount_value)}`
+                : `${formatUsdAmount(created.discount_value)} off`
           }`,
         );
       }
@@ -487,14 +601,12 @@ export function PromoManagementPage() {
       p.code.toLowerCase().includes(q) ||
       (p.description ?? '').toLowerCase().includes(q);
     const matchesType = typeFilter === 'all' || p.discount_type === typeFilter;
+    const isEnded = p.is_expired || p.is_exhausted;
     const matchesStatus =
       statusFilter === 'all' ||
-      (statusFilter === 'active' &&
-        p.is_active &&
-        !p.is_expired &&
-        !p.is_exhausted) ||
-      (statusFilter === 'inactive' &&
-        (!p.is_active || p.is_expired || p.is_exhausted));
+      (statusFilter === 'active' && p.is_active && !isEnded) ||
+      (statusFilter === 'paused' && !p.is_active && !isEnded) ||
+      (statusFilter === 'ended' && isEnded);
     return matchesSearch && matchesType && matchesStatus;
   });
 
@@ -512,7 +624,10 @@ export function PromoManagementPage() {
   const activeCount = promos.filter(
     (p) => p.is_active && !p.is_expired && !p.is_exhausted,
   ).length;
-  const pausedOrExpiredCount = Math.max(0, promos.length - activeCount);
+  const pausedCount = promos.filter(
+    (p) => !p.is_active && !p.is_expired && !p.is_exhausted,
+  ).length;
+  const endedCount = promos.filter((p) => p.is_expired || p.is_exhausted).length;
   const totalRedemptions = promos.reduce((acc, p) => acc + (p.used_count || 0), 0);
   const totalSavedUsd = stats?.total_discount_usd ?? 0;
 
@@ -521,8 +636,8 @@ export function PromoManagementPage() {
       const cap =
         promo.max_discount_usd != null
           ? lang === 'vi'
-            ? ` (tối đa $${promo.max_discount_usd.toFixed(0)})`
-            : ` (max $${promo.max_discount_usd.toFixed(0)})`
+            ? ` (tối đa ${formatUsdAmount(promo.max_discount_usd)})`
+            : ` (max ${formatUsdAmount(promo.max_discount_usd)})`
           : '';
       return `-${promo.discount_value}%${cap}`;
     }
@@ -535,7 +650,15 @@ export function PromoManagementPage() {
         ? lang === 'vi'
           ? 'Mọi gói'
           : 'All Plans'
-        : promo.applicable_tiers.toUpperCase();
+        : promo.applicable_tiers === 'pro'
+          ? lang === 'vi'
+            ? 'Gói Pro'
+            : 'CITRA Pro'
+        : promo.applicable_tiers === 'ultra'
+          ? lang === 'vi'
+            ? 'Gói Ultra'
+            : 'CITRA Ultra'
+          : String(promo.applicable_tiers).toUpperCase();
     const cycleLabel =
       promo.applicable_cycles === 'all'
         ? lang === 'vi'
@@ -583,8 +706,8 @@ export function PromoManagementPage() {
             </h1>
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
               {lang === 'vi'
-                ? 'Tạo mã ưu đãi, theo dõi lượt sử dụng và bật/tắt chiến dịch chỉ với một chạm.'
-                : 'Create discount coupons, track redemptions, and toggle campaigns in one click.'}
+                ? 'Tạo mã giảm giá, quản lý giới hạn áp dụng và theo dõi lượt sử dụng.'
+                : 'Create promo codes, manage usage limits, and track redemptions.'}
             </p>
           </div>
         </div>
@@ -596,11 +719,11 @@ export function PromoManagementPage() {
           className="gap-2 rounded-xl h-9 shadow-sm shrink-0 cursor-pointer"
         >
           <Plus className="h-4 w-4" />
-          {lang === 'vi' ? 'Tạo mã ưu đãi' : 'Create Promo Code'}
+          {lang === 'vi' ? 'Tạo mã giảm giá' : 'Create Promo Code'}
         </Button>
       </div>
 
-      {/* Campaign Performance Overview */}
+      {/* Promo Overview */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
         <Card className="lg:col-span-4 p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm flex items-center gap-4">
           <DonutChart
@@ -610,7 +733,8 @@ export function PromoManagementPage() {
               promos.length > 0
                 ? [
                     { value: activeCount, color: '#10b981' },
-                    { value: pausedOrExpiredCount, color: '#94a3b8' },
+                    { value: pausedCount, color: '#f59e0b' },
+                    { value: endedCount, color: '#94a3b8' },
                   ]
                 : [{ value: 1, color: '#cbd5e1' }]
             }
@@ -622,12 +746,16 @@ export function PromoManagementPage() {
           />
           <div className="min-w-0 flex-1 space-y-1">
             <p className="text-sm font-display font-semibold text-slate-900 dark:text-slate-100">
-              {lang === 'vi' ? 'Sức khỏe chiến dịch' : 'Campaign Activity'}
+              {lang === 'vi' ? 'Tổng quan mã khuyến mãi' : 'Promo Overview'}
             </p>
             <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
               {lang === 'vi'
-                ? `${activeCount} mã đang chạy · ${pausedOrExpiredCount} tạm dừng / hết hạn`
-                : `${activeCount} live · ${pausedOrExpiredCount} paused or expired`}
+                ? `${activeCount} đang chạy · ${pausedCount} tạm dừng${
+                    endedCount > 0 ? ` · ${endedCount} hết hạn / hết lượt` : ''
+                  }`
+                : `${activeCount} active · ${pausedCount} paused${
+                    endedCount > 0 ? ` · ${endedCount} expired / depleted` : ''
+                  }`}
             </p>
           </div>
         </Card>
@@ -659,7 +787,7 @@ export function PromoManagementPage() {
 
           <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm flex flex-col justify-between">
             <span className="text-xs font-medium text-indigo-600 dark:text-indigo-400">
-              {lang === 'vi' ? 'Lượt áp dụng' : 'Redemptions'}
+              {lang === 'vi' ? 'Lượt đã dùng' : 'Total Uses'}
             </span>
             <p
               data-testid="kpi-total-redemptions"
@@ -671,11 +799,18 @@ export function PromoManagementPage() {
 
           <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm flex flex-col justify-between">
             <span className="text-xs font-medium text-violet-600 dark:text-violet-400">
-              {lang === 'vi' ? 'Tổng ưu đãi' : 'Total Saved'}
+              {lang === 'vi' ? 'Tổng tiền đã giảm' : 'Total Discounts Given'}
             </span>
-            <p className="mt-2 text-2xl font-bold font-mono tabular-nums text-violet-600 dark:text-violet-400">
-              ${totalSavedUsd.toFixed(2)}
-            </p>
+            <div className="mt-2">
+              <p className="text-2xl font-bold font-mono tabular-nums text-violet-600 dark:text-violet-400">
+                ${totalSavedUsd.toFixed(2)}
+              </p>
+              {lang === 'vi' && totalSavedUsd > 0 && (
+                <p className="text-[11px] font-mono text-slate-400 dark:text-slate-500 mt-0.5">
+                  {formatVndApprox(totalSavedUsd)}
+                </p>
+              )}
+            </div>
           </Card>
         </div>
       </div>
@@ -689,7 +824,7 @@ export function PromoManagementPage() {
       {/* Promo Campaigns Studio */}
       <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
         <StudioWindowHeader
-          title={lang === 'vi' ? 'CHIẾN DỊCH MÃ GIẢM GIÁ' : 'PROMO CAMPAIGNS'}
+          title={lang === 'vi' ? 'DANH SÁCH MÃ GIẢM GIÁ' : 'PROMO CAMPAIGNS'}
           badge={
             <Badge
               variant="secondary"
@@ -707,7 +842,11 @@ export function PromoManagementPage() {
                 options={[
                   { key: 'all', label: lang === 'vi' ? 'Tất cả' : 'All' },
                   { key: 'active', label: lang === 'vi' ? 'Đang chạy' : 'Active' },
-                  { key: 'inactive', label: lang === 'vi' ? 'Tạm dừng' : 'Paused' },
+                  { key: 'paused', label: lang === 'vi' ? 'Tạm dừng' : 'Paused' },
+                  {
+                    key: 'ended',
+                    label: lang === 'vi' ? 'Hết hạn / Hết lượt' : 'Expired / Depleted',
+                  },
                 ]}
               />
               <button
@@ -836,6 +975,16 @@ export function PromoManagementPage() {
               {filtered.map((promo) => {
                 const effectiveActive =
                   promo.is_active && !promo.is_expired && !promo.is_exhausted;
+                const isLockedEnded = promo.is_expired || promo.is_exhausted;
+                const toggleDisabledTooltip = promo.is_expired
+                  ? lang === 'vi'
+                    ? 'Mã đã hết hạn — bấm Chỉnh sửa để gia hạn ngày sử dụng'
+                    : 'Code has expired — click Edit to extend its expiration date'
+                  : promo.is_exhausted
+                    ? lang === 'vi'
+                      ? 'Mã đã hết lượt dùng — bấm Chỉnh sửa để tăng giới hạn lượt'
+                      : 'Code has reached its usage limit — click Edit to increase max uses'
+                    : undefined;
                 return (
                   <div
                     key={`mobile-${promo.id}`}
@@ -919,25 +1068,30 @@ export function PromoManagementPage() {
                       <span className="inline-flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
                         <Calendar className="h-3 w-3 shrink-0" />
                         {promo.expires_at
-                          ? `${lang === 'vi' ? 'HSD:' : 'Expires:'} ${formatLocalizedDate(promo.expires_at, lang)}`
+                          ? `${lang === 'vi' ? 'Hết hạn:' : 'Expires:'} ${formatPromoExpiryDate(promo.expires_at, lang)}`
                           : lang === 'vi'
                             ? 'Không giới hạn thời gian'
                             : 'No expiry'}
                       </span>
                       <div className="inline-flex items-center gap-2 shrink-0">
-                        <TactileToggle
-                          checked={promo.is_active}
-                          onChange={() => void handleToggleActive(promo)}
-                          aria-label={
-                            promo.is_active
-                              ? lang === 'vi'
-                                ? `Tạm dừng mã ${promo.code}`
-                                : `Pause promo code ${promo.code}`
-                              : lang === 'vi'
-                                ? `Kích hoạt mã ${promo.code}`
-                                : `Activate promo code ${promo.code}`
-                          }
-                        />
+                        <span title={toggleDisabledTooltip} className="inline-flex">
+                          <TactileToggle
+                            checked={effectiveActive}
+                            disabled={isLockedEnded}
+                            onChange={() => void handleToggleActive(promo)}
+                            aria-label={
+                              isLockedEnded
+                                ? toggleDisabledTooltip
+                                : promo.is_active
+                                  ? lang === 'vi'
+                                    ? `Tạm dừng mã ${promo.code}`
+                                    : `Pause promo code ${promo.code}`
+                                  : lang === 'vi'
+                                    ? `Kích hoạt mã ${promo.code}`
+                                    : `Activate promo code ${promo.code}`
+                            }
+                          />
+                        </span>
                         <Button
                           type="button"
                           variant="outline"
@@ -1003,6 +1157,16 @@ export function PromoManagementPage() {
                   {filtered.map((promo) => {
                     const effectiveActive =
                       promo.is_active && !promo.is_expired && !promo.is_exhausted;
+                    const isLockedEnded = promo.is_expired || promo.is_exhausted;
+                    const toggleDisabledTooltip = promo.is_expired
+                      ? lang === 'vi'
+                        ? 'Mã đã hết hạn — bấm Chỉnh sửa để gia hạn ngày sử dụng'
+                        : 'Code has expired — click Edit to extend its expiration date'
+                      : promo.is_exhausted
+                        ? lang === 'vi'
+                          ? 'Mã đã hết lượt dùng — bấm Chỉnh sửa để tăng giới hạn lượt'
+                          : 'Code has reached its usage limit — click Edit to increase max uses'
+                        : undefined;
                     const usagePct =
                       promo.max_uses != null && promo.max_uses > 0
                         ? Math.min(
@@ -1063,8 +1227,8 @@ export function PromoManagementPage() {
                           {promo.min_amount_usd > 0 && (
                             <div className="text-[11px] text-slate-400 mt-1 whitespace-nowrap">
                               {lang === 'vi'
-                                ? `Đơn từ $${promo.min_amount_usd.toFixed(0)}`
-                                : `Min $${promo.min_amount_usd.toFixed(0)}`}
+                                ? `Đơn từ ${formatUsdAmount(promo.min_amount_usd)}`
+                                : `Min ${formatUsdAmount(promo.min_amount_usd)}`}
                             </div>
                           )}
                         </TableCell>
@@ -1132,7 +1296,7 @@ export function PromoManagementPage() {
                             <Calendar className="h-3 w-3 shrink-0" />
                             <span>
                               {promo.expires_at
-                                ? formatLocalizedDate(promo.expires_at, lang)
+                                ? formatPromoExpiryDate(promo.expires_at, lang)
                                 : lang === 'vi'
                                   ? 'Không giới hạn'
                                   : 'No expiry'}
@@ -1143,20 +1307,25 @@ export function PromoManagementPage() {
                         {/* TactileToggle + Edit/Delete */}
                         <TableCell className="align-middle py-3.5 text-right whitespace-nowrap">
                           <div className="inline-flex items-center justify-end gap-2">
-                            <TactileToggle
-                              checked={promo.is_active}
-                              onChange={() => void handleToggleActive(promo)}
-                              data-testid={`promo-toggle-${promo.code}`}
-                              aria-label={
-                                promo.is_active
-                                  ? lang === 'vi'
-                                    ? `Tạm dừng mã ${promo.code}`
-                                    : `Pause promo code ${promo.code}`
-                                  : lang === 'vi'
-                                    ? `Kích hoạt mã ${promo.code}`
-                                    : `Activate promo code ${promo.code}`
-                              }
-                            />
+                            <span title={toggleDisabledTooltip} className="inline-flex">
+                              <TactileToggle
+                                checked={effectiveActive}
+                                disabled={isLockedEnded}
+                                onChange={() => void handleToggleActive(promo)}
+                                data-testid={`promo-toggle-${promo.code}`}
+                                aria-label={
+                                  isLockedEnded
+                                    ? toggleDisabledTooltip
+                                    : promo.is_active
+                                      ? lang === 'vi'
+                                        ? `Tạm dừng mã ${promo.code}`
+                                        : `Pause promo code ${promo.code}`
+                                      : lang === 'vi'
+                                        ? `Kích hoạt mã ${promo.code}`
+                                        : `Activate promo code ${promo.code}`
+                                }
+                              />
+                            </span>
                             <Button
                               type="button"
                               variant="outline"
@@ -1235,9 +1404,13 @@ export function PromoManagementPage() {
                           : 'Create Promo Code'}
                     </h2>
                     <p className="text-xs text-slate-500 dark:text-slate-400">
-                      {lang === 'vi'
-                        ? 'Mã 6 ký tự chữ in hoa & số (A-Z, 0-9)'
-                        : '6-character uppercase alphanumeric code (A-Z, 0-9)'}
+                      {editingPromo
+                        ? lang === 'vi'
+                          ? 'Cập nhật mức giảm, giới hạn sử dụng hoặc ngày hết hạn của mã.'
+                          : 'Update discount rules, usage limits, or expiration date.'
+                        : lang === 'vi'
+                          ? 'Mã 6 ký tự chữ in hoa & số (A-Z, 0-9)'
+                          : '6-character uppercase alphanumeric code (A-Z, 0-9)'}
                     </p>
                   </div>
                 </div>
@@ -1277,8 +1450,8 @@ export function PromoManagementPage() {
                       >
                         {editingPromo
                           ? lang === 'vi'
-                            ? 'Mã giảm giá (cố định)'
-                            : 'Promo Code (read-only)'
+                            ? 'Mã giảm giá (không thể đổi)'
+                            : 'Promo Code (cannot be changed)'
                           : lang === 'vi'
                             ? 'Mã giảm giá (6 ký tự) *'
                             : 'Promo Code (6 chars) *'}
@@ -1312,7 +1485,7 @@ export function PromoManagementPage() {
                           if (codeError) setCodeError('');
                           if (formError) setFormError('');
                         }}
-                        placeholder="CITRA9"
+                        placeholder={lang === 'vi' ? 'VD: HK1206' : 'e.g. FALL26'}
                         className={`font-mono uppercase tracking-widest text-sm font-bold rounded-xl ${
                           inlineCodeHint
                             ? 'border-rose-400 focus-visible:ring-rose-500/30'
@@ -1441,13 +1614,21 @@ export function PromoManagementPage() {
                             : ''
                         }`}
                       />
-                      {fieldErrors.discountValue && (
+                      {fieldErrors.discountValue ? (
                         <p
                           role="alert"
                           className="mt-1 text-[11px] text-rose-600 dark:text-rose-400"
                         >
                           {fieldErrors.discountValue}
                         </p>
+                      ) : (
+                        lang === 'vi' &&
+                        discountType === 'fixed' &&
+                        Number(discountValue) > 0 && (
+                          <p className="mt-1 text-[11px] font-mono text-slate-400 dark:text-slate-500">
+                            {`${formatVndApprox(Number(discountValue))} (quy đổi VNPay tham khảo)`}
+                          </p>
+                        )
                       )}
                     </div>
                   </div>
@@ -1486,7 +1667,9 @@ export function PromoManagementPage() {
                             ? lang === 'vi'
                               ? 'Không giới hạn'
                               : 'No cap'
-                            : 'N/A'
+                            : lang === 'vi'
+                              ? 'Chỉ áp dụng giảm %'
+                              : 'Only for % discounts'
                         }
                         className={`rounded-xl font-mono text-sm ${
                           fieldErrors.maxDiscountUsd
@@ -1494,13 +1677,21 @@ export function PromoManagementPage() {
                             : ''
                         }`}
                       />
-                      {fieldErrors.maxDiscountUsd && (
+                      {fieldErrors.maxDiscountUsd ? (
                         <p
                           role="alert"
                           className="mt-1 text-[11px] text-rose-600 dark:text-rose-400"
                         >
                           {fieldErrors.maxDiscountUsd}
                         </p>
+                      ) : (
+                        lang === 'vi' &&
+                        discountType === 'percent' &&
+                        Number(maxDiscountUsd) > 0 && (
+                          <p className="mt-1 text-[11px] font-mono text-slate-400 dark:text-slate-500">
+                            {formatVndApprox(Number(maxDiscountUsd))}
+                          </p>
+                        )
                       )}
                     </div>
 
@@ -1511,7 +1702,7 @@ export function PromoManagementPage() {
                       >
                         {lang === 'vi'
                           ? 'Đơn tối thiểu ($ USD)'
-                          : 'Minimum Order Subtotal ($ USD)'}
+                          : 'Minimum Order ($ USD)'}
                       </label>
                       <Input
                         id="promo-min-order-field"
@@ -1537,13 +1728,20 @@ export function PromoManagementPage() {
                             : ''
                         }`}
                       />
-                      {fieldErrors.minOrderUsd && (
+                      {fieldErrors.minOrderUsd ? (
                         <p
                           role="alert"
                           className="mt-1 text-[11px] text-rose-600 dark:text-rose-400"
                         >
                           {fieldErrors.minOrderUsd}
                         </p>
+                      ) : (
+                        lang === 'vi' &&
+                        Number(minOrderUsd) > 0 && (
+                          <p className="mt-1 text-[11px] font-mono text-slate-400 dark:text-slate-500">
+                            {formatVndApprox(Number(minOrderUsd))}
+                          </p>
+                        )
                       )}
                     </div>
                   </div>
@@ -1554,7 +1752,7 @@ export function PromoManagementPage() {
                         htmlFor="promo-tiers-field"
                         className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5"
                       >
-                        {lang === 'vi' ? 'Gói cước áp dụng' : 'Applicable Plan Tiers'}
+                        {lang === 'vi' ? 'Gói sử dụng áp dụng' : 'Applicable Plans'}
                       </label>
                       <Select
                         id="promo-tiers-field"
@@ -1568,11 +1766,19 @@ export function PromoManagementPage() {
                       >
                         <option value="all">
                           {lang === 'vi'
-                            ? 'Tất cả gói (Pro & Ultra)'
+                            ? 'Tất cả gói trả phí (Pro & Ultra)'
                             : 'All Paid Plans (Pro & Ultra)'}
                         </option>
-                        <option value="pro">Pro Researcher</option>
-                        <option value="ultra">Ultra Institutional</option>
+                        <option value="pro">
+                          {lang === 'vi'
+                            ? 'Gói Pro (Nghiên cứu)'
+                            : 'CITRA Pro (Research)'}
+                        </option>
+                        <option value="ultra">
+                          {lang === 'vi'
+                            ? 'Gói Ultra (Tổ chức / Trường)'
+                            : 'CITRA Ultra (Institutional)'}
+                        </option>
                       </Select>
                     </div>
 
@@ -1618,7 +1824,7 @@ export function PromoManagementPage() {
                         htmlFor="promo-max-uses-field"
                         className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5"
                       >
-                        {lang === 'vi' ? 'Tổng lượt tối đa' : 'Global Max Uses'}
+                        {lang === 'vi' ? 'Tổng lượt tối đa' : 'Max Total Uses'}
                       </label>
                       <Input
                         id="promo-max-uses-field"
@@ -1637,7 +1843,7 @@ export function PromoManagementPage() {
                           }
                           if (formError) setFormError('');
                         }}
-                        placeholder={lang === 'vi' ? 'Vô hạn (∞)' : 'Unlimited (∞)'}
+                        placeholder={lang === 'vi' ? 'Không giới hạn' : 'Unlimited'}
                         className={`rounded-xl font-mono text-sm ${
                           fieldErrors.maxUses
                             ? 'border-rose-400 focus-visible:ring-rose-500/30'
@@ -1719,26 +1925,45 @@ export function PromoManagementPage() {
                             : ''
                         }`}
                       />
-                      {expiresError && (
+                      {expiresError ? (
                         <p
                           role="alert"
                           className="mt-1 text-[11px] text-rose-600 dark:text-rose-400"
                         >
                           {expiresError}
                         </p>
+                      ) : (
+                        <p className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">
+                          {lang === 'vi'
+                            ? 'Hết hiệu lực lúc 23:59 cuối ngày đã chọn'
+                            : 'Expires at 23:59 on the selected date'}
+                        </p>
                       )}
                     </div>
                   </div>
 
-                  <label className="flex items-center gap-2.5 pt-1 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
+                  <div className="flex items-center gap-2.5 pt-1">
+                    <TactileToggle
+                      id="promo-active-toggle"
                       data-testid="promo-active-checkbox"
+                      aria-labelledby="promo-active-label"
+                      aria-label={
+                        editingPromo
+                          ? lang === 'vi'
+                            ? 'Đang kích hoạt (áp dụng khi thanh toán)'
+                            : 'Active (available at checkout)'
+                          : lang === 'vi'
+                            ? 'Kích hoạt mã giảm giá ngay lập tức'
+                            : 'Enable promo code immediately for checkout'
+                      }
                       checked={isActive}
-                      onChange={(e) => setIsActive(e.target.checked)}
-                      className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                      onChange={setIsActive}
+                      disabled={submitting}
                     />
-                    <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                    <span
+                      id="promo-active-label"
+                      className="text-xs font-medium text-slate-700 dark:text-slate-300"
+                    >
                       {editingPromo
                         ? lang === 'vi'
                           ? 'Đang kích hoạt (áp dụng khi thanh toán)'
@@ -1747,7 +1972,7 @@ export function PromoManagementPage() {
                           ? 'Kích hoạt mã giảm giá ngay lập tức'
                           : 'Enable promo code immediately for checkout'}
                     </span>
-                  </label>
+                  </div>
                 </div>
 
                 {/* Sticky Modal Footer */}
@@ -1828,7 +2053,7 @@ export function PromoManagementPage() {
                   className="gap-2 rounded-xl cursor-pointer"
                 >
                   {deleting && <Loader2 className="h-4 w-4 animate-spin" />}
-                  {lang === 'vi' ? 'Xóa vĩnh viễn' : 'Delete Code'}
+                  {lang === 'vi' ? 'Xóa vĩnh viễn' : 'Delete Permanently'}
                 </Button>
               </div>
             </div>

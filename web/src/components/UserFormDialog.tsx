@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Loader2, ShieldAlert } from 'lucide-react';
+import { Eye, EyeOff, Loader2, ShieldAlert } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { PlanTier, User, UserCreate, UserUpdate } from '@/api/client';
 import { api } from '@/api/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/contexts/ToastContext';
 import { validatePasswordClient } from '@/lib/utils';
 import { formatUserError, resolveAcademicLang } from '@/lib/academicTaxonomy';
 import {
@@ -36,6 +37,30 @@ interface FieldErrors {
 const USERNAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]{1,48}[a-zA-Z0-9]$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+function formatAdminUserError(
+  err: unknown,
+  lang: 'vi' | 'en',
+  fallback: string,
+): string {
+  const formatted = formatUserError(err, lang, fallback);
+  if (/cannot\s+demote\s+yourself\s+from\s+admin/i.test(formatted)) {
+    return lang === 'vi'
+      ? 'Không thể tự hạ quyền quản trị viên của chính bạn.'
+      : 'You cannot demote your own administrator account.';
+  }
+  if (/cannot\s+deactivate\s+your\s+own\s+account/i.test(formatted)) {
+    return lang === 'vi'
+      ? 'Không thể tự tạm khóa tài khoản của chính bạn.'
+      : 'You cannot deactivate your own account.';
+  }
+  if (/^user\s+not\s+found\.?$/i.test(formatted)) {
+    return lang === 'vi'
+      ? 'Không tìm thấy tài khoản này (có thể đã bị xóa).'
+      : 'This account was not found (it may have been deleted).';
+  }
+  return formatted;
+}
+
 export function UserFormDialog({
   open,
   onOpenChange,
@@ -46,6 +71,7 @@ export function UserFormDialog({
   const { t, i18n } = useTranslation();
   const lang = resolveAcademicLang(i18n.resolvedLanguage || i18n.language);
   const { user: authUser } = useAuth();
+  const toast = useToast();
   const isEdit = Boolean(user);
   const effectiveCurrentUserId = currentUserId ?? authUser?.id;
   const isSelfEdit = Boolean(
@@ -60,6 +86,7 @@ export function UserFormDialog({
   const [fullName, setFullName] = useState('');
   const [institution, setInstitution] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [role, setRole] = useState<'user' | 'teacher' | 'admin'>('user');
   const [planTier, setPlanTier] = useState<PlanTier>('basic');
   const [planTierTouched, setPlanTierTouched] = useState(false);
@@ -98,6 +125,7 @@ export function UserFormDialog({
         setIsActive(true);
         setCanOverrideVerdicts(false);
       }
+      setShowPassword(false);
       setError('');
       setFieldErrors({});
     }
@@ -135,8 +163,8 @@ export function UserFormDialog({
     ) {
       nextFieldErrors.username =
         lang === 'vi'
-          ? 'Tên đăng nhập gồm 3–50 ký tự (chữ cái, số, ., _, -), không có dấu chấm liên tiếp.'
-          : 'Username must be 3–50 characters (letters, numbers, ., _, -), without consecutive dots.';
+          ? 'Tên đăng nhập gồm 3–50 ký tự (chữ cái, số, ., _, -), bắt đầu và kết thúc bằng chữ cái hoặc số, không có hai dấu chấm liên tiếp.'
+          : 'Username must be 3–50 characters (letters, numbers, ., _, -), start and end with a letter or number, and contain no consecutive dots.';
     }
 
     if (!isEdit && !password) {
@@ -196,13 +224,21 @@ export function UserFormDialog({
     try {
       if (isEdit && user) {
         await api.updateUser(user.id, payload as UserUpdate);
+        toast.success(
+          lang === 'vi' ? 'Đã cập nhật tài khoản' : 'Account Updated',
+          trimmedUsername || user.username,
+        );
       } else {
         await api.createUser(payload as UserCreate);
+        toast.success(
+          lang === 'vi' ? 'Đã tạo tài khoản mới' : 'Account Created',
+          trimmedUsername,
+        );
       }
       onSuccess();
       onOpenChange(false);
     } catch (err) {
-      setError(formatUserError(err, lang, t('admin.genericError')));
+      setError(formatAdminUserError(err, lang, t('admin.genericError')));
     } finally {
       setLoading(false);
     }
@@ -273,31 +309,61 @@ export function UserFormDialog({
                     : 'Reset Password (optional)'
                   : t('admin.passwordRequiredLabel')}
               </Label>
-              <Input
-                id="user-form-password"
-                type="password"
-                data-testid="user-form-password"
-                value={password}
-                onChange={(e) => {
-                  setPassword(e.target.value);
-                  clearFieldError('password');
-                }}
-                maxLength={128}
-                disabled={loading}
-                aria-invalid={Boolean(fieldErrors.password)}
-                placeholder={
-                  isEdit
-                    ? lang === 'vi'
-                      ? 'Để trống nếu giữ nguyên mật khẩu hiện tại'
-                      : 'Leave blank to keep current password'
-                    : t('admin.passwordMinPlaceholder')
-                }
-                className={
-                  fieldErrors.password
-                    ? 'border-rose-400 focus-visible:ring-rose-500/30'
-                    : undefined
-                }
-              />
+              <div className="relative">
+                <Input
+                  id="user-form-password"
+                  type={showPassword ? 'text' : 'password'}
+                  data-testid="user-form-password"
+                  value={password}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    clearFieldError('password');
+                  }}
+                  maxLength={128}
+                  disabled={loading}
+                  aria-invalid={Boolean(fieldErrors.password)}
+                  placeholder={
+                    isEdit
+                      ? lang === 'vi'
+                        ? 'Để trống nếu giữ nguyên mật khẩu hiện tại'
+                        : 'Leave blank to keep current password'
+                      : t('admin.passwordMinPlaceholder')
+                  }
+                  className={
+                    fieldErrors.password
+                      ? 'pr-10 border-rose-400 focus-visible:ring-rose-500/30'
+                      : 'pr-10'
+                  }
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  disabled={loading}
+                  aria-label={
+                    showPassword
+                      ? lang === 'vi'
+                        ? 'Ẩn mật khẩu'
+                        : 'Hide password'
+                      : lang === 'vi'
+                        ? 'Hiện mật khẩu'
+                        : 'Show password'
+                  }
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer"
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
+              {isEdit && !fieldErrors.password && (
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-snug">
+                  {lang === 'vi'
+                    ? 'Đặt mật khẩu mới sẽ tự động đăng xuất tài khoản khỏi các phiên hiện tại.'
+                    : 'Setting a new password signs this account out of active sessions.'}
+                </p>
+              )}
               {fieldErrors.password && (
                 <p
                   role="alert"
@@ -354,7 +420,7 @@ export function UserFormDialog({
 
             <div className="space-y-1.5">
               <Label htmlFor="user-form-institution">
-                {lang === 'vi' ? 'Đơn vị / Lớp' : 'Institution / Class'}
+                {lang === 'vi' ? 'Trường / Khoa / Đơn vị' : 'Institution / Department'}
               </Label>
               <Input
                 id="user-form-institution"
@@ -365,6 +431,11 @@ export function UserFormDialog({
                 disabled={loading}
                 placeholder={t('admin.institutionExamplePlaceholder')}
               />
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-snug">
+                {lang === 'vi'
+                  ? 'Thông tin hiển thị trên hồ sơ; ghi danh lớp học được quản lý tại mục Lớp học.'
+                  : 'Profile display only — class enrollment is managed under Classes.'}
+              </p>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -388,6 +459,8 @@ export function UserFormDialog({
                               : 'basic',
                         );
                       }
+                    } else if (nextRole === 'admin' && !planTierTouched) {
+                      setPlanTier('ultra');
                     }
                   }}
                   disabled={loading || isSelfEdit}
@@ -416,10 +489,29 @@ export function UserFormDialog({
                   disabled={loading}
                   wrapperClassName="w-full"
                 >
-                  <option value="basic">CITRA Basic</option>
-                  <option value="pro">CITRA Pro</option>
-                  <option value="ultra">CITRA Ultra</option>
+                  <option value="basic">
+                    {lang === 'vi'
+                      ? 'CITRA Basic (3 lượt/tháng)'
+                      : 'CITRA Basic (3 checks/mo)'}
+                  </option>
+                  <option value="pro">
+                    {lang === 'vi'
+                      ? 'CITRA Pro (50 lượt/tháng)'
+                      : 'CITRA Pro (50 checks/mo)'}
+                  </option>
+                  <option value="ultra">
+                    {lang === 'vi'
+                      ? 'CITRA Ultra (1.000 lượt/tháng)'
+                      : 'CITRA Ultra (1,000 checks/mo)'}
+                  </option>
                 </Select>
+                {role === 'admin' && (
+                  <p className="text-[11px] text-amber-700 dark:text-amber-300 leading-snug">
+                    {lang === 'vi'
+                      ? 'Quản trị viên luôn có lượt kiểm tra không giới hạn.'
+                      : 'Administrators always receive unlimited checks.'}
+                  </p>
+                )}
               </div>
             </div>
 
@@ -438,7 +530,7 @@ export function UserFormDialog({
             )}
 
             <div className="space-y-3 pt-1">
-              <div className="flex items-center gap-3">
+              <div className="flex items-start gap-3">
                 <TactileToggle
                   id="user-form-active-switch"
                   aria-labelledby="user-form-active-label"
@@ -447,15 +539,31 @@ export function UserFormDialog({
                     if (!isSelfEdit) setIsActive(next);
                   }}
                   disabled={loading || isSelfEdit}
+                  className="mt-0.5"
                 />
-                <span
-                  id="user-form-active-label"
-                  className="text-sm font-medium text-slate-700 dark:text-slate-300"
-                >
-                  {(isSelfEdit ? true : isActive)
-                    ? t('admin.active')
-                    : t('admin.inactive')}
-                </span>
+                <div className="min-w-0">
+                  <span
+                    id="user-form-active-label"
+                    className="block text-sm font-medium text-slate-700 dark:text-slate-300"
+                  >
+                    {lang === 'vi'
+                      ? 'Cho phép đăng nhập'
+                      : 'Account active (allow sign-in)'}
+                  </span>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">
+                    {(isSelfEdit ? true : isActive)
+                      ? lang === 'vi'
+                        ? 'Đang hoạt động — tài khoản có thể đăng nhập bình thường.'
+                        : 'Active — user can sign in normally.'
+                      : isEdit
+                        ? lang === 'vi'
+                          ? 'Đang tạm khóa — tài khoản bị chặn đăng nhập và đăng xuất khỏi các phiên hiện tại.'
+                          : 'Inactive — sign-in is blocked and active sessions are ended.'
+                        : lang === 'vi'
+                          ? 'Chưa kích hoạt — nếu có email, hệ thống sẽ gửi liên kết tự kích hoạt cho người dùng.'
+                          : 'Pending activation — if an email is set, an activation link will be sent.'}
+                  </p>
+                </div>
               </div>
 
               {role !== 'user' && (
@@ -473,12 +581,14 @@ export function UserFormDialog({
                       id="user-form-override-label"
                       className="block text-sm font-medium text-slate-700 dark:text-slate-300"
                     >
-                      {t('admin.canOverrideVerdictsLabel')}
+                      {lang === 'vi'
+                        ? 'Cho phép cập nhật kết quả kiểm tra'
+                        : 'Allow updating review results'}
                     </span>
                     <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">
                       {lang === 'vi'
-                        ? 'Cho phép xác nhận hoặc điều chỉnh kết quả kiểm chứng trích dẫn của sinh viên.'
-                        : 'Allows confirming or adjusting automated citation verification verdicts.'}
+                        ? 'Cho phép xác nhận hoặc điều chỉnh kết quả kiểm tra trích dẫn do hệ thống gợi ý.'
+                        : 'Allows confirming or updating automated citation check results.'}
                     </p>
                   </div>
                 </div>

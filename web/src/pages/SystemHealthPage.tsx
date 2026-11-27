@@ -63,42 +63,67 @@ const VERDICT_COLOR_HEX: Record<CanonicalVerdictKey, string> = {
 
 const CACHE_STAT_LABELS: Record<string, { en: string; vi: string }> = {
   total: { en: 'Total Cached Entries', vi: 'Tổng mục lưu đệm' },
-  total_hits: { en: 'Total Cache Hits', vi: 'Tổng lượt trúng đệm' },
-  avg_hit_count: { en: 'Avg Hits / Entry', vi: 'Trung bình trúng / mục' },
-  dynamic_entries: { en: 'Dynamic Entries', vi: 'Mục đệm động' },
-  local_papers_count: { en: 'Local Corpus Papers', vi: 'Bài báo kho cục bộ' },
-  local_queries_count: { en: 'Local Corpus Queries', vi: 'Truy vấn kho cục bộ' },
-  local_hits_count: { en: 'Local Corpus Hits', vi: 'Lượt trúng kho cục bộ' },
-  local_hit_rate_percent: { en: 'Local Hit Rate (%)', vi: 'Tỷ lệ trúng cục bộ (%)' },
+  total_hits: { en: 'Total Cache Reuses', vi: 'Tổng lượt tái sử dụng đệm' },
+  avg_hit_count: { en: 'Avg Reuses / Entry', vi: 'Trung bình tái sử dụng / mục' },
+  dynamic_entries: { en: 'Temporary Cached Entries', vi: 'Mục lưu đệm tạm' },
+  local_papers_count: { en: 'Built-in Library Papers', vi: 'Bài báo thư viện tích hợp' },
+  local_queries_count: { en: 'Built-in Library Queries', vi: 'Lượt tra cứu thư viện tích hợp' },
+  local_hits_count: { en: 'Built-in Library Matches', vi: 'Lượt khớp thư viện tích hợp' },
+  local_hit_rate_percent: {
+    en: 'Built-in Library Match Rate (%)',
+    vi: 'Tỷ lệ khớp thư viện tích hợp (%)',
+  },
   persistent_entries: {
-    en: 'Persistent SQLite Entries',
-    vi: 'Mục lưu đệm SQLite bền vững',
+    en: 'Saved Disk Cache Entries',
+    vi: 'Mục lưu đệm trên ổ đĩa',
   },
   expired_entries: { en: 'Expired Cache Entries', vi: 'Mục lưu đệm đã hết hạn' },
   persistent_hits: {
-    en: 'Persistent SQLite Hits',
-    vi: 'Lượt trúng đệm SQLite bền vững',
+    en: 'Disk Cache Reuses',
+    vi: 'Lượt tái sử dụng từ ổ đĩa',
   },
-  hit_rate_percent: { en: 'Cache Hit Rate (%)', vi: 'Tỷ lệ trúng đệm (%)' },
-  session_hits: { en: 'Session Cache Hits (B1)', vi: 'Lượt trúng phiên RAM (B1)' },
+  hit_rate_percent: { en: 'Cache Reuse Rate (%)', vi: 'Tỷ lệ tái sử dụng đệm (%)' },
+  session_hits: {
+    en: 'Session Cache Hits',
+    vi: 'Lượt khớp đệm phiên hiện tại',
+  },
   session_misses: {
-    en: 'Session Cache Misses (B1)',
-    vi: 'Lượt trượt phiên RAM (B1)',
+    en: 'Session Cache Misses',
+    vi: 'Lượt chưa có trong đệm',
   },
   session_hit_rate_percent: {
-    en: 'Session Hit Rate (%)',
-    vi: 'Tỷ lệ trúng phiên RAM (%)',
+    en: 'Session Cache Hit Rate (%)',
+    vi: 'Tỷ lệ khớp đệm phiên (%)',
   },
-  wave0_entries: { en: 'Wave-0 Prefetch Entries', vi: 'Mục tiền nạp Wave-0' },
+  wave0_entries: { en: 'Preloaded Records', vi: 'Dữ liệu khởi động sẵn' },
   negative_cache_entries: {
-    en: 'Negative Cache Entries',
-    vi: 'Bộ nhớ đệm không tìm thấy',
+    en: 'Empty-Result Cache',
+    vi: 'Đệm kết quả trống',
   },
   singleflight_coalesced: {
-    en: 'Singleflight Coalesced',
-    vi: 'Truy vấn gộp Singleflight',
+    en: 'Deduplicated Requests',
+    vi: 'Yêu cầu gộp trùng',
   },
 };
+
+const SERVICE_DISPLAY_LABELS: Record<string, { en: string; vi: string }> = {
+  grobid: { en: 'Enhanced PDF Parser', vi: 'Bộ đọc PDF chuyên sâu' },
+  database: { en: 'Database', vi: 'Cơ sở dữ liệu' },
+  db: { en: 'Database', vi: 'Cơ sở dữ liệu' },
+  cache: { en: 'Lookup Cache', vi: 'Bộ nhớ đệm' },
+  parser: { en: 'Document Parser', vi: 'Bộ đọc tài liệu' },
+  redis: { en: 'Session Cache', vi: 'Bộ nhớ đệm phiên' },
+  upstream: { en: 'Academic Sources', vi: 'Nguồn học thuật' },
+};
+
+function formatServiceName(key: string, lang: 'en' | 'vi'): string {
+  const normalized = key.trim().toLowerCase();
+  const mapped = SERVICE_DISPLAY_LABELS[normalized];
+  if (mapped) return mapped[lang];
+  return key
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (ch) => ch.toUpperCase());
+}
 
 const UPSTREAM_PROVIDER_LABELS: Record<
   string,
@@ -116,7 +141,7 @@ const UPSTREAM_PROVIDER_LABELS: Record<
   open_library: 'Open Library',
   pubmed: 'PubMed',
   datacite: 'DataCite',
-  doi_ra: 'DOI Registration Agency',
+  doi_ra: { en: 'Global DOI Registry', vi: 'Hệ thống đăng ký DOI' },
   doaj: 'DOAJ',
   openaire_hal: 'OpenAIRE / HAL',
   ncbi_biorxiv: 'NCBI / bioRxiv',
@@ -127,17 +152,17 @@ const UPSTREAM_PROVIDER_LABELS: Record<
   },
   vn_tech_standard: {
     en: 'VN Tech Standards (TCVN/QCVN)',
-    vi: 'Tiêu chuẩn Kỹ thuật VN (TCVN/QCVN)',
+    vi: 'Tiêu chuẩn kỹ thuật VN (TCVN/QCVN)',
   },
   vn_textbook_registry: {
     en: 'VN Textbook Registry',
-    vi: 'Danh mục Giáo trình ĐH VN',
+    vi: 'Danh mục giáo trình ĐH VN',
   },
   vn_legal_registry: {
-    en: 'VN Legal Registry (VBQPPL)',
+    en: 'Vietnamese Legal Database',
     vi: 'Cơ sở dữ liệu Pháp luật VN',
   },
-  web_html_meta: { en: 'Web HTML Metadata', vi: 'Siêu dữ liệu HTML Web' },
+  web_html_meta: { en: 'Web Page Metadata', vi: 'Thông tin trang web' },
   wayback_html_meta: {
     en: 'Wayback Machine Archive',
     vi: 'Lưu trữ Wayback Machine',
@@ -146,8 +171,8 @@ const UPSTREAM_PROVIDER_LABELS: Record<
   wikidata_opencitatio: 'Wikidata / OpenCitations',
   url_check: { en: 'URL Check', vi: 'Kiểm chứng URL' },
   clean_miss: {
-    en: 'Verified Clean Miss',
-    vi: 'Không có bản ghi (Đã xác thực)',
+    en: 'Confirmed No Match',
+    vi: 'Đã kiểm tra — không tìm thấy bản ghi',
   },
   serpapi: 'SerpAPI (Google Scholar)',
   acl: 'ACL Anthology',
@@ -157,12 +182,12 @@ const UPSTREAM_PROVIDER_LABELS: Record<
     vi: 'Danh mục học thuật VN',
   },
   html_head: {
-    en: 'HTML Meta Verifier',
-    vi: 'Trình kiểm chứng HTML Meta',
+    en: 'Web Metadata Checker',
+    vi: 'Trình đọc thông tin trang web',
   },
   local_db: {
-    en: 'Local Corpus DB',
-    vi: 'Kho dữ liệu cục bộ',
+    en: 'CITRA Scholarly Library',
+    vi: 'Thư viện học thuật CITRA',
   },
   known_papers: {
     en: 'Curated Known Papers',
@@ -226,12 +251,46 @@ function sanitizeUpstreamError(
   ) {
     if (/timeout|timed\s*out/i.test(trimmed)) {
       return lang === 'vi'
-        ? 'Hết thời gian chờ sau nhiều lần thử lại'
-        : 'Request timed out after retries';
+        ? 'Hết thời gian phản hồi từ nguồn ngoài'
+        : 'Upstream request timed out';
     }
     return lang === 'vi'
       ? 'Kết nối nguồn gặp lỗi sau nhiều lần thử lại'
       : 'Upstream request failed after retries';
+  }
+
+  // Translate common raw Python/HTTP client exception messages into clean ops language
+  if (
+    /ReadTimeout|ConnectTimeout|PoolTimeout|TimeoutException|timeout\s*\(|timed\s*out/i.test(
+      trimmed,
+    )
+  ) {
+    return lang === 'vi'
+      ? 'Hết thời gian phản hồi từ nguồn ngoài'
+      : 'Upstream request timed out';
+  }
+  if (/rate\s*limit|too\s+many\s+requests|\b429\b/i.test(trimmed)) {
+    return lang === 'vi'
+      ? 'Nguồn tạm giới hạn tốc độ truy vấn'
+      : 'Temporarily rate-limited by upstream source';
+  }
+  if (
+    /\b(?:http\s*)?5\d{2}\b|gateway\s*timeout|bad\s*gateway|service\s*unavailable/i.test(
+      trimmed,
+    )
+  ) {
+    return lang === 'vi'
+      ? 'Máy chủ nguồn tạm thời gặp lỗi'
+      : 'Upstream server temporarily unavailable';
+  }
+  if (
+    /ConnectError|RemoteProtocolError|TLS|SSL|connection\s+reset|reset\s+by\s+peer/i.test(
+      trimmed,
+    )
+  ) {
+    return lang === 'vi'
+      ? 'Kết nối tới nguồn ngoài bị gián đoạn'
+      : 'Connection to upstream source interrupted';
   }
 
   // Strip leaked query strings / URL parameters / quoted search queries
@@ -251,38 +310,57 @@ function sanitizeUpstreamError(
   return cleaned.length > 140 ? `${cleaned.slice(0, 137)}…` : cleaned;
 }
 
-function formatSqliteSyncMode(raw: unknown): string {
-  if (raw === 0 || raw === '0') return 'OFF';
-  if (raw === 1 || raw === '1') return 'NORMAL';
-  if (raw === 2 || raw === '2') return 'FULL';
-  if (raw === 3 || raw === '3') return 'EXTRA';
-  if (typeof raw === 'string' && raw.trim()) return raw.trim().toUpperCase();
-  return 'NORMAL';
+function formatSqliteSyncMode(raw: unknown, lang: 'en' | 'vi'): string {
+  const normalized =
+    raw === 0 || raw === '0'
+      ? 'OFF'
+      : raw === 1 || raw === '1'
+        ? 'NORMAL'
+        : raw === 2 || raw === '2'
+          ? 'FULL'
+          : raw === 3 || raw === '3'
+            ? 'EXTRA'
+            : typeof raw === 'string' && raw.trim()
+              ? raw.trim().toUpperCase()
+              : 'NORMAL';
+  if (lang === 'vi') {
+    if (normalized === 'NORMAL') return 'Tiêu chuẩn (NORMAL)';
+    if (normalized === 'FULL') return 'Đầy đủ (FULL)';
+    if (normalized === 'OFF') return 'Tắt (OFF)';
+    if (normalized === 'EXTRA') return 'Tối đa (EXTRA)';
+  }
+  return normalized;
 }
 
 function formatLocalPapersDbMode(
   localDb: Record<string, unknown> | null | undefined,
+  lang: 'en' | 'vi',
 ): string {
-  if (!localDb || typeof localDb !== 'object') return 'N/A';
-  if (localDb.available === false) return 'UNAVAILABLE';
-  if (typeof localDb.mode === 'string' && localDb.mode.trim()) {
-    return localDb.mode.trim().toUpperCase();
+  if (!localDb || typeof localDb !== 'object') {
+    return lang === 'vi'
+      ? 'Thư viện học thuật CITRA (Chưa kết nối)'
+      : 'CITRA Scholarly Library (Not Connected)';
   }
-  if (
+  if (localDb.available === false) {
+    return lang === 'vi'
+      ? 'Thư viện học thuật CITRA (Chưa sẵn sàng)'
+      : 'CITRA Scholarly Library (Unavailable)';
+  }
+  const modeStr = typeof localDb.mode === 'string' ? localDb.mode.trim().toLowerCase() : '';
+  const isReadOnly =
     localDb.read_only === true ||
     localDb.query_only === true ||
-    localDb.query_only === 1
-  ) {
-    const jm =
-      typeof localDb.journal_mode === 'string' && localDb.journal_mode.trim()
-        ? ` · ${localDb.journal_mode.trim().toUpperCase()}`
-        : '';
-    return `READ-ONLY${jm}`;
+    localDb.query_only === 1 ||
+    modeStr.includes('ro') ||
+    modeStr.includes('read');
+  if (isReadOnly) {
+    return lang === 'vi'
+      ? 'Thư viện học thuật CITRA (Chỉ đọc)'
+      : 'CITRA Scholarly Library (Read-Only)';
   }
-  if (typeof localDb.journal_mode === 'string' && localDb.journal_mode.trim()) {
-    return localDb.journal_mode.trim().toUpperCase();
-  }
-  return 'CONNECTED';
+  return lang === 'vi'
+    ? 'Thư viện học thuật CITRA (Đã kết nối)'
+    : 'CITRA Scholarly Library (Connected)';
 }
 
 function isProviderDegraded(info: UpstreamSourceHealth): boolean {
@@ -332,7 +410,7 @@ function getProviderVisuals(
   }
   if (degradedWhileClosed) {
     return {
-      label: lang === 'vi' ? 'Phản hồi chậm' : 'Degraded',
+      label: lang === 'vi' ? 'Không ổn định' : 'Unstable',
       tooltip:
         lang === 'vi'
           ? 'Nguồn đang kết nối nhưng tỷ lệ thành công dưới 80% hoặc có lỗi liên tiếp'
@@ -437,21 +515,23 @@ export function SystemHealthPage() {
         await api.resetCircuitBreaker(source);
       }
       toast.success(
-        lang === 'vi' ? 'Đã đặt lại ngắt mạch' : 'Circuit breaker reset',
+        lang === 'vi'
+          ? 'Đã khôi phục kết nối nguồn'
+          : 'Source connection restored',
         source
           ? lang === 'vi'
-            ? `Đã khôi phục mạch cho ${formatProviderName(source, lang)}.`
-            : `Reset circuit breaker for ${formatProviderName(source, lang)}.`
+            ? `Đã kết nối lại nguồn ${formatProviderName(source, lang)}.`
+            : `Reconnected ${formatProviderName(source, lang)}.`
           : lang === 'vi'
-            ? 'Đã khôi phục tất cả các mạch đang mở.'
-            : 'All tripped circuit breakers have been reset.',
+            ? 'Đã kết nối lại các nguồn đang tạm ngắt'
+            : 'Reconnected all paused sources',
       );
       await load(false);
     } catch (e) {
       toast.error(
         lang === 'vi'
-          ? 'Không thể đặt lại ngắt mạch'
-          : 'Failed to reset circuit breaker',
+          ? 'Không thể kết nối lại nguồn'
+          : 'Could not reconnect source',
         formatUserError(e, lang),
       );
     } finally {
@@ -558,31 +638,33 @@ export function SystemHealthPage() {
       : effectiveLevel === 'degraded'
         ? 'bg-amber-500'
         : 'bg-red-500';
-  const degradedList = coreHealth.degradedServices.join(', ');
+  const degradedList = coreHealth.degradedServices
+    .map((svc) => formatServiceName(svc, lang))
+    .join(', ');
 
   let pillText: string;
   if (effectiveLevel === 'healthy') {
     pillText =
-      lang === 'vi' ? 'TẤT CẢ DỊCH VỤ ỔN ĐỊNH' : 'ALL SERVICES HEALTHY';
+      lang === 'vi' ? 'Tất cả dịch vụ ổn định' : 'All Services Healthy';
   } else if (effectiveLevel === 'degraded') {
     if (coreHealth.degradedServices.length > 0) {
       pillText =
         lang === 'vi'
-          ? `SUY GIẢM: ${degradedList}`
-          : `DEGRADED: ${degradedList}`;
+          ? `Tạm suy giảm: ${degradedList}`
+          : `Degraded: ${degradedList}`;
     } else if (degradedUpstreamCount > 0 && totalUpstreamCount > 0) {
       pillText =
         lang === 'vi'
-          ? `${degradedUpstreamCount} NGUỒN ĐANG CHẬM / SUY GIẢM (${healthyUpstreamCount}/${totalUpstreamCount} ổn định)`
-          : `${degradedUpstreamCount} ${degradedUpstreamCount === 1 ? 'SOURCE' : 'SOURCES'} DEGRADED (${healthyUpstreamCount}/${totalUpstreamCount} operational)`;
+          ? `${degradedUpstreamCount} nguồn không ổn định (${healthyUpstreamCount}/${totalUpstreamCount} hoạt động tốt)`
+          : `${degradedUpstreamCount} ${degradedUpstreamCount === 1 ? 'source' : 'sources'} unstable (${healthyUpstreamCount}/${totalUpstreamCount} operational)`;
     } else {
-      pillText = lang === 'vi' ? 'SUY GIẢM' : 'DEGRADED';
+      pillText = lang === 'vi' ? 'Hệ thống tạm suy giảm' : 'System Degraded';
     }
   } else {
     pillText =
       lang === 'vi'
-        ? `SỰ CỐ (${String(data.status).toUpperCase()})${degradedList ? `: ${degradedList}` : ''}`
-        : `OUTAGE (${String(data.status).toUpperCase()})${degradedList ? `: ${degradedList}` : ''}`;
+        ? `Hệ thống gián đoạn${degradedList ? `: ${degradedList}` : ''}`
+        : `Service outage${degradedList ? `: ${degradedList}` : ''}`;
   }
 
   // Stage 1: live Database & GROBID status pills
@@ -731,6 +813,26 @@ export function SystemHealthPage() {
     ? formatLocalizedDateTime(lastCheckedIso, lang)
     : null;
 
+  const grobidTooltip = grobidActive
+    ? lang === 'vi'
+      ? 'Đang dùng dịch vụ phân tích PDF chuyên sâu (GROBID) để tách cấu trúc tài liệu và trích dẫn.'
+      : 'Using the dedicated academic PDF parser (GROBID) for structured citation extraction.'
+    : grobidSvcDegraded
+      ? lang === 'vi'
+        ? 'Dịch vụ phân tích PDF chuyên sâu đang gián đoạn; hệ thống tự động dùng bộ đọc văn bản chuẩn dự phòng.'
+        : 'Enhanced PDF parser is temporarily unavailable; automatically using the built-in fallback parser.'
+      : lang === 'vi'
+        ? 'Đang dùng bộ đọc văn bản chuẩn dự phòng vì dịch vụ phân tích PDF chuyên sâu chưa bật'
+        : 'Using the built-in standard text parser because the enhanced PDF analysis service is not enabled';
+
+  const dbTooltip = dbHealthy
+    ? lang === 'vi'
+      ? 'Cơ sở dữ liệu đang kết nối và phản hồi ổn định.'
+      : 'Database is connected and responding normally.'
+    : lang === 'vi'
+      ? 'Kết nối cơ sở dữ liệu đang gặp sự cố — cần kiểm tra máy chủ.'
+      : 'Database connection is experiencing an issue — server inspection required.';
+
   const pipelineStages: Array<{
     id: string;
     stepLabel: string;
@@ -743,8 +845,8 @@ export function SystemHealthPage() {
   }> = [
     {
       id: 'parser-db',
-      stepLabel: lang === 'vi' ? 'CHẶNG 1' : 'STAGE 1',
-      title: lang === 'vi' ? 'Đọc & Lưu trữ Tài liệu' : 'Document Engine & DB',
+      stepLabel: lang === 'vi' ? 'Bước 1' : 'Step 1',
+      title: lang === 'vi' ? 'Đọc & lưu trữ tài liệu' : 'Document Processing & Storage',
       level: coreHealth.level,
       statusText:
         coreHealth.level === 'healthy'
@@ -766,7 +868,8 @@ export function SystemHealthPage() {
           <div className="flex flex-wrap items-center gap-1.5">
             <span
               data-testid="stage1-grobid-pill"
-              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-[10px] font-medium whitespace-nowrap ${
+              title={grobidTooltip}
+              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-[10px] font-medium whitespace-nowrap cursor-help ${
                 grobidActive
                   ? 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-200/80 dark:border-emerald-800/80 text-emerald-700 dark:text-emerald-300'
                   : grobidSvcDegraded
@@ -776,19 +879,20 @@ export function SystemHealthPage() {
             >
               {grobidActive
                 ? lang === 'vi'
-                  ? 'GROBID: Hoạt động'
-                  : 'GROBID: Active'
+                  ? 'Bộ đọc PDF chuyên sâu: Bật'
+                  : 'Enhanced PDF Parser: Active'
                 : grobidSvcDegraded
                   ? lang === 'vi'
-                    ? 'GROBID: Gián đoạn'
-                    : 'GROBID: Degraded'
+                    ? 'Bộ đọc PDF chuyên sâu: Gián đoạn'
+                    : 'Enhanced PDF Parser: Degraded'
                   : lang === 'vi'
-                    ? 'GROBID: Dự phòng'
-                    : 'GROBID: Fallback'}
+                    ? 'Bộ đọc PDF: Dự phòng'
+                    : 'PDF Parser: Fallback'}
             </span>
             <span
               data-testid="stage1-db-pill"
-              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-[10px] font-medium whitespace-nowrap ${
+              title={dbTooltip}
+              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-[10px] font-medium whitespace-nowrap cursor-help ${
                 dbHealthy
                   ? 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-200/80 dark:border-emerald-800/80 text-emerald-700 dark:text-emerald-300'
                   : 'bg-rose-50 dark:bg-rose-950/60 border-rose-200/80 dark:border-rose-800/80 text-rose-700 dark:text-rose-300'
@@ -796,11 +900,11 @@ export function SystemHealthPage() {
             >
               {dbHealthy
                 ? lang === 'vi'
-                  ? 'CSDL: Kết nối tốt'
-                  : 'DB: Connected'
+                  ? 'Cơ sở dữ liệu: Ổn định'
+                  : 'Database: Connected'
                 : lang === 'vi'
-                  ? 'CSDL: Gián đoạn'
-                  : 'DB: Issue'}
+                  ? 'Cơ sở dữ liệu: Gián đoạn'
+                  : 'Database: Issue'}
             </span>
           </div>
         </div>
@@ -808,13 +912,13 @@ export function SystemHealthPage() {
     },
     {
       id: 'scholarly-network',
-      stepLabel: lang === 'vi' ? 'CHẶNG 2' : 'STAGE 2',
-      title: lang === 'vi' ? '15+ Nguồn Học thuật' : 'Scholarly API Network',
+      stepLabel: lang === 'vi' ? 'Bước 2' : 'Step 2',
+      title: lang === 'vi' ? 'Kết nối thư viện học thuật' : 'Scholarly Library Sources',
       level: isUpstreamDegraded ? 'degraded' : 'healthy',
       statusText: isUpstreamDegraded
         ? lang === 'vi'
-          ? `${degradedUpstreamCount} suy giảm`
-          : `${degradedUpstreamCount} degraded`
+          ? `${degradedUpstreamCount} không ổn định`
+          : `${degradedUpstreamCount} unstable`
         : lang === 'vi'
           ? 'Thông suốt'
           : 'Connected',
@@ -832,7 +936,7 @@ export function SystemHealthPage() {
               >
                 {healthyUpstreamCount}/{totalUpstreamCount}
               </span>
-              {lang === 'vi' ? 'nguồn ổn định' : 'sources operational'}
+              {lang === 'vi' ? 'nguồn hoạt động tốt' : 'sources operational'}
             </>
           ) : lang === 'vi' ? (
             'Chờ truy vấn mới'
@@ -844,10 +948,16 @@ export function SystemHealthPage() {
     },
     {
       id: 'lookup-cache',
-      stepLabel: lang === 'vi' ? 'CHẶNG 3' : 'STAGE 3',
-      title: lang === 'vi' ? 'Bộ nhớ Tăng tốc' : 'Smart Lookup Cache',
+      stepLabel: lang === 'vi' ? 'Bước 3' : 'Step 3',
+      title: lang === 'vi' ? 'Bộ nhớ đệm tăng tốc' : 'Lookup Speed Cache',
       level: 'healthy',
-      statusText: lang === 'vi' ? 'Tối ưu' : 'Accelerated',
+      statusText: hasCacheHitRateSample
+        ? lang === 'vi'
+          ? 'Đang tăng tốc'
+          : 'Accelerated'
+        : lang === 'vi'
+          ? 'Đang chờ dữ liệu'
+          : 'Standby',
       icon: <Zap className="h-4 w-4 text-amber-500 dark:text-amber-400" />,
       metric: (
         <p className="text-xs text-slate-600 dark:text-slate-300">
@@ -874,8 +984,8 @@ export function SystemHealthPage() {
             aria-label={
               hasCacheHitRateSample
                 ? lang === 'vi'
-                  ? `Tỷ lệ trúng bộ nhớ đệm: ${formatMetricNumber(cacheHitRatePct)}%`
-                  : `Cache hit rate: ${formatMetricNumber(cacheHitRatePct)}%`
+                  ? `Tỷ lệ tái sử dụng bộ nhớ đệm: ${formatMetricNumber(cacheHitRatePct)}%`
+                  : `Cache reuse rate: ${formatMetricNumber(cacheHitRatePct)}%`
                 : lang === 'vi'
                   ? 'Chưa có lượt tra cứu bộ nhớ đệm'
                   : 'No cache lookups recorded yet'
@@ -934,7 +1044,7 @@ export function SystemHealthPage() {
             </span>
           </div>
           <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap">
-            {lang === 'vi' ? 'Tỷ lệ trúng' : 'Hit rate'}
+            {lang === 'vi' ? 'Tái sử dụng đệm' : 'Cache reuse'}
           </span>
         </div>
       ),
@@ -1171,8 +1281,8 @@ export function SystemHealthPage() {
           rightSlot={
             <span className="text-xs font-mono text-slate-500 dark:text-slate-400">
               {lang === 'vi'
-                ? `${formatIntCounter(data.totals.verdicts, lang)} bản ghi tổng cộng`
-                : `${formatIntCounter(data.totals.verdicts, lang)} total records`}
+                ? `${formatIntCounter(data.totals.verdicts, lang)} trích dẫn đã kiểm tra`
+                : `${formatIntCounter(data.totals.verdicts, lang)} citations checked`}
             </span>
           }
         />
@@ -1199,7 +1309,7 @@ export function SystemHealthPage() {
                     {formatIntCounter(data.totals.verdicts, lang)}
                   </span>
                   <span className="text-[10px] text-slate-400">
-                    {lang === 'vi' ? 'kết quả' : 'verdicts'}
+                    {lang === 'vi' ? 'trích dẫn' : 'citations'}
                   </span>
                 </div>
               }
@@ -1208,7 +1318,9 @@ export function SystemHealthPage() {
 
           <div className="flex-1 min-w-0 space-y-2.5">
             <h2 className="text-sm font-display font-semibold text-slate-900 dark:text-white">
-              {t('admin.verdictsByLabel')}
+              {lang === 'vi'
+                ? 'Phân loại kết quả kiểm chứng'
+                : 'Breakdown by verification outcome'}
             </h2>
             {verdictEntries.length === 0 ? (
               <p className="text-xs text-slate-400">
@@ -1259,10 +1371,10 @@ export function SystemHealthPage() {
                     : '0 active sources'
                   : lang === 'vi'
                     ? `${healthyUpstreamCount} hoạt động${
-                        degradedClosedCount > 0 ? ` · ${degradedClosedCount} phản hồi chậm` : ''
+                        degradedClosedCount > 0 ? ` · ${degradedClosedCount} không ổn định` : ''
                       } · ${halfOpenCircuitsCount} kiểm tra lại · ${openCircuitsCount} tạm ngắt`
                     : `${healthyUpstreamCount} operational${
-                        degradedClosedCount > 0 ? ` · ${degradedClosedCount} degraded` : ''
+                        degradedClosedCount > 0 ? ` · ${degradedClosedCount} unstable` : ''
                       } · ${halfOpenCircuitsCount} recovering · ${openCircuitsCount} paused`}
               </span>
               {openCircuitsCount + halfOpenCircuitsCount > 0 && (
@@ -1281,7 +1393,9 @@ export function SystemHealthPage() {
                     <RotateCcw className="h-3 w-3" />
                   )}
                   <span>
-                    {lang === 'vi' ? 'Khôi phục tất cả' : 'Reset All Breakers'}
+                    {lang === 'vi'
+                      ? 'Kết nối lại nguồn tạm ngắt'
+                      : 'Reconnect Paused Sources'}
                   </span>
                 </Button>
               )}
@@ -1292,8 +1406,8 @@ export function SystemHealthPage() {
         <div className="p-4 sm:p-6">
           <h2 className="text-sm font-display font-semibold text-slate-900 dark:text-white">
             {lang === 'vi'
-              ? 'Nguồn Học Thuật & Ngắt Mạch Tự Động'
-              : 'Scholarly Upstream Providers & Circuit Breakers'}
+              ? 'Nguồn học thuật & Bảo vệ kết nối tự động'
+              : 'Academic Sources & Connection Protection'}
           </h2>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 mb-3">
             {lang === 'vi'
@@ -1341,11 +1455,18 @@ export function SystemHealthPage() {
                       <th className="py-2.5 px-3.5 font-semibold whitespace-nowrap">
                         {lang === 'vi' ? 'Tỷ lệ thành công' : 'Success Rate'}
                       </th>
-                      <th className="py-2.5 px-3.5 font-semibold whitespace-nowrap">
-                        {lang === 'vi' ? 'Giới hạn (429)' : 'Rate Limit'}
+                      <th
+                        title={
+                          lang === 'vi'
+                            ? 'Số lần nguồn ngoài tạm từ chối do vượt giới hạn số yêu cầu cho phép (HTTP 429)'
+                            : 'Times the upstream source temporarily throttled requests (HTTP 429)'
+                        }
+                        className="py-2.5 px-3.5 font-semibold whitespace-nowrap cursor-help"
+                      >
+                        {lang === 'vi' ? 'Vượt giới hạn tốc độ' : 'Rate Limited'}
                       </th>
                       <th className="py-2.5 px-3.5 font-semibold whitespace-nowrap">
-                        {lang === 'vi' ? 'Lỗi mạng' : 'Errors'}
+                        {lang === 'vi' ? 'Sự cố kết nối' : 'Connection Errors'}
                       </th>
                     </tr>
                   </thead>
@@ -1463,7 +1584,9 @@ export function SystemHealthPage() {
                                   ) : (
                                     <RotateCcw className="h-2.5 w-2.5" />
                                   )}
-                                  <span>{lang === 'vi' ? 'Đặt lại' : 'Reset'}</span>
+                                  <span>
+                                    {lang === 'vi' ? 'Kết nối lại' : 'Reconnect'}
+                                  </span>
                                 </button>
                               )}
                             </div>
@@ -1488,8 +1611,17 @@ export function SystemHealthPage() {
                                     {formatLatency(primaryLatencyMs)}
                                   </span>
                                   {p95LatencyMs !== null && (
-                                    <span className="text-[10px] text-slate-400 dark:text-slate-500 whitespace-nowrap">
-                                      {`p95: ${formatLatency(p95LatencyMs)}`}
+                                    <span
+                                      title={
+                                        lang === 'vi'
+                                          ? '95% số yêu cầu phản hồi nhanh hơn mức thời gian này (p95)'
+                                          : '95% of requests complete within this time (p95 latency)'
+                                      }
+                                      className="text-[10px] text-slate-400 dark:text-slate-500 whitespace-nowrap cursor-help"
+                                    >
+                                      {lang === 'vi'
+                                        ? `95% ≤ ${formatLatency(p95LatencyMs)}`
+                                        : `p95: ${formatLatency(p95LatencyMs)}`}
                                     </span>
                                   )}
                                 </div>
@@ -1557,14 +1689,14 @@ export function SystemHealthPage() {
                             <div className="flex flex-wrap items-center gap-1.5">
                               <span>
                                 {lang === 'vi'
-                                  ? `Hết thời gian chờ (Timeout): ${formatIntCounter(timeoutCount, lang)} · 5xx: ${formatIntCounter(http5xxCount, lang)}`
-                                  : `Timeouts: ${formatIntCounter(timeoutCount, lang)} · 5xx: ${formatIntCounter(http5xxCount, lang)}`}
+                                  ? `Chờ quá lâu: ${formatIntCounter(timeoutCount, lang)} · Lỗi máy chủ: ${formatIntCounter(http5xxCount, lang)}`
+                                  : `Timeouts: ${formatIntCounter(timeoutCount, lang)} · Server errors: ${formatIntCounter(http5xxCount, lang)}`}
                               </span>
                               {consecutiveFailures > 0 && (
                                 <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[10px] text-rose-600 dark:text-rose-400">
                                   {lang === 'vi'
-                                    ? `Liên tiếp: ${consecutiveFailures}`
-                                    : `Streak: ${consecutiveFailures}`}
+                                    ? `Lỗi liên tiếp: ${consecutiveFailures}`
+                                    : `Consecutive errors: ${consecutiveFailures}`}
                                 </span>
                               )}
                             </div>
@@ -1604,8 +1736,8 @@ export function SystemHealthPage() {
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-xs font-semibold text-emerald-900 dark:text-emerald-200">
                       {lang === 'vi'
-                        ? 'Bộ nhớ đệm Trích dẫn Động'
-                        : 'Dynamic Citation Cache'}
+                        ? 'Bộ nhớ đệm tra cứu tạm'
+                        : 'Temporary Lookup Cache'}
                     </span>
                     <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/70 text-emerald-800 dark:text-emerald-200 whitespace-nowrap">
                       {lang === 'vi' ? 'Lưu tạm' : 'Live Cache'}
@@ -1619,8 +1751,8 @@ export function SystemHealthPage() {
                   </p>
                   <p className="mt-0.5 text-xs text-emerald-800/80 dark:text-emerald-300/80">
                     {lang === 'vi'
-                      ? `${formatIntCounter(persistentHits, lang)} lượt trúng bền vững`
-                      : `${formatIntCounter(persistentHits, lang)} persistent hits`}
+                      ? `${formatIntCounter(persistentHits, lang)} lượt tra cứu khớp từ kho đệm`
+                      : `${formatIntCounter(persistentHits, lang)} cached lookup hits`}
                   </p>
                 </div>
 
@@ -1631,8 +1763,8 @@ export function SystemHealthPage() {
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-xs font-semibold text-indigo-900 dark:text-indigo-200">
                       {lang === 'vi'
-                        ? 'Kho Học thuật Cục bộ Tĩnh'
-                        : 'Static Local Corpus'}
+                        ? 'Thư viện học thuật CITRA tích hợp'
+                        : 'Built-in CITRA Scholarly Library'}
                     </span>
                     <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/70 text-indigo-800 dark:text-indigo-200 whitespace-nowrap">
                       {lang === 'vi' ? 'Cố định' : 'Built-in'}
@@ -1657,7 +1789,7 @@ export function SystemHealthPage() {
               <div data-testid="cache-by-source-section" className="pt-2">
                 <p className="text-xs font-semibold text-slate-700 dark:text-slate-200 mb-2">
                   {lang === 'vi'
-                    ? 'Phân bổ lưu đệm theo nguồn'
+                    ? 'Phân bổ dữ liệu đệm theo nguồn'
                     : 'Cached Entries by Source'}
                 </p>
                 {cacheBySourceEntries.length > 0 ? (
@@ -1687,8 +1819,8 @@ export function SystemHealthPage() {
                     <span className="font-bold font-mono tabular-nums">0</span>
                     <span>
                       {lang === 'vi'
-                        ? 'mục lưu đệm tra cứu động'
-                        : 'dynamic cached entries'}
+                        ? 'mục lưu đệm tra cứu tạm'
+                        : 'temporary cached entries'}
                     </span>
                   </span>
                 )}
@@ -1702,8 +1834,8 @@ export function SystemHealthPage() {
               >
                 <p className="text-xs font-semibold text-slate-700 dark:text-slate-200 mb-2">
                   {lang === 'vi'
-                    ? 'Kho tri thức học thuật tích hợp sẵn'
-                    : 'Built-in Local Scholarly Corpus'}
+                    ? 'Thư viện học thuật tích hợp sẵn'
+                    : 'Built-in Scholarly Library'}
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {localCorpusBySourceEntries.map(([sourceKey, count]) => (
@@ -1724,7 +1856,7 @@ export function SystemHealthPage() {
             )}
           </div>
 
-          {/* Progressive Disclosure Footer for Granular Cache Counters & SQLite Engine Telemetry */}
+          {/* Progressive Disclosure Footer for Granular Cache Counters & Database Settings */}
           <div className="border-t border-slate-200/80 dark:border-slate-800 bg-slate-50/30 dark:bg-slate-900/50">
             <button
               type="button"
@@ -1737,7 +1869,7 @@ export function SystemHealthPage() {
                 <SlidersHorizontal className="h-3.5 w-3.5 text-slate-400 shrink-0" />
                 {lang === 'vi'
                   ? 'Thông số kỹ thuật nâng cao (Dành cho quản trị hạ tầng)'
-                  : 'Advanced Engine Diagnostics (Infrastructure Details)'}
+                  : 'Advanced Diagnostics (Infrastructure Details)'}
               </span>
               <SymmetricChevron
                 open={diagnosticsOpen}
@@ -1755,17 +1887,17 @@ export function SystemHealthPage() {
                   {hasB1SessionTelemetry && (
                     <div
                       data-testid="b1-session-cache-panel"
-                      className="p-3 rounded-xl bg-violet-50/60 dark:bg-violet-950/25 border border-violet-200/80 dark:border-violet-800/70 flex flex-wrap items-center justify-between gap-2 text-xs font-mono"
+                      className="p-3 rounded-xl bg-violet-50/60 dark:bg-violet-950/25 border border-violet-200/80 dark:border-violet-800/70 flex flex-wrap items-center justify-between gap-2 text-xs"
                     >
                       <span className="font-semibold text-violet-900 dark:text-violet-200">
                         {lang === 'vi'
-                          ? 'Bộ nhớ đệm phiên RAM (B1 Singleflight)'
-                          : 'B1 In-Memory Session Cache'}
+                          ? 'Bộ nhớ đệm phiên hiện tại'
+                          : 'In-Memory Session Cache'}
                       </span>
-                      <div className="flex flex-wrap items-center gap-2.5 text-[11px] text-violet-800 dark:text-violet-300">
+                      <div className="flex flex-wrap items-center gap-2.5 text-[11px] font-mono text-violet-800 dark:text-violet-300">
                         {rawCacheStats.session_hit_rate_percent != null && (
                           <span data-testid="b1-session-hit-rate">
-                            {lang === 'vi' ? 'Tỷ lệ trúng' : 'Hit Rate'}:{' '}
+                            {lang === 'vi' ? 'Tỷ lệ khớp' : 'Hit Rate'}:{' '}
                             <strong>
                               {formatMetricNumber(
                                 Number(rawCacheStats.session_hit_rate_percent),
@@ -1776,7 +1908,10 @@ export function SystemHealthPage() {
                         )}
                         {rawCacheStats.wave0_entries != null && (
                           <span data-testid="b1-wave0-entries">
-                            Wave-0:{' '}
+                            {lang === 'vi'
+                              ? 'Dữ liệu khởi động sẵn'
+                              : 'Preloaded Records'}
+                            :{' '}
                             <strong>
                               {formatIntCounter(
                                 Number(rawCacheStats.wave0_entries),
@@ -1787,7 +1922,10 @@ export function SystemHealthPage() {
                         )}
                         {rawCacheStats.singleflight_coalesced != null && (
                           <span data-testid="b1-singleflight-coalesced">
-                            Singleflight:{' '}
+                            {lang === 'vi'
+                              ? 'Yêu cầu gộp trùng'
+                              : 'Deduplicated Requests'}
+                            :{' '}
                             <strong>
                               {formatIntCounter(
                                 Number(rawCacheStats.singleflight_coalesced),
@@ -1799,8 +1937,8 @@ export function SystemHealthPage() {
                         {rawCacheStats.negative_cache_entries != null && (
                           <span data-testid="b1-negative-entries">
                             {lang === 'vi'
-                              ? 'Bộ nhớ đệm không tìm thấy'
-                              : 'Neg Cache'}
+                              ? 'Đệm kết quả trống'
+                              : 'Empty-Result Cache'}
                             :{' '}
                             <strong>
                               {formatIntCounter(
@@ -1834,46 +1972,47 @@ export function SystemHealthPage() {
                   {appSqliteWal && (
                     <div
                       data-testid="sqlite-wal-telemetry"
-                      className="flex flex-wrap items-center gap-2 text-[11px] font-mono pt-1"
+                      className="flex flex-wrap items-center gap-2 text-[11px] pt-1"
                     >
                       <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold">
                         <HardDrive className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
-                        SQLite Engine
+                        {lang === 'vi'
+                          ? 'Thông số kỹ thuật CSDL'
+                          : 'Database Settings'}
                       </span>
                       <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-50/80 dark:bg-emerald-950/60 border border-emerald-200/70 dark:border-emerald-800/70 text-emerald-800 dark:text-emerald-200">
                         <span className="text-slate-500 dark:text-slate-400">
-                          journal_mode:
+                          {lang === 'vi' ? 'Chế độ ghi nhật ký:' : 'Journal Mode:'}
                         </span>
-                        <span className="font-bold">
+                        <span className="font-mono font-bold">
                           {String(appSqliteWal.journal_mode ?? 'WAL').toUpperCase()}
                         </span>
                       </span>
                       <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700 text-slate-700 dark:text-slate-200">
                         <span className="text-slate-500 dark:text-slate-400">
-                          synchronous:
+                          {lang === 'vi'
+                            ? 'Mức đồng bộ dữ liệu:'
+                            : 'Data Sync Level:'}
                         </span>
-                        <span className="font-bold">
-                          {formatSqliteSyncMode(appSqliteWal.synchronous)}
+                        <span className="font-mono font-bold">
+                          {formatSqliteSyncMode(appSqliteWal.synchronous, lang)}
                         </span>
                       </span>
                       {(appSqliteWal.busy_timeout_ms != null ||
                         appSqliteWal.busy_timeout != null) && (
                         <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700 text-slate-700 dark:text-slate-200">
                           <span className="text-slate-500 dark:text-slate-400">
-                            busy_timeout:
+                            {lang === 'vi'
+                              ? 'Thời gian chờ khóa (ms):'
+                              : 'Lock Timeout (ms):'}
                           </span>
-                          <span className="font-bold tabular-nums">
+                          <span className="font-mono font-bold tabular-nums">
                             {`${String(appSqliteWal.busy_timeout_ms ?? appSqliteWal.busy_timeout)} ms`}
                           </span>
                         </span>
                       )}
-                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-indigo-50/70 dark:bg-indigo-950/50 border border-indigo-200/70 dark:border-indigo-800/70 text-indigo-800 dark:text-indigo-200">
-                        <span className="text-slate-500 dark:text-slate-400">
-                          local_papers.db:
-                        </span>
-                        <span className="font-bold">
-                          {formatLocalPapersDbMode(localPapersSqliteWal)}
-                        </span>
+                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-indigo-50/70 dark:bg-indigo-950/50 border border-indigo-200/70 dark:border-indigo-800/70 text-indigo-800 dark:text-indigo-200 font-semibold">
+                        {formatLocalPapersDbMode(localPapersSqliteWal, lang)}
                       </span>
                     </div>
                   )}
@@ -1898,7 +2037,7 @@ export function SystemHealthPage() {
               <SlidersHorizontal className="h-3.5 w-3.5 text-slate-400 shrink-0" />
               {lang === 'vi'
                 ? 'Thông số kỹ thuật nâng cao (Dành cho quản trị hạ tầng)'
-                : 'Advanced Engine Diagnostics (Infrastructure Details)'}
+                : 'Advanced Diagnostics (Infrastructure Details)'}
             </span>
             <SymmetricChevron
               open={diagnosticsOpen}
@@ -1915,46 +2054,47 @@ export function SystemHealthPage() {
               <div className="px-4 sm:px-5 pb-4 pt-1 border-t border-slate-100 dark:border-slate-800">
                 <div
                   data-testid="sqlite-wal-telemetry"
-                  className="flex flex-wrap items-center gap-2 text-[11px] font-mono pt-2"
+                  className="flex flex-wrap items-center gap-2 text-[11px] pt-2"
                 >
                   <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold">
                     <HardDrive className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
-                    SQLite Engine
+                    {lang === 'vi'
+                      ? 'Thông số kỹ thuật CSDL'
+                      : 'Database Settings'}
                   </span>
                   <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-50/80 dark:bg-emerald-950/60 border border-emerald-200/70 dark:border-emerald-800/70 text-emerald-800 dark:text-emerald-200">
                     <span className="text-slate-500 dark:text-slate-400">
-                      journal_mode:
+                      {lang === 'vi' ? 'Chế độ ghi nhật ký:' : 'Journal Mode:'}
                     </span>
-                    <span className="font-bold">
+                    <span className="font-mono font-bold">
                       {String(appSqliteWal.journal_mode ?? 'WAL').toUpperCase()}
                     </span>
                   </span>
                   <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700 text-slate-700 dark:text-slate-200">
                     <span className="text-slate-500 dark:text-slate-400">
-                      synchronous:
+                      {lang === 'vi'
+                        ? 'Mức đồng bộ dữ liệu:'
+                        : 'Data Sync Level:'}
                     </span>
-                    <span className="font-bold">
-                      {formatSqliteSyncMode(appSqliteWal.synchronous)}
+                    <span className="font-mono font-bold">
+                      {formatSqliteSyncMode(appSqliteWal.synchronous, lang)}
                     </span>
                   </span>
                   {(appSqliteWal.busy_timeout_ms != null ||
                     appSqliteWal.busy_timeout != null) && (
                     <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700 text-slate-700 dark:text-slate-200">
                       <span className="text-slate-500 dark:text-slate-400">
-                        busy_timeout:
+                        {lang === 'vi'
+                          ? 'Thời gian chờ khóa (ms):'
+                          : 'Lock Timeout (ms):'}
                       </span>
-                      <span className="font-bold tabular-nums">
+                      <span className="font-mono font-bold tabular-nums">
                         {`${String(appSqliteWal.busy_timeout_ms ?? appSqliteWal.busy_timeout)} ms`}
                       </span>
                     </span>
                   )}
-                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-indigo-50/70 dark:bg-indigo-950/50 border border-indigo-200/70 dark:border-indigo-800/70 text-indigo-800 dark:text-indigo-200">
-                    <span className="text-slate-500 dark:text-slate-400">
-                      local_papers.db:
-                    </span>
-                    <span className="font-bold">
-                      {formatLocalPapersDbMode(localPapersSqliteWal)}
-                    </span>
+                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-indigo-50/70 dark:bg-indigo-950/50 border border-indigo-200/70 dark:border-indigo-800/70 text-indigo-800 dark:text-indigo-200 font-semibold">
+                    {formatLocalPapersDbMode(localPapersSqliteWal, lang)}
                   </span>
                 </div>
               </div>
@@ -1967,12 +2107,14 @@ export function SystemHealthPage() {
         isOpen={confirmClearOpen}
         variant="danger"
         title={
-          lang === 'vi' ? 'Xóa toàn bộ bộ nhớ đệm?' : 'Clear the lookup cache?'
+          lang === 'vi'
+            ? 'Xóa bộ nhớ đệm tra cứu tạm?'
+            : 'Clear temporary lookup cache?'
         }
         message={
           lang === 'vi'
-            ? 'Mọi kết quả tra cứu học thuật đã lưu tạm sẽ bị xóa; các lần phân tích tiếp theo sẽ gọi lại nguồn dữ liệu và có thể chậm hơn.'
-            : 'All cached scholarly lookups will be deleted; upcoming analyses will re-query source APIs and may be slower.'
+            ? 'Chỉ xóa kết quả tra cứu tạm từ nguồn ngoài; tài khoản, bài nộp, báo cáo kiểm chứng và thư viện học thuật tích hợp sẵn hoàn toàn không bị ảnh hưởng. Lần kiểm tra tiếp theo có thể mất thêm vài giây.'
+            : 'Only temporary external lookup results will be cleared. User accounts, submitted documents, reports, and the built-in scholarly library remain untouched. The next few checks may take slightly longer.'
         }
         confirmLabel={lang === 'vi' ? 'Xóa bộ nhớ đệm' : 'Clear cache'}
         cancelLabel={lang === 'vi' ? 'Hủy' : 'Cancel'}
