@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Body, Depends
@@ -63,9 +64,26 @@ def get_system_health(
         get_circuit_breaker_registry(),
         get_settings(),
     )
+    upstream_sources = registry.snapshot_all()
+    degraded_sources: list[str] = []
+    for src_name, stats in sorted(upstream_sources.items()):
+        state_val = str(stats.get("state") or "closed").strip().lower()
+        total_calls = int(stats.get("total_calls") or 0)
+        success_count = int(stats.get("success_count") or 0)
+        consecutive_failures = int(stats.get("consecutive_failures") or 0)
+        if (
+            state_val != "closed"
+            or consecutive_failures >= 2
+            or (total_calls >= 3 and (success_count / total_calls) < 0.80)
+        ):
+            degraded_sources.append(src_name)
+    upstream_status = "degraded" if degraded_sources else "ok"
 
     return {
         "status": "degraded" if "grobid" in services else "ok",
+        "checked_at": datetime.now(UTC).isoformat(),
+        "upstream_status": upstream_status,
+        "degraded_sources": degraded_sources,
         "services": services,
         "parser_mode": grobid_health.parser_mode,
         "grobid_available": grobid_health.available,
@@ -79,7 +97,7 @@ def get_system_health(
         },
         "verdict_label_counts": label_counts,
         "cache_stats": cache_stats,
-        "upstream_sources": registry.snapshot_all(),
+        "upstream_sources": upstream_sources,
         "sqlite_wal": {
             "app_db": get_app_db_tuning_report(),
             "local_papers_db": get_local_papers_tuning_report(),

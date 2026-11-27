@@ -65,6 +65,15 @@ from integrity_checker.models.validation import (
 from integrity_checker.retrieval import RetrievalOrchestrator
 from integrity_checker.retrieval.normalization import citation_key
 
+SCANNED_PDF_WARNING_VI = (
+    "Phát hiện tài liệu PDF dạng ảnh quét (Scanned/Image-only PDF) thiếu lớp văn bản số hóa (Text Layer). "
+    "Vui lòng chuyển đổi qua OCR hoặc tải lên bản gốc .docx / PDF xuất trực tiếp từ Word/LaTeX để đạt độ chính xác kiểm chứng trích dẫn tối đa."
+)
+SCANNED_PDF_WARNING_EN = (
+    "Scanned or image-only PDF detected (missing selectable text layer). "
+    "Please run OCR or upload the original .docx / digitally exported PDF from Word or LaTeX for accurate citation verification."
+)
+
 
 class _CrossLoopAsyncSemaphore:
     """Async-native FIFO semaphore shared safely across multiple worker event loops."""
@@ -842,8 +851,18 @@ class IntegrityPipeline:
                 and len(ref_citations) == 0
             )
         )
+        is_unscannable_pdf = bool(
+            is_scanned_pdf and len(in_text_citations) == 0 and len(ref_citations) == 0
+        )
+        scanned_msg_vi = (
+            (doc_metadata.get("warning_message") or SCANNED_PDF_WARNING_VI)
+            if is_scanned_pdf
+            else None
+        )
+        scanned_msg_en = SCANNED_PDF_WARNING_EN if is_scanned_pdf else None
         style_profile_dict["document_diagnostics"] = {
             "is_scanned_pdf": is_scanned_pdf,
+            "is_unscannable": is_unscannable_pdf,
             "scanned_pages_count": scanned_pages_count,
             "total_extractable_chars": total_extractable_chars,
             "avg_chars_per_page": avg_chars_per_page,
@@ -853,15 +872,9 @@ class IntegrityPipeline:
                 doc_metadata.get("legacy_encoding_pages_count") or 0
             ),
             "warning_code": "SCANNED_PDF_DETECTED" if is_scanned_pdf else None,
-            "warning_message": (
-                doc_metadata.get("warning_message")
-                or (
-                    "Phát hiện tài liệu PDF dạng ảnh quét (Scanned/Image-only PDF) thiếu lớp văn bản số hóa (Text Layer). "
-                    "Vui lòng chuyển đổi qua OCR hoặc tải lên bản gốc .docx / PDF xuất trực tiếp từ Word/LaTeX để đạt độ chính xác kiểm chứng trích dẫn tối đa."
-                    if is_scanned_pdf
-                    else None
-                )
-            ),
+            "warning_message": scanned_msg_vi,
+            "warning_message_vi": scanned_msg_vi,
+            "warning_message_en": scanned_msg_en,
             "parser_warnings": list(parser_warnings or []),
         }
 

@@ -137,6 +137,9 @@ class PendingVerdictItem(BaseModel):
     essay_id: int
     filename: str
     student_username: str | None
+    student_name: str | None = None
+    class_id: int | None = None
+    class_name: str | None = None
     citation_raw: str = ""
     label: str
     confidence: float
@@ -158,6 +161,85 @@ class PendingVerdictItem(BaseModel):
 
 
 _TEACHER_URL_RE = re.compile(r"https?://[^\s\]\)\,;\"'>]+", re.IGNORECASE)
+
+_ANALYTICS_ISSUE_VERDICT_LABELS = frozenset(
+    {"metadata_error", "suspected_hallucination", "unresolved"}
+)
+_ANALYTICS_LAYER1_ISSUE_STATUSES = frozenset(
+    {
+        "missing_reference",
+        "uncited_reference",
+        "in_text_mismatch",
+        "duplicate_reference",
+        "ambiguous_mapping",
+        "style_inconsistent",
+    }
+)
+_ANALYTICS_NON_ISSUE_RULE_IDS = frozenset(
+    {
+        "R-LOCAL_DB",
+        "R-LOCAL_DB_ONLY",
+        "R-LOCAL_DB_VERIFIED",
+        "R-LOCAL_DB_GOOD_MATCH",
+        "R-WELL-LINKED",
+        "R-WELL-LINKED-MODERATE",
+        "R-DOI-TITLE-AUTHOR",
+        "R-CONSENSUS-FULL",
+        "R-SINGLE-SOURCE-VERIFIED",
+        "R-BOOK-EDITION-VERIFIED",
+        "R-KNOWN-PAPER",
+        "R-KNOWN-PAPER-NO-TITLE",
+        "R-SEMINAL-PAPER",
+        "R-CANONICAL-MATCH",
+        "R-VN-LEGAL-FORMAT",
+        "R-LEGAL-DOCUMENT",
+        "R-VN-LEGAL-VERIFIED",
+        "R-LEGAL-STATUTE-VERIFIED",
+        "R-GLOBAL-DOI-RA-VERIFIED",
+        "R-HF-VERIFIED",
+        "R-RFC-VERIFIED",
+        "R-GITHUB-VERIFIED",
+        "R-PACKAGE-VERIFIED",
+        "R-SOFTWARE-PACKAGE-VERIFIED",
+        "R-WIKIDATA-VERIFIED",
+        "R-WIKIDATA-STANDARD-VERIFIED",
+        "R-OPENCITATIONS-VERIFIED",
+        "R-WAYBACK-ARCHIVED",
+        "R-DOMAIN-EXCEPTION",
+        "R-NON-SCHOLARLY-RESOURCE",
+        "R-URL-RESOURCE",
+        "R-WEB-RESOURCE",
+        "R-CONTENT-ALIGNMENT",
+        "R-CROSS-LINGUAL-ALIGNMENT",
+        "R-VN-STANDARD-VERIFIED",
+        "R-VN-TEXTBOOK-VERIFIED",
+        "R01_EXACT_DOI",
+        "R01_DOI_EXACT",
+        "R01_DOI_MATCH",
+        "R04_AUTHOR_OVERLAP",
+        "R09_SEMANTIC_ALIGN",
+    }
+)
+_ANALYTICS_POSITIVE_TEXT_RE = re.compile(
+    r"(?:^|[^a-z])verified(?=$|[^a-z])|"
+    r"exact\s+match|canonical\s+match|known\s+seminal|"
+    r"đã\s+xác\s+minh|khớp\s+chính\s+xác|khớp\s+chặt\s+chẽ|"
+    r"hoàn\s+toàn\s+trùng\s+khớp|kinh\s+điển",
+    re.IGNORECASE,
+)
+
+
+def _is_positive_or_non_issue_rule(rule_str: str) -> bool:
+    """Return True if a rule ID or reason string represents a positive verification / provenance match."""
+    cleaned = str(rule_str or "").strip()
+    if not cleaned:
+        return True
+    upper = cleaned.upper()
+    if upper in _ANALYTICS_NON_ISSUE_RULE_IDS:
+        return True
+    if upper.endswith(("-VERIFIED", "_VERIFIED")):
+        return True
+    return bool(_ANALYTICS_POSITIVE_TEXT_RE.search(cleaned))
 
 
 def _parse_str_list(val: Any) -> list[str]:
@@ -729,6 +811,18 @@ def list_pending_reviews(
             if e.user_id is not None
         }
     )
+    classes_by_id: dict[int, Class] = {cls.id: cls}
+    extra_class_ids = {
+        int(e.class_id)
+        for e in essays_by_id.values()
+        if e.class_id is not None and int(e.class_id) != cls.id
+    }
+    if extra_class_ids:
+        for extra_cls in db.scalars(
+            select(Class).where(Class.id.in_(extra_class_ids))
+        ).all():
+            classes_by_id[extra_cls.id] = extra_cls
+
     out: list[PendingVerdictItem] = []
     for v in verdicts:
         essay = essays_by_id.get(v.essay_id)
@@ -737,6 +831,16 @@ def list_pending_reviews(
             if essay and essay.user_id
             else None
         )
+        student_name = (
+            ((student.full_name or "").strip() or student.username)
+            if student
+            else None
+        )
+        resolved_class = (
+            classes_by_id.get(int(essay.class_id))
+            if essay and essay.class_id is not None
+            else None
+        ) or cls
         rules = _parse_str_list(getattr(v, "triggered_rules", None))
         mismatched = _parse_str_list(getattr(v, "mismatched_fields", None))
         features = _parse_verdict_features(v)
@@ -767,6 +871,9 @@ def list_pending_reviews(
                 essay_id=v.essay_id,
                 filename=essay.filename if essay else "",
                 student_username=student.username if student else None,
+                student_name=student_name,
+                class_id=resolved_class.id,
+                class_name=resolved_class.name,
                 citation_raw=raw_cit,
                 label=v.label,
                 confidence=v.confidence,
@@ -1259,11 +1366,18 @@ def get_class_analytics(
                 if 1900 <= yr <= current_year + 1:
                     years_found.append(yr)
 
-            # Triggered issue rules (exclude verified/resource provenance tags from "Most Common Citation Issues")
+            # Triggered issue rules: ONLY count genuine issue rules from non-verified issue
+            # verdicts or genuine Layer-1 mapping issues, strictly excluding positive verification
+            # / provenance rules (e.g., R-LOCAL_DB_VERIFIED, R-WELL-LINKED, R-DOI-TITLE-AUTHOR).
             rules = _parse_str_list(getattr(v, "triggered_rules", None))
-            if lbl not in ("verified", "resource"):
+            m_status = (getattr(v, "mapping_status", None) or "").strip().lower()
+            has_issue_signal = (
+                lbl in _ANALYTICS_ISSUE_VERDICT_LABELS
+                or m_status in _ANALYTICS_LAYER1_ISSUE_STATUSES
+            )
+            if has_issue_signal:
                 for r_str in rules:
-                    if r_str in ("R-LOCAL_DB", "R-LOCAL_DB_ONLY"):
+                    if _is_positive_or_non_issue_rule(r_str):
                         continue
                     rule_counts[r_str] = rule_counts.get(r_str, 0) + 1
             if lbl == "metadata_error" and "R-INCOMPLETE-METADATA" in rules:

@@ -40,7 +40,11 @@ from integrity_checker.db.models import AuditLog, User
 from integrity_checker.db.repository import Repository
 from integrity_checker.export.bibliography_formatter import build_remediated_bibliography
 from integrity_checker.export.docx_exporter import export_auto_healed_docx, export_report_to_docx
-from integrity_checker.pipeline.integrity_pipeline import _serialize_citation_link
+from integrity_checker.pipeline.integrity_pipeline import (
+    SCANNED_PDF_WARNING_EN,
+    SCANNED_PDF_WARNING_VI,
+    _serialize_citation_link,
+)
 
 router = APIRouter()
 
@@ -568,11 +572,46 @@ def _normalize_manuscript_stem(filename: str | None) -> str:
     return cleaned or raw or "essay"
 
 
+_GENERIC_NON_REVISION_STEMS = frozenset(
+    {
+        "essay",
+        "untitled",
+        "document",
+        "file",
+        "test",
+        "sample",
+        "temp",
+        "tmp",
+    }
+)
+
+
+def _file_revision_family(filename: str | None) -> str:
+    """Group compatible manuscript file extensions separately from bibliography export formats (.bib vs .ris)."""
+    ext = Path(filename or "").suffix.lower()
+    if ext in {".pdf", ".docx", ".doc", ".odt", ".rtf", ".tex", ".txt", ""}:
+        return "manuscript"
+    if ext in {".bib", ".bibtex"}:
+        return "bibtex"
+    if ext == ".ris":
+        return "ris"
+    return ext
+
+
+def _is_descriptive_revision_stem(stem: str) -> bool:
+    """Require a meaningful non-generic stem (>=3 chars and >=2 letters) for automatic v1 -> v2 matching."""
+    cleaned = (stem or "").strip().lower()
+    if len(cleaned) < 3 or cleaned in _GENERIC_NON_REVISION_STEMS:
+        return False
+    letter_count = len(re.findall(r"[^\W\d_]", cleaned, flags=re.UNICODE))
+    return letter_count >= 2
+
+
 def _is_same_manuscript_family(stem_a: str, stem_b: str) -> bool:
     """Check whether two normalized manuscript stems represent revisions of the same paper."""
     a = (stem_a or "").strip().lower()
     b = (stem_b or "").strip().lower()
-    if not a or not b or a == "essay" or b == "essay":
+    if not _is_descriptive_revision_stem(a) or not _is_descriptive_revision_stem(b):
         return False
     if a == b:
         return True
@@ -767,7 +806,10 @@ def _compute_revision_diff(
         if not _is_eligible_revision_essay(cand, is_explicit_target=is_explicit_target):
             continue
         cand_stem = _normalize_manuscript_stem(cand.filename)
-        is_same_stem = _is_same_manuscript_family(cur_stem, cand_stem)
+        is_same_format = _file_revision_family(essay.filename) == _file_revision_family(
+            cand.filename
+        )
+        is_same_stem = is_same_format and _is_same_manuscript_family(cur_stem, cand_stem)
         if not is_same_stem and not is_explicit_target:
             continue
         if cand.id > essay.id and not is_explicit_target:
@@ -1004,18 +1046,32 @@ def _extract_document_diagnostics(
         else None
     )
     diag: dict[str, Any] = dict(raw_dd) if isinstance(raw_dd, dict) else {}
+    has_no_extractions = len(citations) == 0 and len(verdicts) == 0
     if diag and "is_scanned_pdf" in diag:
         diag.setdefault("ocr_pages_recovered", [])
         diag.setdefault("legacy_encoding_detected", None)
         diag.setdefault("legacy_encoding_pages_count", 0)
+        is_sc = bool(diag.get("is_scanned_pdf"))
+        if is_sc:
+            diag.setdefault("warning_code", "SCANNED_PDF_DETECTED")
+            diag.setdefault("warning_message", SCANNED_PDF_WARNING_VI)
+            diag.setdefault(
+                "warning_message_vi",
+                diag.get("warning_message") or SCANNED_PDF_WARNING_VI,
+            )
+            diag.setdefault("warning_message_en", SCANNED_PDF_WARNING_EN)
+        else:
+            diag.setdefault("warning_message_vi", None)
+            diag.setdefault("warning_message_en", None)
+        diag.setdefault("is_unscannable", bool(is_sc and has_no_extractions))
         return diag
 
     is_docx = str(getattr(essay, "filename", "") or "").lower().endswith(".docx")
     num_pages = int(getattr(essay, "num_pages", 0) or 0)
-    has_no_extractions = len(citations) == 0 and len(verdicts) == 0
     is_scanned = bool(not is_docx and num_pages > 0 and has_no_extractions)
     return {
         "is_scanned_pdf": is_scanned,
+        "is_unscannable": is_scanned,
         "scanned_pages_count": num_pages if is_scanned else 0,
         "total_extractable_chars": 0 if is_scanned else -1,
         "avg_chars_per_page": 0.0 if is_scanned else -1.0,
@@ -1023,12 +1079,9 @@ def _extract_document_diagnostics(
         "legacy_encoding_detected": None,
         "legacy_encoding_pages_count": 0,
         "warning_code": "SCANNED_PDF_DETECTED" if is_scanned else None,
-        "warning_message": (
-            "Phát hiện tài liệu PDF dạng ảnh quét (Scanned/Image-only PDF) thiếu lớp văn bản số hóa (Text Layer). "
-            "Vui lòng chuyển đổi qua OCR hoặc tải lên bản gốc .docx / PDF xuất trực tiếp từ Word/LaTeX để đạt độ chính xác kiểm chứng trích dẫn tối đa."
-            if is_scanned
-            else None
-        ),
+        "warning_message": SCANNED_PDF_WARNING_VI if is_scanned else None,
+        "warning_message_vi": SCANNED_PDF_WARNING_VI if is_scanned else None,
+        "warning_message_en": SCANNED_PDF_WARNING_EN if is_scanned else None,
         "parser_warnings": ["SCANNED_PDF_DETECTED"] if is_scanned else [],
     }
 
@@ -1358,6 +1411,21 @@ def _json_response(
             "disclaimer": "",
         }
 
+    doc_diagnostics = _extract_document_diagnostics(
+        essay, style_profile_dict, citations, verdicts
+    )
+    is_unscannable = bool(
+        doc_diagnostics.get("is_scanned_pdf")
+        and len(citations) == 0
+        and len(verdicts) == 0
+    )
+    doc_diagnostics["is_unscannable"] = is_unscannable
+    if isinstance(cis_dict, dict):
+        cis_dict = dict(cis_dict)
+        cis_dict["is_unscannable"] = is_unscannable
+        if is_unscannable:
+            cis_dict["risk_level"] = "unscannable"
+
     # v1.2 schema: trả về flat fields (essay_id, filename, num_pages, num_citations)
     # ở top-level để frontend `AnalysisReport` interface map 1-1.
     # Giữ `essay` nested để không phá clients khác (CSV/PDF export, scripts).
@@ -1426,9 +1494,7 @@ def _json_response(
             if c.citation_type == "reference_list"
         ],
         "cis": cis_dict,
-        "document_diagnostics": _extract_document_diagnostics(
-            essay, style_profile_dict, citations, verdicts
-        ),
+        "document_diagnostics": doc_diagnostics,
         "revision_diff": (
             _compute_revision_diff(
                 repo,

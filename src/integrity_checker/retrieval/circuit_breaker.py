@@ -25,6 +25,71 @@ _HTTP_CODE_RE = re.compile(
     r"(?:http[\s/_:-]*|status[\s/_:-]*|\()([45]\d{2})\b|\b(429|5\d{2})\b",
     re.IGNORECASE,
 )
+_HEX_ADDR_RE = re.compile(r"\b0x[0-9a-fA-F]{4,}\b")
+_DIRTY_REPR_OR_QUERY_RE = re.compile(
+    r"RetryError\s*\[|"
+    r"<\s*Future\b|"
+    r"\b0x[0-9a-fA-F]{4,}\b|"
+    r"\bfor\s+(?:url\s+)?['\"]|"
+    r"['\"][^'\"]{2,}['\"]|"
+    r"https?://|"
+    r"\b(?:httpx\.)?(?:ReadTimeout|ConnectTimeout|PoolTimeout|WriteTimeout|TimeoutException|"
+    r"ConnectError|ReadError|WriteError|RemoteProtocolError|HTTPStatusError|RetryError|"
+    r"RequestError|TransportError|NetworkError)\b|"
+    r":\s*\)\s*$|"
+    r":\s*$",
+    re.IGNORECASE,
+)
+_CONNECTION_ERR_RE = re.compile(
+    r"connect(?:error|ion|\s+refused|\s+reset)|remoteprotocol|readerror|writeerror|"
+    r"network|dns|ssl|tls|eof|broken pipe|name or service not known|errno",
+    re.IGNORECASE,
+)
+
+
+def sanitize_error_reason(raw_reason: str | None) -> str | None:
+    """Normalize upstream error reasons so raw Python reprs, hex addresses, and user citation
+    strings are never stored or exposed via health telemetry.
+    """
+    if raw_reason is None:
+        return None
+    raw = str(raw_reason).strip()
+    if not raw:
+        return None
+
+    # Already-clean human diagnostics (no Python reprs, hex addresses, URLs, or quoted query text)
+    # are preserved verbatim (whitespace-normalized & capped at 240 chars) for backward compatibility.
+    if not _DIRTY_REPR_OR_QUERY_RE.search(raw):
+        cleaned = " ".join(raw.split())
+        return cleaned[:240] or None
+
+    # Strip hex memory addresses before inspecting HTTP codes so 0x...429... never misclassifies.
+    scrubbed = _HEX_ADDR_RE.sub("", raw)
+    # Strip quoted user queries / URLs so user text never influences error classification or leaks.
+    scrubbed = re.sub(r"\bfor\s+(?:url\s+)?(['\"]).*?\1", "", scrubbed, flags=re.IGNORECASE)
+    scrubbed = re.sub(r"https?://\S+", "", scrubbed, flags=re.IGNORECASE)
+    scrubbed_lower = scrubbed.lower()
+
+    if _HTTP_429_RE.search(scrubbed_lower):
+        return "Rate limited (HTTP 429)"
+    if "timeout" in scrubbed_lower or "timed out" in scrubbed_lower:
+        return "Request timed out (timeout)"
+
+    code_match = _HTTP_CODE_RE.search(scrubbed)
+    if code_match:
+        code_val = int(code_match.group(1) or code_match.group(2))
+        if code_val == 429:
+            return "Rate limited (HTTP 429)"
+        if 500 <= code_val < 600:
+            return f"Upstream server error (HTTP {code_val})"
+        if 400 <= code_val < 500:
+            return f"Upstream client error (HTTP {code_val})"
+
+    if _HTTP_5XX_RE.search(scrubbed_lower):
+        return "Upstream server error (HTTP 5xx)"
+    if _CONNECTION_ERR_RE.search(scrubbed_lower):
+        return "Connection error"
+    return "Upstream request failed"
 
 
 class CircuitState(str, Enum):
@@ -179,10 +244,11 @@ class CircuitBreakerRegistry:
             entry.consecutive_failures += 1
 
             raw_reason = str(reason or "")
-            entry.last_error = raw_reason[:240] or None
+            entry.last_error = sanitize_error_reason(raw_reason)
             entry.last_failure_at = now
 
-            r = raw_reason.lower()
+            scrubbed_for_classify = _HEX_ADDR_RE.sub("", raw_reason)
+            r = scrubbed_for_classify.lower()
             is_rate_limit = bool(_HTTP_429_RE.search(r))
             if "timeout" in r or "timed out" in r:
                 entry.timeout_count += 1
@@ -191,7 +257,7 @@ class CircuitBreakerRegistry:
             elif _HTTP_5XX_RE.search(r):
                 entry.http_5xx_count += 1
 
-            code_match = _HTTP_CODE_RE.search(raw_reason)
+            code_match = _HTTP_CODE_RE.search(scrubbed_for_classify)
             if code_match:
                 entry.last_status_code = int(code_match.group(1) or code_match.group(2))
             elif is_rate_limit:
@@ -259,7 +325,7 @@ class CircuitBreakerRegistry:
                     "open_remaining_seconds": open_remaining,
                     "cooldown_remaining_s": open_remaining,
                     "opened_at": entry.opened_at,
-                    "last_error": entry.last_error,
+                    "last_error": sanitize_error_reason(entry.last_error),
                     "last_status_code": entry.last_status_code,
                     "last_failure_at": entry.last_failure_at,
                 }
@@ -351,4 +417,5 @@ __all__ = [
     "CircuitState",
     "get_circuit_breaker_registry",
     "reset_circuit_breaker_registry",
+    "sanitize_error_reason",
 ]

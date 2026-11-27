@@ -3190,6 +3190,271 @@ def _enforce_public_sandbox_rate_limit(
             _public_sandbox_rate_buckets.pop(client_ip, None)
 
 
+_SANDBOX_BARE_DOI_RE = re.compile(
+    r"\b(10\.\d{4,9}/[^\s,;)\]>\"']+)",
+    re.IGNORECASE,
+)
+_SANDBOX_SCHOLARLY_ID_RE = re.compile(
+    r"(?:https?://\S+|www\.\S+|\b10\.\d{4,9}/\S+|\bdoi\s*:\s*\S+|"
+    r"\barxiv\s*[:\s]*\d{4}\.\d{4,5}|\b(?:isbn|issn|rfc|tcvn|qcvn)\b|"
+    r"\d+/\d{4}/(?:qh|nđ|tt|qđ|nq|ubtvqh)|"
+    r"\b(?:luật|bộ\s+luật|nghị\s+định|thông\s+tư|hiến\s+pháp|quyết\s+định|nghị\s+quyết)\b)",
+    re.IGNORECASE,
+)
+_SANDBOX_PLAUSIBLE_YEAR_RE = re.compile(
+    r"\b(?:18|19|20)\d{2}[a-z]?\b|\(\s*n\.?\s*d\.?\s*\)",
+    re.IGNORECASE,
+)
+_SANDBOX_VOWELS = frozenset(
+    "aeiouyàáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹ"
+)
+_SANDBOX_KEYBOARD_ROWS = ("qwerty", "asdfg", "zxcvb", "hjkl", "uiop", "qwert", "asdf", "zxcv")
+_SANDBOX_L1_NON_ISSUE_STATUSES = frozenset({"matched", "not_applicable"})
+
+_VN_AUTHORITY_EN_MAP = {
+    "quốc hội": "National Assembly of Vietnam",
+    "chính phủ": "Government of Vietnam",
+    "ủy ban thường vụ quốc hội": "Standing Committee of the National Assembly of Vietnam",
+    "thủ tướng chính phủ": "Prime Minister of Vietnam",
+    "hệ thống pháp luật việt nam (vbqppl)": "Vietnamese National Legal Database (VBQPPL)",
+    "văn bản quy phạm pháp luật việt nam": "Vietnamese Legal Normative System",
+}
+
+
+def _is_keyboard_mash_word(word: str) -> bool:
+    """Return True if a token looks like random keyboard mash rather than a real word."""
+    w = word.lower()
+    if len(w) < 4:
+        return False
+    if any(seq in w for seq in _SANDBOX_KEYBOARD_ROWS):
+        return True
+    if re.search(r"(.)\1{3,}", w):
+        return True
+    if len(w) >= 6 and not word.isupper():
+        vowel_cnt = sum(1 for ch in w if ch in _SANDBOX_VOWELS)
+        if vowel_cnt <= 1 and (vowel_cnt / len(w)) < 0.17:
+            return True
+    return False
+
+
+def _is_non_citation_gibberish(raw_text: str | None) -> bool:
+    """Fast heuristic detecting obvious gibberish / non-citation input before hitting external APIs."""
+    text = " ".join((raw_text or "").split()).strip()
+    if not text:
+        return True
+    if _SANDBOX_SCHOLARLY_ID_RE.search(text):
+        return False
+    alpha_words = re.findall(r"[^\W\d_]{2,}", text, flags=re.UNICODE)
+    has_year = bool(_SANDBOX_PLAUSIBLE_YEAR_RE.search(text))
+    has_punct = bool(re.search(r"[,.;:()\[\]\"“”]", text))
+    if len(alpha_words) < 3 and not has_year:
+        return True
+    if len(alpha_words) < 3 and not has_punct:
+        return True
+    if not has_year and not has_punct:
+        mash_cnt = sum(1 for w in alpha_words if _is_keyboard_mash_word(w))
+        if alpha_words and (mash_cnt / len(alpha_words)) >= 0.5:
+            return True
+    return False
+
+
+def _translate_vn_authority_en(authority: str | None) -> str:
+    raw = (authority or "").strip()
+    if not raw:
+        return "Vietnamese legislative/executive authority"
+    return _VN_AUTHORITY_EN_MAP.get(raw.lower(), raw)
+
+
+def _localize_sandbox_verdict_reasoning(
+    raw_reasoning: str,
+    trig_rules: list[str],
+    citation: Any,
+    matched_source: Any,
+    *,
+    is_en: bool,
+) -> tuple[str, str | None, str | None]:
+    """Produce rich bilingual EN/VI diagnoses for Fabricated DOI and VN Legal sandbox verdicts."""
+    rules_set = set(trig_rules or [])
+    raw_cit = str(getattr(citation, "raw_text", "") or "")
+
+    # 1. Fabricated DOI (R-FABRICATED-DOI)
+    if "R-FABRICATED-DOI" in rules_set:
+        doi_str = str(getattr(citation, "doi", None) or "").strip()
+        if not doi_str:
+            doi_m = _SANDBOX_BARE_DOI_RE.search(raw_cit)
+            if doi_m:
+                doi_str = doi_m.group(1).rstrip(".,;)]>\"'")
+        doi_display = doi_str or "unknown DOI"
+        reason_en = (
+            f"Fabricated or placeholder DOI detected ({doi_display}): this DOI uses an invalid "
+            "or reserved test publisher prefix (such as 10.1234 or 10.9999) or synthetic pattern "
+            "that does not exist in Crossref, DataCite, or global DOI registration agencies. "
+            "Please replace it with the official verified DOI of the real publication or remove the unverified reference."
+        )
+        reason_vi = (
+            f"Phát hiện mã DOI có dấu hiệu ngụy tạo hoặc giả định ({doi_display}): mã DOI này sử dụng "
+            "tiền tố nhà xuất bản không hợp lệ/giả định (như 10.1234, 10.9999) hoặc cấu trúc tổng hợp "
+            "không tồn tại trên Crossref, DataCite và Cơ quan Đăng ký DOI toàn cầu. "
+            "Vui lòng thay thế bằng mã DOI chính thức của ấn phẩm thật hoặc loại bỏ trích dẫn chưa kiểm chứng."
+        )
+        return (reason_en if is_en else reason_vi), reason_en, reason_vi
+
+    # 2. Vietnamese Legal Statute / Document (R-LEGAL-DOCUMENT / R-VN-LEGAL-*)
+    is_vn_legal = "R-LEGAL-DOCUMENT" in rules_set or any(
+        r.startswith("R-VN-LEGAL-") for r in rules_set
+    )
+    if not is_vn_legal:
+        return raw_reasoning, None, None
+
+    if "R-FAKE-URL" in rules_set:
+        reason_en = raw_reasoning
+        reason_vi = (
+            "Phát hiện đường dẫn URL thuộc tên miền giả định hoặc không hợp lệ trong trích dẫn "
+            f"văn bản quy phạm pháp luật Việt Nam: {raw_cit[:120]}"
+        )
+        return (reason_en if is_en else reason_vi), reason_en, reason_vi
+
+    reason_vi = raw_reasoning
+    legal_cand = None
+    if matched_source is not None:
+        for cand in getattr(matched_source, "candidates", None) or []:
+            if getattr(cand, "source_name", None) == "vn_legal_registry":
+                legal_cand = cand
+                break
+
+    code_m = re.search(
+        r"\b(\d{1,4}/\d{4}/(?:QH\d{1,2}|NĐ-CP|TT-[A-ZĐÀ-Ỹ]+|QĐ-[A-ZĐÀ-Ỹ]+|NQ-[A-ZĐÀ-Ỹ]+|UBTVQH\d{1,2}))\b",
+        raw_reasoning + " " + raw_cit,
+        re.IGNORECASE,
+    )
+    code_str = code_m.group(1) if code_m else None
+    canon_name = getattr(legal_cand, "title", None) if legal_cand is not None else None
+    canon_year = getattr(legal_cand, "year", None) if legal_cand is not None else None
+    canon_auth = getattr(legal_cand, "venue", None) if legal_cand is not None else None
+
+    if "R-VN-LEGAL-FABRICATED" in rules_set or "R-VN-LEGAL-MISMATCH" in rules_set:
+        en_details: list[str] = []
+        date_m = re.search(r"Ngày ban hành không tồn tại trong lịch \(([^)]+)\)", raw_reasoning)
+        if date_m:
+            en_details.append(f"impossible calendar promulgation date ({date_m.group(1)})")
+        if "chỉ có 6 Bộ luật chính thức" in raw_reasoning:
+            en_details.append(
+                "Vietnam only has 6 official Codes (Civil, Penal, Labor, Civil Procedure, Criminal Procedure, Maritime)"
+            )
+        if "vượt quá phạm vi đánh số thực tế của Quốc hội" in raw_reasoning:
+            en_details.append(
+                f"National Assembly statute number ({code_str or 'cited code'}) exceeds realistic legislative numbering "
+                "and does not exist in the National Legal Database"
+            )
+        if "vượt quá phạm vi đánh số thực tế của Chính phủ" in raw_reasoning:
+            en_details.append(
+                f"Government Decree number ({code_str or 'cited code'}) exceeds realistic numbering "
+                "and does not exist in the National Legal Database"
+            )
+        if "Mâu thuẫn năm ban hành trong số hiệu" in raw_reasoning:
+            en_details.append(
+                "conflict between enactment year in the statute number and the stated promulgation date"
+            )
+        if "Sai cơ quan ban hành" in raw_reasoning:
+            en_details.append("issuing authority does not match the statutory document class")
+        if "Tên văn bản không khớp với số hiệu" in raw_reasoning:
+            en_details.append(
+                f"statute title does not match official code {code_str or ''}".strip()
+            )
+        yr_hist_m = re.search(
+            r"Năm ban hành \(([^)]+)\) không khớp với lịch sử lập pháp của ([^(]+?)\s*\(các năm hợp lệ:\s*([^)]+)\)",
+            raw_reasoning,
+        )
+        if yr_hist_m:
+            en_details.append(
+                f"cited enactment year ({yr_hist_m.group(1)}) does not match legislative history of "
+                f"{yr_hist_m.group(2).strip()} (valid years: {yr_hist_m.group(3)})"
+            )
+        code_err_m = re.search(
+            r"Sai số hiệu văn bản:\s*([^\n]+?)\s+năm\s+(\d{4})\s+có số hiệu chuẩn là\s+([^\s(]+)\s*\(ghi nhận:\s*([^)]+)\)",
+            raw_reasoning,
+        )
+        if code_err_m:
+            en_details.append(
+                f"incorrect statutory code for {code_err_m.group(1).strip()} ({code_err_m.group(2)}): "
+                f"official code is {code_err_m.group(3)} (cited: {code_err_m.group(4)})"
+            )
+
+        if "R-VN-LEGAL-FABRICATED" in rules_set:
+            if en_details:
+                reason_en = "Suspected fabricated Vietnamese legal document: " + "; ".join(en_details) + "."
+            else:
+                reason_en = (
+                    "Suspected fabricated Vietnamese legal document: statutory code, enactment date, "
+                    "or issuing authority is invalid and does not exist in the Vietnamese National Legal Database."
+                )
+        else:
+            if en_details:
+                reason_en = (
+                    "Vietnamese legal statute metadata discrepancy detected: "
+                    + "; ".join(en_details)
+                    + "."
+                )
+            else:
+                reason_en = (
+                    "Vietnamese legal statute metadata discrepancy detected: enactment year, "
+                    "statutory code, or issuing authority differs from the official registry."
+                )
+        return (reason_en if is_en else reason_vi), reason_en, reason_vi
+
+    if "R-VN-LEGAL-VERIFIED" in rules_set:
+        statute_name_m = re.search(
+            r"(?:hợp lệ|Việt Nam):\s*([^(\u2014—]+)",
+            raw_reasoning,
+        )
+        name_display = (
+            statute_name_m.group(1).strip()
+            if statute_name_m
+            else (canon_name or raw_cit[:100])
+        )
+        yr_display = canon_year
+        if not yr_display:
+            yr_m = re.search(r"\((\d{4})", raw_reasoning)
+            if yr_m:
+                yr_display = yr_m.group(1)
+        auth_m = re.search(r"[Cc]ơ quan ban hành:\s*([^.)]+)", raw_reasoning)
+        auth_display = _translate_vn_authority_en(
+            auth_m.group(1).strip() if auth_m else canon_auth
+        )
+        if "R-VN-LEGAL-SUPERSEDED" in rules_set:
+            sup_m = re.search(r"thay thế bởi\s+(.+?)\.?$", raw_reasoning)
+            sup_by = sup_m.group(1).strip() if sup_m else "a newer statutory enactment"
+            reason_en = (
+                f"Verified Vietnamese legal statute: {name_display}"
+                + (f" ({yr_display})" if yr_display else "")
+                + (f", code {code_str}" if code_str else "")
+                + f", issued by {auth_display}. "
+                f"Effectiveness notice: This statute is no longer in force and was superseded by {sup_by}."
+            )
+        else:
+            reason_en = (
+                f"Verified valid Vietnamese legal statute: {name_display}"
+                + (f" ({yr_display})" if yr_display else "")
+                + (f" — Code: {code_str}" if code_str else "")
+                + f" — Issuing authority: {auth_display} (Currently in force)."
+            )
+        return (reason_en if is_en else reason_vi), reason_en, reason_vi
+
+    if "luật so sánh" in raw_reasoning.lower() or "nước ngoài" in raw_reasoning.lower():
+        reason_en = (
+            "Recognized foreign / comparative-law statutory citation "
+            "(outside the Vietnamese National Legal Statutory Registry)."
+        )
+    else:
+        reason_en = (
+            "Recognized Vietnamese legal / administrative document"
+            + (f" ({code_str})" if code_str else "")
+            + ": valid statutory numbering format, outside the core automated statute registry — "
+            "manual effectiveness check recommended."
+        )
+    return (reason_en if is_en else reason_vi), reason_en, reason_vi
+
+
 @router.post("/sandbox/verify")
 async def verify_sandbox_citations_instant(
     payload: dict[str, Any],
@@ -3312,28 +3577,44 @@ async def verify_sandbox_citations_instant(
             pipeline.ref_parser.parse_reference_section, fake_doc
         )
         if not parsed_citations:
-            for line in [ln.strip() for ln in raw_references_text.splitlines() if len(ln.strip()) > 12][:15]:
+            raw_non_empty = [
+                ln.strip()
+                for ln in raw_references_text.splitlines()
+                if ln.strip() and not _GUEST_BIB_HEADER_RE.match(ln.strip())
+            ]
+            for line in raw_non_empty[:15]:
+                doi_m = _SANDBOX_BARE_DOI_RE.search(line)
+                extracted_doi = (
+                    doi_m.group(1).rstrip(".,;)]>\"'") if doi_m else None
+                )
                 parsed_citations.append(
                     Citation(
                         raw_text=line,
                         citation_type=CitationType.REFERENCE_LIST,
-                        style=CitationStyle.APA,
+                        style=CitationStyle.IEEE if style == "ieee" else CitationStyle.APA,
+                        doi=extracted_doi,
                         page_num=1,
                         context=claim_context or None,
-                        mapping_status="matched",
-                        mapping_confidence=1.0,
+                        mapping_status="not_applicable",
+                        mapping_confidence=0.0,
                     )
                 )
         for c in parsed_citations:
+            if not c.doi and c.raw_text:
+                doi_m = _SANDBOX_BARE_DOI_RE.search(c.raw_text)
+                if doi_m:
+                    c.doi = doi_m.group(1).rstrip(".,;)]>\"'")
+            c.mapping_status = "not_applicable"
+            c.mapping_confidence = 0.0
             if claim_context:
                 c.context = claim_context
             layer1_statuses.append(
                 {
-                    "status": "matched",
+                    "status": "not_applicable",
                     "note": (
-                        "Direct bibliography verification."
+                        "Direct bibliography verification (in-text linking not applicable)."
                         if is_en
-                        else "Kiểm tra trực tiếp danh mục tham khảo."
+                        else "Kiểm tra trực tiếp danh mục tham khảo (không áp dụng đối chiếu trong bài)."
                     ),
                 }
             )
@@ -3357,6 +3638,8 @@ async def verify_sandbox_citations_instant(
         allow_serpapi_flag=allow_serpapi_flag,
         include_remediation=include_remediation,
         t0=t0,
+        is_en=is_en,
+        is_bibliography_only=bool(raw_references_text and not (isinstance(items, list) and items)),
     )
 
 
@@ -3369,14 +3652,28 @@ async def _execute_instant_citations_verification(
     allow_serpapi_flag: bool,
     include_remediation: bool,
     t0: float,
+    is_en: bool = False,
+    is_bibliography_only: bool = False,
 ) -> dict[str, Any]:
     """Shared concurrent verification & serialization engine for /sandbox/verify and /sandbox/public-verify."""
     from integrity_checker.export.bibliography_formatter import build_remediated_bibliography
+    from integrity_checker.models.source import SourceResult
 
     sem = asyncio.Semaphore(8)
+    gibberish_flags = [
+        bool(is_bibliography_only and _is_non_citation_gibberish(getattr(c, "raw_text", "")))
+        for c in parsed_citations
+    ]
 
-    async def _retrieve_one(c: Any):
-        from integrity_checker.models.source import SourceResult
+    async def _retrieve_one(c: Any, *, is_gibberish: bool = False):
+        if is_gibberish:
+            return SourceResult(
+                citation_raw=c.raw_text,
+                candidates=[],
+                sources_queried=[],
+                sources_succeeded=[],
+                sources_failed={},
+            )
 
         async with sem:
             rules_obj = getattr(getattr(pipeline, "checker", None), "rules", None)
@@ -3479,12 +3776,89 @@ async def _execute_instant_citations_verification(
                     html_meta=u_meta,
                 )
 
-    source_results = await asyncio.gather(*(_retrieve_one(c) for c in parsed_citations))
+    source_results = await asyncio.gather(
+        *(
+            _retrieve_one(c, is_gibberish=is_gib)
+            for c, is_gib in zip(parsed_citations, gibberish_flags, strict=False)
+        )
+    )
 
     verdict_items: list[dict[str, Any]] = []
-    raw_verdict_dicts_for_remediation: list[dict[str, Any]] = []
+    remediable_verdict_pairs: list[tuple[dict[str, Any], dict[str, Any]]] = []
 
-    for idx, (citation, source) in enumerate(zip(parsed_citations, source_results, strict=False), start=1):
+    for idx, (citation, source, is_gib) in enumerate(
+        zip(parsed_citations, source_results, gibberish_flags, strict=False), start=1
+    ):
+        l1_info = (
+            layer1_statuses[idx - 1]
+            if idx - 1 < len(layer1_statuses)
+            else {"status": "not_applicable" if is_bibliography_only else "matched", "note": ""}
+        )
+        if is_gib:
+            gib_reason_en = (
+                "Input does not appear to be a valid bibliographic citation "
+                "(missing recognizable author, title, publication year, DOI, or URL). "
+                "Please paste a complete reference such as: Author, A. (Year). Title. Journal/Venue."
+            )
+            gib_reason_vi = (
+                "Văn bản nhập vào không giống một trích dẫn học thuật hợp lệ "
+                "(thiếu tác giả, tiêu đề, năm xuất bản, mã DOI hoặc URL). "
+                "Vui lòng dán trích dẫn đầy đủ theo mẫu: Tác giả (Năm). Tiêu đề. Tạp chí/NXB."
+            )
+            gib_dict: dict[str, Any] = {
+                "index": idx,
+                "citation_raw": citation.raw_text,
+                "cited_title": citation.title,
+                "cited_authors": citation.authors,
+                "cited_year": citation.year,
+                "cited_venue": citation.venue,
+                "cited_doi": citation.doi,
+                "cited_url": getattr(citation, "url", None),
+                "numeric_index": getattr(citation, "numeric_index", None),
+                "sub_index": getattr(citation, "sub_index", None),
+                "composite_label": getattr(citation, "composite_label", None),
+                "label": "unresolved",
+                "confidence": 0.0,
+                "mapping_status": "not_applicable",
+                "mapping_note": (
+                    "Direct bibliography verification — input is not a recognizable citation."
+                    if is_en
+                    else "Kiểm tra trực tiếp danh mục tham khảo — đầu vào không giống cấu trúc trích dẫn hợp lệ."
+                ),
+                "reasoning": gib_reason_en if is_en else gib_reason_vi,
+                "reasoning_en": gib_reason_en,
+                "reasoning_vi": gib_reason_vi,
+                "triggered_rules": ["R-INCOMPLETE-METADATA"],
+                "mismatched_fields": [],
+                "url_status": None,
+                "url_status_code": None,
+                "archive_url": None,
+                "is_retracted": False,
+                "is_invalid_input": True,
+                "html_meta": None,
+                "features": {
+                    "title_sim_fuzzy": 0.0,
+                    "title_sim_semantic": 0.0,
+                    "author_jaccard": 0.0,
+                    "year_distance": 0,
+                    "doi_exact_match": False,
+                    "venue_sim": 0.0,
+                    "cross_lingual_detected": False,
+                    "bridged_concepts": [],
+                    "cross_lingual_title_detected": False,
+                    "cross_lingual_title_sim": 0.0,
+                    "html_meta_title_sim": None,
+                    "has_scholarly_candidate": False,
+                },
+                "matched_source": None,
+                "matched_sources": [],
+                "sources_succeeded": [],
+                "used_local_db": False,
+                "remediated_apa": None,
+            }
+            verdict_items.append(gib_dict)
+            continue
+
         used_local = "local_db" in (source.sources_succeeded or [])
         verdict = await asyncio.to_thread(
             pipeline.checker.check,
@@ -3494,7 +3868,6 @@ async def _execute_instant_citations_verification(
             api_exhausted=bool(getattr(source, "api_exhausted", False)),
             used_local_db=used_local,
         )
-        l1_info = layer1_statuses[idx - 1] if idx - 1 < len(layer1_statuses) else {"status": "matched", "note": ""}
         best = source.best_candidate()
         vf = getattr(verdict, "features", None)
 
@@ -3762,7 +4135,16 @@ async def _execute_instant_citations_verification(
             "has_scholarly_candidate": has_scholarly_cand,
         }
 
-        v_dict = {
+        effective_verdict_source = getattr(verdict, "matched_source", None) or source
+        final_reasoning, reason_en, reason_vi = _localize_sandbox_verdict_reasoning(
+            str(verdict.reasoning or ""),
+            trig_rules,
+            citation,
+            effective_verdict_source,
+            is_en=is_en,
+        )
+
+        v_dict: dict[str, Any] = {
             "index": idx,
             "citation_raw": citation.raw_text,
             "cited_title": citation.title,
@@ -3778,7 +4160,7 @@ async def _execute_instant_citations_verification(
             "confidence": round(float(verdict.confidence or 0.0), 3),
             "mapping_status": l1_info["status"],
             "mapping_note": l1_info["note"],
-            "reasoning": verdict.reasoning,
+            "reasoning": final_reasoning,
             "triggered_rules": trig_rules,
             "mismatched_fields": list(verdict.mismatched_fields or []),
             "url_status": getattr(source, "url_status", None),
@@ -3792,20 +4174,25 @@ async def _execute_instant_citations_verification(
             "sources_succeeded": list(source.sources_succeeded or []),
             "used_local_db": used_local,
         }
+        if reason_en is not None:
+            v_dict["reasoning_en"] = reason_en
+        if reason_vi is not None:
+            v_dict["reasoning_vi"] = reason_vi
         verdict_items.append(v_dict)
-        raw_verdict_dicts_for_remediation.append(v_dict)
+        remediable_verdict_pairs.append((v_dict, v_dict))
 
     remediation: dict[str, Any] | None = None
     remediated_apa: str | None = None
-    if include_remediation:
-        remediation = await asyncio.to_thread(
+    if include_remediation and remediable_verdict_pairs:
+        remediation_res = await asyncio.to_thread(
             build_remediated_bibliography,
             essay_id=0,
-            verdicts=raw_verdict_dicts_for_remediation,
+            verdicts=[raw_v for _, raw_v in remediable_verdict_pairs],
             style=style,
         )
-        rem_entries = remediation.get("entries") or []
-        for v_item, r_entry in zip(verdict_items, rem_entries, strict=False):
+        remediation = remediation_res
+        rem_entries = remediation_res.get("entries") or []
+        for (v_item, _), r_entry in zip(remediable_verdict_pairs, rem_entries, strict=False):
             if not r_entry.get("is_hallucination"):
                 v_item["remediated_apa"] = r_entry.get("apa") or r_entry.get("remediated_text")
             else:
@@ -3829,7 +4216,11 @@ async def _execute_instant_citations_verification(
     halluc_cnt = sum(1 for v in verdict_items if v["label"] == "suspected_hallucination")
     resource_cnt = sum(1 for v in verdict_items if v["label"] == "resource")
     unresolved_cnt = sum(1 for v in verdict_items if v["label"] == "unresolved")
-    l1_issue_cnt = sum(1 for v in verdict_items if v["mapping_status"] != "matched")
+    l1_issue_cnt = sum(
+        1
+        for v in verdict_items
+        if v["mapping_status"] not in _SANDBOX_L1_NON_ISSUE_STATUSES
+    )
 
     return {
         "elapsed_seconds": elapsed,
@@ -4091,25 +4482,35 @@ async def verify_public_guest_citations(
                 ),
             )
         for entry_text in candidate_entries[:PUBLIC_SANDBOX_MAX_REFERENCES]:
+            doi_m = _SANDBOX_BARE_DOI_RE.search(entry_text)
+            extracted_doi = doi_m.group(1).rstrip(".,;)]>\"'") if doi_m else None
             parsed_citations.append(
                 Citation(
                     raw_text=entry_text,
                     citation_type=CitationType.REFERENCE_LIST,
                     style=CitationStyle.IEEE if style == "ieee" else CitationStyle.APA,
+                    doi=extracted_doi,
                     page_num=1,
-                    mapping_status="matched",
-                    mapping_confidence=1.0,
+                    mapping_status="not_applicable",
+                    mapping_confidence=0.0,
                 )
             )
 
     parsed_citations = parsed_citations[:PUBLIC_SANDBOX_MAX_REFERENCES]
+    for c in parsed_citations:
+        if not c.doi and c.raw_text:
+            doi_m = _SANDBOX_BARE_DOI_RE.search(c.raw_text)
+            if doi_m:
+                c.doi = doi_m.group(1).rstrip(".,;)]>\"'")
+        c.mapping_status = "not_applicable"
+        c.mapping_confidence = 0.0
     layer1_statuses = [
         {
-            "status": "matched",
+            "status": "not_applicable",
             "note": (
-                "Direct bibliography verification."
+                "Direct bibliography verification (in-text linking not applicable)."
                 if is_en
-                else "Kiểm tra trực tiếp danh mục tham khảo."
+                else "Kiểm tra trực tiếp danh mục tham khảo (không áp dụng đối chiếu trong bài)."
             ),
         }
         for _ in parsed_citations
@@ -4123,5 +4524,7 @@ async def verify_public_guest_citations(
         allow_serpapi_flag=False,
         include_remediation=True,
         t0=t0,
+        is_en=is_en,
+        is_bibliography_only=True,
     )
 
