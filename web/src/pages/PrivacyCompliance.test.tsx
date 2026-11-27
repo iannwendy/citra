@@ -57,7 +57,7 @@ describe('Vietnamese Personal Data Protection Compliance UI (DLCN-01, DLCN-02, D
     expect(root.getAttribute('data-lang')).toBe('vi');
     expect(root.innerHTML).not.toContain('shadow-2xs');
     const headerNavVi = root.querySelector('header nav[aria-label="Primary Navigation"]');
-    expect(headerNavVi?.textContent).toContain('Quy trình hoạt động');
+    expect(headerNavVi?.textContent).toContain('Cách hoạt động');
     expect(headerNavVi?.textContent).toContain('Độ tin cậy');
     expect(screen.getByTestId('solva-sticky-card-0')).toBeDefined();
     expect(document.querySelector('.animate-solva-marquee')).not.toBeNull();
@@ -93,8 +93,10 @@ describe('Vietnamese Personal Data Protection Compliance UI (DLCN-01, DLCN-02, D
     expect(document.querySelector('a[href="/classes"]')).toBeNull();
     expect(document.body.textContent).not.toContain('(/batch)');
     expect(document.body.textContent).not.toContain('(/classes)');
-    expect(document.body.textContent).toContain('/batch-upload');
-    expect(document.body.textContent).toContain('/teacher/classes');
+    expect(document.body.textContent).not.toContain('(/batch-upload)');
+    expect(document.body.textContent).not.toContain('(/teacher/classes)');
+    expect(document.body.textContent).toContain('Kiểm tra hàng loạt');
+    expect(document.body.textContent).toContain('Quản lý lớp học');
     expect(screen.queryByText(/Mã số doanh nghiệp/i)).toBeNull();
     expect(screen.getAllByText(/02 ngày làm việc/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Crossref/i).length).toBeGreaterThan(0);
@@ -135,9 +137,10 @@ describe('Vietnamese Personal Data Protection Compliance UI (DLCN-01, DLCN-02, D
     expect(schemaToggle.getAttribute('aria-expanded')).toBe('false');
     expect(screen.queryByText('avatar_path')).toBeNull();
 
-    // Interactive Solva data-category filter works cleanly & preserves card_last4 visibility
+    // Interactive Solva data-category filter works cleanly & keeps plain-language payment card label (no raw card_last4 leak)
     fireEvent.click(screen.getByRole('button', { name: /Dữ liệu Nhạy cảm \(1\)/i }));
-    expect(screen.getAllByText(/card_last4/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/4 số cuối thẻ thanh toán/i).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/card_last4/i)).toBeNull();
 
     // Also renders cleanly in English via the Solva header language toggle
     fireEvent.click(screen.getByRole('button', { name: /VI \/ EN/i }));
@@ -302,7 +305,8 @@ describe('Vietnamese Personal Data Protection Compliance UI (DLCN-01, DLCN-02, D
     expect(screen.queryByText(/^CASCADE PURGE$/)).toBeNull();
     expect(screen.getByText('CÁCH LY BẢO MẬT')).toBeDefined();
     expect(screen.getByText('KHÔNG LƯU TRỮ')).toBeDefined();
-    expect(screen.getByText('4 số cuối (card_last4)')).toBeDefined();
+    expect(screen.getByText('4 số cuối thẻ')).toBeDefined();
+    expect(screen.queryByText(/card_last4/)).toBeNull();
     expect(document.getElementById('data-collected')!.textContent).toContain(
       'ảnh đại diện tải lên',
     );
@@ -310,11 +314,12 @@ describe('Vietnamese Personal Data Protection Compliance UI (DLCN-01, DLCN-02, D
     // 5. Unpublished-thesis confidentiality reassurance in VI (no full-text transmit, no shared Turnitin/similarity pool)
     expect(screen.getAllByText(/Turnitin/i).length).toBeGreaterThanOrEqual(2);
 
-    // Switch to English and verify localized schema label, zero PAN/SMTP jargon, and Turnitin reassurance
+    // Switch to English and verify localized schema label, zero PAN/SMTP/card_last4 jargon, and Turnitin reassurance
     fireEvent.click(screen.getByRole('button', { name: /VI \/ EN/i }));
     await waitFor(() => {
       expect(schemaToggle.textContent?.trim()).toBe('Technical Schema');
-      expect(screen.getByText('Last 4 digits (card_last4)')).toBeDefined();
+      expect(screen.getByText('Last 4 card digits')).toBeDefined();
+      expect(screen.queryByText(/card_last4/)).toBeNull();
       expect(screen.queryByText(/\bPAN\b/)).toBeNull();
       expect(screen.queryByText(/\bSMTP\b/)).toBeNull();
       expect(screen.getAllByText(/Turnitin/i).length).toBeGreaterThanOrEqual(2);

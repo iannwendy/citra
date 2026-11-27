@@ -67,7 +67,7 @@ describe('Batch Check entry points', () => {
     expect(screen.queryByRole('link', { name: /batch check/i })).toBeNull();
   });
 
-  it('keeps core workspace sidebar navigation order including Live Sandbox and Batch Check', () => {
+  it('keeps core workspace sidebar navigation order including Quick Check and Batch Check', () => {
     renderWithProviders(
       <AppLayout>
         <div />
@@ -75,7 +75,8 @@ describe('Batch Check entry points', () => {
       { user: makeUser('user', 'pro') },
     );
 
-    expect(screen.getAllByRole('link', { name: /sandbox/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('link', { name: /quick check/i }).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('link', { name: /sandbox/i })).toBeNull();
 
     const navLinks = screen
       .getAllByRole('link')

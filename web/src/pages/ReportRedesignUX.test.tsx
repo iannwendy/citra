@@ -195,7 +195,7 @@ describe('Report Page UI/UX Redesign (Non-Tech Clarity & Progressive Disclosure)
         expect(screen.getByTestId('cis-qualitative-pill')).toBeDefined(),
       );
       expect(screen.getByTestId('cis-qualitative-pill').textContent).toContain(
-        'Rất đáng tin cậy',
+        'Xuất sắc',
       );
 
       const revNote = screen.getByTestId('revision-diff-banner');
@@ -1043,7 +1043,8 @@ describe('Report Page UI/UX Redesign (Non-Tech Clarity & Progressive Disclosure)
         expect(sheet.textContent).toContain('Search on Google Scholar');
         expect(sheet.textContent).toContain('Not matched');
         expect(sheet.textContent).not.toContain('HTTP 403 OK');
-        expect(sheet.textContent).toContain('Restricted Access (HTTP 403)');
+        expect(sheet.textContent).not.toContain('HTTP 403');
+        expect(sheet.textContent).toContain('Restricted Access');
         expect(sheet.textContent).not.toContain('SENTENCE-BERT ↔ SENTENCE-BERT');
         const copyBtn = sheet.querySelector('button[disabled]');
         expect(copyBtn).not.toBeNull();
@@ -1273,12 +1274,14 @@ describe('Report Page UI/UX Redesign (Non-Tech Clarity & Progressive Disclosure)
       expect(essayContainer.textContent).toContain('Liên kết hoạt động');
       expect(essayContainer.textContent).not.toContain('HTTP 200 OK');
       expect(essayContainer.textContent).not.toContain('GROBID TEI-XML');
-      expect(essayContainer.textContent).toContain('(tr. 1)');
+      // Missing page_num must not fabricate a bogus "(tr. 1)"
+      expect(essayContainer.textContent).not.toContain('(tr. 1)');
       expect(essayContainer.textContent).toContain(
         'Đoạn văn liên quan trong bài (chưa trích dẫn trực tiếp)',
       );
-      expect(essayContainer.textContent).toContain('mức độ liên quan ngữ cảnh: 52%');
+      // L1 summary omits raw ML telemetry suffixes
       expect(essayContainer.textContent).not.toContain('Neural = 0.52');
+      expect(essayContainer.textContent).not.toContain('mức độ liên quan ngữ cảnh: 52%');
 
       // Select unresolved citation [4] (768) -> verifies short "— Chưa đối chiếu" badge without clipping
       const unresolvedCard = essayContainer.querySelector('[data-citation-id="768"]');
@@ -1290,7 +1293,7 @@ describe('Report Page UI/UX Redesign (Non-Tech Clarity & Progressive Disclosure)
       expect(essayContainer.textContent).not.toContain('Chưa đối chiếu được');
       unmountEssay();
 
-      // 3. P2-4: IssuesPage 1-based markers (no [765]), non-green certainty bar, collapsed raw rule IDs, Liên kết trong bài bucket
+      // 3. P2-4: IssuesPage 1-based markers (no [765]), non-green certainty bar, plain-language checks, Liên kết trong bài bucket
       const { container: issuesContainer, unmount: unmountIssues } = renderWithProviders(
         <Routes>
           <Route path="/verification/issues/:id" element={<IssuesPage />} />
@@ -1305,18 +1308,23 @@ describe('Report Page UI/UX Redesign (Non-Tech Clarity & Progressive Disclosure)
       expect(issuesContainer.textContent).not.toContain('[765]');
       expect(issuesContainer.textContent).not.toContain('[769]');
 
-      // Expand first error card ([1] Fake Author) to inspect analysis certainty bar & technical details
+      // Expand first error card ([1] Fake Author - suspected_hallucination): hides misleading certainty bar & raw rule IDs
       const expandButtons = screen.getAllByLabelText(/Mở rộng chi tiết/i);
-      expect(expandButtons.length).toBeGreaterThan(0);
+      expect(expandButtons.length).toBeGreaterThan(1);
       fireEvent.click(expandButtons[0]);
 
+      await waitFor(() =>
+        expect(screen.getByTestId('issue-source-candidate-badge')).toBeDefined(),
+      );
+      expect(screen.queryByTestId('issue-analysis-certainty')).toBeNull();
+      expect(issuesContainer.textContent).not.toContain('R-FABRICATED-DOI');
+
+      // Expand metadata_error card ([3] Smith) -> shows non-green amber match certainty bar
+      fireEvent.click(expandButtons[1]);
       const certaintyEl = await screen.findByTestId('issue-analysis-certainty');
-      expect(certaintyEl.textContent).toContain('Độ chắc chắn của phân tích');
+      expect(certaintyEl.textContent).toContain('Độ khớp đối chiếu');
       // Must NOT use green bg-emerald-500 progress bar on error cards!
       expect(certaintyEl.innerHTML).not.toContain('bg-emerald-500');
-      const techDetails = screen.getByTestId('issue-technical-details');
-      expect(techDetails.getAttribute('open')).toBeNull();
-      expect(techDetails.textContent).toContain('R-FABRICATED-DOI');
       unmountIssues();
 
       // 4. P3: LogicTracePage plain labels + KPI cards summing to 100% of Total
@@ -1480,7 +1488,7 @@ describe('Report Page UI/UX Redesign (Non-Tech Clarity & Progressive Disclosure)
         <InteractiveDecisionFlowBoard verdict={liveLegalVerdict} />,
       );
       const storyVi = screen.getByTestId('flow-story-card').textContent ?? '';
-      expect(storyVi).toContain('Liên kết đang hoạt động bình thường.');
+      expect(storyVi).toContain('Liên kết trang web đang hoạt động.');
       expect(storyVi).not.toContain('HTTP 200 OK');
       expect(storyVi).toContain('Văn bản pháp luật');
       unmountFlowVi();
@@ -1490,7 +1498,7 @@ describe('Report Page UI/UX Redesign (Non-Tech Clarity & Progressive Disclosure)
         <InteractiveDecisionFlowBoard verdict={liveLegalVerdict} />,
       );
       const storyEn = screen.getByTestId('flow-story-card').textContent ?? '';
-      expect(storyEn).toContain('Source link is active and reachable.');
+      expect(storyEn).toContain('The cited link is active.');
       expect(storyEn).not.toContain('HTTP 200 OK');
       unmountFlowEn();
 

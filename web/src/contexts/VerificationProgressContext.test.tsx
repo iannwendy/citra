@@ -124,7 +124,7 @@ describe('VerificationProgressContext — Cross-Tab & Reload Progress Persistenc
     });
 
     const uploadBtn = await screen.findByRole('button', {
-      name: /Bắt đầu xác minh/i,
+      name: /Bắt đầu kiểm tra/i,
     });
     fireEvent.click(uploadBtn);
 
@@ -221,7 +221,7 @@ describe('VerificationProgressContext — Cross-Tab & Reload Progress Persistenc
     });
 
     fireEvent.click(
-      screen.getByRole('button', { name: /Bắt đầu xác minh/i }),
+      screen.getByRole('button', { name: /Bắt đầu kiểm tra/i }),
     );
 
     // Wait for first 3 concurrent uploads to be in-flight
@@ -400,7 +400,7 @@ describe('VerificationProgressContext — Cross-Tab & Reload Progress Persistenc
       target: { files: [makePdf('Handoff_Thesis.pdf')] },
     });
 
-    const uploadBtn = await screen.findByRole('button', { name: /Bắt đầu xác minh/i });
+    const uploadBtn = await screen.findByRole('button', { name: /Bắt đầu kiểm tra/i });
     fireEvent.click(uploadBtn);
 
     expect(await screen.findByTestId('processing-filename-badge')).toBeDefined();
@@ -464,7 +464,7 @@ describe('VerificationProgressContext — Cross-Tab & Reload Progress Persistenc
     fireEvent.change(fileInput, {
       target: { files: [makePdf('MidUpload_Away.pdf')] },
     });
-    fireEvent.click(await screen.findByRole('button', { name: /Bắt đầu xác minh/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /Bắt đầu kiểm tra/i }));
 
     // Navigate away to Dashboard BEFORE uploadEssay resolves!
     fireEvent.click(screen.getByRole('link', { name: /^Bảng điều khiển$/i }));
@@ -554,7 +554,7 @@ describe('VerificationProgressContext — Cross-Tab & Reload Progress Persistenc
     fireEvent.change(fileInput, {
       target: { files: [makePdf('GraceFallback.pdf')] },
     });
-    fireEvent.click(await screen.findByRole('button', { name: /Bắt đầu xác minh/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /Bắt đầu kiểm tra/i }));
 
     expect(await screen.findByTestId('stub-no-processing-mount')).toBeDefined();
 

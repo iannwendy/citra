@@ -845,6 +845,7 @@ describe('Track 5 Remediation Suite (Wave 1, 2 & 3)', () => {
         { user: makeUser({ plan_tier: 'pro' }) },
       );
 
+      fireEvent.click(screen.getByTestId('sandbox-mode-acl-btn'));
       fireEvent.click(screen.getByTestId('sandbox-random-acl-btn'));
       const generateBtn = await screen.findByTestId('sandbox-generate-verify-pdf-btn');
       fireEvent.click(generateBtn);
@@ -958,7 +959,7 @@ describe('Track 5 Remediation Suite (Wave 1, 2 & 3)', () => {
 
       // Must NOT label a 0.28 confidence hallucination candidate as green "MATCH"
       const candidateBadge = await screen.findByTestId('issue-source-candidate-badge');
-      expect(candidateBadge.textContent).toMatch(/Low Confidence/i);
+      expect(candidateBadge.textContent).toMatch(/Low match/i);
       expect(candidateBadge.textContent).not.toBe('MATCH');
       expect(candidateBadge.textContent).not.toBe('Matched');
     });
@@ -1138,7 +1139,7 @@ describe('Track 5 Remediation Suite (Wave 1, 2 & 3)', () => {
       fireEvent.submit(pwInputs[0]!.closest('form')!);
 
       await waitFor(() => {
-        expect(screen.getByText(/72 UTF-8 bytes|72 byte/i)).toBeTruthy();
+        expect(screen.getByText(/Password is too long|shorter password|under 64 characters/i)).toBeTruthy();
       });
       expect(changePwSpy).not.toHaveBeenCalled();
     });
@@ -1161,7 +1162,8 @@ describe('Track 5 Remediation Suite (Wave 1, 2 & 3)', () => {
       expect(landingSrc).not.toMatch(/R01–R16/);
       expect(landingSrc).not.toMatch(/15-verdict|15 nhãn phán quyết/i);
       expect(landingSrc).toContain('/solva/pricing-floral.webp');
-      expect(landingSrc).toMatch(/Sentence-BERT/i);
+      expect(landingSrc).not.toMatch(/Sentence-BERT/i);
+      expect(landingSrc).toMatch(/Bilingual Abstract Matching|abstract/i);
       expect(pricingSrc).toMatch(/Bilingual Abstract Matching|Đối chiếu nội dung/i);
 
       expect(remediationSrc).not.toContain('NGUỒN BỊA ĐẶT / ẢO GIÁC AI — CẦN LOẠI BỎ');

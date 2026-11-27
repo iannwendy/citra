@@ -220,23 +220,38 @@ describe('Task 2.1 — Human-First Copywriting & Collapsible Progressive Disclos
         expect(collapsedText).not.toMatch(/==|!=|>=|biblStruct|R01_EXACT_DOI|R12_GHOST_DOI/);
       });
 
-      // Click technical trace toggle -> reveals R01-R30 rule codes, boolean condition expressions & canonical enums
+      // Click detailed criteria toggle -> reveals plain-language two-step verification criteria (zero raw enum/code leakage)
       fireEvent.click(options[2]); // Citation [3]: SUSPECTED_HALLUCINATION
       fireEvent.click(traceToggle);
       expect(traceToggle.getAttribute('aria-expanded')).toBe('true');
 
       const tracePanel = within(demo).getByTestId('debugger-technical-trace-panel');
-      expect(tracePanel.textContent).toContain('SUSPECTED_HALLUCINATION');
-      expect(tracePanel.textContent).toContain('MATCHED');
-      expect(tracePanel.textContent).toContain('R12_GHOST_DOI');
-      expect(tracePanel.textContent).toContain('max_similarity(title, all_candidates)');
+      expect(tracePanel.textContent).toContain(
+        getPlainVerdictLabel('SUSPECTED_HALLUCINATION', lang).label,
+      );
+      expect(tracePanel.textContent).toContain(getPlainMappingLabel('MATCHED', lang).label);
+      expect(tracePanel.textContent).toContain(
+        lang === 'vi' ? 'Kiểm tra mã DOI quốc tế' : 'DOI Registry Check',
+      );
+      expect(tracePanel.textContent).toContain('10.1038/s42256-024-99812-x');
+      expect(tracePanel.textContent).not.toMatch(
+        /SUSPECTED_HALLUCINATION|R12_GHOST_DOI|max_similarity/,
+      );
 
-      // Switch to Citation [4] while expanded -> reveals L1_MISSING_BIB_ENTRY & biblStruct condition
+      // Switch to Citation [4] while expanded -> reveals plain-language missing bibliography criteria without <biblStruct>
       fireEvent.click(options[3]);
-      expect(tracePanel.textContent).toContain('MISSING_REFERENCE');
-      expect(tracePanel.textContent).toContain('has no matching biblStruct');
+      expect(tracePanel.textContent).toContain(
+        getPlainMappingLabel('MISSING_REFERENCE', lang).label,
+      );
+      expect(tracePanel.textContent).toContain(
+        lang === 'vi'
+          ? 'Đối chiếu trích dẫn trong bài & cuối bài'
+          : 'In-Text to Reference List Check',
+      );
+      expect(tracePanel.textContent).not.toContain('biblStruct');
+      expect(tracePanel.textContent).not.toContain('MISSING_REFERENCE');
 
-      // Collapse again -> raw enum & formulas disappear cleanly
+      // Collapse again -> detailed criteria panel disappears cleanly
       fireEvent.click(traceToggle);
       expect(traceToggle.getAttribute('aria-expanded')).toBe('false');
       expect(within(demo).queryByTestId('debugger-technical-trace-panel')).toBeNull();
@@ -245,7 +260,7 @@ describe('Task 2.1 — Human-First Copywriting & Collapsible Progressive Disclos
     }
   });
 
-  it('4. shows a human-readable extracted citation card instead of raw <biblStruct> XML by default, with optional xml-schema-preview-toggle', async () => {
+  it('4. shows a human-readable extracted citation card instead of raw <biblStruct> XML by default, with optional structured-fields toggle', async () => {
     for (const lang of ['en', 'vi'] as const) {
       await i18n.changeLanguage(lang);
       const { container, unmount } = renderLanding();
@@ -261,17 +276,26 @@ describe('Task 2.1 — Human-First Copywriting & Collapsible Progressive Disclos
 
       const xmlToggle = screen.getByTestId('xml-schema-preview-toggle');
       expect(xmlToggle.getAttribute('aria-expanded')).toBe('false');
+      expect(xmlToggle.textContent).toContain(
+        lang === 'vi' ? 'Xem thông tin đã tách' : 'Structured Fields',
+      );
 
       fireEvent.click(xmlToggle);
       expect(xmlToggle.getAttribute('aria-expanded')).toBe('true');
-      expect(container.textContent).toContain('<biblStruct');
-      expect(container.textContent).toContain('</biblStruct>');
+      const structuredPanel = container.querySelector('#xml-schema-preview-panel') as HTMLElement;
+      expect(structuredPanel).not.toBeNull();
+      expect(structuredPanel.textContent).toContain(lang === 'vi' ? 'Tiêu đề' : 'Title');
+      expect(structuredPanel.textContent).toContain(lang === 'vi' ? 'Tác giả' : 'Authors');
+      expect(structuredPanel.textContent).toContain('2016 · IEEE CVPR');
+      expect(structuredPanel.textContent).toContain('10.1109/CVPR.2016.90');
+      expect(container.textContent).not.toContain('<biblStruct');
+      expect(container.textContent).not.toContain('</biblStruct>');
 
       unmount();
     }
   });
 
-  it('5. leads #benchmark-120k with a plain-language 3-pillar summary, tucks ML ablation/Platt tables behind benchmark-technical-details-toggle, and formats all VI thousands with dots (120.000)', async () => {
+  it('5. leads #benchmark-120k with a plain-language 3-pillar summary, tucks independent evaluation breakdown behind benchmark-technical-details-toggle, and formats all VI thousands with dots (120.000)', async () => {
     for (const lang of ['en', 'vi'] as const) {
       await i18n.changeLanguage(lang);
       const { container, unmount } = renderLanding();
@@ -283,8 +307,8 @@ describe('Task 2.1 — Human-First Copywriting & Collapsible Progressive Disclos
       expect(benchToggle.getAttribute('aria-expanded')).toBe('false');
       expect(benchToggle.textContent).toContain(
         lang === 'vi'
-          ? 'Xem chi tiết phương pháp & bảng số liệu kỹ thuật'
-          : 'View Full Technical Methodology & Benchmark Tables',
+          ? 'Xem chi tiết cách CITRA được kiểm thử độc lập'
+          : 'View How CITRA Was Independently Tested',
       );
 
       // Default collapsed state shows 120,000 / 120.000 & 99.67% / 99,67% with zero Platt ECE / OOD / HybridMLScorer / raw enum tables
@@ -314,25 +338,37 @@ describe('Task 2.1 — Human-First Copywriting & Collapsible Progressive Disclos
         expect(entireViDefaultText).not.toMatch(/\b\d{1,3},\d{3}\b/);
       }
 
-      // Expand technical benchmark methodology & tables
+      // Expand plain-language independent evaluation breakdown (zero ML jargon even when expanded)
       fireEvent.click(benchToggle);
       expect(benchToggle.getAttribute('aria-expanded')).toBe('true');
-      expect(bench.textContent).toMatch(/B5 · HybridMLScorer/i);
+      expect(bench.textContent).toContain('CITRA (#1)');
+      expect(bench.textContent).toContain(
+        lang === 'vi' ? 'Mô hình AI thuần túy' : 'Pure AI classifier',
+      );
+      expect(bench.textContent).not.toMatch(
+        /HybridMLScorer|McNemar|Platt|\bECE\b|\bOOD\b|SUSPECTED_HALLUCINATION/,
+      );
 
       const classesTab = within(bench).getByRole('tab', {
-        name: /4 classes & 15 sub-taxonomies|4 nhãn & 15 nhóm lỗi/i,
+        name: /All 4 Verdict Types|Độ chính xác 4 trạng thái/i,
       });
       fireEvent.click(classesTab);
-      expect(bench.textContent).toContain('SUSPECTED_HALLUCINATION');
+      expect(bench.textContent).toContain(
+        lang === 'vi' ? 'Không tìm thấy nguồn' : 'Source Not Found',
+      );
+      expect(bench.textContent).not.toContain('SUSPECTED_HALLUCINATION');
 
       const calibrationTab = within(bench).getByRole('tab', {
-        name: /platt calibration & 95% ci|hiệu chỉnh platt & bootstrap 95% ci/i,
+        name: /Score Reliability|Độ tin cậy & Ổn định điểm số/i,
       });
       fireEvent.click(calibrationTab);
-      expect(bench.textContent).toContain(lang === 'vi' ? '0,0405' : '0.0405');
+      expect(bench.textContent).toContain(
+        lang === 'vi' ? '4,1% (giảm 6,1×)' : '4.1% (6.1× lower)',
+      );
+      expect(bench.textContent).toContain(lang === 'vi' ? '99,73%' : '99.73%');
 
       if (lang === 'vi') {
-        // Even with technical drawers expanded in VI, thousand separators strictly use dots
+        // Even with evaluation drawers expanded in VI, thousand separators strictly use dots
         expect(container.textContent ?? '').not.toMatch(/\b\d{1,3},\d{3}\b/);
       }
 
@@ -374,7 +410,7 @@ describe('Task 2.1 — Human-First Copywriting & Collapsible Progressive Disclos
       unmountW();
     }
 
-    // C. StickyCardWidget(1) in VI contains zero R01_DOI_EXACT or R05_YEAR_DRIFT strings (while preserving them in EN)
+    // C. StickyCardWidget(1) contains zero raw R01_DOI_EXACT or R05_YEAR_DRIFT rule codes in both VI and EN
     const { container: sticky1Vi, unmount: unmountStickyVi } = render(
       <StickyCardWidget index={1} lang="vi" />,
     );
@@ -387,8 +423,10 @@ describe('Task 2.1 — Human-First Copywriting & Collapsible Progressive Disclos
     const { container: sticky1En, unmount: unmountStickyEn } = render(
       <StickyCardWidget index={1} lang="en" />,
     );
-    expect(sticky1En.textContent).toContain('R01_DOI_EXACT');
-    expect(sticky1En.textContent).toContain('R05_YEAR_DRIFT');
+    expect(sticky1En.textContent).not.toContain('R01_DOI_EXACT');
+    expect(sticky1En.textContent).not.toContain('R05_YEAR_DRIFT');
+    expect(sticky1En.textContent).toContain('Verified official DOI link');
+    expect(sticky1En.textContent).toContain('Publication year check');
     unmountStickyEn();
 
     // D. All 3 progressive-disclosure toggles carry aria-controls pointing to a real DOM id, and Citation [4] uses a defined .verdict-badge-* rule in index.css
@@ -512,14 +550,15 @@ describe('Task 2.1 — Human-First Copywriting & Collapsible Progressive Disclos
       });
       expect(card2Cta.getAttribute('href')).toBe('#how-it-works');
 
-      // BUG-17 / BUG-39: Expanded #benchmark-120k has zero np.clip, zero 6.17e-23, consistent p-value & 128K+ distinction
+      // BUG-17 / BUG-39: Expanded #benchmark-120k has zero np.clip, zero raw scientific p-values, and clear 128,000+ corpus distinction
       const bench = container.querySelector('#benchmark-120k') as HTMLElement;
       fireEvent.click(within(bench).getByTestId('benchmark-technical-details-toggle'));
       const expandedBenchText = bench.textContent ?? '';
       expect(expandedBenchText).not.toContain('np.clip');
       expect(expandedBenchText).not.toContain('6.17e-23');
-      expect(expandedBenchText).toContain(lang === 'vi' ? '1,66e-73' : '1.66e-73');
-      expect(expandedBenchText).toContain('128K+');
+      expect(expandedBenchText).not.toMatch(/1[.,]66e-73|McNemar/i);
+      expect(expandedBenchText).toContain(lang === 'vi' ? '128.000+' : '128,000+');
+      expect(expandedBenchText).toContain(lang === 'vi' ? '57,33%' : '57.33%');
 
       // BUG-17 / BUG-39: Zero self-quoting "CITRA Lab" testimonial attribution & localized 48 phút 12 giây in VI
       expect(container.textContent).not.toContain('CITRA Lab');
@@ -570,33 +609,33 @@ describe('Task 2.1 — Human-First Copywriting & Collapsible Progressive Disclos
     expect(titlebar.textContent).toContain('thesis_citation_audit_2026.pdf');
     expect(titlebar.textContent).not.toContain('15+ Thư viện');
     expect(metabar.textContent).toContain('PDF · DOCX · 15+ Thư viện');
-    expect(metabar.textContent).toContain('Điểm: 92,4');
+    expect(metabar.textContent).toContain('Điểm bài viết: 84,5 / 100');
 
     const bench = landingVi.querySelector('#benchmark-120k') as HTMLElement;
     fireEvent.click(within(bench).getByTestId('benchmark-technical-details-toggle'));
     const expandedVi = bench.textContent ?? '';
-    expect(expandedVi).toContain('TÁCH BIỆT BÀI BÁO & TIÊU ĐỀ');
-    expect(expandedVi).toContain('TRONG & NGOÀI TẬP DỮ LIỆU');
+    expect(expandedVi).toContain('KIỂM THỬ TÁCH BIỆT HOÀN TOÀN');
+    expect(expandedVi).toContain('DẪN ĐẦU TRÊN BỘ THƯỜNG & BỘ KHÓ');
     expect(expandedVi).toContain('Độ chuẩn xác');
     expect(expandedVi).toContain('120.000');
     expect(expandedVi).toContain('99,67%');
     expect(expandedVi).toContain('99,93%');
-    expect(expandedVi).toContain('0,0405');
+    expect(expandedVi).toContain('99,73%');
     expect(expandedVi).not.toContain('PAPER & TITLE DISJOINT');
     expect(expandedVi).not.toContain('ID & OOD');
 
-    // Prominent VND prices on Landing / VI cards + VND savings badges when annual toggle active
-    expect(screen.getByTestId('landing-vnd-price-basic').textContent).toBe('0 ₫');
-    expect(screen.getByTestId('landing-vnd-price-pro').textContent).toBe('500.000 ₫');
-    expect(screen.getByTestId('landing-vnd-price-ultra').textContent).toBe('5.000.000 ₫');
-    fireEvent.click(screen.getByTestId('landing-billing-toggle'));
+    // Prominent VND prices on Landing / VI cards default to Annual (-20%) with savings badges, toggling to Monthly
+    expect(screen.getByTestId('landing-vnd-price-basic').textContent).toBe('Miễn phí');
     expect(screen.getByTestId('landing-vnd-price-pro').textContent).toBe('400.000 ₫');
     expect(screen.getByTestId('landing-vnd-price-ultra').textContent).toBe('4.000.000 ₫');
     expect(landingVi.querySelector('#taxonomy')?.textContent).toContain('Tiết kiệm 1.200.000 ₫/năm');
     expect(landingVi.querySelector('#taxonomy')?.textContent).toContain('Tiết kiệm 12.000.000 ₫/năm');
+    fireEvent.click(screen.getByTestId('landing-billing-toggle'));
+    expect(screen.getByTestId('landing-vnd-price-pro').textContent).toBe('500.000 ₫');
+    expect(screen.getByTestId('landing-vnd-price-ultra').textContent).toBe('5.000.000 ₫');
     uLandVi();
 
-    // C. AuthSplitShell formats VI decimal with comma (94,8 / 100) and EN with dot (94.8 / 100)
+    // C. AuthSplitShell formats VI decimal with comma (96,0 / 100) and EN with dot (96.0 / 100)
     await i18n.changeLanguage('vi');
     const { container: authVi, unmount: uAuthVi } = render(
       <MemoryRouter>
@@ -607,8 +646,8 @@ describe('Task 2.1 — Human-First Copywriting & Collapsible Progressive Disclos
         </ThemeProvider>
       </MemoryRouter>,
     );
-    expect(authVi.textContent).toContain('94,8 / 100');
-    expect(authVi.textContent).not.toContain('94.8 / 100');
+    expect(authVi.textContent).toContain('96,0 / 100');
+    expect(authVi.textContent).not.toContain('96.0 / 100');
     uAuthVi();
 
     await i18n.changeLanguage('en');
@@ -621,7 +660,7 @@ describe('Task 2.1 — Human-First Copywriting & Collapsible Progressive Disclos
         </ThemeProvider>
       </MemoryRouter>,
     );
-    expect(authEn.textContent).toContain('94.8 / 100');
+    expect(authEn.textContent).toContain('96.0 / 100');
     uAuthEn();
   });
 });

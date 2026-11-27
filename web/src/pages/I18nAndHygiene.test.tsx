@@ -51,7 +51,7 @@ describe('Bilingual Completeness & Runtime Test Hygiene (BUG-10b & BUG-11)', () 
     );
 
     await waitFor(() => expect(screen.getByText('Smith et al. (2024)')).toBeDefined());
-    expect(container.textContent).toContain('Nhất quán Trích dẫn ·');
+    expect(container.textContent).toContain('Đối chiếu trích dẫn trong bài & danh mục cuối bài ·');
     expect(container.textContent).not.toContain('entries analyzed');
     expect(container.textContent).not.toContain('No Reference');
   });
@@ -108,11 +108,13 @@ describe('Bilingual Completeness & Runtime Test Hygiene (BUG-10b & BUG-11)', () 
     expect(container.textContent).toContain('Tất cả (1)');
     expect(container.textContent).toContain('✕ Không tìm thấy nguồn (1)');
     expect(container.textContent).not.toContain('Bịa đặt');
-    expect(container.textContent).toContain('Độ tin cậy:');
+    expect(container.textContent).toContain('Mức độ khớp:');
     expect(container.textContent).toContain('Trích dẫn trong bài');
-    expect(container.textContent).toContain('Bản ghi chuẩn truy xuất');
-    expect(container.textContent).toContain('Không tìm thấy bản ghi chuẩn');
+    expect(container.textContent).toContain('Dữ liệu gốc tìm được');
+    expect(container.textContent).toContain('Không tìm thấy dữ liệu gốc');
+    expect(container.textContent).not.toContain('Cited in Essay');
     expect(container.textContent).not.toContain('Cited in Manuscript');
+    expect(container.textContent).not.toContain('No published record found');
     expect(container.textContent).not.toContain('No canonical record found');
     unmount();
 
@@ -128,8 +130,10 @@ describe('Bilingual Completeness & Runtime Test Hygiene (BUG-10b & BUG-11)', () 
     );
     await waitFor(() => expect(screen.getAllByText(/Fake Paper/).length).toBeGreaterThan(0));
     expect(enContainer.textContent).toContain('All (1)');
-    expect(enContainer.textContent).toContain('Cited in Manuscript');
-    expect(enContainer.textContent).toContain('No canonical record found');
+    expect(enContainer.textContent).toContain('Cited in Essay');
+    expect(enContainer.textContent).toContain('Published Record');
+    expect(enContainer.textContent).toContain('No published record found');
+    expect(enContainer.textContent).not.toContain('Canonical Retrieved');
   });
 
   it('SettingsPage localizes API key usage status and Copy button in VI', async () => {

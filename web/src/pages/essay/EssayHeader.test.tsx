@@ -66,7 +66,10 @@ describe('EssayHeader export controls (plan-based, not role-based)', () => {
     renderHeader(makeUser('user', 'pro'), 'paper.pdf');
     const btn = screen.getByTestId('export-healed-docx-btn') as HTMLButtonElement;
     expect(btn.disabled).toBe(true);
-    expect(btn.getAttribute('title')).toMatch(/only available for essays uploaded as \.docx/i);
+    expect(btn.getAttribute('title')).toMatch(
+      /only available for documents uploaded as Word \(\.docx\) files/i,
+    );
+    expect(btn.getAttribute('title')).not.toMatch(/auto-healed/i);
     expect(screen.getByRole('tooltip').textContent).toMatch(/\.docx/);
     fireEvent.click(btn);
     expect(spy).not.toHaveBeenCalled();
@@ -128,7 +131,8 @@ describe('BibliographyRemediationModal Auto-Healed .DOCX', () => {
     fireEvent.click(btn);
     await waitFor(() => {
       const errorText = screen.getByTestId('auto-healed-docx-error').textContent ?? '';
-      expect(errorText).toMatch(/Could not export the auto-healed Word file\..*nope/i);
+      expect(errorText).toMatch(/Could not export the suggested Word file\..*nope/i);
+      expect(errorText).not.toMatch(/auto-healed/i);
       expect(errorText).not.toMatch(/API 400/);
     });
   });

@@ -453,7 +453,7 @@ describe('Track 4 Holistic SE Remediation Suite (FE-01..FE-15, QA-10, QA-11)', (
           fireEvent.click(screen.getByTestId('modal-upgrade-pro-btn'));
           await waitFor(() =>
             expect(
-              screen.getByText(/Invalid checkout redirect URL/i),
+              screen.getByText(/Could not start the checkout session|Could not open the checkout page/i),
             ).toBeDefined(),
           );
           expect(mockLocation.href).toBe('http://localhost:3000/pricing');
@@ -1302,7 +1302,8 @@ describe('Track 4 Holistic SE Remediation Suite (FE-01..FE-15, QA-10, QA-11)', (
           <BuggyWidget />
         </ErrorBoundary>,
       );
-      expect(screen.getByText('Synthetic render explosion')).toBeDefined();
+      expect(screen.getByText('Đã xảy ra sự cố hiển thị')).toBeDefined();
+      expect(document.body.textContent).toContain('Synthetic render explosion');
       expect(document.body.textContent).not.toContain('Something went wrong');
       const retryBtn = screen.getByRole('button', { name: /thử lại/i });
       fireEvent.click(retryBtn);
@@ -1318,7 +1319,8 @@ describe('Track 4 Holistic SE Remediation Suite (FE-01..FE-15, QA-10, QA-11)', (
         pageLevel: true,
       });
       const { unmount: uHoc } = render(<SafeWidget />);
-      expect(screen.getByText('Synthetic render explosion')).toBeDefined();
+      expect(screen.getByText('Đã xảy ra sự cố hiển thị')).toBeDefined();
+      expect(document.body.textContent).toContain('Synthetic render explosion');
       uHoc();
       consoleErrorSpy.mockRestore();
 
@@ -1603,7 +1605,9 @@ describe('Track 4 Holistic SE Remediation Suite (FE-01..FE-15, QA-10, QA-11)', (
       });
       fireEvent.change(input, { target: { files: [badFile] } });
       await waitFor(() =>
-        expect(document.body.textContent).toMatch(/\.PDF, \.DOCX, \.BIB, \.RIS/i),
+        expect(document.body.textContent).toMatch(
+          /PDF \(\.pdf\), Word \(\.docx\), BibTeX \(\.bib\), RIS \(\.ris\)/i,
+        ),
       );
       unmount();
     });

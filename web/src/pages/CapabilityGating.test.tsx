@@ -43,38 +43,41 @@ describe('IssuesPage capability gating', () => {
     vi.spyOn(api, 'getEssay').mockResolvedValue(makeReport());
   });
 
-  it('Pro student sees explanation, triggered rules, source lookup and confidence', async () => {
+  it('Pro student sees explanation, verification checks, checked libraries and match certainty', async () => {
     renderIssues(makeUser('user', 'pro'));
     await expandFirstIssue();
     expect(screen.getByText('What this means')).toBeDefined();
-    expect(screen.getByText('Triggered Rules')).toBeDefined();
-    expect(screen.getByText('R05')).toBeDefined();
-    expect(screen.getByText('Source Lookup')).toBeDefined();
-    expect(screen.getByText('Confidence')).toBeDefined();
+    expect(screen.getByText('Verification Checks')).toBeDefined();
+    expect(screen.getByText('An additional verification check was applied')).toBeDefined();
+    expect(screen.queryByText(/^R05$/)).toBeNull();
+    expect(screen.getByText('Checked Libraries')).toBeDefined();
+    expect(screen.getByTestId('issue-analysis-certainty').textContent).toMatch(
+      /Match certainty:\s*73%/,
+    );
     expect(screen.queryByTestId('issues-upgrade-hint')).toBeNull();
   });
 
   it('Ultra student also gets the deep diagnostics', async () => {
     renderIssues(makeUser('user', 'ultra'));
     await expandFirstIssue();
-    expect(screen.getByText('Triggered Rules')).toBeDefined();
+    expect(screen.getByText('Verification Checks')).toBeDefined();
   });
 
   it('Basic student is gated and sees an upgrade hint instead', async () => {
     renderIssues(makeUser('user', 'basic'));
     await expandFirstIssue();
-    expect(screen.queryByText('Triggered Rules')).toBeNull();
-    expect(screen.queryByText('Source Lookup')).toBeNull();
+    expect(screen.queryByText('Verification Checks')).toBeNull();
+    expect(screen.queryByText('Checked Libraries')).toBeNull();
     expect(screen.queryByText('What this means')).toBeNull();
     const hint = screen.getByTestId('issues-upgrade-hint');
-    expect(hint.textContent).toMatch(/Pro \/ Ultra/);
+    expect(hint.textContent).toMatch(/Upgrade to Pro/i);
     expect(hint.querySelector('a')?.getAttribute('href')).toBe('/pricing');
   });
 
   it('teacher keeps full access', async () => {
     renderIssues(makeUser('teacher'));
     await expandFirstIssue();
-    expect(screen.getByText('Triggered Rules')).toBeDefined();
+    expect(screen.getByText('Verification Checks')).toBeDefined();
   });
 });
 
@@ -85,17 +88,22 @@ describe('EssayPage capability gating', () => {
     vi.spyOn(api, 'getEssay').mockResolvedValue(makeReport());
   });
 
-  it('Pro student sees the raw extracted reference string and confidence', async () => {
+  it('Pro student sees the original reference in essay and match confidence in verification details', async () => {
     renderEssay(makeUser('user', 'pro'));
-    await waitFor(() => expect(screen.getByText('Raw Extracted Reference String')).toBeDefined());
-    expect(screen.getAllByText(/Conf:/).length).toBeGreaterThan(0);
+    const drawerToggle = await screen.findByTestId('deep-verification-drawer-toggle');
+    fireEvent.click(drawerToggle);
+    await waitFor(() => expect(screen.getByText('Original Reference in Essay')).toBeDefined());
+    expect(screen.getAllByText(/Match Confidence:/).length).toBeGreaterThan(0);
+    expect(screen.queryByTestId('deep-drawer-basic-upgrade')).toBeNull();
   });
 
-  it('Basic student does not see the raw reference string or confidence', async () => {
+  it('Basic student does not see the original reference block or match confidence and sees upgrade card', async () => {
     renderEssay(makeUser('user', 'basic'));
     await waitFor(() => expect(screen.getAllByText('thesis.pdf').length).toBeGreaterThan(0));
-    expect(screen.queryByText('Raw Extracted Reference String')).toBeNull();
-    expect(screen.queryByText(/Conf:/)).toBeNull();
+    fireEvent.click(screen.getByTestId('deep-verification-drawer-toggle'));
+    expect(screen.queryByText('Original Reference in Essay')).toBeNull();
+    expect(screen.queryByText(/Match Confidence:/)).toBeNull();
+    expect(screen.getByTestId('deep-drawer-basic-upgrade')).toBeDefined();
   });
 });
 

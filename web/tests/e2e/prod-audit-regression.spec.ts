@@ -122,7 +122,7 @@ function registerAuditAdminAndTeacherMocks(page: Page): void {
           id: 2,
           username: 'sv_minh_nguyen',
           role: 'user',
-          email: 'minh.nguyen.2026@student.tdtu.edu.vn',
+          email: 'minh.nguyen.2026@student.citra.edu.vn',
           full_name: 'Nguyễn Bảo Minh',
           is_active: true,
           avatar_url: null,
@@ -264,14 +264,26 @@ test.describe('Production Audit E2E Regression Suite', () => {
           await expect(page.locator('html')).toHaveAttribute('lang', lang);
 
           const bodyText = (await page.locator('body').textContent()) ?? '';
-          expect(bodyText, `${routePath} (${lang}) leaked SourceLogic`).not.toContain('SourceLogic');
-          expect(bodyText, `${routePath} (${lang}) leaked symbolic_verifier.py`).not.toContain(
+          const forbiddenPublicLeaks = [
+            'SourceLogic',
             'symbolic_verifier.py',
-          );
-          expect(bodyText, `${routePath} (${lang}) leaked 0% np.clip`).not.toContain('0% np.clip');
-          expect(bodyText, `${routePath} (${lang}) leaked accusatory copy`).not.toContain(
+            '0% np.clip',
             'ngay trước mặt thầy cô',
-          );
+            'GOOGLE_CLIENT_ID',
+            'Đăng nhập Không gian',
+            'Sách & Mở',
+            'R01_DOI_EXACT',
+            'R05_YEAR_DRIFT',
+            '<biblStruct>',
+            'VNPAY Sandbox v2.1.0',
+            '₫ VND',
+            'HMAC-SHA256',
+            'vnp_TxnRef',
+            'vnp_SecureHash',
+          ];
+          for (const leak of forbiddenPublicLeaks) {
+            expect(bodyText, `${routePath} (${lang}) leaked "${leak}"`).not.toContain(leak);
+          }
         }
       }
     });
@@ -371,11 +383,32 @@ test.describe('Production Audit E2E Regression Suite', () => {
         await expect(page.locator('main')).toBeVisible();
 
         const bodyText = (await page.locator('body').textContent()) ?? '';
-        expect(bodyText, `${routePath} leaked "Bịa đặt"`).not.toContain('Bịa đặt');
-        expect(bodyText, `${routePath} leaked raw HALLUCINATION`).not.toContain('HALLUCINATION');
-        expect(bodyText, `${routePath} leaked "ngay trước mặt thầy cô"`).not.toContain(
+        const forbiddenAuthLeaks = [
+          'Bịa đặt',
+          'HALLUCINATION',
           'ngay trước mặt thầy cô',
-        );
+          'R-HALLUCINATED-SOURCE',
+          'Đồ Thị Bằng Chứng Neuro-Symbolic',
+          'TRUY VẾT DAG',
+          'ACADEMIC CONCEPT BRIDGE',
+          'CẦU NỐI KHÁI NIỆM HỌC THUẬT',
+          'title similarity =',
+          'độ tương đồng tiêu đề =',
+          'HTTP 403 OK',
+          '(B1 Singleflight)',
+          'Wave-0',
+          'local_papers.db',
+          'Ngắt Mạch Tự Động',
+          'Trang chặn bot',
+          'Ghi đè trích dẫn',
+          'Ghi đè phán quyết',
+          '((GMT+7))',
+          'Export Audit Artifact',
+          'Auto-Healed',
+        ];
+        for (const leak of forbiddenAuthLeaks) {
+          expect(bodyText, `${routePath} leaked "${leak}"`).not.toContain(leak);
+        }
       }
 
       // DecisionSupportBanner must be visible on report & faculty review routes
@@ -460,6 +493,10 @@ test.describe('Production Audit E2E Regression Suite', () => {
       const sysText = (await page.locator('body').textContent()) ?? '';
       expect(sysText).not.toContain('RetryError');
       expect(sysText).not.toContain('Future at 0x');
+      expect(sysText).not.toContain('(B1 Singleflight)');
+      expect(sysText).not.toContain('Wave-0');
+      expect(sysText).not.toContain('local_papers.db');
+      expect(sysText).not.toContain('Ngắt Mạch Tự Động');
     });
   });
 });

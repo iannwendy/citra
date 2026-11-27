@@ -136,10 +136,10 @@ describe('RuleInspector & verdictExplanation i18n and complete backend R- rule c
       />,
     );
 
-    expect(screen.getByText('Triggered Rules (4)')).toBeDefined();
-    expect(screen.getByText('Cross-Lingual Semantic Alignment (VI↔EN)')).toBeDefined();
+    expect(screen.getByText('Verification Checks (4)')).toBeDefined();
+    expect(screen.getByText('Cross-Language Meaning Match (VI ↔ EN)')).toBeDefined();
     expect(
-      screen.getByText('Translated Title Match (TDTU Foreign-Title Rule)'),
+      screen.getByText('Foreign-Language Title Was Translated'),
     ).toBeDefined();
     expect(document.body.textContent).not.toContain('Custom rule triggered');
     unmount();
@@ -156,13 +156,13 @@ describe('RuleInspector & verdictExplanation i18n and complete backend R- rule c
       />,
     );
 
-    expect(screen.getByText('Luật được kích hoạt (4)')).toBeDefined();
+    expect(screen.getByText('Tiêu chí kiểm tra (4)')).toBeDefined();
     expect(
-      screen.getByText('Tương đồng ngữ nghĩa xuyên ngôn ngữ Việt ↔ Anh'),
+      screen.getByText('Khớp nội dung song ngữ Việt ↔ Anh'),
     ).toBeDefined();
     expect(
       screen.getByText(
-        'Tiêu đề dịch tiếng Việt (Vi phạm quy tắc giữ nguyên tiêu đề gốc TDTU)',
+        'Tiêu đề bài báo nước ngoài đang bị dịch sang tiếng Việt',
       ),
     ).toBeDefined();
     expect(document.body.textContent).not.toContain('Custom rule triggered');
@@ -194,7 +194,7 @@ describe('RuleInspector & verdictExplanation i18n and complete backend R- rule c
     expect(getVerdictExplanation(verdict)).toContain(
       'We found a likely publication, but the publication year and the authors do not match',
     );
-    expect(getVerdictDisplayName('metadata_error')).toBe('Needs a metadata review');
+    expect(getVerdictDisplayName('metadata_error')).toBe('Details Mismatch');
     expect(getSourceSummary(verdict)).toBe('Found a matching publication in Crossref');
     expect(getSearchStepDescription(verdict)).toBe(
       'Checked Crossref for a matching publication.',
@@ -204,7 +204,7 @@ describe('RuleInspector & verdictExplanation i18n and complete backend R- rule c
     expect(getVerdictExplanation(verdict)).toContain(
       'Tìm thấy ấn phẩm tương ứng nhưng năm xuất bản và tác giả không khớp với trích dẫn',
     );
-    expect(getVerdictDisplayName('metadata_error')).toBe('Cần rà soát metadata');
+    expect(getVerdictDisplayName('metadata_error')).toBe('Sai lệch thông tin');
     expect(getSourceSummary(verdict)).toBe('Tìm thấy ấn phẩm khớp trên Crossref');
     expect(getSearchStepDescription(verdict)).toBe(
       'Đã kiểm tra Crossref để tìm ấn phẩm khớp.',

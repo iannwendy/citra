@@ -103,15 +103,15 @@ describe('R-INCOMPLETE-METADATA localization & VerdictBadge sub-label', () => {
     expect(screen.getByText('Sai lệch thông tin')).toBeDefined();
   });
 
-  it('returns localized Incomplete Reference badge visuals in EssayPage getVerdictBadgeVisuals without breaking standard or legal METADATA_ERROR', () => {
+  it('returns localized Incomplete Citation badge visuals in EssayPage getVerdictBadgeVisuals without breaking standard or legal METADATA_ERROR', () => {
     expect(
       getVerdictBadgeVisuals('metadata_error', ['R-INCOMPLETE-METADATA'], 'en')
         .text,
-    ).toBe('⚠ Incomplete Reference');
+    ).toBe('⚠ Incomplete Citation');
     expect(
       getVerdictBadgeVisuals('metadata_error', ['R-INCOMPLETE-METADATA'], 'vi')
         .text,
-    ).toBe('⚠ Thiếu quy cách trích dẫn');
+    ).toBe('⚠ Thiếu thông tin trích dẫn');
     expect(
       getVerdictBadgeVisuals(
         'metadata_error',

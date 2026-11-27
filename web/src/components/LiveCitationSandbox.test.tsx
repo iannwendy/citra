@@ -67,6 +67,9 @@ describe('LiveCitationSandbox i18n, Academic Taxonomy & Quick Paste UX', () => {
 
     renderWithProviders(<LiveCitationSandbox lang="en" />);
 
+    // Defaults to Quick Check; switch to Sample PDF builder to verify sample controls & presets
+    fireEvent.click(screen.getByTestId('sandbox-mode-acl-btn'));
+
     expect(screen.getByTestId('sandbox-acl-count-select').className).toContain('pr-8');
     expect(screen.getByTestId('sandbox-acl-style-select').className).toContain('pr-8');
 
@@ -75,8 +78,9 @@ describe('LiveCitationSandbox i18n, Academic Taxonomy & Quick Paste UX', () => {
       expect(screen.getByTestId('sandbox-paper-card-0')).toBeDefined();
     });
 
-    // Cycle presets on card 0 and verify non-accusatory English labels
-    expect(screen.getAllByText('Canonical ACL').length).toBeGreaterThan(0);
+    // Cycle presets on card 0 and verify non-accusatory, plain-language English labels
+    expect(screen.getAllByText('Original Record').length).toBeGreaterThan(0);
+    expect(screen.queryByText('Canonical ACL')).toBeNull();
     fireEvent.click(screen.getByTestId('sandbox-preset-wrong-year-0'));
     expect(screen.getAllByText('Wrong Year').length).toBeGreaterThan(0);
 
@@ -108,10 +112,14 @@ describe('LiveCitationSandbox i18n, Academic Taxonomy & Quick Paste UX', () => {
 
     renderWithProviders(<LiveCitationSandbox lang="vi" />);
 
-    const initialText = document.body.textContent ?? '';
-    expect(initialText).toContain('Lấy ngẫu nhiên 12 bài báo');
-    expect(initialText).not.toContain('Random 12 Bài báo');
-    expect(initialText).not.toContain('ngay trước mặt thầy cô');
+    // Defaults to Quick Check (Kiểm tra nhanh) before switching to Sample PDF builder
+    expect(document.body.textContent ?? '').toContain('Kiểm tra trích dẫn ngay');
+    fireEvent.click(screen.getByTestId('sandbox-mode-acl-btn'));
+
+    const builderText = document.body.textContent ?? '';
+    expect(builderText).toContain('Lấy ngẫu nhiên 12 bài báo');
+    expect(builderText).not.toContain('Random 12 Bài báo');
+    expect(builderText).not.toContain('ngay trước mặt thầy cô');
 
     fireEvent.click(screen.getByTestId('sandbox-random-acl-btn'));
     await waitFor(() => {
@@ -120,7 +128,8 @@ describe('LiveCitationSandbox i18n, Academic Taxonomy & Quick Paste UX', () => {
 
     const text = document.body.textContent ?? '';
     expect(text).toContain('Tạo nhanh bài mẫu có lỗi phổ biến');
-    expect(text).toContain('Bản gốc ACL');
+    expect(text).toContain('Thư viện học thuật');
+    expect(text).not.toContain('Bản gốc ACL');
     expect(text).toContain('Có trích dẫn trong bài viết');
     expect(text).toContain('Có trong Danh mục tham khảo');
     expect(text).not.toContain('Hội Đồng');
@@ -138,9 +147,16 @@ describe('LiveCitationSandbox i18n, Academic Taxonomy & Quick Paste UX', () => {
     expect(header.className).toContain('dark:text-slate-50');
     expect(header.className).not.toContain('to-violet-950');
 
+    // Quick Check is active by default; Sample PDF tab carries inactive light/dark classes
     const rawBtn = screen.getByTestId('sandbox-mode-raw-btn');
-    expect(rawBtn.className).toContain('text-slate-600');
-    expect(rawBtn.className).toContain('dark:text-slate-300');
+    expect(rawBtn.getAttribute('aria-pressed')).toBe('true');
+    expect(rawBtn.className).toContain('bg-indigo-600');
+    expect(rawBtn.className).toContain('text-white');
+
+    const aclBtn = screen.getByTestId('sandbox-mode-acl-btn');
+    expect(aclBtn.getAttribute('aria-pressed')).toBe('false');
+    expect(aclBtn.className).toContain('text-slate-600');
+    expect(aclBtn.className).toContain('dark:text-slate-300');
   });
 
   it('Quick Paste updates subtitle, hides raw rule IDs behind collapsible toggle, uses Unified Taxonomy + DecisionSupportBanner, formats < 0.1s, suppresses not_applicable Layer-1, fixes dark BibTeX icon, and marks/clears stale results on edit/empty', async () => {
@@ -440,6 +456,11 @@ describe('LiveCitationSandbox i18n, Academic Taxonomy & Quick Paste UX', () => {
     expect(rawTabVi.className).toContain('truncate');
 
     const corpusBadgeVi = screen.getByTestId('sandbox-corpus-badge');
+    // Default Quick Check mode displays 15+ libraries badge
+    expect(corpusBadgeVi.textContent).toContain('15+ thư viện học thuật');
+
+    // Switch to Sample PDF mode -> displays steady 128.000+ badge that never jumps on sample response
+    fireEvent.click(aclTabVi);
     expect(corpusBadgeVi.textContent).toContain('128.000+ bài báo học thuật');
     expect(corpusBadgeVi.textContent).not.toContain('128,626');
 
@@ -457,6 +478,10 @@ describe('LiveCitationSandbox i18n, Academic Taxonomy & Quick Paste UX', () => {
     const { unmount: unmountEn } = renderWithProviders(<LiveCitationSandbox lang="en" />);
     expect(screen.getByTestId('sandbox-mode-acl-btn').textContent?.trim()).toBe('Sample PDF');
     expect(screen.getByTestId('sandbox-mode-raw-btn').textContent?.trim()).toBe('Quick Check');
+    expect(screen.getByTestId('sandbox-corpus-badge').textContent).toContain(
+      '15+ academic libraries',
+    );
+    fireEvent.click(screen.getByTestId('sandbox-mode-acl-btn'));
     expect(screen.getByTestId('sandbox-corpus-badge').textContent).toContain(
       '128K+ scholarly papers',
     );

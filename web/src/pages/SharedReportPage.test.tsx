@@ -94,7 +94,10 @@ describe('Task 6.1: SharedReportPage & EssayHeader Share Receipt', () => {
 
     await waitFor(() => expect(screen.getByTestId('shared-report-page')).toBeDefined());
     expect(screen.getByTestId('receipt-id-badge').textContent).toContain('CITRA-00007-ABCDEF12');
-    expect(screen.getByTestId('hmac-verified-seal').textContent).toContain('HMAC-SHA256');
+    expect(screen.getByTestId('hmac-verified-seal').textContent).toContain(
+      'Verified Official Report · CITRA',
+    );
+    expect(screen.getByTestId('hmac-verified-seal').textContent).not.toContain('HMAC-SHA256');
     expect(screen.getByTestId('qr-verification-matrix')).toBeDefined();
     expect(screen.getByTestId('shared-cis-score').textContent).toContain('92.4');
     expect(screen.getByTestId('shared-report-filename').textContent).toBe(
@@ -121,7 +124,10 @@ describe('Task 6.1: SharedReportPage & EssayHeader Share Receipt', () => {
 
     await waitFor(() => expect(screen.getByTestId('shared-report-error')).toBeDefined());
     expect(screen.getByTestId('shared-report-error').textContent).toContain(
-      'Invalid or tampered share token signature',
+      'This share link is invalid or has expired.',
+    );
+    expect(screen.getByTestId('shared-report-error').textContent).not.toContain(
+      'tampered share token signature',
     );
   });
 
@@ -235,7 +241,7 @@ describe('Task 6.1: SharedReportPage & EssayHeader Share Receipt', () => {
     const langBtn = screen.getByTestId('shared-lang-toggle');
     expect(langBtn.textContent).toContain('EN');
     expect(screen.getByTestId('shared-report-disclaimer').textContent).toContain(
-      'This system is a decision-support tool',
+      'evidence-based review aid',
     );
 
     // Toggle to Vietnamese -> shows 'VI', does NOT re-fetch API, and localizes disclaimer + explanation
@@ -243,10 +249,10 @@ describe('Task 6.1: SharedReportPage & EssayHeader Share Receipt', () => {
     await waitFor(() => expect(langBtn.textContent).toContain('VI'));
     expect(getReportSpy).toHaveBeenCalledTimes(1);
     expect(screen.getByTestId('shared-report-disclaimer').textContent).toContain(
-      'Hệ thống này là công cụ hỗ trợ giảng viên',
+      'hỗ trợ rà soát',
     );
     expect(screen.getByTestId('shared-verdict-row-0').textContent).toContain(
-      'thư viện học thuật cục bộ',
+      'Thư viện học thuật CITRA',
     );
     expect(screen.getByTestId('shared-verdict-row-0').textContent).toContain(
       'DOI / Nguồn gốc',
@@ -416,7 +422,7 @@ describe('Task 6.1: SharedReportPage & EssayHeader Share Receipt', () => {
 
     // Branded receipt badge, Print button & Theme toggle
     expect(screen.getByTestId('shared-receipt-badge').textContent).toContain(
-      'CITATION VERIFICATION RECEIPT',
+      'VERIFIED CITATION REPORT · CITRA',
     );
     expect(screen.getByTestId('shared-theme-toggle')).toBeDefined();
     fireEvent.click(screen.getByTestId('shared-print-btn'));
@@ -431,8 +437,8 @@ describe('Task 6.1: SharedReportPage & EssayHeader Share Receipt', () => {
     const row0 = screen.getByTestId('shared-verdict-row-0');
     expect(row0.textContent).toContain('[5]');
     expect(row0.textContent).not.toContain('(ref-0004)');
-    expect(row0.textContent).toContain('Restricted Access (HTTP 403)');
-    expect(row0.textContent).not.toContain('HTTP 403 OK');
+    expect(row0.textContent).toContain('Paywalled / login required');
+    expect(row0.textContent).not.toContain('HTTP 403');
     expect(row0.textContent).not.toContain('[Neural:');
     expect(row0.textContent).not.toContain('`');
     unmount();
@@ -552,7 +558,7 @@ describe('Task 6.1: SharedReportPage & EssayHeader Share Receipt', () => {
     expect(expandBtn).not.toBeNull();
     fireEvent.click(expandBtn!);
     await waitFor(() =>
-      expect(row1.textContent).toContain('Ứng viên tham khảo (chưa đủ khớp)'),
+      expect(row1.textContent).toContain('Tài liệu gần giống (chưa đủ khớp)'),
     );
     expect(row1.textContent).not.toContain('fabricated');
     expect(row1.textContent).not.toContain('[Neural:');
@@ -564,7 +570,7 @@ describe('Task 6.1: SharedReportPage & EssayHeader Share Receipt', () => {
         '2 references (11 mentions)',
       ),
     );
-    expect(screen.getByTestId('shared-report-page').textContent).toContain('Link Active');
+    expect(screen.getByTestId('shared-report-page').textContent).toContain('Link active');
   });
 
   it('Round 3 [P2-R2-1 & P3-R2-5]: renders amber non-confirmed candidate badge on unresolved verdict with matched_source and wraps underscore filenames cleanly', async () => {
@@ -645,14 +651,14 @@ describe('Task 6.1: SharedReportPage & EssayHeader Share Receipt', () => {
     const matchedHeader = screen.getByTestId('shared-matched-source-header-0');
     expect(matchedHeader.className).toContain('text-amber-700');
     expect(matchedHeader.className).not.toContain('text-emerald-700');
-    expect(matchedHeader.textContent).toContain('Ứng viên tham khảo (chưa đủ khớp): Crossref');
+    expect(matchedHeader.textContent).toContain('Tài liệu gần giống (chưa đủ khớp): Crossref');
     expect(matchedHeader.textContent).not.toContain('Nguồn Khớp');
 
-    // Switch to EN -> Candidate (insufficient match): Crossref
+    // Switch to EN -> Similar work (not a confirmed match): Crossref
     fireEvent.click(screen.getByTestId('shared-lang-toggle'));
     await waitFor(() =>
       expect(screen.getByTestId('shared-matched-source-header-0').textContent).toContain(
-        'Candidate (insufficient match): Crossref',
+        'Similar work (not a confirmed match): Crossref',
       ),
     );
   });

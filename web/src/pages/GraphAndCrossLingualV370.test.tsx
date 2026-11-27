@@ -82,15 +82,16 @@ describe('v3.70.0 Groups 5 & 6: Cross-Lingual ONNX INT8 UI, RevisionDiff Polarit
     );
 
     const bridgeBox = screen.getByTestId('essay-bridged-concepts');
-    expect(bridgeBox.textContent).toContain('VI → EN');
-    expect(bridgeBox.textContent).toContain('VI ↔ EN Cross-Lingual Semantic Match');
+    expect(bridgeBox.textContent).toContain('Cross-language match');
     expect(bridgeBox.textContent).toContain('84%');
+    expect(bridgeBox.textContent).not.toContain('ONNX');
 
-    // Title similarity in Metadata Diff table must show 84% Sim, NEVER 11% Sim
+    // Title similarity in Metadata Diff table must show 84% Match, NEVER 11% Match/Sim
     const diffTableText = container.querySelector('table')?.textContent ?? '';
-    expect(diffTableText).toContain('84% Sim');
+    expect(diffTableText).toContain('84% Match');
+    expect(diffTableText).not.toContain('11% Match');
     expect(diffTableText).not.toContain('11% Sim');
-    expect(container.textContent).toContain('0.84');
+    expect(container.textContent).toContain('84% match');
     expect(container.textContent).not.toContain('title similarity = 0.11');
     unmount();
 
@@ -110,7 +111,7 @@ describe('v3.70.0 Groups 5 & 6: Cross-Lingual ONNX INT8 UI, RevisionDiff Polarit
       expect(screen.getByTestId('essay-onnx-cross-lingual-badge')).toBeDefined(),
     );
     expect(screen.getByTestId('essay-onnx-cross-lingual-badge').textContent).toContain(
-      'Đối chiếu ngữ nghĩa Việt ↔ Anh',
+      'Khớp nội dung Việt–Anh',
     );
     expect(screen.getByTestId('essay-onnx-cross-lingual-badge').textContent).toContain(
       '84%',
@@ -174,17 +175,16 @@ describe('v3.70.0 Groups 5 & 6: Cross-Lingual ONNX INT8 UI, RevisionDiff Polarit
       expect(screen.getAllByText(/Fabricated Title With Real DOI/).length).toBeGreaterThan(0),
     );
 
-    // Switch to Tab 2 (Verification Checks) and verify R-CHIMERIC-DOI-MISMATCH consequent (in collapsible Technical Details)
+    // Switch to Tab 2 (Verification Checks) and verify plain-language chimeric DOI & conflict checks (no raw R-* / IF...THEN)
     const rulesTab = screen.getByRole('tab', { name: /2\. Verification Checks/i });
     fireEvent.mouseDown(rulesTab);
     fireEvent.click(rulesTab);
     await waitFor(() =>
-      expect(container.textContent).toContain('R-CHIMERIC-DOI-MISMATCH'),
+      expect(container.textContent).toContain('DOI Points to a Different Publication'),
     );
-    expect(container.textContent).toContain(
-      'IF doi_resolved == TRUE AND title_sim_fuzzy < 0.35 AND author_jaccard < 0.25 THEN SUSPECTED_HALLUCINATION',
-    );
-    expect(container.textContent).toContain('R-DOI-CONFLICT');
+    expect(container.textContent).toContain('Conflicting DOI Across Academic Libraries');
+    expect(container.textContent).not.toContain('R-CHIMERIC-DOI-MISMATCH');
+    expect(container.textContent).not.toContain('IF doi_resolved');
 
     // Switch to Tab 1 (Checked Sources) in EN mode
     // On suspected_hallucination verdicts, retrieved candidates MUST NOT render green "Matched"
@@ -192,18 +192,20 @@ describe('v3.70.0 Groups 5 & 6: Cross-Lingual ONNX INT8 UI, RevisionDiff Polarit
     fireEvent.mouseDown(sourcesTabEn);
     fireEvent.click(sourcesTabEn);
     await waitFor(() =>
-      expect(container.textContent).toContain('Candidate · Sim: 0.88'),
+      expect(container.textContent).toContain('Candidate · Match: 88%'),
     );
     expect(container.textContent).toContain('Candidate (insufficient match)');
-    expect(container.textContent).not.toContain('Matched · Sim: 0.88');
-    expect(container.textContent).toContain('No Hit');
+    expect(container.textContent).not.toContain('Matched · Match: 88%');
+    expect(container.textContent).toContain('Not Found');
+    expect(container.textContent).not.toContain('No Hit');
 
-    // Select web resource [2] in EN mode -> shows Not Routed
+    // Select web resource [2] in EN mode -> shows N/A & Skipped — web or legal source (no Not Routed jargon)
     const webCardEn = container.querySelector('[data-citation-id="cit-web-unrouted"]');
     fireEvent.click(webCardEn!);
     await waitFor(() =>
-      expect(container.textContent).toContain('Not Routed'),
+      expect(container.textContent).toContain('Skipped — web or legal source'),
     );
+    expect(container.textContent).not.toContain('Not Routed');
     unmount();
 
     // Verify Vietnamese localization in Tab 1 (Checked Sources)
@@ -225,18 +227,20 @@ describe('v3.70.0 Groups 5 & 6: Cross-Lingual ONNX INT8 UI, RevisionDiff Polarit
     fireEvent.mouseDown(sourcesTabVi);
     fireEvent.click(sourcesTabVi);
     await waitFor(() =>
-      expect(viContainer.textContent).toContain('Ứng viên tham khảo · Tương đồng: 0.88'),
+      expect(viContainer.textContent).toContain('Ứng viên tham khảo · Độ khớp: 88%'),
     );
     expect(viContainer.textContent).toContain('Ứng viên tham khảo (chưa đủ khớp)');
-    expect(viContainer.textContent).not.toContain('Đã khớp · Tương đồng: 0.88');
+    expect(viContainer.textContent).not.toContain('Đã khớp · Độ khớp: 88%');
     expect(viContainer.textContent).toContain('Không khớp');
     expect(viContainer.textContent).not.toContain('No Hit');
 
     const webCardVi = viContainer.querySelector('[data-citation-id="cit-web-unrouted"]');
     fireEvent.click(webCardVi!);
     await waitFor(() =>
-      expect(viContainer.textContent).toContain('Không định tuyến'),
+      expect(viContainer.textContent).toContain('Không áp dụng'),
     );
+    expect(viContainer.textContent).toContain('Không cần dò (nguồn web / văn bản pháp luật)');
+    expect(viContainer.textContent).not.toContain('Không định tuyến');
   });
 
   it('EssayPage RevisionDiff uses rose styling when error counts increase and emerald when error counts decrease, plus [14a] composite marker & localized labels', async () => {
@@ -444,27 +448,27 @@ describe('v3.70.0 Groups 5 & 6: Cross-Lingual ONNX INT8 UI, RevisionDiff Polarit
       <EvidenceGraph verdict={verdicts[3]} />,
     );
     const unresVerdictNode = screen.getByTestId('evidence-node-verdict');
-    expect(unresVerdictNode.textContent).toContain('REVIEW');
+    expect(unresVerdictNode.textContent).toContain('Review');
     expect(unresVerdictNode.textContent).not.toContain('ROOT');
     expect(screen.getByTestId('evidence-node-reference').textContent).toContain(
-      'ROOT',
+      'Citation',
     );
-    // Unresolved rules node has neutral INFO status, not warning
-    expect(screen.getByTestId('evidence-node-rules').textContent).toContain('INFO');
+    // Unresolved rules node has neutral Info status, not warning
+    expect(screen.getByTestId('evidence-node-rules').textContent).toContain('Info');
     unmountUnres();
 
-    // Verify 'resource' verdict node shows RESOURCE + Curated Registry Hit (never Local FTS5 Hit or ROOT) + positive PASS rules
+    // Verify 'resource' verdict node shows Source + Official Registry (never Local FTS5 Hit or ROOT) + positive Match rules
     const { container: legalGraphContainer, unmount: unmountLegal } =
       renderWithProviders(<EvidenceGraph verdict={verdicts[2]} />);
     const legalVerdictNode = screen.getByTestId('evidence-node-verdict');
-    expect(legalVerdictNode.textContent).toContain('RESOURCE');
+    expect(legalVerdictNode.textContent).toContain('Source');
     expect(legalVerdictNode.textContent).not.toContain('ROOT');
-    expect(legalGraphContainer.textContent).toContain('Curated Registry Hit');
+    expect(legalGraphContainer.textContent).toContain('Official Registry');
     expect(legalGraphContainer.textContent).not.toContain('Local FTS5 Hit');
     expect(
       legalGraphContainer.querySelector('[data-source-key="vn_legal_registry"]'),
     ).not.toBeNull();
-    expect(screen.getByTestId('evidence-node-rules').textContent).toContain('PASS');
+    expect(screen.getByTestId('evidence-node-rules').textContent).toContain('Match');
     unmountLegal();
 
     // Verify R-URL-CONTENT-MISMATCH web_html_meta candidate has 'warning' status (MISMATCH, NEVER 'success'/PASS) & surfaces observed <title>
@@ -521,14 +525,16 @@ describe('v3.70.0 Groups 5 & 6: Cross-Lingual ONNX INT8 UI, RevisionDiff Polarit
       (c) => c.id === 'sim-cross-lingual-bridge',
     );
     expect(viBridge).toBeDefined();
-    expect(viBridge!.detail).toContain('ONNX INT8');
+    expect(viBridge!.detail).toContain('tiếng Việt');
     expect(viBridge!.detail).toContain('86%');
+    expect(viBridge!.detail).not.toContain('ONNX');
+    expect(viBridge!.detail).not.toContain('MiniLM');
     const viVerdictNode = viOnnxGraph.children!.find((c) => c.id === 'verdict')!;
     expect(viVerdictNode.label).toBe('Thiếu quy cách trích dẫn');
 
     const { graph: viLegalGraph } = buildEvidenceGraph(verdicts[2], 'vi');
     expect(viLegalGraph.children!.find((c) => c.id === 'verdict')!.label).toBe(
-      'Văn bản Pháp luật VN',
+      'Văn bản pháp luật',
     );
   });
 
@@ -572,7 +578,13 @@ describe('v3.70.0 Groups 5 & 6: Cross-Lingual ONNX INT8 UI, RevisionDiff Polarit
       '84%',
     );
     expect(screen.getByTestId('bridged-concepts-bar').textContent).toContain(
+      'VI ↔ EN Cross-Lingual Alignment',
+    );
+    expect(screen.getByTestId('bridged-concepts-bar').textContent).not.toContain(
       'paraphrase-multilingual-MiniLM-L12-v2',
+    );
+    expect(screen.getByTestId('bridged-concepts-bar').textContent).not.toContain(
+      'ONNX INT8',
     );
     unmountTrace();
 
@@ -676,24 +688,27 @@ describe('v3.70.0 Groups 5 & 6: Cross-Lingual ONNX INT8 UI, RevisionDiff Polarit
       expect(screen.getByTestId('shared-doc-diagnostics-banner')).toBeDefined(),
     );
     expect(screen.getByTestId('shared-legacy-encoding-pill').textContent).toContain(
-      'Auto-transcoded legacy Vietnamese encoding (TCVN3 → Unicode NFC)',
+      'Automatically fixed legacy Vietnamese fonts so text could be read accurately',
+    );
+    expect(screen.getByTestId('shared-legacy-encoding-pill').textContent).not.toContain(
+      'TCVN3',
     );
     expect(screen.getByTestId('shared-ocr-recovery-pill').textContent).toContain(
-      'Recovered text via OCR on page(s): 3, 7',
+      'Automatically extracted text from scanned image pages (pages 3, 7)',
     );
     expect(screen.getByTestId('shared-cross-lingual-badge-0').textContent).toContain(
-      'VI ↔ EN Cross-Lingual · 84%',
+      'VI ↔ EN Match · 84%',
     );
 
     // Toggle SharedReportPage to VI and check localized diagnostics
     fireEvent.click(screen.getByTestId('shared-lang-toggle'));
     await waitFor(() =>
       expect(screen.getByTestId('shared-legacy-encoding-pill').textContent).toContain(
-        'Đã tự động chuyển mã bảng mã tiếng Việt cũ (TCVN3 → Unicode NFC)',
+        'Đã tự động sửa lỗi font tiếng Việt cũ để đọc chính xác nội dung',
       ),
     );
     expect(screen.getByTestId('shared-ocr-recovery-pill').textContent).toContain(
-      'Đã khôi phục văn bản bằng OCR tại trang: 3, 7',
+      'Đã tự động nhận diện chữ từ trang ảnh chụp (trang 3, 7)',
     );
   });
 });

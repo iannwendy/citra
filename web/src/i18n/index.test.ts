@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { resolveAcademicLang } from '@/lib/academicTaxonomy';
 import i18n, { resolveInitialLanguage } from './index';
 import en from './locales/en.json';
 import vi from './locales/vi.json';
@@ -38,7 +39,13 @@ describe('i18n configuration and Task 5.1 translation fixes', () => {
 
     expect(essayPageSrc).not.toContain("startsWith('en') ? 'en' : 'vi'");
     expect(essayPageSrc).toContain("i18n.language?.startsWith('vi') ? 'vi' : 'en'");
-    expect(onboardingSrc).toContain("i18n.language?.startsWith('vi') ? 'vi' : 'en'");
+    expect(onboardingSrc).not.toContain("startsWith('en') ? 'en' : 'vi'");
+    expect(onboardingSrc).toContain(
+      'resolveAcademicLang(i18n.resolvedLanguage || i18n.language)',
+    );
+    expect(resolveAcademicLang('vi-VN')).toBe('vi');
+    expect(resolveAcademicLang('en-US')).toBe('en');
+    expect(resolveAcademicLang(undefined)).toBe('en');
   });
 
   it('auto-detects vi-VN browser language when no saved preference exists, honors saved localStorage, and syncs <html lang>', async () => {

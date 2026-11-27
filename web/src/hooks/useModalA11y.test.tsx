@@ -90,7 +90,7 @@ describe('custom modals are accessible dialogs', () => {
     renderWithProviders(
       <BibliographyRemediationModal open essayId={1} filename="a.docx" lang="en" onClose={onClose} />,
     );
-    const dlg = await screen.findByRole('dialog', { name: /Bibliography Auto-Remediation/ });
+    const dlg = await screen.findByRole('dialog', { name: /Fix & Format Bibliography/ });
     expect(dlg.getAttribute('aria-modal')).toBe('true');
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(onClose).toHaveBeenCalledTimes(1);

@@ -111,7 +111,7 @@ describe('ProcessingPage failed-job UX, queued step state, & live SSE telemetry'
 
     // Credit refund reassurance badge
     expect(screen.getByTestId('quota-refund-badge').textContent).toContain(
-      'Your monthly upload credit was automatically refunded',
+      'This failed check was not counted against your monthly limit',
     );
 
     // Action buttons navigate cleanly
@@ -162,7 +162,7 @@ describe('ProcessingPage failed-job UX, queued step state, & live SSE telemetry'
     expect(screen.getByTestId('pipeline-step-1').getAttribute('data-step-status')).toBe('error');
     expect(screen.getByTestId('pipeline-step-error-badge-1').textContent).toBe('Lỗi');
     expect(screen.getByTestId('quota-refund-badge').textContent).toContain(
-      'Lượt tải lên trong tháng của bạn đã được hoàn lại (không trừ hạn ngạch)',
+      'Lượt kiểm tra tháng này của bạn đã được hoàn lại (không bị trừ lượt)',
     );
     expect(screen.getByTestId('failed-upload-another-btn').textContent).toContain(
       'Tải lại tài liệu khác',
@@ -255,14 +255,16 @@ describe('ProcessingPage failed-job UX, queued step state, & live SSE telemetry'
     expect(sourcesBar.textContent).toContain('Crossref');
     expect(sourcesBar.textContent).toContain('OpenAlex');
     expect(sourcesBar.textContent).toContain('arXiv');
-    expect(sourcesBar.textContent).toContain('VN Legal Registry');
+    expect(sourcesBar.textContent).toContain('Vietnam Legal Database');
     expect(screen.getByTestId('live-source-pill-crossref')).toBeDefined();
     expect(screen.getByTestId('live-source-pill-vn_legal_registry')).toBeDefined();
 
     expect(screen.getByTestId('scanned-pdf-processing-banner')).toBeDefined();
-    expect(screen.getByTestId('legacy-encoding-processing-banner').textContent).toContain('TCVN3');
     expect(screen.getByTestId('legacy-encoding-processing-banner').textContent).toContain(
-      'Unicode NFC',
+      'Older Vietnamese font detected',
+    );
+    expect(screen.getByTestId('legacy-encoding-processing-banner').textContent).toContain(
+      '4 pages',
     );
     expect(screen.getByTestId('ocr-recovered-processing-banner').textContent).toContain(
       '3 pages (p.1, p.2, p.4)',
@@ -642,14 +644,14 @@ describe('SystemHealthPage idle provider guard, SQLite WAL telemetry, & dynamic 
     // Health status pill accurately reflects 2 degraded upstream providers (open + half_open)
     const pill = await screen.findByTestId('health-status-pill');
     expect(pill.getAttribute('data-level')).toBe('degraded');
-    expect(pill.textContent).toContain('2 SOURCES DEGRADED (3/5 operational)');
+    expect(pill.textContent).toContain('2 sources unstable (3/5 operational)');
 
     // SQLite WAL telemetry rendered cleanly
     const walBar = screen.getByTestId('sqlite-wal-telemetry');
     expect(walBar.textContent).toContain('WAL');
     expect(walBar.textContent).toContain('NORMAL');
     expect(walBar.textContent).toContain('15000 ms');
-    expect(walBar.textContent).toContain('RO_IMMUTABLE_WAL');
+    expect(walBar.textContent).toContain('CITRA Scholarly Library (Read-Only)');
 
     // Idle 0-call provider shows '—' for BOTH latency and success rate (never 100% or 0 ms)
     const idleRow = screen.getByTestId('upstream-row-vn_tech_standard');
@@ -669,20 +671,20 @@ describe('SystemHealthPage idle provider guard, SQLite WAL telemetry, & dynamic 
       '100%',
     );
 
-    // Active open provider prefers avg_latency_ms, formats >=1000ms p95 in seconds, and renders last_error with tooltip
+    // Active open provider prefers avg_latency_ms, formats >=1000ms p95 in seconds, and sanitizes last_error cleanly
     const waybackRow = screen.getByTestId('upstream-row-wayback_html_meta');
     expect(waybackRow.textContent).toContain('Wayback Machine Archive');
     expect(waybackRow.textContent).toContain('845.4 ms');
     expect(waybackRow.textContent).toContain('p95: 1.4 s');
     const lastErr = screen.getByTestId('upstream-last-error-wayback_html_meta');
-    expect(lastErr.getAttribute('title')).toBe('HTTP 503 CDX Wayback upstream gateway timeout');
-    expect(lastErr.textContent).toContain('HTTP 503 CDX Wayback');
+    expect(lastErr.getAttribute('title')).toBe('Upstream server temporarily unavailable');
+    expect(lastErr.textContent).toContain('Upstream server temporarily unavailable');
 
     expect(screen.getByTestId('upstream-row-vn_legal_registry').textContent).toContain(
-      'VN Legal Registry (VBQPPL)',
+      'Vietnamese Legal Database',
     );
     expect(screen.getByTestId('upstream-row-web_html_meta').textContent).toContain(
-      'Web HTML Metadata',
+      'Web Page Metadata',
     );
   });
 
@@ -729,11 +731,11 @@ describe('SystemHealthPage idle provider guard, SQLite WAL telemetry, & dynamic 
     const { unmount } = renderWithProviders(<SystemHealthPage />);
 
     const stats = await screen.findByTestId('cache-stats');
-    expect(stats.textContent).toContain('Persistent SQLite Entries');
+    expect(stats.textContent).toContain('Saved Disk Cache Entries');
     expect(stats.textContent).toContain('Expired Cache Entries');
-    expect(stats.textContent).toContain('Persistent SQLite Hits');
-    expect(stats.textContent).toContain('Local Corpus Hits');
-    expect(stats.textContent).toContain('Local Corpus Papers');
+    expect(stats.textContent).toContain('Disk Cache Reuses');
+    expect(stats.textContent).toContain('Built-in Library Matches');
+    expect(stats.textContent).toContain('Built-in Library Papers');
     expect(stats.textContent).toContain('Crossref');
     expect(screen.getByTestId('local-corpus-by-source-section')).toBeDefined();
 
@@ -744,7 +746,7 @@ describe('SystemHealthPage idle provider guard, SQLite WAL telemetry, & dynamic 
     await waitFor(() => expect(healthSpy).toHaveBeenCalledTimes(2));
     await waitFor(() => {
       expect(screen.getByTestId('cache-by-source-zero').textContent).toContain(
-        '0dynamic cached entries',
+        '0temporary cached entries',
       );
     });
     expect(screen.getByTestId('cache-stat-persistent_entries').textContent).toContain('0');
@@ -756,10 +758,10 @@ describe('SystemHealthPage idle provider guard, SQLite WAL telemetry, & dynamic 
     vi.spyOn(api, 'getSystemHealth').mockResolvedValue(beforeClear);
     renderWithProviders(<SystemHealthPage />);
     const viStats = await screen.findByTestId('cache-stats');
-    expect(viStats.textContent).toContain('Mục lưu đệm SQLite bền vững');
+    expect(viStats.textContent).toContain('Mục lưu đệm trên ổ đĩa');
     expect(viStats.textContent).toContain('Mục lưu đệm đã hết hạn');
-    expect(viStats.textContent).toContain('Lượt trúng đệm SQLite bền vững');
-    expect(viStats.textContent).toContain('Lượt trúng kho cục bộ');
+    expect(viStats.textContent).toContain('Lượt tái sử dụng từ ổ đĩa');
+    expect(viStats.textContent).toContain('Lượt khớp thư viện tích hợp');
   });
 });
 
@@ -865,12 +867,14 @@ describe('DashboardPage, HistoryPage job lifecycle badges & AccountManagementPag
     });
 
     await waitFor(() => expect(screen.getByText('queued_submission.pdf')).toBeDefined());
-    expect(screen.getByTestId('history-job-status-801').textContent).toBe('Hàng đợi');
+    expect(screen.getByTestId('history-job-status-801').textContent).toBe('Đang chờ lượt');
     expect(screen.getByTestId('history-job-status-802').textContent).toBe('Đang xử lý');
     expect(screen.getByTestId('history-job-status-803').textContent).toContain('Thất bại');
     expect(screen.getByTestId('history-job-refund-803').textContent).toBe('Hoàn lượt');
-    expect(screen.getByTestId('history-essay-cis-803').textContent).toBe('CIS: —');
-    expect(screen.getByTestId('history-essay-cis-804').textContent).toBe('CIS: 92.4 / 100');
+    expect(screen.getByTestId('history-essay-cis-803').textContent).toBe('Điểm trích dẫn: —');
+    expect(screen.getByTestId('history-essay-cis-804').textContent).toBe(
+      'Điểm trích dẫn: 92.4 / 100',
+    );
 
     const historyLinks = screen.getAllByTestId('essay-item');
     expect(historyLinks.map((el) => el.getAttribute('href'))).toEqual([
@@ -916,7 +920,7 @@ describe('DashboardPage, HistoryPage job lifecycle badges & AccountManagementPag
     });
 
     await waitFor(() => expect(screen.getByText('dr_nguyen · teacher@test.local')).toBeDefined());
-    expect(screen.getAllByText('Plan / Quota').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Plan & Usage').length).toBeGreaterThan(0);
 
     expect(screen.getByTestId('user-plan-quota-1').textContent).toContain('ULTRA');
     expect(screen.getByTestId('user-plan-quota-1').textContent).toContain('Unlimited');
@@ -934,7 +938,7 @@ describe('DashboardPage, HistoryPage job lifecycle badges & AccountManagementPag
       user: makeUser('admin'),
       initialRoute: '/admin/users',
     });
-    await waitFor(() => expect(screen.getAllByText('Gói / Hạn ngạch').length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getAllByText('Gói & lượt kiểm tra').length).toBeGreaterThan(0));
     expect(screen.getByTestId('user-plan-quota-1').textContent).toContain('Không giới hạn');
   });
 });

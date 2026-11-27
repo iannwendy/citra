@@ -183,14 +183,14 @@ describe('buildEvidenceGraph', () => {
     expect(archExplanation).toMatch(/Wayback Machine/i);
     expect(getRuleDisplayName('R-RETRACTED-PAPER')).toMatch(/retracted/i);
     expect(getRuleDisplayName('R-WAYBACK-ARCHIVED')).toMatch(/Wayback Machine/i);
-    expect(getRuleDisplayName('R-GLOBAL-DOI-RA-VERIFIED')).toMatch(/Registration Agency/i);
+    expect(getRuleDisplayName('R-GLOBAL-DOI-RA-VERIFIED')).toMatch(/Global DOI Registry/i);
     expect(getRuleDisplayName('R-HF-VERIFIED')).toMatch(/Hugging Face/i);
     expect(getRuleDisplayName('R-RFC-VERIFIED')).toMatch(/IETF/i);
     expect(getRuleDisplayName('R-GITHUB-VERIFIED')).toMatch(/GitHub/i);
     expect(getRuleDisplayName('R-PACKAGE-VERIFIED')).toMatch(/PyPI|NPM/i);
     expect(getRuleDisplayName('R-WIKIDATA-VERIFIED')).toMatch(/Wikidata|OpenCitations/i);
     expect(getRuleDisplayName('R-CROSS-LINGUAL-ALIGNMENT')).toMatch(/Vietnamese|cross-lingual/i);
-    expect(getRuleDisplayName('R-CROSS-LINGUAL-TITLE-MATCH')).toMatch(/Translated title|TDTU/i);
+    expect(getRuleDisplayName('R-CROSS-LINGUAL-TITLE-MATCH')).toMatch(/Translated title/i);
   });
 
   it('builds cross-lingual concept bridge and translated title nodes in EvidenceGraph', () => {
@@ -229,6 +229,6 @@ describe('buildEvidenceGraph', () => {
 
     const explanation = getVerdictExplanation(crossLingualVerdict);
     expect(explanation).toContain('92% VI↔EN semantic match');
-    expect(explanation).toContain('TDTU academic citation rules');
+    expect(explanation).toContain('standard academic citation rules');
   });
 });

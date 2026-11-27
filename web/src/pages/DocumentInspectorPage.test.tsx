@@ -61,7 +61,8 @@ describe('DocumentInspectorPage i18n', () => {
     );
 
     expect(await screen.findByText('Document View')).toBeDefined();
-    expect(screen.getByText('Context Stream')).toBeDefined();
+    expect(screen.getByText('In-Text Citations')).toBeDefined();
+    expect(screen.queryByText('Context Stream')).toBeNull();
     expect(screen.getByText('PDF Page Preview')).toBeDefined();
     expect(screen.getByText('Citation List')).toBeDefined();
     expect(
@@ -72,7 +73,7 @@ describe('DocumentInspectorPage i18n', () => {
     expect(await screen.findByText('Citation Detail')).toBeDefined();
     expect(screen.getByText('In-text Citation')).toBeDefined();
     expect(screen.getByText('What we found')).toBeDefined();
-    expect(screen.getByText('Triggered Rules')).toBeDefined();
+    expect(screen.getByText('Verification Checks')).toBeDefined();
     expect(screen.getByText('View full report')).toBeDefined();
   });
 
@@ -94,7 +95,8 @@ describe('DocumentInspectorPage i18n', () => {
     );
 
     expect(await screen.findByText('Chế độ xem tài liệu')).toBeDefined();
-    expect(screen.getByText('Luồng ngữ cảnh')).toBeDefined();
+    expect(screen.getByText('Đoạn văn trích dẫn')).toBeDefined();
+    expect(screen.queryByText('Luồng ngữ cảnh')).toBeNull();
     expect(screen.getByText('Xem trước trang PDF')).toBeDefined();
     expect(screen.getByText('Danh sách trích dẫn')).toBeDefined();
     expect(
@@ -104,8 +106,8 @@ describe('DocumentInspectorPage i18n', () => {
     fireEvent.click(screen.getByTestId('page-citation-item-1'));
     expect(await screen.findByText('Chi tiết trích dẫn')).toBeDefined();
     expect(screen.getByText('Trích dẫn trong bài')).toBeDefined();
-    expect(screen.getByText('Kết quả phân tích')).toBeDefined();
-    expect(screen.getByText('Luật được kích hoạt')).toBeDefined();
+    expect(screen.getByText('Kết quả kiểm tra')).toBeDefined();
+    expect(screen.getByText('Tiêu chí kiểm tra')).toBeDefined();
     expect(screen.getByText('Xem báo cáo đầy đủ')).toBeDefined();
   });
 });

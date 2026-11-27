@@ -83,9 +83,10 @@ describe('Wave 2A: URL Resource Metadata, Verdict Diff Table, Composite Sub-Refs
     );
     const diffTableText = container.querySelector('table')?.textContent ?? '';
     expect(diffTableText).toContain('The Huffington Post');
-    expect(diffTableText).toContain('Not declared in page metadata');
+    expect(diffTableText).toContain('Not listed on this web page');
     expect(diffTableText).not.toContain('Available at:');
-    expect(container.textContent).not.toContain('No canonical record found');
+    expect(container.textContent).not.toContain('No published record found');
+    expect(container.textContent).not.toContain('✕ Mismatch');
     expect(container.textContent).not.toContain('✕ Diff');
 
     // Check Vietnamese localization for Case (a)
@@ -103,8 +104,9 @@ describe('Wave 2A: URL Resource Metadata, Verdict Diff Table, Composite Sub-Refs
     await waitFor(() =>
       expect(screen.getAllByText(/Why Academic Citation Checking Matters/).length).toBeGreaterThan(0),
     );
-    expect(viContainer.textContent).toContain('Trang web không khai báo thẻ này');
-    expect(viContainer.textContent).not.toContain('Không tìm thấy bản ghi chuẩn');
+    expect(viContainer.textContent).toContain('Trang web không ghi thông tin này');
+    expect(viContainer.textContent).not.toContain('Không tìm thấy dữ liệu gốc');
+    expect(viContainer.textContent).not.toContain('✕ Sai lệch');
     expect(viContainer.textContent).not.toContain('✕ Lệch');
   });
 
@@ -143,10 +145,11 @@ describe('Wave 2A: URL Resource Metadata, Verdict Diff Table, Composite Sub-Refs
       expect(screen.getAllByText(/System Card Technical Overview/).length).toBeGreaterThan(0),
     );
     expect(container.textContent).toContain(
-      'Verified web resource (bot-protected — HTML meta unavailable)',
+      'This website restricts automated preview — please open it directly',
     );
-    expect(container.textContent).toContain('Web Resource');
-    expect(container.textContent).not.toContain('No canonical record found');
+    expect(container.textContent).toContain('Web Page');
+    expect(container.textContent).not.toContain('No published record found');
+    expect(container.textContent).not.toContain('✕ Mismatch');
     expect(container.textContent).not.toContain('✕ Diff');
 
     unmount();
@@ -164,10 +167,11 @@ describe('Wave 2A: URL Resource Metadata, Verdict Diff Table, Composite Sub-Refs
       expect(screen.getAllByText(/System Card Technical Overview/).length).toBeGreaterThan(0),
     );
     expect(viContainer.textContent).toContain(
-      'Tài nguyên web hợp lệ (tường lửa/chặn bot — không đọc được thẻ HTML)',
+      'Trang web hạn chế truy cập tự động — vui lòng bấm mở trực tiếp',
     );
-    expect(viContainer.textContent).toContain('Tài nguyên Web');
-    expect(viContainer.textContent).not.toContain('Không tìm thấy bản ghi chuẩn');
+    expect(viContainer.textContent).toContain('Nguồn web');
+    expect(viContainer.textContent).not.toContain('Không tìm thấy dữ liệu gốc');
+    expect(viContainer.textContent).not.toContain('✕ Sai lệch');
     expect(viContainer.textContent).not.toContain('✕ Lệch');
   });
 
@@ -218,10 +222,13 @@ describe('Wave 2A: URL Resource Metadata, Verdict Diff Table, Composite Sub-Refs
       expect(container.textContent).toContain('Top 10 Summer Cooking Recipes Blog Home'),
     );
     expect(container.textContent).toContain('Wrong Page');
-    expect(container.textContent).toContain('HTTP 200 resolved to a different page title');
     expect(container.textContent).toContain(
-      'The actual web page at this URL is titled “Top 10 Summer Cooking Recipes Blog Home”',
+      'Link opens, but leads to a page with a different title',
     );
+    expect(container.textContent).toContain(
+      'The actual web page at this link is titled "Top 10 Summer Cooking Recipes Blog Home"',
+    );
+    expect(container.textContent).not.toContain('HTTP 200');
     expect(container.textContent).not.toContain('Matching publication found');
 
     unmount();
@@ -239,7 +246,10 @@ describe('Wave 2A: URL Resource Metadata, Verdict Diff Table, Composite Sub-Refs
       expect(viContainer.textContent).toContain('Top 10 Summer Cooking Recipes Blog Home'),
     );
     expect(viContainer.textContent).toContain('Sai nội dung trang');
-    expect(viContainer.textContent).toContain('HTTP 200 hoạt động nhưng trỏ tới tiêu đề trang web khác');
+    expect(viContainer.textContent).toContain(
+      'Đường dẫn vẫn mở được nhưng dẫn tới trang có tiêu đề khác',
+    );
+    expect(viContainer.textContent).not.toContain('HTTP 200');
   });
 
   it('EssayPage Case (d): renders amber Incomplete Metadata messaging without hallucinating authors from bare title or showing red Diff', async () => {
@@ -272,10 +282,13 @@ describe('Wave 2A: URL Resource Metadata, Verdict Diff Table, Composite Sub-Refs
     await waitFor(() =>
       expect(screen.getAllByText(/Survey of Large Language Model Hallucinations/).length).toBeGreaterThan(0),
     );
-    expect(container.textContent).toContain('Insufficient citation metadata for canonical lookup');
+    expect(container.textContent).toContain(
+      'Not enough citation details to look up this source',
+    );
     expect(container.textContent).toContain('Provided');
     expect(container.textContent).toContain('Missing');
-    expect(container.textContent).not.toContain('No canonical record found');
+    expect(container.textContent).not.toContain('No published record found');
+    expect(container.textContent).not.toContain('✕ Mismatch');
     expect(container.textContent).not.toContain('✕ Diff');
 
     // Card uses amber styling for metadata_error rather than hallucination-red
@@ -326,12 +339,12 @@ describe('Wave 2A: URL Resource Metadata, Verdict Diff Table, Composite Sub-Refs
     await waitFor(() =>
       expect(screen.getAllByText(/TCVN 12345:2025/).length).toBeGreaterThan(0),
     );
-    expect(container.textContent).toContain('VN National Standards (TCVN / QCVN)');
+    expect(container.textContent).toContain('Vietnamese National Standards (TCVN / QCVN)');
     expect(container.textContent).not.toContain('999');
     expect(container.textContent).not.toContain('1026');
     unmount();
 
-    // LogicTracePage also guards year_distance=999 and renders live features
+    // LogicTracePage also guards year_distance=999 and renders human-readable verification checks
     const { container: traceContainer, unmount: unmountTrace } = renderWithProviders(
       <Routes>
         <Route path="/verification/report/:id/trace" element={<LogicTracePage />} />
@@ -342,8 +355,11 @@ describe('Wave 2A: URL Resource Metadata, Verdict Diff Table, Composite Sub-Refs
       },
     );
     await waitFor(() =>
-      expect(traceContainer.textContent).toContain('R-VN-STANDARD-VERIFIED'),
+      expect(traceContainer.textContent).toContain(
+        'Vietnamese National Standard Verified (TCVN / QCVN)',
+      ),
     );
+    expect(traceContainer.textContent).not.toContain('R-VN-STANDARD-VERIFIED');
     expect(traceContainer.textContent).not.toContain('999');
     expect(traceContainer.textContent).not.toContain('1026');
     unmountTrace();
@@ -353,7 +369,9 @@ describe('Wave 2A: URL Resource Metadata, Verdict Diff Table, Composite Sub-Refs
       <EvidenceGraph verdict={standardVerdict} />,
     );
     expect(graphContainer.textContent).not.toContain('999');
-    expect(graphContainer.textContent).toContain('VN National Standards (TCVN / QCVN)');
+    expect(graphContainer.textContent).toContain(
+      'Vietnamese National Standards (TCVN / QCVN)',
+    );
   });
 
   it('EssayPage Failed-Essay (409) error card and TCVN3/OCR diagnostics on EssayPage & DocumentInspectorPage', async () => {
@@ -405,11 +423,19 @@ describe('Wave 2A: URL Resource Metadata, Verdict Diff Table, Composite Sub-Refs
       expect(screen.getByTestId('essay-doc-diagnostics-banner')).toBeDefined(),
     );
     expect(
-      screen.getByText('Auto-transcoded legacy Vietnamese encoding (TCVN3 → Unicode NFC)'),
+      screen.getByText(
+        'Automatically converted legacy Vietnamese fonts so citations could be read accurately.',
+      ),
     ).toBeDefined();
     expect(
-      screen.getByText('Recovered text via Tesseract OCR (vie+eng) on page(s): 2, 5'),
+      screen.getByText('Automatically extracted text from scanned pages (pages 2, 5).'),
     ).toBeDefined();
+    expect(screen.getByTestId('essay-doc-diagnostics-banner').textContent).not.toContain(
+      'TCVN3',
+    );
+    expect(screen.getByTestId('essay-doc-diagnostics-banner').textContent).not.toContain(
+      'Tesseract',
+    );
     unmountEssayDiag();
 
     await i18n.changeLanguage('vi');
@@ -426,10 +452,10 @@ describe('Wave 2A: URL Resource Metadata, Verdict Diff Table, Composite Sub-Refs
       expect(screen.getByTestId('inspector-doc-diagnostics-banner')).toBeDefined(),
     );
     expect(
-      screen.getByText('Đã tự động chuyển mã bảng mã tiếng Việt cũ (TCVN3 → Unicode NFC)'),
+      screen.getByText('Đã tự động sửa lỗi font tiếng Việt cũ để đọc chính xác nội dung'),
     ).toBeDefined();
     expect(
-      screen.getByText('Đã khôi phục văn bản bằng OCR (Tesseract vie+eng) tại trang: 2, 5'),
+      screen.getByText('Đã tự động nhận diện chữ từ trang ảnh chụp (trang 2, 5)'),
     ).toBeDefined();
   });
 
@@ -491,7 +517,10 @@ describe('Wave 2A: URL Resource Metadata, Verdict Diff Table, Composite Sub-Refs
     );
     await waitFor(() => expect(issuesContainer.textContent).toContain('[14a]'));
     expect(screen.getByTestId('issue-url-status-badge').textContent).toContain(
-      'HTTP 200 · Wrong Page',
+      '⚠ Page does not match title',
+    );
+    expect(screen.getByTestId('issue-url-status-badge').textContent).not.toContain(
+      'HTTP 200',
     );
     expect(issuesContainer.textContent).toContain('Unrelated Portal Homepage');
     unmountIssues();
@@ -579,7 +608,9 @@ describe('Wave 2A: URL Resource Metadata, Verdict Diff Table, Composite Sub-Refs
 
     await waitFor(() => expect(screen.getByTestId('shared-report-page')).toBeDefined());
     expect(sharedContainer.textContent).toContain('[14a]');
-    expect(screen.getByTestId('shared-url-status-0').textContent).toContain('Wrong Page');
+    expect(screen.getByTestId('shared-url-status-0').textContent).toContain(
+      'Page does not match title',
+    );
     expect(screen.getByTestId('shared-observed-web-meta-0').textContent).toContain(
       'Unrelated Portal Homepage',
     );
@@ -594,12 +625,12 @@ describe('Wave 2A: URL Resource Metadata, Verdict Diff Table, Composite Sub-Refs
     expect(screen.getByText('Legal Statute')).toBeDefined();
     await i18n.changeLanguage('vi');
     rerender(<VerdictBadge verdict="resource" triggeredRules={['R-VN-LEGAL-VERIFIED']} />);
-    expect(screen.getByText('Văn bản Pháp luật')).toBeDefined();
+    expect(screen.getByText('Văn bản pháp luật')).toBeDefined();
     unmountBadge();
 
     await i18n.changeLanguage('en');
 
-    // 2. RuleInspector tech_standard condition + live features pills (guarding year_distance=999)
+    // 2. RuleInspector human-readable checks + live feature chips (guarding year_distance=999 & omitting raw R-* / snake_case keys)
     const { container: ruleContainer, unmount: unmountRule } = renderWithProviders(
       <RuleInspector
         triggeredRules={['R-VN-STANDARD-VERIFIED', 'R-URL-CONTENT-MISMATCH']}
@@ -614,11 +645,15 @@ describe('Wave 2A: URL Resource Metadata, Verdict Diff Table, Composite Sub-Refs
         }}
       />,
     );
-    expect(ruleContainer.textContent).toContain('tech_standard');
+    expect(ruleContainer.textContent).toContain(
+      'Vietnamese National Standard Verified (TCVN / QCVN)',
+    );
     expect(ruleContainer.textContent).not.toContain('vn_tech_standard');
+    expect(ruleContainer.textContent).not.toContain('R-VN-STANDARD-VERIFIED');
     const liveFeatures = screen.getByTestId('rule-inspector-live-features');
-    expect(liveFeatures.textContent).toContain('html_meta_title_sim=0.12');
-    expect(liveFeatures.textContent).toContain('cross_lingual_title_sim=0.88');
+    expect(liveFeatures.textContent).toContain('Web page title match: 12%');
+    expect(liveFeatures.textContent).toContain('Title match: 88%');
+    expect(liveFeatures.textContent).not.toContain('html_meta_title_sim=');
     expect(liveFeatures.textContent).not.toContain('999');
     unmountRule();
 
@@ -697,7 +732,7 @@ describe('Wave 2A: URL Resource Metadata, Verdict Diff Table, Composite Sub-Refs
     await waitFor(() =>
       expect(screen.getByText('⚠ Manual Review Required')).toBeDefined(),
     );
-    expect(screen.getByText('✓ Auto-Repaired')).toBeDefined();
+    expect(screen.getByText('✓ Fix Suggested')).toBeDefined();
     unmountModal();
 
     // 4. LiveCitationSandbox resource card + R-URL-CONTENT-MISMATCH observed page title
@@ -792,7 +827,8 @@ describe('Wave 2A: URL Resource Metadata, Verdict Diff Table, Composite Sub-Refs
     );
 
     const resCard1 = screen.getByTestId('sandbox-result-card-2');
-    expect(resCard1.textContent).toContain('HTTP 200 · Wrong Page');
+    expect(resCard1.textContent).toContain('Page content mismatch');
+    expect(resCard1.textContent).not.toContain('HTTP 200');
     expect(resCard1.textContent).toContain('React Blog Archive');
   });
 
@@ -878,7 +914,8 @@ describe('Wave 2A: URL Resource Metadata, Verdict Diff Table, Composite Sub-Refs
       expect(screen.getByTestId('sandbox-result-card-1')).toBeDefined(),
     );
     expect(sbContainer.textContent).not.toContain('FAKE URL');
-    expect(sbContainer.textContent).toContain('Wayback Archived');
+    expect(sbContainer.textContent).toContain('Web archive copy');
+    expect(sbContainer.textContent).toContain('Web Archive (Wayback)');
     expect(sbContainer.textContent).toContain('Web Source: 1');
     expect(sbContainer.textContent).toContain('Legal Statute: 1');
     expect(sbContainer.textContent).toContain('· Vietnamese Legal Registry');
@@ -961,25 +998,27 @@ describe('Wave 2A: URL Resource Metadata, Verdict Diff Table, Composite Sub-Refs
         },
       );
     await waitFor(() =>
-      expect(essayDocxContainer.textContent).toContain('WORD DOCX · OPENXML'),
+      expect(essayDocxContainer.textContent).toContain('Word (.docx)'),
     );
+    expect(essayDocxContainer.textContent).not.toContain('OPENXML');
     expect(essayDocxContainer.textContent).not.toContain(
-      'VN National Standards (TCVN / QCVN) and OpenAlex',
+      'Vietnamese National Standards (TCVN / QCVN) and OpenAlex',
     );
     expect(essayDocxContainer.textContent).toContain(
-      'Verified fields (title, publication year)',
+      'The title, publication year match your citation.',
     );
 
-    // Click [8a] and verify no "title similarity = 0.00" & [8a] highlighted
+    // Click [8a] and verify no raw similarity telemetry ("title similarity = 0.00") & observed web title is shown
     const btn8a = Array.from(
       essayDocxContainer.querySelectorAll<HTMLElement>('[data-citation-id]'),
     ).find((el) => el.dataset.citationId === 'v2');
     expect(btn8a).toBeDefined();
     fireEvent.click(btn8a!);
     await waitFor(() =>
-      expect(essayDocxContainer.textContent).toContain('HTML page title similarity = 1.00'),
+      expect(essayDocxContainer.textContent).toContain('Long Short-Term Memory Web Entry'),
     );
     expect(essayDocxContainer.textContent).not.toContain('title similarity = 0.00');
+    expect(essayDocxContainer.textContent).not.toContain('HTML page title similarity');
     unmountEssayDocx();
 
     // 3. DocumentInspectorPage highlights [8a] inside <mark>, shows DOCX header, and never shows FAKE URL on Wayback-rescued unchecked URLs
@@ -1003,7 +1042,7 @@ describe('Wave 2A: URL Resource Metadata, Verdict Diff Table, Composite Sub-Refs
     expect(inspContainer.textContent).not.toContain('FAKE URL');
     unmountInsp();
 
-    // 4. LogicTracePage shows Wayback Archived (never FAKE URL) and strips duplicate [1] prefix
+    // 4. LogicTracePage shows Wayback archived (never FAKE URL) and strips duplicate [1] prefix
     const { container: traceContainer } = renderWithProviders(
       <Routes>
         <Route path="/verification/trace/:id" element={<LogicTracePage />} />
@@ -1014,7 +1053,7 @@ describe('Wave 2A: URL Resource Metadata, Verdict Diff Table, Composite Sub-Refs
       },
     );
     await waitFor(() =>
-      expect(traceContainer.textContent).toContain('Wayback Archived'),
+      expect(traceContainer.textContent).toContain('Wayback archived'),
     );
     expect(traceContainer.textContent).not.toContain('FAKE URL');
     expect(traceContainer.textContent).not.toContain('[1][1]');

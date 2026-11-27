@@ -68,11 +68,12 @@ describe('Task 5.6 — Localized components in EN and VI', () => {
       <OverrideControls verdict={verdict} onOverride={vi.fn().mockResolvedValue(undefined)} />,
       { user: makeUser('admin') },
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Ghi đè' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cập nhật kết quả kiểm tra' }));
     expect(screen.getByText('✓ Đã xác minh')).toBeDefined();
     expect(screen.getByText('△ Sai lệch thông tin')).toBeDefined();
-    expect(screen.getByText('Đã liên kết')).toBeDefined();
-    expect(screen.getByText('Thiếu nguồn')).toBeDefined();
+    fireEvent.click(screen.getByTestId('override-mapping-toggle'));
+    expect(screen.getAllByText('Khớp trong bài & danh mục').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText('Thiếu trong danh mục')).toBeDefined();
   });
 
   it('localizes UserFormDialog and DeleteUserDialog in VI', async () => {
@@ -114,25 +115,25 @@ describe('Task 5.6 — Localized components in EN and VI', () => {
 
     await i18n.changeLanguage('en');
     const enGraph = buildEvidenceGraph(verdict, 'en');
-    expect(enGraph.graph.children?.[0]?.label).toBe('Academic Databases');
-    expect(enGraph.graph.children?.[1]?.label).toBe('Semantic Matching');
+    expect(enGraph.graph.children?.[0]?.label).toBe('Academic Libraries');
+    expect(enGraph.graph.children?.[1]?.label).toBe('Content Comparison');
 
     const { unmount } = renderWithProviders(
       <CitationGraphView verdicts={[verdict]} onSelect={vi.fn()} />,
     );
-    expect(screen.getByText(/Two-Layer Citation & Source Network Explorer/)).toBeDefined();
+    expect(screen.getByText(/Citation & Source Verification Network/)).toBeDefined();
     expect(screen.getByText('All Layers')).toBeDefined();
     unmount();
 
     await i18n.changeLanguage('vi');
     const viGraph = buildEvidenceGraph(verdict, 'vi');
-    expect(viGraph.graph.children?.[0]?.label).toBe('Cơ sở dữ liệu học thuật');
-    expect(viGraph.graph.children?.[1]?.label).toBe('Đối sánh ngữ nghĩa');
+    expect(viGraph.graph.children?.[0]?.label).toBe('Thư viện học thuật');
+    expect(viGraph.graph.children?.[1]?.label).toBe('So sánh nội dung');
 
     renderWithProviders(
       <CitationGraphView verdicts={[verdict]} onSelect={vi.fn()} />,
     );
-    expect(screen.getByText(/Trình Khám Phá Mạng Lưới Trích Dẫn & Nguồn 2 Tầng/)).toBeDefined();
+    expect(screen.getByText(/Mạng lưới đối chiếu trích dẫn & nguồn gốc/)).toBeDefined();
     expect(screen.getByText('Tất cả tầng')).toBeDefined();
   });
 });
@@ -402,7 +403,8 @@ describe('Task 2.3 — Non-Tech Verdict Clarity, Mapping Case-Insensitivity & Up
     fireEvent.click(screen.getByTestId('modal-cycle-monthly'));
     expect(viModal.textContent).toContain('500.000 ₫');
     expect(viModal.textContent).toContain('5.000.000 ₫');
-    expect(screen.getByTestId('modal-upgrade-ultra-btn').textContent).toContain('200');
+    expect(screen.getByTestId('modal-upgrade-ultra-btn').textContent).toContain('5.000.000 ₫');
+    expect(viModal.textContent).toContain('~$200/tháng');
   });
 
   it('Round 1: eliminates VI machine-translated calques on VerdictBadge (UNRESOLVED & LIKELY_VERIFIED) and enforces triggeredRules parity + actionable tooltips across VerdictBadge, VerdictBadgeCompact, and VerdictIcon', async () => {
@@ -432,9 +434,9 @@ describe('Task 2.3 — Non-Tech Verdict Clarity, Mapping Case-Insensitivity & Up
     );
 
     const expectedEnIncompleteTitle =
-      'Incomplete Reference — Citation lacks required fields (author, publication year, or venue) rather than being fabricated; add the missing details to complete this entry.';
+      'Incomplete Reference — Citation is missing required details (author, publication year, or venue); add the missing details to complete this entry.';
     const expectedEnLegalTitle =
-      'Legal Statute — Recognized legal statute or government regulation; no action needed (excluded from academic citation penalty).';
+      'Legal Statute — Recognized legal statute or government regulation; no action needed (not penalized in your score).';
 
     for (const id of ['en-vb-inc', 'en-vbc-inc', 'en-vbi-inc']) {
       const el = screen.getByTestId(id).firstElementChild as HTMLElement;
@@ -486,9 +488,9 @@ describe('Task 2.3 — Non-Tech Verdict Clarity, Mapping Case-Insensitivity & Up
     expect(viContainer.textContent).not.toContain('Khả năng cao bịa đặt');
 
     const expectedViIncompleteTitle =
-      'Thiếu quy cách trích dẫn — Mục tham khảo thiếu tác giả, năm xuất bản hoặc nơi công bố (không phải nguồn bịa đặt); hãy bổ sung đầy đủ các thông tin còn thiếu.';
+      'Thiếu quy cách trích dẫn — Mục tham khảo thiếu tác giả, năm xuất bản hoặc nơi công bố (chỉ là thiếu sót trình bày); hãy bổ sung đầy đủ các thông tin còn thiếu.';
     const expectedViLegalTitle =
-      'Văn bản Pháp luật — Văn bản quy phạm pháp luật đã nhận diện; không cần chỉnh sửa và không bị tính điểm trừ trích dẫn.';
+      'Văn bản pháp luật — Văn bản quy phạm pháp luật đã nhận diện; không cần chỉnh sửa và không bị tính điểm trừ trích dẫn.';
 
     for (const id of ['vi-vb-inc', 'vi-vbc-inc', 'vi-vbi-inc']) {
       const el = screen.getByTestId(id).firstElementChild as HTMLElement;
@@ -562,17 +564,23 @@ describe('Task 2.3 — Non-Tech Verdict Clarity, Mapping Case-Insensitivity & Up
     // Non-breaking VND currency units (annual)
     const proVndAnnual = screen.getByTestId('modal-pro-vnd-equivalent');
     const ultraVndAnnual = screen.getByTestId('modal-ultra-vnd-equivalent');
-    expect(proVndAnnual.textContent).toBe('≈ 400.000 ₫/tháng · 4.800.000 ₫/năm qua VNPay');
-    expect(ultraVndAnnual.textContent).toBe('≈ 4.000.000 ₫/tháng · 48.000.000 ₫/năm qua VNPay');
-    expect(proVndAnnual.querySelectorAll('span.whitespace-nowrap').length).toBe(3);
-    expect(ultraVndAnnual.querySelectorAll('span.whitespace-nowrap').length).toBe(3);
+    expect(proVndAnnual.textContent).toBe(
+      'Thanh toán 4.800.000 ₫/năm (~$192/năm) qua VNPay hoặc thẻ quốc tế',
+    );
+    expect(ultraVndAnnual.textContent).toBe(
+      'Thanh toán 48.000.000 ₫/năm (~$1.920/năm) qua VNPay hoặc thẻ quốc tế',
+    );
+    expect(viModal.querySelectorAll('span.whitespace-nowrap').length).toBeGreaterThanOrEqual(4);
 
     // Non-breaking VND currency units (monthly)
     fireEvent.click(screen.getByTestId('modal-cycle-monthly'));
-    expect(proVndAnnual.textContent).toBe('≈ 500.000 ₫/tháng qua VNPay & thẻ quốc tế');
-    expect(ultraVndAnnual.textContent).toBe('≈ 5.000.000 ₫/tháng qua VNPay & thẻ quốc tế');
-    expect(proVndAnnual.querySelectorAll('span.whitespace-nowrap').length).toBe(2);
-    expect(ultraVndAnnual.querySelectorAll('span.whitespace-nowrap').length).toBe(2);
+    expect(proVndAnnual.textContent).toBe(
+      'Thanh toán hàng tháng (~$20/tháng) qua VNPay hoặc thẻ quốc tế',
+    );
+    expect(ultraVndAnnual.textContent).toBe(
+      'Thanh toán hàng tháng (~$200/tháng) qua VNPay hoặc thẻ quốc tế',
+    );
+    expect(viModal.querySelectorAll('span.whitespace-nowrap').length).toBeGreaterThanOrEqual(2);
 
     // Card header geometry: audience subtitle sits full-width outside the [Icon + Title | Badge] flex-wrap top row
     const ultraHeading = screen.getByText('CITRA Ultra');
@@ -674,7 +682,7 @@ describe('Task 2.3 — Non-Tech Verdict Clarity, Mapping Case-Insensitivity & Up
       { user: makeUser('admin', 'ultra'), initialRoute: '/dashboard' },
     );
     expect(layoutContainer.querySelector('aside a[href="/sandbox"]')).not.toBeNull();
-    expect(layoutContainer.textContent).toContain('Thử nghiệm nhanh');
+    expect(layoutContainer.textContent).toContain('Kiểm tra nhanh');
     expect(screen.getByTestId('app-footer').textContent).toContain(
       '© 2026 CITRA. Bảo lưu mọi quyền.',
     );
@@ -705,7 +713,7 @@ describe('Task 2.3 — Non-Tech Verdict Clarity, Mapping Case-Insensitivity & Up
     );
     const viSub = screen.getByTestId('help-modal-subtitle');
     const viFooter = screen.getByTestId('help-modal-footer-note');
-    expect(viSub.textContent).toBe('CITRA · Xác minh học thuật');
+    expect(viSub.textContent).toBe('Cách kiểm tra trích dẫn và đọc hiểu kết quả');
     expect(viSub.className).toContain('whitespace-normal');
     expect(viSub.className).not.toContain('truncate');
     expect(viFooter.textContent).toBe(
@@ -722,7 +730,7 @@ describe('Task 2.3 — Non-Tech Verdict Clarity, Mapping Case-Insensitivity & Up
     );
     const enSub = screen.getByTestId('help-modal-subtitle');
     const enFooter = screen.getByTestId('help-modal-footer-note');
-    expect(enSub.textContent).toBe('CITRA · Academic Verification');
+    expect(enSub.textContent).toBe('How to check citations and understand your report');
     expect(enSub.className).toContain('whitespace-normal');
     expect(enSub.className).not.toContain('truncate');
     expect(enFooter.textContent).toBe(
@@ -748,7 +756,7 @@ describe('Task 2.3 — Non-Tech Verdict Clarity, Mapping Case-Insensitivity & Up
       { user: makeUser('admin', 'ultra'), initialRoute: '/dashboard' },
     );
     const auditLinkVi = viLayout.querySelector('aside a[href="/admin/audit"]');
-    expect(auditLinkVi?.textContent).toBe('Nhật ký duyệt bài');
+    expect(auditLinkVi?.textContent).toBe('Nhật ký duyệt trích dẫn');
     uViLayout();
 
     // 4. AppLayout EN admin sidebar keeps "Citation Review Log"

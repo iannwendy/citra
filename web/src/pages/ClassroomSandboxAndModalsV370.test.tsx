@@ -218,7 +218,7 @@ describe('v3.70.0 Classroom, Pending Reviews, Sandbox, Modals & RuleInspector', 
     expect(await screen.findByTestId('cohort-verdict-breakdown')).toBeTruthy();
     expect(
       screen.getByTestId('verdict-breakdown-pill-incomplete_metadata').textContent,
-    ).toMatch(/Incomplete Reference:\s*2/);
+    ).toMatch(/Incomplete Citation:\s*2/);
     expect(
       screen.getByTestId('verdict-breakdown-pill-unresolved').textContent,
     ).toMatch(/Unverified:\s*2/);
@@ -357,11 +357,11 @@ describe('v3.70.0 Classroom, Pending Reviews, Sandbox, Modals & RuleInspector', 
       'Unrelated Cooking Blog Homepage',
     );
     expect(screen.getByTestId('pending-retracted-502').textContent).toContain(
-      'RETRACTED',
+      'Paper Retracted',
     );
     expect(
       within(screen.getByTestId('pending-url-status-502'))
-        .getByRole('link', { name: /Wayback Archived/i })
+        .getByRole('link', { name: /Web Archive/i })
         .getAttribute('href'),
     ).toBe('https://web.archive.org/web/20250101/https://example.org/wrong-page');
 
@@ -373,11 +373,11 @@ describe('v3.70.0 Classroom, Pending Reviews, Sandbox, Modals & RuleInspector', 
 
     expect(await screen.findByText('Thiếu quy cách trích dẫn')).toBeTruthy();
     expect(screen.getByTestId('pending-observed-meta-502').textContent).toContain(
-      'Tiêu đề trang URL thực tế: "Unrelated Cooking Blog Homepage"',
+      'Tiêu đề thực tế của đường dẫn: "Unrelated Cooking Blog Homepage"',
     );
     expect(
       within(screen.getByTestId('pending-review-row-501')).getByText(
-        /chưa đủ thông tin định danh học thuật/i,
+        /thiếu thông tin cần thiết \(tác giả, năm hoặc nơi xuất bản\)/i,
       ),
     ).toBeTruthy();
   });
@@ -472,7 +472,7 @@ describe('v3.70.0 Classroom, Pending Reviews, Sandbox, Modals & RuleInspector', 
     expect(screen.getByTestId('remediation-entry-index-15').textContent).toBe('[14b]');
     expect(
       screen.getByTestId('remediation-status-resource-15').textContent,
-    ).toContain('Web / Statutory Resource');
+    ).toContain('Web Page / Legal Document');
 
     // Select TDTU style and click Export Auto-Healed .DOCX
     fireEvent.click(screen.getByTestId('remediate-style-tdtu'));
@@ -565,8 +565,8 @@ describe('v3.70.0 Classroom, Pending Reviews, Sandbox, Modals & RuleInspector', 
     });
 
     const remBtn = screen.getByTestId('actionbar-remediation-btn');
-    expect(remBtn.textContent).toContain('Remediation Engine');
-    expect(remBtn.getAttribute('title')).toBe('Auto-Fix Style (APA / IEEE / TDTU)');
+    expect(remBtn.textContent).toContain('Fix Suggestions');
+    expect(remBtn.getAttribute('title')).toBe('Fix suggestions & formatting (APA / IEEE)');
     expect(screen.getByTestId('override-attribution').textContent).toBe('by prof_tran');
 
     unmount();
@@ -581,9 +581,9 @@ describe('v3.70.0 Classroom, Pending Reviews, Sandbox, Modals & RuleInspector', 
     );
 
     const remBtnVi = screen.getByTestId('actionbar-remediation-btn');
-    expect(remBtnVi.textContent).toContain('Chuẩn hóa Tài liệu tham khảo');
+    expect(remBtnVi.textContent).toContain('Gợi ý sửa trích dẫn');
     expect(remBtnVi.getAttribute('title')).toBe(
-      'Tự động chuẩn hóa (APA / IEEE / TDTU)',
+      'Gợi ý chỉnh sửa & định dạng chuẩn (APA / IEEE)',
     );
     expect(screen.getByTestId('override-attribution').textContent).toBe('bởi prof_tran');
   });
@@ -632,6 +632,7 @@ describe('v3.70.0 Classroom, Pending Reviews, Sandbox, Modals & RuleInspector', 
       user: zeroQuotaUser,
     });
 
+    fireEvent.click(screen.getByTestId('sandbox-mode-acl-btn'));
     fireEvent.click(screen.getByTestId('sandbox-random-acl-btn'));
     await screen.findByTestId('sandbox-paper-card-0');
     fireEvent.click(screen.getByTestId('sandbox-generate-verify-pdf-btn'));
@@ -666,6 +667,7 @@ describe('v3.70.0 Classroom, Pending Reviews, Sandbox, Modals & RuleInspector', 
       { refreshUser: refreshUserSpy },
     );
 
+    fireEvent.click(screen.getByTestId('sandbox-mode-acl-btn'));
     fireEvent.click(screen.getByTestId('sandbox-random-acl-btn'));
     await screen.findByTestId('sandbox-paper-card-0');
 
@@ -765,13 +767,13 @@ describe('v3.70.0 Classroom, Pending Reviews, Sandbox, Modals & RuleInspector', 
     const card1 = screen.getByTestId('sandbox-result-card-1');
     expect(card1.textContent).toContain('[14a]');
     expect(screen.getByTestId('sandbox-url-status-1').textContent).toContain(
-      'Scholarly Match',
+      'Academic Match',
     );
     expect(screen.getByTestId('sandbox-observed-meta-1').textContent).toContain(
       'TCVN 7572-1:2020 Aggregates for concrete and mortar',
     );
     expect(screen.getByTestId('sandbox-observed-meta-1').textContent).toMatch(
-      /VN National Standards \(TCVN \/ QCVN\)/i,
+      /Vietnamese National Standards \(TCVN \/ QCVN\)/i,
     );
     expect(screen.getByTestId('sandbox-retracted-pill-2').textContent).toContain(
       'RETRACTED',
@@ -798,7 +800,7 @@ describe('v3.70.0 Classroom, Pending Reviews, Sandbox, Modals & RuleInspector', 
   it('HelpModal renders Incomplete Reference and 4 canonical 0–100 CIS bands in EN & VI, and RuleInspector defines R-DOI-CONFLICT & updated R-CROSS-LINGUAL-TITLE-MATCH', async () => {
     const { unmount } = renderWithAuth(<HelpModal isOpen={true} onClose={vi.fn()} />);
 
-    fireEvent.click(screen.getByRole('button', { name: /Understanding Verdicts/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Understanding Results/i }));
 
     expect(screen.getByText('Incomplete Reference')).toBeTruthy();
     expect(screen.queryByText('R-INCOMPLETE-METADATA')).toBeNull();
@@ -814,24 +816,24 @@ describe('v3.70.0 Classroom, Pending Reviews, Sandbox, Modals & RuleInspector', 
     fireEvent.click(screen.getByRole('button', { name: /Hiểu về kết quả/i }));
     expect(screen.getByText('Thiếu quy cách trích dẫn')).toBeTruthy();
     expect(screen.getByText('Xuất sắc')).toBeTruthy();
-    expect(screen.getByText('Tốt')).toBeTruthy();
-    expect(screen.getByText('Trung bình / Cần rà soát')).toBeTruthy();
-    expect(screen.getByText('Cần rà soát kỹ')).toBeTruthy();
+    expect(screen.getByText('Khá tốt')).toBeTruthy();
+    expect(screen.getByText('Cần rà soát')).toBeTruthy();
+    expect(screen.getByText('Cần kiểm tra kỹ')).toBeTruthy();
 
     // RuleInspector definitions check
     expect(RULE_DEFINITIONS['R-DOI-CONFLICT']).toBeDefined();
     expect(RULE_DEFINITIONS['R-DOI-CONFLICT'].category).toBe('warning');
     expect(RULE_DEFINITIONS['R-CROSS-LINGUAL-TITLE-MATCH'].name).toBe(
-      'Translated Title Match (TDTU Foreign-Title Rule)',
+      'Foreign-Language Title Was Translated',
     );
     expect(RULE_DEFINITIONS['R-CROSS-LINGUAL-TITLE-MATCH'].nameVi).toBe(
-      'Tiêu đề dịch tiếng Việt (Vi phạm quy tắc giữ nguyên tiêu đề gốc TDTU)',
+      'Tiêu đề bài báo nước ngoài đang bị dịch sang tiếng Việt',
     );
     expect(RULE_DEFINITIONS['R-CROSS-LINGUAL-TITLE-MATCH'].description).toContain(
-      '>= 0.58 (lexicon + multilingual ONNX INT8)',
+      'keeping the original publication title',
     );
     expect(RULE_DEFINITIONS['R-CROSS-LINGUAL-TITLE-MATCH'].descriptionVi).toContain(
-      '>= 0.58 (lexicon + multilingual ONNX INT8)',
+      'giữ nguyên tiêu đề gốc',
     );
 
     renderWithAuth(
@@ -841,7 +843,7 @@ describe('v3.70.0 Classroom, Pending Reviews, Sandbox, Modals & RuleInspector', 
       />,
     );
     expect(
-      screen.getByText('Xung đột mã DOI giữa các CSDL học thuật'),
+      screen.getByText('Mã DOI khác nhau giữa các thư viện học thuật'),
     ).toBeTruthy();
   });
 
@@ -1032,12 +1034,13 @@ describe('v3.70.0 Classroom, Pending Reviews, Sandbox, Modals & RuleInspector', 
 
     expect(screen.getByTestId('decision-support-banner')).toBeTruthy();
     expect(screen.getByTestId('override-close-btn')).toBeTruthy();
-    expect(screen.getByText('Kết quả xác minh nguồn')).toBeTruthy();
+    expect(screen.getByText('Kết quả kiểm tra nguồn gốc')).toBeTruthy();
     expect(
-      screen.getByText('Tình trạng trình bày & đối chiếu trong bài'),
+      screen.getByText('Điều chỉnh liên kết trong bài (nâng cao)'),
     ).toBeTruthy();
+    fireEvent.click(screen.getByTestId('override-mapping-toggle'));
     expect(screen.getByTestId('override-mapping-description').textContent).toContain(
-      'Thiếu nguồn:',
+      'Thiếu trong danh mục:',
     );
 
     const submitBtn = screen.getByTestId('override-submit-btn') as HTMLButtonElement;
@@ -1172,7 +1175,7 @@ describe('v3.70.0 Classroom, Pending Reviews, Sandbox, Modals & RuleInspector', 
       route: '/teacher/reviews',
     });
     const urlPill = await screen.findByTestId('pending-url-status-801');
-    expect(urlPill.textContent).toContain('✕ Invalid Domain');
+    expect(urlPill.textContent).toContain('✕ Website Not Found');
     expect(urlPill.textContent).not.toContain('Fake Domain');
     unmountPending();
 
@@ -1202,16 +1205,17 @@ describe('v3.70.0 Classroom, Pending Reviews, Sandbox, Modals & RuleInspector', 
       { route: '/teacher/classes/21' },
     );
     await screen.findByTestId('cohort-avg-cis-value');
-    expect(clsContainer.textContent).toContain('Điểm CIS TB');
+    expect(clsContainer.textContent).toContain('Điểm trích dẫn TB (CIS)');
     expect(clsContainer.textContent).not.toContain('Điểm tin cậy TB');
     unmountCls();
 
-    // 3. LiveCitationSandbox VI uses "12 bài báo học thuật" & "kho bài báo học thuật"
+    // 3. LiveCitationSandbox VI uses "12 bài báo học thuật" & "thư viện 128.000+ bài báo học thuật"
     const { container: sbContainer } = renderWithAuth(<LiveCitationSandbox lang="vi" />);
+    fireEvent.click(screen.getByTestId('sandbox-mode-acl-btn'));
     const countSelect = screen.getByTestId('sandbox-acl-count-select');
     expect(countSelect.textContent).toContain('12 bài báo học thuật');
     expect(countSelect.textContent).not.toContain('12 bài báo ACL');
-    expect(sbContainer.textContent).toContain('kho bài báo học thuật');
+    expect(sbContainer.textContent).toContain('thư viện 128.000+ bài báo học thuật');
     expect(sbContainer.textContent).not.toContain('kho ACL');
   });
 });

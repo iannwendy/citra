@@ -235,13 +235,14 @@ describe('Task 6 — Landing Page & Pricing Interactive Choreography', () => {
     const landingPro = screen.getByTestId('landing-price-pro');
     const landingUltra = screen.getByTestId('landing-price-ultra');
     expect(landingPro.classList.contains('t-digit-group')).toBe(true);
-    expect(landingPro.textContent).toBe('$20');
-    expect(landingUltra.textContent).toBe('$200');
-
-    // Toggle to annual -> $16 and $160 immediately with stationary '$' prefix
-    fireEvent.click(toggle);
+    // LandingPage defaults to Annual billing (-20%): $16 and $160
     expect(landingPro.textContent).toBe('$16');
     expect(landingUltra.textContent).toBe('$160');
+
+    // Toggle to monthly -> $20 and $200 immediately with stationary '$' prefix
+    fireEvent.click(toggle);
+    expect(landingPro.textContent).toBe('$20');
+    expect(landingUltra.textContent).toBe('$200');
 
     unmount();
 
@@ -639,7 +640,10 @@ describe('Task 6 — Landing Page & Pricing Interactive Choreography', () => {
     const pricingNavAgain = within(spaView.container).getByRole('navigation', {
       name: /Pricing Navigation/i,
     });
-    fireEvent.click(within(pricingNavAgain).getByRole('link', { name: /120K Benchmark/i }));
+    expect(
+      within(pricingNavAgain).queryByRole('link', { name: /120K Benchmark/i }),
+    ).toBeNull();
+    fireEvent.click(within(pricingNavAgain).getByRole('link', { name: /^Accuracy$/i }));
 
     const pricingToBenchSection = spaView.container.querySelector('#benchmark-120k') as HTMLElement;
     expect(pricingToBenchSection).not.toBeNull();

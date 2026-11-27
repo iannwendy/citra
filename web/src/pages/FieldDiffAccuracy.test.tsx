@@ -107,23 +107,24 @@ describe('EssayPage Metadata Diff Table Accuracy (Regression for essay_02_mixed.
       ).toBeGreaterThan(0),
     );
 
-    expect(getDiffRowStatusText(container, 'Title')).toContain('84% Sim');
-    expect(getDiffRowStatusText(container, 'Authors')).toContain('Diff');
+    expect(getDiffRowStatusText(container, 'Title')).toContain('84% Match');
+    expect(getDiffRowStatusText(container, 'Title')).not.toContain('Sim');
+    expect(getDiffRowStatusText(container, 'Authors')).toContain('Mismatch');
     expect(getDiffRowStatusText(container, 'Year')).toContain('100% Match');
 
     const venueStatus = getDiffRowStatusText(container, 'Venue');
     expect(venueStatus).not.toContain('100% Match');
-    expect(venueStatus).toContain('Diff');
+    expect(venueStatus).toContain('Mismatch');
 
     const doiStatus = getDiffRowStatusText(container, 'DOI');
     expect(doiStatus).not.toContain('100% Match');
     expect(doiStatus).not.toContain('Missing');
-    expect(doiStatus).toContain('Diff');
+    expect(doiStatus).toContain('Mismatch');
 
     const urlStatus = getDiffRowStatusText(container, 'URL / Link');
     expect(urlStatus).not.toContain('Checked');
     expect(urlStatus).not.toContain('Verified Link');
-    expect(urlStatus).toMatch(/Broken Link|Diff/);
+    expect(urlStatus).toMatch(/Broken Link|Mismatch/);
   });
 
   it('marks synthesized DOI URL as Broken Link / Diff (not Checked) on suspected_hallucination', async () => {
@@ -190,7 +191,7 @@ describe('EssayPage Metadata Diff Table Accuracy (Regression for essay_02_mixed.
 
     const urlStatus = getDiffRowStatusText(container, 'URL / Link');
     expect(urlStatus).not.toContain('Checked');
-    expect(urlStatus).toMatch(/Broken Link|Diff/);
+    expect(urlStatus).toMatch(/Broken Link|Mismatch/);
   });
 
   it('displays Preprint (not 100% Match) when a verified paper cites conference venue against retrieved arXiv record', async () => {
@@ -271,6 +272,7 @@ describe('EssayPage Metadata Diff Table Accuracy (Regression for essay_02_mixed.
     const venueStatus = getDiffRowStatusText(container, 'Venue');
     expect(venueStatus).not.toContain('100% Match');
     expect(venueStatus).not.toContain('Diff');
+    expect(venueStatus).not.toContain('Mismatch');
     expect(venueStatus).toContain('Preprint');
   });
 
@@ -379,8 +381,11 @@ describe('EssayPage Metadata Diff Table Accuracy (Regression for essay_02_mixed.
         screen.getAllByText(/Highly accurate protein structure prediction with AlphaFold/).length,
       ).toBeGreaterThan(0),
     );
+    expect(container.textContent).toContain(
+      'Mã DOI bạn ghi đang trỏ tới một công trình khác',
+    );
     expect(container.textContent).not.toContain('(cao))');
     expect(container.textContent).not.toContain('ngữ cảnh Neural');
-    expect(container.textContent).toContain('mức độ liên quan ngữ cảnh: 88%');
+    expect(container.textContent).not.toContain('mức độ liên quan ngữ cảnh: 88%');
   });
 });

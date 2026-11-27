@@ -50,8 +50,11 @@ describe('ProcessingPage FIFO Admission Queue UI', () => {
     ).toBeDefined();
     expect(screen.getByTestId('queued-processing-banner')).toBeDefined();
     expect(
-      screen.getByText('Submission in smart admission queue — Current position: #4'),
+      screen.getByText('Your document is waiting in line — Position #4'),
     ).toBeDefined();
+    expect(screen.getByTestId('queued-processing-banner').textContent).not.toMatch(
+      /admission queue|FIFO/i,
+    );
     expect(screen.getByText('Queued (#4)')).toBeDefined();
   });
 
@@ -77,8 +80,11 @@ describe('ProcessingPage FIFO Admission Queue UI', () => {
     ).toBeDefined();
     expect(screen.getByTestId('queued-processing-banner')).toBeDefined();
     expect(
-      screen.getByText('Bài nộp đang trong hàng đợi thông minh — Vị trí hiện tại: #2'),
+      screen.getByText('Bài viết đang chờ tới lượt kiểm tra — Vị trí #2'),
     ).toBeDefined();
+    expect(screen.getByTestId('queued-processing-banner').textContent).not.toMatch(
+      /hàng đợi thông minh|FIFO/i,
+    );
     expect(screen.getByText('Hàng đợi #2')).toBeDefined();
     expect(screen.getByText('Đang xếp hàng (#2)')).toBeDefined();
   });

@@ -135,7 +135,7 @@ describe('LoginPage', () => {
     });
   });
 
-  it('renders Continue with Google button and shows message when GOOGLE_CLIENT_ID is not configured', async () => {
+  it('renders Continue with Google button and shows a plain-language message without env-var jargon when Google sign-in is unavailable', async () => {
     renderLoginPage();
 
     const googleBtn = screen.getByTestId('google-auth-button');
@@ -144,9 +144,9 @@ describe('LoginPage', () => {
     fireEvent.click(googleBtn);
 
     await waitFor(() => {
-      expect(
-        screen.getByText(/GOOGLE_CLIENT_ID/i)
-      ).toBeDefined();
+      const alert = screen.getByRole('alert');
+      expect(alert.textContent).toMatch(/google sign-in is currently unavailable/i);
+      expect(alert.textContent).not.toMatch(/GOOGLE_CLIENT_ID|\.env/i);
     });
   });
 
@@ -157,11 +157,11 @@ describe('LoginPage', () => {
     expect(screen.getByText(/Exact DOI Match/i)).toBeDefined();
     expect(screen.queryByText(/R01_DOI_MATCH/i)).toBeNull();
 
-    // Click second sample tab [4] Nguyen & Tran
+    // Click second sample tab [4] Devlin et al.
     const tabs = screen.getAllByRole('tab');
     expect(tabs.length).toBe(3);
     fireEvent.click(tabs[1]);
-    expect(screen.getByText(/Year & Venue Mismatch/i)).toBeDefined();
+    expect(screen.getByText(/Year & Conference Mismatch/i)).toBeDefined();
     expect(screen.queryByText(/R05_YEAR_DRIFT/i)).toBeNull();
 
     // Click third sample tab [7] Robertson & Walker
@@ -212,7 +212,7 @@ describe('LoginPage', () => {
     const { container: viContainer, unmount: unmountVi } = renderLoginPage(loginMockVi);
 
     const viLabel = viContainer.querySelector('label[for="username"]');
-    expect(viLabel?.textContent?.trim()).toBe('Email hoặc Tên đăng nhập');
+    expect(viLabel?.textContent?.trim()).toBe('Email hoặc tên đăng nhập');
 
     // No raw "SSO · RBAC" or "TLS 1.3 · JWT RBAC" in Vietnamese
     expect(viContainer.textContent).not.toContain('SSO · RBAC');
@@ -273,9 +273,9 @@ describe('LoginPage', () => {
     expect(leftPanelVi.textContent).not.toContain('NLI:');
     expect(leftPanelVi.textContent).not.toContain('expr:');
 
-    // Accuracy badge prevents mid-phrase line breaks
+    // Corpus verification badge prevents mid-phrase line breaks
     const accSpanVi = Array.from(leftPanelVi.querySelectorAll('span')).find((el) =>
-      el.textContent?.includes('99,67% CHÍNH XÁC'),
+      el.textContent?.includes('Kiểm chứng qua 128.000+ bài báo'),
     );
     expect(accSpanVi).toBeDefined();
     expect(
@@ -359,7 +359,7 @@ describe('LoginPage', () => {
 
     const leftPanelVi = viContainer.firstElementChild?.firstElementChild as HTMLElement;
     expect(leftPanelVi.textContent).toContain('thư viện');
-    expect(leftPanelVi.textContent).toContain('Hơn 30 tiêu chí đối chiếu');
+    expect(leftPanelVi.textContent).toContain('30 tiêu chí đối chiếu');
     expect(leftPanelVi.textContent).not.toContain('CSDL');
     expect(leftPanelVi.textContent).not.toContain('Luật R01–R30 · CIS');
 

@@ -45,7 +45,7 @@ describe('BatchUploadPage', () => {
 
     const { container } = renderWithProviders(<BatchUploadPage />, { user: makeUser('user', 'pro') });
     addFiles(container, [pdf('a.pdf'), pdf('b.pdf'), pdf('c.pdf'), pdf('d.pdf'), pdf('e.pdf')]);
-    fireEvent.click(screen.getByRole('button', { name: /start verification/i }));
+    fireEvent.click(screen.getByRole('button', { name: /start check/i }));
 
     await waitFor(() => expect(releases.length).toBe(3));
     expect(peak).toBe(3);
@@ -66,7 +66,7 @@ describe('BatchUploadPage', () => {
     const user = makeUser('user', 'pro', { quota: { ...QUOTA_BY_TIER.pro, max_batch_files: 2 } });
     const { container } = renderWithProviders(<BatchUploadPage />, { user });
     addFiles(container, [pdf('a.pdf'), pdf('b.pdf'), pdf('c.pdf')]);
-    fireEvent.click(screen.getByRole('button', { name: /start verification/i }));
+    fireEvent.click(screen.getByRole('button', { name: /start check/i }));
     await waitFor(() => expect(screen.getByTestId('upgrade-modal')).toBeDefined());
     expect(screen.getByTestId('batch-quota-errors').textContent).toMatch(/up to 2 files per batch/);
     expect(spy).not.toHaveBeenCalled();
@@ -76,7 +76,7 @@ describe('BatchUploadPage', () => {
     const spy = vi.spyOn(api, 'uploadEssay');
     const { container } = renderWithProviders(<BatchUploadPage />, { user: makeUser('user', 'pro') });
     addFiles(container, [pdf('huge.pdf', 26)]);
-    fireEvent.click(screen.getByRole('button', { name: /start verification/i }));
+    fireEvent.click(screen.getByRole('button', { name: /start check/i }));
     await waitFor(() =>
       expect(screen.getByTestId('batch-quota-errors').textContent).toMatch(/huge\.pdf.*25 MB/),
     );
@@ -90,7 +90,7 @@ describe('BatchUploadPage', () => {
     });
     const { container } = renderWithProviders(<BatchUploadPage />, { user });
     addFiles(container, [pdf('a.pdf'), pdf('b.pdf')]);
-    fireEvent.click(screen.getByRole('button', { name: /start verification/i }));
+    fireEvent.click(screen.getByRole('button', { name: /start check/i }));
     await waitFor(() =>
       expect(screen.getByTestId('batch-quota-errors').textContent).toMatch(/Only 1 monthly checks remain/),
     );
@@ -105,7 +105,7 @@ describe('BatchUploadPage', () => {
     });
     const { container } = renderWithProviders(<BatchUploadPage />, { user: admin });
     addFiles(container, [pdf('a.pdf'), pdf('b.pdf')]);
-    fireEvent.click(screen.getByRole('button', { name: /start verification/i }));
+    fireEvent.click(screen.getByRole('button', { name: /start check/i }));
     await waitFor(() => expect(api.uploadEssay).toHaveBeenCalledTimes(2));
     expect(screen.queryByTestId('batch-quota-errors')).toBeNull();
   });
@@ -116,7 +116,7 @@ describe('BatchUploadPage', () => {
     });
     await waitFor(() => expect(api.listMyClasses).toHaveBeenCalledTimes(1));
     expect(screen.getByTestId('batch-limit-label').textContent).toContain(
-      'Up to 10 files / batch',
+      'Up to 10 files per batch',
     );
     expect(document.body.textContent).toMatch(/Word \(\.docx\)/);
     expect(document.body.textContent).toMatch(/BibTeX \(\.bib\)/);
@@ -134,7 +134,7 @@ describe('BatchUploadPage', () => {
     });
     await waitFor(() => expect(api.listMyClasses).toHaveBeenCalledTimes(2));
     expect(screen.getByTestId('batch-limit-label').textContent).toContain(
-      'Tối đa 10 tệp / lô',
+      'Tối đa 10 tệp mỗi lần',
     );
     expect(screen.getByTestId('batch-file-count-badge').textContent).toBe('0 tệp');
     expect(document.body.textContent).toMatch(/Word \(\.docx\)/);
@@ -155,11 +155,13 @@ describe('BatchUploadPage', () => {
 
     const { container } = renderWithProviders(<BatchUploadPage />, { user: makeUser('user', 'pro') });
     addFiles(container, [pdf('good.pdf'), pdf('bad.pdf')]);
-    fireEvent.click(screen.getByRole('button', { name: /start verification/i }));
+    fireEvent.click(screen.getByRole('button', { name: /start check/i }));
 
     await waitFor(() => {
       expect(screen.getByText('Complete')).toBeDefined();
-      expect(screen.getByText(/Corrupted PDF file/)).toBeDefined();
+      expect(
+        screen.getByText(/This file appears damaged or isn't a valid document format/i),
+      ).toBeDefined();
     });
 
     // Must stay on page and NOT show "All files processed — opening report…" while a file failed

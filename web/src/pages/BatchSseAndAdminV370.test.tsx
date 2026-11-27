@@ -161,7 +161,7 @@ describe('v3.70.0 — Batch Lifecycle, SSE Refund/Rate-Limit, Floating Pill, Sta
     fireEvent.change(input, {
       target: { files: [makePdf('queued_ocr.pdf'), makePdf('failed_pipeline.pdf')] },
     });
-    fireEvent.click(screen.getByRole('button', { name: /start verification/i }));
+    fireEvent.click(screen.getByRole('button', { name: /start check/i }));
 
     // Wait for mixed batch to settle (901 completed after 13 polls > maxAttempts=8; 902 failed with refund)
     const mixedBanner = await screen.findByTestId(
@@ -179,8 +179,8 @@ describe('v3.70.0 — Batch Lifecycle, SSE Refund/Rate-Limit, Floating Pill, Sta
     expect(refreshUserSpy).toHaveBeenCalled();
 
     // OCR & legacy encoding chips rendered on completed row
-    expect(screen.getByText(/OCR:\s*3p/)).toBeDefined();
-    expect(screen.getByText('TCVN3/VNI -> Unicode')).toBeDefined();
+    expect(screen.getByText(/Scanned text read:\s*3 pages/)).toBeDefined();
+    expect(screen.getByText('Vietnamese font normalized')).toBeDefined();
 
     // Clicking "Retry Failed" calls api.reanalyzeEssay(902) and NEVER re-uploads a duplicate essay
     expect(uploadSpy).toHaveBeenCalledTimes(2);
@@ -327,11 +327,11 @@ describe('v3.70.0 — Batch Lifecycle, SSE Refund/Rate-Limit, Floating Pill, Sta
       },
     );
 
-    // Verify Step 5 renders distinct amber Rate-Limited badge
+    // Verify Step 5 renders distinct amber Busy — retrying badge
     const rateLimitedBadge = await screen.findByTestId(
       'live-source-rate-limited-semanticscholar',
     );
-    expect(rateLimitedBadge.textContent).toBe('Rate-Limited');
+    expect(rateLimitedBadge.textContent).toBe('Busy — retrying');
     expect(refreshUserSpy).not.toHaveBeenCalled();
 
     // Push terminal SSE failed frame with quota_charged: false
@@ -470,7 +470,7 @@ describe('v3.70.0 — Batch Lifecycle, SSE Refund/Rate-Limit, Floating Pill, Sta
       expect(screen.getByTestId('dynamic-cache-entries-value').textContent).toBe('0');
     });
     expect(screen.getByTestId('dynamic-citation-cache-card').textContent).toContain(
-      '0 persistent hits',
+      '0 cached lookup hits',
     );
     expect(screen.getByTestId('static-local-corpus-value').textContent).toBe(
       '128,000',
@@ -567,6 +567,6 @@ describe('v3.70.0 — Batch Lifecycle, SSE Refund/Rate-Limit, Floating Pill, Sta
 
     renderWithProviders(<DashboardPage />, { user: makeUser('teacher', 'pro') });
     const chip = await screen.findByTestId('dashboard-incomplete-ref-chip');
-    expect(chip.textContent).toContain('4 Incomplete Ref');
+    expect(chip.textContent).toContain('4 incomplete references');
   });
 });

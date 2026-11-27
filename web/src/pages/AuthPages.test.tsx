@@ -548,7 +548,7 @@ describe('Auth Pages (Register, Activate, Forgot & Reset Password)', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: /đăng ký tài khoản/i }));
     const viLongAlert = screen.getByRole('alert').textContent ?? '';
-    expect(viLongAlert).toMatch(/64 ký tự/i);
+    expect(viLongAlert).toMatch(/50 ký tự|ngắn hơn/i);
     expect(viLongAlert).not.toMatch(/UTF-8|72 byte/i);
 
     fireEvent.change(viContainer.querySelector('#password')!, {

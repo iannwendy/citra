@@ -190,14 +190,14 @@ describe('SystemHealthPage', () => {
     renderWithProviders(<SystemHealthPage />);
     const pill = await screen.findByTestId('health-status-pill');
     expect(pill.getAttribute('data-level')).toBe('degraded');
-    expect(pill.textContent).toContain('DEGRADED: grobid');
-    expect(pill.textContent).not.toContain('ALL SERVICES HEALTHY');
+    expect(pill.textContent).toContain('Degraded: Enhanced PDF Parser');
+    expect(pill.textContent).not.toContain('All Services Healthy');
   });
 
   it('healthy status shows the healthy pill', async () => {
     vi.spyOn(api, 'getSystemHealth').mockResolvedValue(health());
     renderWithProviders(<SystemHealthPage />);
-    expect((await screen.findByTestId('health-status-pill')).textContent).toContain('ALL SERVICES HEALTHY');
+    expect((await screen.findByTestId('health-status-pill')).textContent).toContain('All Services Healthy');
   });
 
   it('Clear cache asks for confirmation, calls api.clearCache and toasts', async () => {
@@ -228,13 +228,13 @@ describe('SystemHealthPage', () => {
     );
     renderWithProviders(<SystemHealthPage />);
     const statsPanel = await screen.findByTestId('cache-stats');
-    expect(statsPanel.textContent).toContain('Tổng lượt trúng đệm');
-    expect(statsPanel.textContent).toContain('Trung bình trúng / mục');
-    expect(statsPanel.textContent).toContain('Bài báo kho cục bộ');
+    expect(statsPanel.textContent).toContain('Tổng lượt tái sử dụng đệm');
+    expect(statsPanel.textContent).toContain('Trung bình tái sử dụng / mục');
+    expect(statsPanel.textContent).toContain('Bài báo thư viện tích hợp');
     expect(statsPanel.textContent).not.toContain('total_hits');
     expect(statsPanel.textContent).not.toContain('avg_hit_count');
     expect(statsPanel.textContent).not.toContain('local_papers_count');
-    expect(screen.getByText('10 bản ghi tổng cộng')).toBeDefined();
+    expect(screen.getByText('10 trích dẫn đã kiểm tra')).toBeDefined();
   });
 
   it('renders per-provider circuit breaker states, cooldown, EMA latency, HTTP 429, timeout/5xx, and persistent cache telemetry in EN', async () => {
@@ -290,7 +290,7 @@ describe('SystemHealthPage', () => {
     renderWithProviders(<SystemHealthPage />);
 
     const panel = await screen.findByTestId('upstream-sources-panel');
-    expect(panel.textContent).toContain('Scholarly Upstream Providers & Circuit Breakers');
+    expect(panel.textContent).toContain('Academic Sources & Connection Protection');
     const table = screen.getByTestId('upstream-circuit-table');
     expect(table).toBeDefined();
 
@@ -318,7 +318,7 @@ describe('SystemHealthPage', () => {
     expect(crossrefRow.textContent).toContain('38 / 45');
     expect(screen.getByTestId('upstream-429-crossref').textContent).toContain('5');
     expect(crossrefRow.textContent).toContain('Timeouts: 2');
-    expect(crossrefRow.textContent).toContain('5xx: 1');
+    expect(crossrefRow.textContent).toContain('Server errors: 1');
 
     const s2Row = screen.getByTestId('upstream-row-semanticscholar');
     expect(s2Row.textContent).toContain('Semantic Scholar');
@@ -327,12 +327,12 @@ describe('SystemHealthPage', () => {
 
     const statusPill = screen.getByTestId('health-status-pill');
     expect(statusPill.getAttribute('data-level')).toBe('degraded');
-    expect(statusPill.textContent).toContain('2 SOURCES DEGRADED (1/3 operational)');
+    expect(statusPill.textContent).toContain('2 sources unstable (1/3 operational)');
 
     const cacheStats = screen.getByTestId('cache-stats');
-    expect(cacheStats.textContent).toContain('Persistent SQLite Entries');
+    expect(cacheStats.textContent).toContain('Saved Disk Cache Entries');
     expect(cacheStats.textContent).toContain('145');
-    expect(cacheStats.textContent).toContain('Persistent SQLite Hits');
+    expect(cacheStats.textContent).toContain('Disk Cache Reuses');
     expect(cacheStats.textContent).toContain('360');
     expect(cacheStats.textContent).toContain('OpenAlex');
     expect(cacheStats.textContent).toContain('95');
@@ -390,17 +390,17 @@ describe('SystemHealthPage', () => {
     renderWithProviders(<SystemHealthPage />);
 
     const panel = await screen.findByTestId('upstream-sources-panel');
-    expect(panel.textContent).toContain('Nguồn Học Thuật & Ngắt Mạch Tự Động');
+    expect(panel.textContent).toContain('Nguồn học thuật & Bảo vệ kết nối tự động');
     expect(panel.textContent).toContain('Đang hoạt động');
     expect(panel.textContent).toContain('Tạm ngắt');
     expect(panel.textContent).toContain('Đang kiểm tra lại');
-    expect(panel.textContent).toContain('Hết thời gian chờ (Timeout)');
+    expect(panel.textContent).toContain('Chờ quá lâu: 3');
     expect(screen.getByTestId('circuit-cooldown-crossref').textContent).toContain('18.4s');
 
     const cacheStats = screen.getByTestId('cache-stats');
-    expect(cacheStats.textContent).toContain('Mục lưu đệm SQLite bền vững');
+    expect(cacheStats.textContent).toContain('Mục lưu đệm trên ổ đĩa');
     expect(cacheStats.textContent).toContain('40');
-    expect(cacheStats.textContent).toContain('Lượt trúng đệm SQLite bền vững');
+    expect(cacheStats.textContent).toContain('Lượt tái sử dụng từ ổ đĩa');
     expect(cacheStats.textContent).toContain('100');
     expect(cacheStats.textContent).toContain('NCBI / bioRxiv');
     expect(cacheStats.textContent).not.toContain('ncbi_biorxiv');
@@ -460,7 +460,7 @@ describe('SystemHealthPage', () => {
     const { unmount } = renderWithProviders(<SystemHealthPage />);
     const enStats = await screen.findByTestId('cache-stats');
     expect(enStats.textContent).toContain('URL Check');
-    expect(enStats.textContent).toContain('Verified Clean Miss');
+    expect(enStats.textContent).toContain('Confirmed No Match');
     expect(enStats.textContent).toContain('Wikidata / OpenCitations');
     expect(screen.queryByTestId('circuit-cooldown-crossref')).toBeNull();
     expect(screen.getByTestId('circuit-cooldown-openalex').textContent).toContain('0.1s');
@@ -471,7 +471,7 @@ describe('SystemHealthPage', () => {
     renderWithProviders(<SystemHealthPage />);
     const viStats = await screen.findByTestId('cache-stats');
     expect(viStats.textContent).toContain('Kiểm chứng URL');
-    expect(viStats.textContent).toContain('Không có bản ghi (Đã xác thực)');
+    expect(viStats.textContent).toContain('Đã kiểm tra — không tìm thấy bản ghi');
     expect(viStats.textContent).toContain('Wikidata / OpenCitations');
   });
 });

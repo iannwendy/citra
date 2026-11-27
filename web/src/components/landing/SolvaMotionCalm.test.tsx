@@ -234,14 +234,17 @@ describe('Task 5: Editorial Calm, Scroll Latch & Honest Scholarly Telemetry', ()
     });
 
     const text = container.textContent ?? '';
-    // Immutable scholarly identifiers must NEVER transiently show 0 / 2000 / #000
+    // Immutable scholarly identifiers must NEVER transiently show 0 / 2000 / #000 (and zero raw R01/R05/Δ jargon)
     expect(text).toContain('10.1109/CVPR.2016.90');
     expect(text).toContain('IEEE [1]–[N]');
     expect(text).toContain('APA 7th (Author, Yr)');
     expect(text).toContain('Vancouver (1)');
-    expect(text).toContain('R01_DOI_EXACT');
-    expect(text).toContain('R05_YEAR_DRIFT');
-    expect(text).toContain('Cited 2018 · Published 2019 (Δ=1yr)');
+    expect(text).toContain('Verified official DOI link');
+    expect(text).toContain('Publication year check');
+    expect(text).toContain('Cited 2018 · Published 2019 (1 yr off)');
+    expect(text).not.toContain('R01_DOI_EXACT');
+    expect(text).not.toContain('R05_YEAR_DRIFT');
+    expect(text).not.toContain('Δ=1yr');
     expect(text).toContain('#018');
     expect(text).toContain('#047');
     expect(text).toContain('#104');
@@ -457,7 +460,9 @@ describe('Task 1.6: Zero Clipping, Truncation & Orphan-Punctuation Guards (EN & 
       expect(stripText).not.toContain(lang === 'vi' ? '99.96%' : '99,96%');
       expect(stripText).toContain('15+');
       expect(stripText).toContain(lang === 'vi' ? '120.000' : '120,000');
-      expect(stripText).toContain(lang === 'vi' ? '(2,4K)' : '(2.4K)');
+      expect(stripText).toContain(
+        lang === 'vi' ? '2.400 trích dẫn khó' : '2,400 tricky cases',
+      );
 
       unmount();
     }
@@ -518,9 +523,9 @@ describe('Task 1.6: Zero Clipping, Truncation & Orphan-Punctuation Guards (EN & 
         lang === 'vi' ? 'KHỚP (94%)' : 'ALIGNED (94%)',
       );
 
-      // Also check (0.97) in Card 3 symbolic rule expression is bound inside .citra-nowrap-tail
+      // Also check (97%) in Card 3 title/DOI match score is bound inside .citra-nowrap-tail
       expect(
-        nowrapBadges.some((el) => (el.textContent ?? '').trim() === '(0.97)'),
+        nowrapBadges.some((el) => (el.textContent ?? '').trim() === '(97%)'),
       ).toBe(true);
       card3.unmount();
 
@@ -562,7 +567,7 @@ describe('Task 1.6: Zero Clipping, Truncation & Orphan-Punctuation Guards (EN & 
       const sticky1Tails = Array.from(
         others.getByTestId('sticky-1').querySelectorAll('.citra-nowrap-tail'),
       ).map((el) => (el.textContent ?? '').trim());
-      expect(sticky1Tails).toContain(lang === 'vi' ? '(Δ=1 năm)' : '(Δ=1yr)');
+      expect(sticky1Tails).toContain(lang === 'vi' ? '(lệch 1 năm)' : '(1 yr off)');
 
       const sticky2Tails = Array.from(
         others.getByTestId('sticky-2').querySelectorAll('.citra-nowrap-tail'),
@@ -613,26 +618,30 @@ describe('Task 1.6: Zero Clipping, Truncation & Orphan-Punctuation Guards (EN & 
   it('HeroVerificationMockup DOI match status badge and mockup widgets use WCAG AA text-emerald-700 / text-red-700 in Light mode', () => {
     for (const lang of ['en', 'vi'] as const) {
       for (const step of [0, 1, 2]) {
-        const { getByText, container, unmount } = render(
+        const { getAllByText, container, unmount } = render(
           <HeroVerificationMockup lang={lang} activeStep={step} />,
         );
         const expectedLabel =
           step === 2
             ? lang === 'vi'
-              ? '404 Không tồn tại'
-              : 'Not Found (404)'
+              ? 'Không tìm thấy nguồn'
+              : 'Not found'
             : lang === 'vi'
-              ? '100% Khớp chuẩn'
+              ? 'Khớp chuẩn 100%'
               : '100% Match';
-        const statusBadge = getByText(expectedLabel);
-        if (step === 2) {
-          expect(statusBadge.className).toContain('text-red-700');
-          expect(statusBadge.className).toContain('dark:text-red-300');
-          expect(statusBadge.className).not.toContain('text-red-600');
-        } else {
-          expect(statusBadge.className).toContain('text-emerald-700');
-          expect(statusBadge.className).toContain('dark:text-emerald-300');
-          expect(statusBadge.className).not.toContain('text-emerald-600');
+        expect(container.textContent).not.toContain('404');
+        const statusBadges = getAllByText(expectedLabel);
+        expect(statusBadges.length).toBeGreaterThan(0);
+        for (const statusBadge of statusBadges) {
+          if (step === 2) {
+            expect(statusBadge.className).toContain('text-red-700');
+            expect(statusBadge.className).toContain('dark:text-red-300');
+            expect(statusBadge.className).not.toContain('text-red-600');
+          } else {
+            expect(statusBadge.className).toContain('text-emerald-700');
+            expect(statusBadge.className).toContain('dark:text-emerald-300');
+            expect(statusBadge.className).not.toContain('text-emerald-600');
+          }
         }
         expect(
           container.querySelectorAll(
@@ -681,7 +690,11 @@ describe('Task 1.6: Zero Clipping, Truncation & Orphan-Punctuation Guards (EN & 
       const demo = landing.container.querySelector('#interactive-demo') as HTMLElement;
       expect(demo).not.toBeNull();
 
-      const filenameEl = within(demo).getByText('thesis_neural_retrieval_2026.pdf');
+      const filenameEl = within(demo).getByText(
+        lang === 'vi'
+          ? 'KLTN_KinhTe_TaiChinh_2026.pdf'
+          : 'Thesis_Citation_Review_2026.pdf',
+      );
       expect(filenameEl.className).not.toContain('truncate');
       expect(filenameEl.className).toContain('break-all');
       expect(filenameEl.className).toContain('sm:break-normal');

@@ -382,7 +382,7 @@ describe('Premium Subscription, Pricing, Stripe Checkout & Paywall UI/UX Flows',
     fireEvent.click(screen.getByTestId('express-apple-pay-btn'));
     expect(screen.getByTestId('wallet-payment-modal')).toBeDefined();
 
-    // Confirm biometric Apple Pay payment
+    // Confirm Apple Pay payment (card/zip inputs intentionally start empty rather than pre-filled)
     fireEvent.click(screen.getByTestId('wallet-confirm-pay-btn'));
 
     await waitFor(() => {
@@ -392,7 +392,7 @@ describe('Premium Subscription, Pricing, Stripe Checkout & Paywall UI/UX Flows',
         card_last4: '4242',
         card_brand: 'visa',
         billing_country: 'VN',
-        billing_zip: '700000',
+        billing_zip: '',
       });
       expect(screen.getByTestId('apay-success')).toBeDefined();
     });
@@ -471,9 +471,9 @@ describe('Premium Subscription, Pricing, Stripe Checkout & Paywall UI/UX Flows',
     });
     fireEvent.change(fileInput, { target: { files: [oversizedFile] } });
 
-    // Click Start Verification button
+    // Click Start Check button
     const uploadBtn = screen.getByRole('button', {
-      name: /start verification|bắt đầu kiểm tra|kiểm chứng/i,
+      name: /start check|start verification|bắt đầu kiểm tra|kiểm chứng/i,
     });
     fireEvent.click(uploadBtn);
 
@@ -637,7 +637,7 @@ describe('Premium Subscription, Pricing, Stripe Checkout & Paywall UI/UX Flows',
     fireEvent.change(fileInput, { target: { files: [validSmallPdf] } });
 
     const uploadBtn = screen.getByRole('button', {
-      name: /start verification|bắt đầu kiểm tra|kiểm chứng/i,
+      name: /start check|start verification|bắt đầu kiểm tra|kiểm chứng/i,
     });
     fireEvent.click(uploadBtn);
 
@@ -665,7 +665,7 @@ describe('Premium Subscription, Pricing, Stripe Checkout & Paywall UI/UX Flows',
     fireEvent.change(fileInput2, { target: { files: [validSmallPdf] } });
     fireEvent.click(
       screen.getByRole('button', {
-        name: /start verification|bắt đầu kiểm tra|kiểm chứng/i,
+        name: /start check|start verification|bắt đầu kiểm tra|kiểm chứng/i,
       }),
     );
 
@@ -997,6 +997,8 @@ describe('Premium Subscription, Pricing, Stripe Checkout & Paywall UI/UX Flows',
     fireEvent.click(openSandboxLink);
 
     expect(screen.getByTestId('sandbox-page')).toBeDefined();
+    // Sandbox defaults to Quick Check; switch to Sample PDF builder
+    fireEvent.click(screen.getByTestId('sandbox-mode-acl-btn'));
     const sampleBtn = screen.getByTestId('sandbox-random-acl-btn');
     fireEvent.click(sampleBtn);
 
@@ -1111,9 +1113,9 @@ describe('Premium Subscription, Pricing, Stripe Checkout & Paywall UI/UX Flows',
     await waitFor(() => {
       expect(screen.getByTestId('revision-diff-banner')).toBeDefined();
     });
-    expect(screen.getByTestId('revision-diff-banner').textContent).toContain(
-      '#28 — VietDepression_Springer_KAIS.pdf',
-    );
+    const bannerText = screen.getByTestId('revision-diff-banner').textContent ?? '';
+    expect(bannerText).toContain('Compared with previous draft: VietDepression_Springer_KAIS.pdf');
+    expect(bannerText).not.toContain('#28 —');
   });
 
   it('PromoManagementPage lists 6-char promo codes, generates/creates a new 6-char code, toggles status, and deletes', async () => {
@@ -1399,11 +1401,11 @@ describe('Premium Subscription, Pricing, Stripe Checkout & Paywall UI/UX Flows',
     });
     expect(screen.getByTestId('vnpay-modal-txn-ref').textContent).toBe('CITRA99VNP');
 
-    // Inspect signed URL
-    fireEvent.click(screen.getByTestId('vnpay-toggle-signed-url-btn'));
-    expect(screen.getByTestId('vnpay-signed-url-box').textContent).toContain(
-      'https://sandbox.vnpayment.vn/paymentv2/vpcpay.html',
-    );
+    // Developer-facing signed URL & raw vnp_TxnRef/vnp_SecureHash jargon removed from checkout modal
+    expect(screen.queryByTestId('vnpay-toggle-signed-url-btn')).toBeNull();
+    const vnpayModalText = screen.getByTestId('vnpay-gateway-modal').textContent ?? '';
+    expect(vnpayModalText).not.toContain('vnp_TxnRef');
+    expect(vnpayModalText).not.toContain('vnp_SecureHash');
 
     // 1. Test NCB Insufficient Funds scenario (code 51) -> displays error inside modal
     fireEvent.click(screen.getByTestId('vnpay-testcard-51'));
@@ -1489,7 +1491,10 @@ describe('Premium Subscription, Pricing, Stripe Checkout & Paywall UI/UX Flows',
       expect(verifyVnpSpy).toHaveBeenCalled();
       expect(screen.getByTestId('billing-success-page')).toBeDefined();
     });
-    expect(screen.getByTestId('receipt-amount-paid').textContent).toContain('4.800.000 ₫ VND');
+    expect(screen.getByTestId('receipt-amount-paid').textContent).toContain(
+      '4.800.000 ₫ ($192.00 USD)',
+    );
+    expect(screen.getByTestId('receipt-amount-paid').textContent).not.toContain('₫ VND');
     expect(screen.getByTestId('receipt-payment-method').textContent).toContain('VNPAY · NCB •••• 2198');
     expect(screen.getByTestId('receipt-vnp-txn-ref').textContent).toContain('CITRA100VNP');
   });
@@ -1502,9 +1507,10 @@ describe('Premium Subscription, Pricing, Stripe Checkout & Paywall UI/UX Flows',
 
     const taxonomySection = container.querySelector('#taxonomy');
     expect(taxonomySection).not.toBeNull();
+    expect(taxonomySection?.textContent).not.toMatch(/Sentence-BERT|API federation/i);
 
     const proDesc = screen.getByText(
-      /Full 15\+ scholarly API federation, Sentence-BERT semantic matching/i,
+      /Cross-check across 15\+ scholarly libraries, verify claim context/i,
     );
     expect(proDesc.getAttribute('style')).toContain('var(--solva-ink)');
     expect(proDesc.className).toContain('font-medium');
@@ -1514,7 +1520,7 @@ describe('Premium Subscription, Pricing, Stripe Checkout & Paywall UI/UX Flows',
     expect(proIncludes.className).toContain('font-semibold');
 
     const proFeatureItem = screen.getByText(
-      '50 manuscripts / month (up to 100 pages, 25 MB)',
+      '50 papers / month (up to 100 pages, 25 MB)',
     );
     expect(proFeatureItem.getAttribute('style')).toContain('var(--solva-ink)');
     expect(proFeatureItem.className).toContain('font-medium');
@@ -1524,7 +1530,7 @@ describe('Premium Subscription, Pricing, Stripe Checkout & Paywall UI/UX Flows',
 
     // Non-featured Basic card retains muted editorial body styling
     const basicFeatureItem = screen.getByText(
-      '3 manuscripts / month (up to 15 pages, 5 MB)',
+      '3 papers / month (up to 15 pages, 5 MB)',
     );
     expect(basicFeatureItem.getAttribute('style')).toContain('var(--solva-muted)');
   });
@@ -1677,8 +1683,8 @@ describe('Premium Subscription, Pricing, Stripe Checkout & Paywall UI/UX Flows',
       expect(enText).not.toContain('4444');
       expect(enText.toLowerCase()).not.toContain('test card');
       expect(enText.toLowerCase()).not.toContain('stripe demo');
-      expect(enText).toMatch(/PCI-DSS/i);
-      expect(enText).toMatch(/TLS 1\.3/i);
+      expect(enText).not.toMatch(/PCI-DSS|TLS 1\.3/i);
+      expect(enText).toMatch(/Bank-Grade Encrypted Checkout/i);
       expect(enText).toMatch(/Stripe/i);
       expect(enText).toMatch(/VNPay/i);
       unmountEn();
@@ -1695,9 +1701,9 @@ describe('Premium Subscription, Pricing, Stripe Checkout & Paywall UI/UX Flows',
       expect(viText.toLowerCase()).not.toContain('thẻ thử nghiệm');
       expect(viText.toLowerCase()).not.toContain('stripe demo');
       expect(viText).not.toContain('Settings ->');
+      expect(viText).not.toMatch(/PCI-DSS|TLS 1\.3/i);
       expect(viText).toContain('(Cài đặt → Quản lý Gói cước)');
-      expect(viText).toMatch(/PCI-DSS/i);
-      expect(viText).toMatch(/TLS 1\.3/i);
+      expect(viText).toMatch(/Thanh toán an toàn qua Stripe/i);
       expect(viText).toMatch(/Stripe/i);
       expect(viText).toMatch(/VNPay/i);
       unmountVi();
@@ -1819,8 +1825,9 @@ describe('Premium Subscription, Pricing, Stripe Checkout & Paywall UI/UX Flows',
     expect(landingProSurface.contains(screen.getByTestId('landing-price-pro'))).toBe(true);
     expect(
       landingProSurface.textContent,
-    ).toMatch(/Full 15\+ scholarly API federation, Sentence-BERT semantic matching/i);
-    expect(landingProSurface.textContent).toContain('50 manuscripts / month (up to 100 pages, 25 MB)');
+    ).toMatch(/Cross-check across 15\+ scholarly libraries, verify claim context/i);
+    expect(landingProSurface.textContent).not.toMatch(/Sentence-BERT|API federation/i);
+    expect(landingProSurface.textContent).toContain('50 papers / month (up to 100 pages, 25 MB)');
     expect(landingFloralBanner?.contains(landingProSurface)).toBe(false);
 
     // Subgrid alignment on Desktop 3-column grid
@@ -1843,7 +1850,7 @@ describe('Premium Subscription, Pricing, Stripe Checkout & Paywall UI/UX Flows',
     expect(pricingProSurface.contains(screen.getByTestId('pro-price-display'))).toBe(true);
     expect(pricingProSurface.contains(screen.getByTestId('select-pro-btn'))).toBe(true);
     expect(pricingProSurface.textContent).toMatch(
-      /Comprehensive citation verification across 15\+ scholarly indexes/i,
+      /Comprehensive citation verification across 15\+ trusted academic libraries/i,
     );
     expect(pricingFloralBanner?.contains(pricingProSurface)).toBe(false);
 
@@ -1947,7 +1954,7 @@ describe('Premium Subscription, Pricing, Stripe Checkout & Paywall UI/UX Flows',
       expect(screen.getByTestId('pro-price-display').textContent).toBe('$16');
       unmountEn();
 
-      // Vietnamese on LandingPage: monthly default ($20 / ~500.000 ₫), toggle to annual ($16 / ~400.000 ₫)
+      // Vietnamese on LandingPage: annual default (400.000 ₫ / ~$16), toggle to monthly (500.000 ₫ / ~$20)
       await i18n.changeLanguage('vi');
       const { unmount: unmountLandingVi } = renderWithAuth(<LandingPage />, {
         user: null,
@@ -1955,29 +1962,31 @@ describe('Premium Subscription, Pricing, Stripe Checkout & Paywall UI/UX Flows',
       });
       const landingPricePro = screen.getByTestId('landing-price-pro');
       const landingVnd = screen.getByTestId('pro-vnd-equivalent');
-      expect(landingPricePro.textContent).toBe('$20');
+      expect(landingPricePro.textContent).toBe('$16');
       expect(landingPricePro.contains(landingVnd)).toBe(false);
-      expect(landingVnd.textContent).toContain('500.000 ₫');
+      expect(screen.getByTestId('landing-vnd-price-pro').textContent).toBe('400.000 ₫');
+      expect(landingVnd.textContent).toContain('4.800.000 ₫/năm');
 
       fireEvent.click(screen.getByTestId('landing-billing-toggle'));
-      expect(screen.getByTestId('landing-price-pro').textContent).toBe('$16');
-      expect(screen.getByTestId('pro-vnd-equivalent').textContent).toContain('400.000 ₫');
+      expect(screen.getByTestId('landing-price-pro').textContent).toBe('$20');
+      expect(screen.getByTestId('landing-vnd-price-pro').textContent).toBe('500.000 ₫');
+      expect(screen.getByTestId('pro-vnd-equivalent').textContent).toContain('~$20/tháng');
       unmountLandingVi();
 
-      // Vietnamese on PricingPage: annual default ($16 / ~400.000 ₫), toggle to monthly ($20 / ~500.000 ₫)
+      // Vietnamese on PricingPage: annual default (400.000 ₫ primary, 4.800.000 ₫/năm), toggle to monthly (500.000 ₫)
       const { unmount: unmountPricingVi } = renderWithAuth(<PricingPage />, {
         user: null,
         initialEntries: ['/pricing'],
       });
       const proDisplay = screen.getByTestId('pro-price-display');
       const pricingVnd = screen.getByTestId('pro-vnd-equivalent');
-      expect(proDisplay.textContent).toBe('$16');
+      expect(proDisplay.textContent).toBe('400.000 ₫');
       expect(proDisplay.contains(pricingVnd)).toBe(false);
-      expect(pricingVnd.textContent).toContain('400.000 ₫');
+      expect(pricingVnd.textContent).toContain('4.800.000 ₫/năm');
 
       fireEvent.click(screen.getByTestId('billing-toggle-monthly'));
-      expect(screen.getByTestId('pro-price-display').textContent).toBe('$20');
-      expect(screen.getByTestId('pro-vnd-equivalent').textContent).toContain('500.000 ₫');
+      expect(screen.getByTestId('pro-price-display').textContent).toBe('500.000 ₫');
+      expect(screen.getByTestId('pro-vnd-equivalent').textContent).toContain('~$20/tháng');
       unmountPricingVi();
     } finally {
       await i18n.changeLanguage('en');
@@ -2047,13 +2056,13 @@ describe('Premium Subscription, Pricing, Stripe Checkout & Paywall UI/UX Flows',
       expect(screen.getByTestId('select-ultra-btn').textContent).toContain('Gói Quản trị · Ultra');
       unmountAdminVi();
 
-      // Public VI Ultra CTA uses Vietnamese dot thousands separator ($1.920/năm) inside hidden 2xl:inline
+      // Public VI Ultra CTA displays primary VND currency (48.000.000 ₫/năm) inside hidden 2xl:inline
       const { unmount: unmountPubVi } = renderWithAuth(<PricingPage />, {
         user: null,
         initialEntries: ['/pricing'],
       });
       const viUltraBtn = screen.getByTestId('select-ultra-btn');
-      expect(viUltraBtn.textContent).toContain('Nâng cấp lên Ultra · $1.920/năm');
+      expect(viUltraBtn.textContent).toContain('Nâng cấp lên Ultra · 48.000.000 ₫/năm');
       expect(viUltraBtn.querySelector('span.hidden.2xl\\:inline')).not.toBeNull();
       unmountPubVi();
     } finally {
@@ -2088,18 +2097,17 @@ describe('Premium Subscription, Pricing, Stripe Checkout & Paywall UI/UX Flows',
       expect(annualBtn.getAttribute('aria-pressed')).toBe('false');
       unmountEn();
 
-      // Vietnamese VND clauses wrapped in whitespace-nowrap + clean annual helper copy
+      // Vietnamese VND clauses wrapped in whitespace-nowrap + clean annual helper copy (Annual by default)
       await i18n.changeLanguage('vi');
       const { unmount: unmountLandingVi } = renderWithAuth(<LandingPage />, {
         user: null,
         initialEntries: ['/'],
       });
-      fireEvent.click(screen.getByTestId('landing-billing-toggle'));
       const landingProVnd = screen.getByTestId('pro-vnd-equivalent');
       expect(landingProVnd.getAttribute('style')).toContain('var(--solva-ink)');
       expect(landingProVnd.className).toContain('font-medium');
-      expect(landingProVnd.querySelectorAll('span.whitespace-nowrap').length).toBeGreaterThanOrEqual(3);
-      expect(landingProVnd.textContent).toContain('400.000 ₫');
+      expect(landingProVnd.querySelectorAll('span.whitespace-nowrap').length).toBeGreaterThanOrEqual(2);
+      expect(screen.getByTestId('landing-vnd-price-pro').textContent).toBe('400.000 ₫');
       expect(landingProVnd.textContent).toContain('4.800.000 ₫/năm');
       unmountLandingVi();
 
@@ -2109,13 +2117,17 @@ describe('Premium Subscription, Pricing, Stripe Checkout & Paywall UI/UX Flows',
       });
       const pricingProVnd = screen.getByTestId('pro-vnd-equivalent');
       const pricingUltraVnd = screen.getByTestId('ultra-vnd-equivalent');
-      expect(pricingProVnd.querySelectorAll('span.whitespace-nowrap').length).toBeGreaterThanOrEqual(3);
-      expect(pricingUltraVnd.querySelectorAll('span.whitespace-nowrap').length).toBeGreaterThanOrEqual(3);
+      expect(pricingProVnd.textContent).toContain('4.800.000 ₫/năm');
+      expect(pricingProVnd.textContent).toContain('~$192/năm');
+      expect(pricingUltraVnd.textContent).toContain('48.000.000 ₫/năm');
+      expect(pricingUltraVnd.textContent).toContain('~$1.920/năm');
 
       const proCardViText = screen.getByTestId('plan-card-pro').textContent ?? '';
       const ultraCardViText = screen.getByTestId('plan-card-ultra').textContent ?? '';
-      expect(proCardViText).toContain('Thanh toán $192/năm (Tiết kiệm $48/năm — Giảm 20%)');
+      expect(proCardViText).toContain('400.000 ₫');
+      expect(proCardViText).toContain('Tiết kiệm 1.200.000 ₫/năm');
       expect(proCardViText).not.toContain('>2 tháng');
+      expect(ultraCardViText).toContain('48.000.000 ₫/năm');
       expect(ultraCardViText).toContain('$1.920/năm');
       expect(ultraCardViText).not.toContain('$1,920');
       unmountPricingVi();
@@ -2297,7 +2309,8 @@ describe('Premium Subscription, Pricing, Stripe Checkout & Paywall UI/UX Flows',
         if (locale === 'vi') {
           expect(nav.textContent).not.toContain('Câu hỏi thường gặp');
           expect(nav.textContent).not.toContain('Benchmark 120K');
-          expect(nav.textContent).toContain('Thực nghiệm 120K');
+          expect(nav.textContent).not.toContain('Thực nghiệm 120K');
+          expect(nav.textContent).toContain('Độ tin cậy');
         }
 
         unmount();
@@ -2351,7 +2364,7 @@ describe('Premium Subscription, Pricing, Stripe Checkout & Paywall UI/UX Flows',
     expect(proTab.getAttribute('aria-selected')).toBe('false');
     expect(ultraTab.getAttribute('aria-selected')).toBe('false');
     const panelBasic = within(compareSection).getByTestId('mobile-compare-tier-panel');
-    expect(panelBasic.textContent).toContain('3 manuscripts / mo');
+    expect(panelBasic.textContent).toContain('3 papers / mo');
     expect(panelBasic.textContent).toContain('5 MB');
     expect(panelBasic.textContent).toContain('15 pages');
     expect(panelBasic.textContent).toContain('Not included');
@@ -2359,7 +2372,7 @@ describe('Premium Subscription, Pricing, Stripe Checkout & Paywall UI/UX Flows',
     // Switch to Pro -> Pro quotas + Included badges + Pro CTA
     fireEvent.click(proTab);
     expect(proTab.getAttribute('aria-selected')).toBe('true');
-    expect(panelBasic.textContent).toContain('50 manuscripts / mo');
+    expect(panelBasic.textContent).toContain('50 papers / mo');
     expect(panelBasic.textContent).toContain('25 MB');
     expect(panelBasic.textContent).toContain('100 pages');
     expect(panelBasic.textContent).toContain('Included');
@@ -2535,7 +2548,8 @@ describe('Premium Subscription, Pricing, Stripe Checkout & Paywall UI/UX Flows',
         }
 
         if (locale === 'vi') {
-          expect(nav.textContent).toContain('Thực nghiệm 120K');
+          expect(nav.textContent).toContain('Độ tin cậy');
+          expect(nav.textContent).not.toContain('Thực nghiệm 120K');
           expect(fullPageText).toContain('mã DOI không tồn tại');
           expect(fullPageText).toContain('Thư viện & kho dữ liệu học thuật uy tín');
           expect(fullPageText).toContain('Độ chính xác kiểm chứng trích dẫn');
@@ -2545,7 +2559,8 @@ describe('Premium Subscription, Pricing, Stripe Checkout & Paywall UI/UX Flows',
           expect(fullPageText).toContain('99,67%');
           expect(fullPageText).toContain('99,93%');
         } else {
-          expect(nav.textContent).toContain('120K Benchmark');
+          expect(nav.textContent).toContain('Accuracy');
+          expect(nav.textContent).not.toContain('120K Benchmark');
           expect(fullPageText).toContain('Trusted academic libraries & indexes');
           expect(fullPageText).toContain('Overall citation verification accuracy');
           expect(fullPageText).toContain('Verification precision');

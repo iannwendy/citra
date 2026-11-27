@@ -172,7 +172,10 @@ function localizeExplanation(v: SharedVerdictItem, lang: 'en' | 'vi'): string {
       /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i.test(
         raw,
       );
-    const hasRawTelemetry = /\[Neural:|title_sim=|author_sim=|\bR-[A-Z0-9_-]+\b/i.test(raw);
+    const hasRawTelemetry =
+      /\[Neural:|title_sim=|author_sim=|title similarity\s*=|author similarity\s*=|context relevance:|độ tương đồng tiêu đề|\bR-[A-Z0-9_-]+\b/i.test(
+        raw,
+      );
     if (
       !raw ||
       hasVietnameseChars ||

@@ -457,7 +457,7 @@ describe('Production Audit Regression Suite (59-bug holistic verification)', () 
       { user: makeUser('teacher', 'pro') },
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Ghi đè' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cập nhật kết quả kiểm tra' }));
     const dialog = screen.getByRole('dialog');
     expect(dialog.textContent).toContain('Công cụ hỗ trợ rà soát học thuật');
     expect(dialog.textContent).toContain('Sai lệch thông tin');

@@ -370,7 +370,7 @@ describe('Visual Action Studio Redesign — 6 Teaching & Admin Pages', () => {
       expect(text).not.toContain('iam_directory.users');
       expect(text).not.toContain('IAM IDENTITY DIRECTORY');
       expect(text).not.toContain('RBAC ENFORCED');
-      expect(text).toContain('MEMBER DIRECTORY');
+      expect(text).toContain('User Accounts');
       expect(container.querySelector('.t-donut')).not.toBeNull();
       expect(container.innerHTML).not.toContain('NaN');
 
@@ -689,7 +689,7 @@ describe('Visual Action Studio Redesign — 6 Teaching & Admin Pages', () => {
       fireEvent.change(screen.getByTestId('plan-tier-filter'), {
         target: { value: 'all' },
       });
-      fireEvent.click(screen.getByLabelText('Edit user admin_root'));
+      fireEvent.click(screen.getByLabelText('Edit account admin_root'));
       const guardNote = await screen.findByTestId('self-lockout-guard-note');
       expect(guardNote.textContent).toContain(
         'You cannot demote or deactivate your own account',
@@ -817,14 +817,14 @@ describe('Visual Action Studio Redesign — 6 Teaching & Admin Pages', () => {
 
       const pill = await screen.findByTestId('health-status-pill');
       expect(pill.getAttribute('data-level')).toBe('degraded');
-      expect(pill.textContent).toContain('1 SOURCE DEGRADED (1/2 operational)');
-      expect(screen.getByTestId('circuit-badge-crossref').textContent).toBe('Degraded');
+      expect(pill.textContent).toContain('1 source unstable (1/2 operational)');
+      expect(screen.getByTestId('circuit-badge-crossref').textContent).toBe('Unstable');
       expect(screen.getByTestId('upstream-latency-crossref').textContent).toContain('25.5 s');
       const errEl = screen.getByTestId('upstream-last-error-crossref');
       expect(errEl.textContent).not.toContain('RetryError');
       expect(errEl.textContent).not.toContain('0x104abc');
-      expect(screen.getByTestId('stage1-grobid-pill').textContent).toContain('GROBID: Active');
-      expect(screen.getByTestId('stage1-db-pill').textContent).toContain('DB: Connected');
+      expect(screen.getByTestId('stage1-grobid-pill').textContent).toContain('Enhanced PDF Parser: Active');
+      expect(screen.getByTestId('stage1-db-pill').textContent).toContain('Database: Connected');
       expect(screen.getByTestId('health-checked-at').textContent).toContain('Last checked:');
 
       fireEvent.click(screen.getByTestId('refresh-health-btn'));
@@ -881,10 +881,10 @@ describe('Visual Action Studio Redesign — 6 Teaching & Admin Pages', () => {
       expect(screen.getByTestId('audit-time-1').textContent).toContain(
         '27/11/2026 · 12:30 (GMT+7)',
       );
-      // resource is NOT counted inside flagged ('0 giữ cảnh báo', '1 nguồn web / khác')
+      // resource is NOT counted inside flagged ('0 cần rà soát / cảnh báo', '1 nguồn web / khác')
       const breakdown = screen.getByTestId('audit-outcome-breakdown').textContent ?? '';
       expect(breakdown).toContain('1 đã xác minh');
-      expect(breakdown).toContain('0 giữ cảnh báo');
+      expect(breakdown).toContain('0 cần rà soát / cảnh báo');
       expect(breakdown).toContain('1 nguồn web / khác');
 
       // Verdict filter narrows to 'resource'
@@ -1022,7 +1022,7 @@ describe('Visual Action Studio Redesign — 6 Teaching & Admin Pages', () => {
       });
       fireEvent.click(screen.getByTestId('promo-submit-btn'));
       const serverAlert = await screen.findByTestId('promo-form-server-error');
-      expect(serverAlert.textContent).toContain('Promo code already exists');
+      expect(serverAlert.textContent).toContain('This promo code already exists.');
       unmount();
 
       // Vietnamese column headers: Trạng thái & Thao tác
@@ -1057,7 +1057,7 @@ describe('Visual Action Studio Redesign — 6 Teaching & Admin Pages', () => {
       });
 
       await waitFor(() => expect(screen.getByText(/sv_linh/)).toBeDefined());
-      fireEvent.click(screen.getByLabelText('Chỉnh sửa người dùng sv_linh'));
+      fireEvent.click(screen.getByLabelText('Chỉnh sửa tài khoản sv_linh'));
 
       const planLabel = await waitFor(() => {
         const el = document.querySelector('label[for="user-form-plan-tier-select"]');
