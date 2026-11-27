@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { act } from '@testing-library/react';
+import { act, waitFor } from '@testing-library/react';
 import { Routes, Route } from 'react-router-dom';
 import { api, type EssayStatus } from '@/api/client';
 import i18n from '@/i18n';
@@ -677,8 +677,10 @@ describe('ProcessingPage Step 1 sub-stage telemetry & ReasoningStream invariants
     )) as HTMLButtonElement;
     expect(buildingBtn.disabled).toBe(true);
     expect(screen.queryByTestId('processing-open-report-btn')).toBeNull();
-    expect(screen.getByTestId('processing-progress-percent').textContent).toContain(
-      '63%',
-    );
+    await waitFor(() => {
+      expect(screen.getByTestId('processing-progress-percent').textContent).toContain(
+        '63%',
+      );
+    });
   });
 });
