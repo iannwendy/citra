@@ -2024,9 +2024,14 @@ export function InteractiveDecisionFlowBoard({
           ) : boardPhase === 'step-3' ? (
             /* ACT 4 BODY: DEDICATED FINAL VERDICT SEAL RIGHT IN THE CENTER! */
             <div data-testid="flow-hub-verdict-seal" className="space-y-2 mt-1">
-              <div className="text-xs font-bold opacity-85 truncate">
-                <span className="font-mono mr-1">{marker}</span>
-                {identity.shortHeader}
+              <div className="text-xs font-bold opacity-85 flex items-center justify-center gap-1 min-w-0">
+                <span className="font-mono shrink-0">{marker}</span>
+                <span className="truncate min-w-0">
+                  {identity.authorOnly.replace(/…+$/, '')}
+                </span>
+                {identity.citedYear && !identity.authorOnly.includes(identity.citedYear) && (
+                  <span className="shrink-0">({identity.citedYear})</span>
+                )}
               </div>
               <div
                 className={`rounded-xl border px-3 py-2.5 ${
@@ -2083,9 +2088,18 @@ export function InteractiveDecisionFlowBoard({
           ) : (
             /* OVERVIEW / ACT 2 BODY */
             <>
-              <div className="text-[13.5px] font-extrabold leading-snug line-clamp-1">
-                <span className="font-mono mr-1 opacity-80">{marker}</span>
-                {identity.shortHeader}
+              <div
+                data-testid="flow-hub-header"
+                title={`${marker} ${identity.shortHeader}`}
+                className="text-[13.5px] font-extrabold leading-snug flex items-center justify-center gap-1 min-w-0"
+              >
+                <span className="font-mono opacity-80 shrink-0">{marker}</span>
+                <span className="truncate min-w-0">
+                  {identity.authorOnly.replace(/…+$/, '')}
+                </span>
+                {identity.citedYear && !identity.authorOnly.includes(identity.citedYear) && (
+                  <span className="shrink-0">({identity.citedYear})</span>
+                )}
               </div>
 
               <p

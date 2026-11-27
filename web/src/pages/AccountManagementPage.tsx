@@ -271,11 +271,11 @@ export function AccountManagementPage() {
               data-testid="plan-tier-distribution-bar"
               className="h-2.5 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden flex"
             >
-              {ultraCount > 0 && (
+              {basicCount > 0 && (
                 <div
-                  style={{ width: `${(ultraCount / safeTotalUsers) * 100}%` }}
-                  className="bg-amber-500 h-full transition-all"
-                  title={`Ultra: ${ultraCount}`}
+                  style={{ width: `${(basicCount / safeTotalUsers) * 100}%` }}
+                  className="bg-slate-400 h-full transition-all"
+                  title={`Basic: ${basicCount}`}
                 />
               )}
               {proCount > 0 && (
@@ -285,11 +285,11 @@ export function AccountManagementPage() {
                   title={`Pro: ${proCount}`}
                 />
               )}
-              {basicCount > 0 && (
+              {ultraCount > 0 && (
                 <div
-                  style={{ width: `${(basicCount / safeTotalUsers) * 100}%` }}
-                  className="bg-slate-400 h-full transition-all"
-                  title={`Basic: ${basicCount}`}
+                  style={{ width: `${(ultraCount / safeTotalUsers) * 100}%` }}
+                  className="bg-amber-500 h-full transition-all"
+                  title={`Ultra: ${ultraCount}`}
                 />
               )}
             </div>
@@ -620,7 +620,7 @@ export function AccountManagementPage() {
                       </div>
                     </TableCell>
 
-                    <TableCell className="flex lg:table-cell items-center justify-between gap-2 p-0 lg:py-3 lg:px-2.5 xl:px-3 whitespace-nowrap">
+                    <TableCell className="flex lg:table-cell items-center justify-between gap-2 p-0 lg:py-3 lg:px-3 xl:px-3.5 whitespace-nowrap">
                       <span className="lg:hidden text-[11px] font-mono uppercase text-slate-400">
                         {t('admin.tableStatus')}
                       </span>

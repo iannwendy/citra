@@ -672,7 +672,7 @@ export function AuthSplitShell({
                   }}
                   className="group p-2.5 xl:p-3 rounded-[12px] border transition-all duration-200 hover:-translate-y-0.5 hover:shadow-sm flex flex-col justify-between gap-1.5"
                 >
-                  <div className="flex flex-wrap items-center justify-between gap-1.5">
+                  <div className="flex items-center justify-between gap-1.5 min-w-0">
                     <div
                       className={`p-1.5 rounded-[8px] border shrink-0 ${item.accentClass}`}
                     >
@@ -684,7 +684,7 @@ export function AuthSplitShell({
                         color: 'var(--solva-muted)',
                         borderColor: 'var(--solva-border)',
                       }}
-                      className="px-1.5 py-0.5 rounded text-[9px] font-mono font-semibold border whitespace-nowrap"
+                      className="px-1.5 py-0.5 rounded text-[8.5px] xl:text-[9px] font-mono font-semibold border whitespace-nowrap tracking-[-0.02em] shrink-0"
                     >
                       {item.tag}
                     </span>

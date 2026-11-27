@@ -64,7 +64,7 @@ const FIELD_LABELS_VI: Record<string, string> = {
   author: 'tác giả',
   year: 'năm xuất bản',
   doi: 'mã DOI',
-  venue: 'nơi công bố (venue)',
+  venue: 'nơi công bố',
   url: 'đường dẫn liên kết',
   content: 'nội dung trích dẫn',
   retracted: 'trạng thái rút bài (BÀI BÁO ĐÃ BỊ RÚT)',

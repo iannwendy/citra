@@ -1868,7 +1868,18 @@ function buildLocalizedReasoning(verdict: Verdict, lang: 'vi' | 'en'): string {
     verdict.reasoning &&
     ((lang === 'vi' && hasViChars) || (lang === 'en' && !hasViChars))
   ) {
-    const cleanLegalReasoning = sanitizeReasoningForDisplay(verdict.reasoning, lang);
+    let cleanLegalReasoning = sanitizeReasoningForDisplay(verdict.reasoning, lang);
+    if (lang === 'vi') {
+      cleanLegalReasoning = cleanLegalReasoning
+        .replace(
+          /^Vietnamese legal document verified\s*\(statutory\/regulatory source\)\s*:\s*/i,
+          'Nhận diện văn bản quy phạm pháp luật Việt Nam hợp lệ: ',
+        )
+        .replace(
+          /^Vietnamese legal document verified\s*:\s*/i,
+          'Nhận diện văn bản quy phạm pháp luật Việt Nam hợp lệ: ',
+        );
+    }
     return verdict.override_note
       ? lang === 'vi'
         ? `[Ghi đè bởi Giảng viên: ${verdict.override_note}] — ${cleanLegalReasoning}`
@@ -2999,6 +3010,9 @@ function enrichVerdictItem(
       return { status: 'match', label: 'Verified Link' };
     }
     if (citedMeta.url === '—' && retrievedMeta && retrievedMeta.url !== '—') {
+      if (verdict.label === 'verified' || verdict.label === 'resource') {
+        return { status: 'match', label: 'Resolved URL' };
+      }
       return { status: 'partial', label: 'Resolved URL' };
     }
     return { status: 'partial', label: 'Unverified' };
@@ -3053,7 +3067,10 @@ function enrichVerdictItem(
               ? ['R-NO-CANDIDATE']
               : ['R-WEAK-EVIDENCE'];
 
-  const isOverallNotFound = verdict.label === 'suspected_hallucination';
+  const isOverallUnconfirmed =
+    verdict.label === 'suspected_hallucination' ||
+    verdict.label === 'unresolved' ||
+    String(verdict.label).toLowerCase() === 'ambiguous';
 
   const rules: SymbolicRuleDisplay[] = triggeredCodes.map((code) => {
     const cleanCode = code.trim();
@@ -3063,7 +3080,7 @@ function enrichVerdictItem(
         code: cleanCode,
         name: lang === 'vi' ? meta.nameVi : meta.nameEn,
         condition: meta.condition,
-        status: isOverallNotFound && meta.status === 'passed' ? 'warning' : meta.status,
+        status: isOverallUnconfirmed && meta.status === 'passed' ? 'warning' : meta.status,
       };
     }
     const inspectorDef = RULE_DEFINITIONS[cleanCode];
@@ -3076,7 +3093,7 @@ function enrichVerdictItem(
             ? 'failed'
             : 'warning';
       const statusFromOutcome: 'passed' | 'warning' | 'failed' =
-        isOverallNotFound && rawStatus === 'passed' ? 'warning' : rawStatus;
+        isOverallUnconfirmed && rawStatus === 'passed' ? 'warning' : rawStatus;
       const condText = inspectorDef.conditions
         .map((c) => `${c.field} ${c.operator} ${c.value}`)
         .join(' AND ');
@@ -3151,7 +3168,7 @@ function enrichVerdictItem(
           : engine.label;
       return {
         name: contextualLabel,
-        status: isOverallNotFound
+        status: isOverallUnconfirmed
           ? 'candidate_insufficient'
           : conf >= 0.7
             ? 'matched'
@@ -3172,7 +3189,7 @@ function enrichVerdictItem(
     ) {
       return {
         name: engine.label,
-        status: isOverallNotFound
+        status: isOverallUnconfirmed
           ? 'candidate_insufficient'
           : verdict.confidence >= 0.7
             ? 'matched'
@@ -3202,7 +3219,7 @@ function enrichVerdictItem(
       const conf = ms.confidence ?? verdict.confidence;
       sources.unshift({
         name: formatEssaySourceDisplay(ms.source, lang, verdict, ms),
-        status: isOverallNotFound
+        status: isOverallUnconfirmed
           ? 'candidate_insufficient'
           : isUrlContentMismatch
             ? 'partial'
@@ -3229,7 +3246,7 @@ function enrichVerdictItem(
     if (observedWeb.doi) extractedFields.push('doi');
     sources.unshift({
       name: formatEssaySourceDisplay(webSourceKey, lang, verdict),
-      status: isOverallNotFound
+      status: isOverallUnconfirmed
         ? 'candidate_insufficient'
         : isUrlContentMismatch
           ? 'partial'
@@ -4095,7 +4112,7 @@ export function EssayPage() {
                       )}
                       {deltaUnres !== 0 && (
                         <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-300">
-                          <span>{lang === 'vi' ? 'Chưa đủ dữ liệu:' : 'Unresolved:'}</span>
+                          <span>{lang === 'vi' ? 'Chưa đủ dữ liệu:' : 'Unverified:'}</span>
                           <strong>{afterUnres}</strong>
                           <span
                             data-testid="revision-delta-unresolved"
@@ -5355,16 +5372,16 @@ export function EssayPage() {
                                       const subtitleText =
                                         src.status === 'matched'
                                           ? lang === 'vi'
-                                            ? `Đã khớp · Tương đồng: ${src.score}${joinedFields ? ` · Trường khớp: ${joinedFields}` : ''}`
-                                            : `Matched · Sim: ${src.score}${joinedFields ? ` · Fields: ${joinedFields}` : ''}`
+                                            ? `Đã khớp · Tương đồng: ${src.score}${joinedFields ? ` · Thông tin đối chiếu: ${joinedFields}` : ''}`
+                                            : `Matched · Sim: ${src.score}${joinedFields ? ` · Record fields: ${joinedFields}` : ''}`
                                           : src.status === 'candidate_insufficient'
                                             ? lang === 'vi'
-                                              ? `Ứng viên tham khảo · Tương đồng: ${src.score}${joinedFields ? ` · Trường trùng: ${joinedFields}` : ''}`
-                                              : `Candidate · Sim: ${src.score}${joinedFields ? ` · Fields: ${joinedFields}` : ''}`
+                                              ? `Ứng viên tham khảo · Tương đồng: ${src.score}${joinedFields ? ` · Thông tin bản ghi: ${joinedFields}` : ''}`
+                                              : `Candidate · Sim: ${src.score}${joinedFields ? ` · Record fields: ${joinedFields}` : ''}`
                                             : src.status === 'partial'
                                               ? lang === 'vi'
-                                                ? `Đã truy vấn · Tương đồng: ${src.score}${joinedFields ? ` · Trường khớp: ${joinedFields}` : ''}`
-                                                : `Queried · Sim: ${src.score}${joinedFields ? ` · Fields: ${joinedFields}` : ''}`
+                                                ? `Đã truy vấn · Tương đồng: ${src.score}${joinedFields ? ` · Thông tin bản ghi: ${joinedFields}` : ''}`
+                                                : `Queried · Sim: ${src.score}${joinedFields ? ` · Record fields: ${joinedFields}` : ''}`
                                               : src.notRouted
                                                 ? lang === 'vi'
                                                   ? 'Không định tuyến · Tài nguyên phi học thuật'

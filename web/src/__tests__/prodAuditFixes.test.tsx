@@ -666,4 +666,23 @@ describe('Production Audit Regression Suite (59-bug holistic verification)', () 
     expect(essayPageSrc).not.toContain('backdrop-blur-xs');
     expect(essayPageSrc).toContain('backdrop-blur-sm');
   });
+
+  it('17. Round 4 P2/P3 invariants: ambiguous deep sources never show green matched, VI legal summary translates prefix, no (venue) leak', () => {
+    const essayPageSrc = fs.readFileSync(path.join(SRC_ROOT, 'pages', 'EssayPage.tsx'), 'utf8');
+    // P2-R3-1: unresolved & ambiguous verdicts downgrade deep source cards to candidate_insufficient
+    expect(essayPageSrc).toContain("verdict.label === 'unresolved'");
+    expect(essayPageSrc).toContain("String(verdict.label).toLowerCase() === 'ambiguous'");
+    expect(essayPageSrc).not.toContain('Trường khớp:');
+    // P3-R3-1: VI legal summary strips English backend prefix
+    expect(essayPageSrc).toContain('Nhận diện văn bản quy phạm pháp luật Việt Nam hợp lệ:');
+    // P3-R3-4: VI verdictExplanation eliminates raw "(venue)" token
+    const expSrc = fs.readFileSync(path.join(SRC_ROOT, 'lib', 'verdictExplanation.ts'), 'utf8');
+    expect(expSrc).not.toContain('nơi công bố (venue)');
+    // P3-R3-2: Network center hub renders non-double-ellipsis title + fixed year sibling
+    const flowSrc = fs.readFileSync(
+      path.join(SRC_ROOT, 'components', 'CitationGraph', 'InteractiveDecisionFlowBoard.tsx'),
+      'utf8',
+    );
+    expect(flowSrc).toContain("identity.authorOnly.replace(/…+$/, '')");
+  });
 });

@@ -1117,11 +1117,14 @@ export function RuleInspector({
 
       <div className="space-y-2">
         {rules.map((rule) => {
-          const isOverallNotFound =
-            Boolean(verdictLabel) &&
-            normalizeVerdictKey(verdictLabel) === "suspected_hallucination"
+          const normalizedLabel = verdictLabel
+            ? normalizeVerdictKey(verdictLabel)
+            : null
+          const isOverallUnconfirmed =
+            normalizedLabel === "suspected_hallucination" ||
+            normalizedLabel === "unresolved"
           const isContradictoryPositive =
-            isOverallNotFound && rule.conclusion.toUpperCase().includes("VERIFIED")
+            isOverallUnconfirmed && rule.conclusion.toUpperCase().includes("VERIFIED")
           const colors = isContradictoryPositive
             ? {
                 bg: "bg-amber-50 dark:bg-amber-950/60",

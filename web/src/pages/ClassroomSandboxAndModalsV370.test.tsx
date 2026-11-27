@@ -221,7 +221,7 @@ describe('v3.70.0 Classroom, Pending Reviews, Sandbox, Modals & RuleInspector', 
     ).toMatch(/Incomplete Reference:\s*2/);
     expect(
       screen.getByTestId('verdict-breakdown-pill-unresolved').textContent,
-    ).toMatch(/Unresolved:\s*2/);
+    ).toMatch(/Unverified:\s*2/);
     expect(screen.getByTestId('cohort-queued-essays-pill').textContent).toContain(
       '1 queued',
     );

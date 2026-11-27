@@ -829,7 +829,7 @@ export function ClassDetailPage() {
               {
                 key: 'unresolved',
                 count: vb.unresolved ?? 0,
-                label: lang === 'vi' ? 'Chưa đủ dữ liệu' : 'Unresolved',
+                label: lang === 'vi' ? 'Chưa đủ dữ liệu' : 'Unverified',
                 colorHex: '#94a3b8',
                 barClass: 'bg-slate-400',
                 pillClass:
