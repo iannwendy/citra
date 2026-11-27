@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, useLocation } from 'react-router-dom';
 import i18n from '@/i18n';
 import { renderWithProviders, makeUser, screen, fireEvent } from '@/test-utils';
 import { makeVerdict } from '@/test-fixtures';
@@ -19,6 +19,10 @@ import { UserFormDialog } from './UserFormDialog';
 import { DeleteUserDialog } from './DeleteUserDialog';
 import { CitationGraphView } from './CitationGraph/CitationGraphView';
 import { buildEvidenceGraph } from './CitationGraph/EvidenceGraph';
+import { ProtectedRoute } from './ProtectedRoute';
+import { HelpModal } from './HelpModal';
+import { EssaySortSelect } from './EssaySortSelect';
+import { AppLayout } from './AppLayout';
 
 describe('Task 5.6 — Localized components in EN and VI', () => {
   beforeEach(async () => {
@@ -474,10 +478,12 @@ describe('Task 2.3 — Non-Tech Verdict Clarity, Mapping Case-Insensitivity & Up
       </div>,
     );
 
-    expect(screen.getByTestId('vi-vb-unres').textContent).toBe('Chưa xác minh');
-    expect(screen.getByTestId('vi-vb-likely').textContent).toBe('Độ khớp cao');
+    expect(screen.getByTestId('vi-vb-unres').textContent).toBe('Chưa đủ dữ liệu');
+    expect(screen.getByTestId('vi-vb-likely').textContent).toBe('Đã xác minh');
     expect(viContainer.textContent).not.toContain('Chưa giải quyết');
     expect(viContainer.textContent).not.toContain('Có thể đã xác minh');
+    expect(viContainer.textContent).not.toContain('Bịa đặt');
+    expect(viContainer.textContent).not.toContain('Khả năng cao bịa đặt');
 
     const expectedViIncompleteTitle =
       'Thiếu quy cách trích dẫn — Mục tham khảo thiếu tác giả, năm xuất bản hoặc nơi công bố (không phải nguồn bịa đặt); hãy bổ sung đầy đủ các thông tin còn thiếu.';
@@ -575,5 +581,119 @@ describe('Task 2.3 — Non-Tech Verdict Clarity, Mapping Case-Insensitivity & Up
     expect(ultraTopRow.className).toContain('flex-wrap');
     expect(ultraTopRow.textContent).not.toContain('Phòng Lab, Bộ môn & Hội đồng luận án');
     expect(ultraTopRow.nextElementSibling?.textContent).toBe('Phòng Lab, Bộ môn & Hội đồng luận án');
+  });
+
+  it('Phase 1B: ProtectedRoute preserves ?redirect= on login and shows localized toast on unauthorized access; HelpModal, EssaySortSelect & AppLayout enforce global shell polish', async () => {
+    function LoginProbe() {
+      const loc = useLocation();
+      return <div data-testid="login-probe">{`${loc.pathname}${loc.search}`}</div>;
+    }
+
+    // 1. Unauthenticated ProtectedRoute -> /login?redirect=%2Fadmin%2Fusers%3Ftab%3Dactive
+    await i18n.changeLanguage('en');
+    const { unmount: u1 } = renderWithProviders(
+      <Routes>
+        <Route path="/login" element={<LoginProbe />} />
+        <Route
+          path="/admin/users"
+          element={
+            <ProtectedRoute requiredRoles={['admin']}>
+              <div>Admin Secret</div>
+            </ProtectedRoute>
+          }
+        />
+      </Routes>,
+      { user: null, initialRoute: '/admin/users?tab=active' },
+    );
+    expect(screen.getByTestId('login-probe').textContent).toBe(
+      '/login?redirect=%2Fadmin%2Fusers%3Ftab%3Dactive',
+    );
+    u1();
+
+    // 2. Authenticated non-admin hitting admin route -> /dashboard + localized VI toast
+    await i18n.changeLanguage('vi');
+    const { unmount: u2 } = renderWithProviders(
+      <Routes>
+        <Route path="/dashboard" element={<div data-testid="dash-home">Dashboard</div>} />
+        <Route
+          path="/admin/users"
+          element={
+            <ProtectedRoute requiredRoles={['admin']}>
+              <div>Admin Secret</div>
+            </ProtectedRoute>
+          }
+        />
+      </Routes>,
+      { user: makeUser('user', 'pro'), initialRoute: '/admin/users' },
+    );
+    expect(screen.getByTestId('dash-home')).toBeDefined();
+    expect(screen.getByText('Bạn không có quyền truy cập trang này.')).toBeDefined();
+    u2();
+
+    // 3. HelpModal in VI: unified taxonomy, no raw enums, no Neuro-Symbolic Engine box, localized BƯỚC 01, no Ctrl+D/Ctrl+U
+    const { container: helpContainer, unmount: u3 } = renderWithProviders(
+      <HelpModal isOpen={true} onClose={vi.fn()} />,
+    );
+    expect(helpContainer.textContent).not.toContain('Neuro-Symbolic Engine');
+    expect(helpContainer.textContent).not.toContain('30 Symbolic Rules');
+    fireEvent.click(screen.getByRole('button', { name: /Bắt đầu/i }));
+    expect(helpContainer.textContent).toContain('BƯỚC 01');
+    expect(helpContainer.textContent).not.toContain('STEP 01');
+    expect(helpContainer.textContent).toContain('5MB–100MB');
+    fireEvent.click(screen.getByRole('button', { name: /Hiểu về kết quả/i }));
+    expect(helpContainer.textContent).toContain('Không tìm thấy nguồn');
+    expect(helpContainer.textContent).toContain('Sai lệch thông tin');
+    expect(helpContainer.textContent).not.toContain('SUSPECTED_HALLUCINATION');
+    expect(helpContainer.textContent).not.toContain('R-INCOMPLETE-METADATA');
+    expect(helpContainer.textContent).not.toContain('Khả năng cao bịa đặt');
+    fireEvent.click(screen.getByRole('button', { name: /Phím tắt/i }));
+    expect(helpContainer.textContent).not.toContain('Ctrl+D');
+    expect(helpContainer.textContent).not.toContain('Ctrl+U');
+    u3();
+
+    // 4. EssaySortSelect widens container to avoid clipping chevron
+    const { container: sortContainer, unmount: u4 } = renderWithProviders(
+      <EssaySortSelect value="date_desc" onChange={vi.fn()} />,
+    );
+    expect((sortContainer.firstElementChild as HTMLElement).className).toContain('sm:min-w-[232px]');
+    expect(screen.getByTestId('essay-sort-select').className).toContain('pr-9');
+    u4();
+
+    // 5. AppLayout in VI includes /sandbox, localizes footer & ARIA labels, never hijacks Ctrl+D / Ctrl+U
+    const { container: layoutContainer } = renderWithProviders(
+      <Routes>
+        <Route
+          path="/dashboard"
+          element={
+            <AppLayout>
+              <div>Body</div>
+            </AppLayout>
+          }
+        />
+      </Routes>,
+      { user: makeUser('admin', 'ultra'), initialRoute: '/dashboard' },
+    );
+    expect(layoutContainer.querySelector('aside a[href="/sandbox"]')).not.toBeNull();
+    expect(layoutContainer.textContent).toContain('Thử nghiệm nhanh');
+    expect(screen.getByTestId('app-footer').textContent).toContain(
+      '© 2026 CITRA. Bảo lưu mọi quyền.',
+    );
+    expect(screen.getByRole('navigation', { name: 'Điều hướng chính' })).toBeDefined();
+
+    const ctrlDEvent = new KeyboardEvent('keydown', {
+      key: 'd',
+      ctrlKey: true,
+      cancelable: true,
+    });
+    window.dispatchEvent(ctrlDEvent);
+    expect(ctrlDEvent.defaultPrevented).toBe(false);
+
+    const ctrlUEvent = new KeyboardEvent('keydown', {
+      key: 'u',
+      ctrlKey: true,
+      cancelable: true,
+    });
+    window.dispatchEvent(ctrlUEvent);
+    expect(ctrlUEvent.defaultPrevented).toBe(false);
   });
 });

@@ -33,6 +33,25 @@ import {
   ChevronUp,
   Terminal,
 } from 'lucide-react';
+import i18n from '@/i18n';
+
+function useActiveToastLang(): 'vi' | 'en' {
+  const resolve = (): 'vi' | 'en' =>
+    (i18n.resolvedLanguage || i18n.language || 'en').startsWith('vi') ? 'vi' : 'en';
+  const [lang, setLang] = useState<'vi' | 'en'>(resolve);
+
+  useEffect(() => {
+    const onChanged = (lng: string) => {
+      setLang(lng.startsWith('vi') ? 'vi' : 'en');
+    };
+    i18n.on('languageChanged', onChanged);
+    return () => {
+      i18n.off('languageChanged', onChanged);
+    };
+  }, []);
+
+  return lang;
+}
 
 // ============================================================
 // Types
@@ -795,6 +814,8 @@ function ToastContainer({
   onResume,
 }: ToastContainerProps): ReactNode {
   const [expanded, setExpanded] = useState(false);
+  const lang = useActiveToastLang();
+  const isVi = lang === 'vi';
 
   const activeCount = toasts.filter((t) => !t.isExiting).length;
 
@@ -823,7 +844,7 @@ function ToastContainer({
     <div
       className={`fixed ${positionClasses[position]} z-[100] flex flex-col items-stretch sm:w-[400px] max-w-[430px] mx-auto sm:mx-0 pointer-events-none select-none`}
       aria-live="polite"
-      aria-label="Notifications"
+      aria-label={isVi ? 'Thông báo' : 'Notifications'}
       onMouseEnter={() => {
         onPause();
         if (activeCount > 1) setExpanded(true);
@@ -843,15 +864,17 @@ function ToastContainer({
       {activeCount > 1 && (
         <div
           data-testid="toast-stack-toolbar"
-          className="pointer-events-auto mb-4 flex items-center justify-between gap-2 px-3.5 py-1.5 rounded-full bg-[#1C1A15] dark:bg-[#FBFAF6] text-[#FBFAF6] dark:text-[#1C1A15] shadow-[0_10px_28px_-4px_rgba(28,26,21,0.35)] border border-white/15 dark:border-black/15 text-[11px] font-mono animate-fade-in relative z-[60]"
+          className="pointer-events-auto mb-4 flex items-center justify-between gap-2 px-3.5 py-1.5 rounded-full bg-[#1C1A15] dark:bg-[#FBFAF6] text-[#FBFAF6] dark:text-[#1C1A15] shadow-[0_10px_28px_-4px_rgba(28,26,21,0.35)] border border-white/15 dark:border-black/15 text-[11px] font-sans animate-fade-in relative z-[60]"
         >
           <button
             type="button"
             onClick={() => setExpanded((prev) => !prev)}
-            className="inline-flex items-center gap-1.5 font-semibold tracking-wider uppercase cursor-pointer hover:opacity-85 transition-opacity"
+            className="inline-flex items-center gap-1.5 font-semibold tracking-wide cursor-pointer hover:opacity-85 transition-opacity"
           >
             <Layers className="w-3.5 h-3.5" />
-            <span>{activeCount} NOTIFICATIONS</span>
+            <span>
+              {activeCount} {isVi ? 'thông báo' : 'notifications'}
+            </span>
             {isExpandedView ? (
               <ChevronDown className="w-3.5 h-3.5" />
             ) : (
@@ -863,9 +886,9 @@ function ToastContainer({
             type="button"
             data-testid="dismiss-all-toasts-btn"
             onClick={onDismissAll}
-            className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-white/15 dark:bg-black/10 hover:bg-white/25 dark:hover:bg-black/20 text-[10px] font-mono font-bold uppercase tracking-wider transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-white/15 dark:bg-black/10 hover:bg-white/25 dark:hover:bg-black/20 text-[11px] font-semibold transition-colors cursor-pointer"
           >
-            <span>CLEAR ALL</span>
+            <span>{isVi ? 'Xóa tất cả' : 'Clear all'}</span>
             <X className="w-3 h-3" />
           </button>
         </div>
@@ -881,6 +904,7 @@ function ToastContainer({
             totalActive={activeCount}
             expanded={isExpandedView}
             isPaused={isPaused}
+            lang={lang}
             onRemove={onRemove}
           />
         ))}
@@ -899,13 +923,15 @@ interface ToastItemProps {
   totalActive: number;
   expanded: boolean;
   isPaused: boolean;
+  lang: 'vi' | 'en';
   onRemove: (id: string) => void;
 }
 
 const META_BADGE_CONFIG: Record<
   ToastType,
   {
-    tag: string;
+    tagVi: string;
+    tagEn: string;
     pillClass: string;
     dotClass: string;
     progressClass: string;
@@ -914,7 +940,8 @@ const META_BADGE_CONFIG: Record<
   }
 > = {
   success: {
-    tag: 'CITRA · VERIFIED',
+    tagVi: 'Thành công',
+    tagEn: 'Done',
     pillClass:
       'bg-emerald-500/15 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300 border-emerald-500/25',
     dotClass: 'bg-emerald-500',
@@ -923,7 +950,8 @@ const META_BADGE_CONFIG: Record<
     borderAccent: 'border-[#E7E3D9] dark:border-[#332F26] hover:border-emerald-500/40',
   },
   error: {
-    tag: 'SYSTEM · ALERT',
+    tagVi: 'Lỗi',
+    tagEn: 'Error',
     pillClass:
       'bg-red-500/15 text-red-800 dark:bg-red-500/20 dark:text-red-300 border-red-500/25',
     dotClass: 'bg-red-500',
@@ -932,7 +960,8 @@ const META_BADGE_CONFIG: Record<
     borderAccent: 'border-red-200/90 dark:border-red-900/60 hover:border-red-500/50',
   },
   warning: {
-    tag: 'NOTICE · WARN',
+    tagVi: 'Cảnh báo',
+    tagEn: 'Notice',
     pillClass:
       'bg-amber-500/15 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300 border-amber-500/25',
     dotClass: 'bg-amber-500',
@@ -941,7 +970,8 @@ const META_BADGE_CONFIG: Record<
     borderAccent: 'border-amber-200/90 dark:border-amber-900/60 hover:border-amber-500/50',
   },
   info: {
-    tag: 'CITRA · NOTICE',
+    tagVi: 'Thông tin',
+    tagEn: 'Info',
     pillClass:
       'bg-[#1C1A15]/10 text-[#1C1A15] dark:bg-[#FBFAF6]/15 dark:text-[#FBFAF6] border-[#1C1A15]/15 dark:border-[#FBFAF6]/20',
     dotClass: 'bg-[#1C1A15] dark:bg-[#FBFAF6]',
@@ -950,7 +980,8 @@ const META_BADGE_CONFIG: Record<
     borderAccent: 'border-[#E7E3D9] dark:border-[#332F26]',
   },
   loading: {
-    tag: 'PIPELINE · SYNC',
+    tagVi: 'Đang xử lý',
+    tagEn: 'Working',
     pillClass:
       'bg-[#1C1A15] text-[#FBFAF6] dark:bg-[#FBFAF6] dark:text-[#1C1A15] border-transparent',
     dotClass: 'bg-emerald-400 dark:bg-emerald-600 animate-ping',
@@ -966,8 +997,10 @@ function ToastItem({
   totalActive,
   expanded,
   isPaused,
+  lang,
   onRemove,
 }: ToastItemProps): ReactNode {
+  const isVi = lang === 'vi';
   const cardRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{
     active: boolean;
@@ -1107,17 +1140,25 @@ function ToastItem({
 
         {/* Center Editorial Text & Action */}
         <div className="flex-1 min-w-0 overflow-hidden">
-          {/* Top Monospace Telemetry Strip */}
+          {/* Top Contextual Status Strip */}
           <div className="flex items-center justify-between gap-2 mb-1 min-w-0">
             <span
-              className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[10px] font-mono font-bold uppercase tracking-wider leading-none max-w-full truncate ${meta.pillClass}`}
+              className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[10px] font-sans font-semibold tracking-wide leading-none max-w-full truncate ${meta.pillClass}`}
             >
               <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${meta.dotClass}`} />
-              <span className="truncate">{toast.category || meta.tag}</span>
+              <span className="truncate">
+                {toast.category || (isVi ? meta.tagVi : meta.tagEn)}
+              </span>
             </span>
 
-            <span className="text-[10px] font-mono text-[#8C887E] dark:text-[#7A756B] uppercase tracking-wider shrink-0">
-              {toast.type === 'loading' ? 'SYNCING' : 'NOW'}
+            <span className="text-[10px] font-sans text-[#5E5A52] dark:text-[#A39D91] tracking-wide shrink-0">
+              {toast.type === 'loading'
+                ? isVi
+                  ? 'Đang xử lý'
+                  : 'Syncing'
+                : isVi
+                  ? 'Vừa xong'
+                  : 'Just now'}
             </span>
           </div>
 
@@ -1153,8 +1194,8 @@ function ToastItem({
         <button
           type="button"
           onClick={() => onRemove(toast.id)}
-          className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-[#8C887E] dark:text-[#A8A296] hover:text-[#1C1A15] dark:hover:text-[#FBFAF6] hover:bg-[#ECE9E0]/90 dark:hover:bg-[#29261F] active:scale-90 transition-[transform,background-color,color] duration-150 cursor-pointer"
-          aria-label="Dismiss notification"
+          className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-[#5E5A52] dark:text-[#A8A296] hover:text-[#1C1A15] dark:hover:text-[#FBFAF6] hover:bg-[#ECE9E0]/90 dark:hover:bg-[#29261F] active:scale-90 transition-[transform,background-color,color] duration-150 cursor-pointer"
+          aria-label={isVi ? 'Đóng thông báo' : 'Dismiss notification'}
         >
           <X className="w-4 h-4" />
         </button>
@@ -1371,14 +1412,26 @@ export function NotificationCenterButton({
                         notificationsEnabled ? 'bg-emerald-500' : 'bg-slate-400'
                       }`}
                     />
-                    <span>{notificationsEnabled ? 'LIVE' : 'MUTED'}</span>
+                    <span>
+                      {lang === 'vi'
+                        ? notificationsEnabled
+                          ? 'Đang bật'
+                          : 'Đã tắt'
+                        : notificationsEnabled
+                          ? 'LIVE'
+                          : 'MUTED'}
+                    </span>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => setOpen(false)}
-                    aria-label="Close notification center"
-                    className="p-1 rounded-lg text-[#8C887E] hover:text-[#1C1A15] dark:hover:text-[#FBFAF6] hover:bg-[#ECE9E0] dark:hover:bg-[#29261F] transition-colors cursor-pointer"
+                    aria-label={
+                      lang === 'vi'
+                        ? 'Đóng trung tâm thông báo'
+                        : 'Close notification center'
+                    }
+                    className="p-1 rounded-lg text-[#5E5A52] dark:text-[#A39D91] hover:text-[#1C1A15] dark:hover:text-[#FBFAF6] hover:bg-[#ECE9E0] dark:hover:bg-[#29261F] transition-colors cursor-pointer"
                   >
                     <X className="w-4 h-4" />
                   </button>
@@ -1393,7 +1446,7 @@ export function NotificationCenterButton({
                 {history.length === 0 ? (
                   <div className="p-7 text-center space-y-2.5">
                     <div className="w-11 h-11 rounded-2xl bg-[#F4F2EC] dark:bg-[#29261F] border border-[#E7E3D9] dark:border-[#332F26] flex items-center justify-center mx-auto">
-                      <Bell className="w-5 h-5 text-[#8C887E]" />
+                      <Bell className="w-5 h-5 text-[#5E5A52] dark:text-[#A39D91]" />
                     </div>
                     <div>
                       <p className="font-solva-sans font-semibold text-sm text-[#1C1A15] dark:text-[#FBFAF6]">
@@ -1403,8 +1456,8 @@ export function NotificationCenterButton({
                       </p>
                       <p className="text-xs text-[#56524A] dark:text-[#A8A296] mt-0.5">
                         {lang === 'vi'
-                          ? 'Mọi sự kiện hệ thống, thanh toán Stripe và kiểm chứng tài liệu sẽ hiển thị tại đây.'
-                          : 'System events, Stripe billing updates, and verification alerts will appear here.'}
+                          ? 'Mọi sự kiện hệ thống, thanh toán và kiểm chứng tài liệu sẽ hiển thị tại đây.'
+                          : 'System events, billing updates, and verification alerts will appear here.'}
                       </p>
                     </div>
                   </div>
@@ -1430,12 +1483,15 @@ export function NotificationCenterButton({
                         <div className="flex-1 min-w-0 overflow-hidden">
                           <div className="flex items-center justify-between gap-2 mb-0.5 min-w-0">
                             <span
-                              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full border text-[9px] font-mono font-bold uppercase max-w-full truncate ${itemMeta.pillClass}`}
+                              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full border text-[10px] font-sans font-semibold max-w-full truncate ${itemMeta.pillClass}`}
                             >
                               <span
                                 className={`w-1.5 h-1.5 rounded-full shrink-0 ${itemMeta.dotClass}`}
                               />
-                              <span className="truncate">{item.category || itemMeta.tag}</span>
+                              <span className="truncate">
+                                {item.category ||
+                                  (lang === 'vi' ? itemMeta.tagVi : itemMeta.tagEn)}
+                              </span>
                             </span>
                             <div className="flex items-center gap-1.5 shrink-0">
                               {isUnread && (
@@ -1445,7 +1501,7 @@ export function NotificationCenterButton({
                                   className="w-2 h-2 rounded-full bg-indigo-600 dark:bg-emerald-400 shrink-0 shadow-[0_0_6px_rgba(79,70,229,0.5)]"
                                 />
                               )}
-                              <span className="text-[10px] font-mono text-[#8C887E]">
+                              <span className="text-[10px] font-sans text-[#5E5A52] dark:text-[#A39D91]">
                                 {formatTimeAgo(item.createdAt)}
                               </span>
                             </div>

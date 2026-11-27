@@ -1,8 +1,10 @@
-import { Navigate } from 'react-router-dom';
+import { type ReactNode, useEffect, useRef } from 'react';
+import { Navigate, useLocation } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../contexts/ToastContext';
 import { useRole, type UserCapability, type UserRole } from '../hooks/useRole';
 import { WorkspaceShellSkeleton } from './PageSkeleton';
-import { ReactNode } from 'react';
 
 interface ProtectedRouteProps {
   children: ReactNode;
@@ -19,8 +21,9 @@ interface ProtectedRouteProps {
 /**
  * Route guard — must be authenticated, optionally restricted by role or capability.
  *
- * Backward compat: ``adminOnly={true}`` still works exactly as before.
- * New code should prefer ``requiredRoles`` or ``requiredCapabilities``.
+ * - Unauthenticated requests preserve their destination via `?redirect=...` on `/login`.
+ * - Authenticated users lacking the required role/capability receive a clear localized
+ *   warning toast before redirecting to `/dashboard` (never a silent redirect).
  */
 export function ProtectedRoute({
   children,
@@ -31,25 +34,52 @@ export function ProtectedRoute({
 }: ProtectedRouteProps) {
   const { user, isLoading } = useAuth();
   const { hasAny, hasAll, role } = useRole();
+  const location = useLocation();
+  const { i18n } = useTranslation();
+  const { warning } = useToast();
+  const lastDeniedRef = useRef<string | null>(null);
+
+  const isUnauthorized =
+    !isLoading &&
+    Boolean(user) &&
+    ((Boolean(adminOnly) && user?.role !== 'admin') ||
+      (Boolean(requiredRoles) && !requiredRoles!.includes(role)) ||
+      (Boolean(requiredCapabilities) && !hasAny(requiredCapabilities!)) ||
+      (Boolean(requiredAllCapabilities) && !hasAll(requiredAllCapabilities!)));
+
+  useEffect(() => {
+    if (!isUnauthorized) {
+      lastDeniedRef.current = null;
+      return;
+    }
+    const deniedKey = `${location.pathname}${location.search}`;
+    if (lastDeniedRef.current === deniedKey) return;
+    lastDeniedRef.current = deniedKey;
+
+    const isVi = i18n.language?.startsWith('vi');
+    warning(
+      isVi
+        ? 'Bạn không có quyền truy cập trang này.'
+        : 'You do not have permission to access that page.',
+      undefined,
+      { force: true },
+    );
+  }, [isUnauthorized, location.pathname, location.search, i18n.language, warning]);
 
   if (isLoading) {
     return <WorkspaceShellSkeleton />;
   }
 
   if (!user) {
-    return <Navigate to="/login" replace />;
+    const targetPath = `${location.pathname}${location.search}`;
+    const redirectQuery =
+      targetPath && targetPath !== '/' && !targetPath.startsWith('/login')
+        ? `?redirect=${encodeURIComponent(targetPath)}`
+        : '';
+    return <Navigate to={`/login${redirectQuery}`} replace />;
   }
 
-  if (adminOnly && user.role !== 'admin') {
-    return <Navigate to="/dashboard" replace />;
-  }
-  if (requiredRoles && !requiredRoles.includes(role)) {
-    return <Navigate to="/dashboard" replace />;
-  }
-  if (requiredCapabilities && !hasAny(requiredCapabilities)) {
-    return <Navigate to="/dashboard" replace />;
-  }
-  if (requiredAllCapabilities && !hasAll(requiredAllCapabilities)) {
+  if (isUnauthorized) {
     return <Navigate to="/dashboard" replace />;
   }
 

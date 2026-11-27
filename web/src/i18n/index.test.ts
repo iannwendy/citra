@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import i18n from './index';
+import i18n, { resolveInitialLanguage } from './index';
 import en from './locales/en.json';
 import vi from './locales/vi.json';
 
@@ -39,5 +39,21 @@ describe('i18n configuration and Task 5.1 translation fixes', () => {
     expect(essayPageSrc).not.toContain("startsWith('en') ? 'en' : 'vi'");
     expect(essayPageSrc).toContain("i18n.language?.startsWith('vi') ? 'vi' : 'en'");
     expect(onboardingSrc).toContain("i18n.language?.startsWith('vi') ? 'vi' : 'en'");
+  });
+
+  it('auto-detects vi-VN browser language when no saved preference exists, honors saved localStorage, and syncs <html lang>', async () => {
+    expect(resolveInitialLanguage(null, 'vi-VN')).toBe('vi');
+    expect(resolveInitialLanguage(null, 'vi')).toBe('vi');
+    expect(resolveInitialLanguage(null, 'en-US')).toBe('en');
+    expect(resolveInitialLanguage(null, null)).toBe('en');
+    expect(resolveInitialLanguage('en', 'vi-VN')).toBe('en');
+    expect(resolveInitialLanguage('vi-VN', 'en-US')).toBe('vi');
+
+    await i18n.changeLanguage('en');
+    expect(document.documentElement.lang).toBe('en');
+    await i18n.changeLanguage('vi');
+    expect(document.documentElement.lang).toBe('vi');
+    await i18n.changeLanguage('en');
+    expect(document.documentElement.lang).toBe('en');
   });
 });

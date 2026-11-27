@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, act, cleanup } from '@testing-library/react';
+import i18n from '@/i18n';
 import { ToastProvider, useToast, NotificationCenterButton } from './ToastContext';
 
 function ToastTestHarness() {
@@ -79,9 +80,10 @@ function ToastTestHarness() {
 }
 
 describe('120fps Solva Editorial Notification Engine (ToastContext)', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     localStorage.clear();
     sessionStorage.clear();
+    await i18n.changeLanguage('en');
     vi.useFakeTimers();
   });
 
@@ -133,7 +135,7 @@ describe('120fps Solva Editorial Notification Engine (ToastContext)', () => {
     const loadingToast = screen.getByRole('alert');
     expect(loadingToast.getAttribute('data-toast-type')).toBe('loading');
     expect(screen.getByText('Verifying CrossRef DOIs…')).toBeTruthy();
-    expect(screen.getByText('PIPELINE · SYNC')).toBeTruthy();
+    expect(screen.getByText('Working')).toBeTruthy();
 
     act(() => {
       vi.advanceTimersByTime(350);
@@ -237,5 +239,30 @@ describe('120fps Solva Editorial Notification Engine (ToastContext)', () => {
     // Clear history
     fireEvent.click(screen.getByTestId('notification-clear-history-btn'));
     expect(screen.getByText('All caught up')).toBeTruthy();
+  });
+
+  it('localizes toast headers, timestamps, and stack controls in Vietnamese and renders above modals (z-[100])', async () => {
+    await i18n.changeLanguage('vi');
+    const { container } = render(
+      <ToastProvider>
+        <ToastTestHarness />
+      </ToastProvider>
+    );
+
+    const toastRegion = container.querySelector('[aria-live="polite"]') as HTMLElement;
+    expect(toastRegion).toBeTruthy();
+    expect(toastRegion.className).toContain('z-[100]');
+
+    fireEvent.click(screen.getByTestId('trigger-error'));
+    fireEvent.click(screen.getByTestId('trigger-warning'));
+
+    expect(screen.getByText('Lỗi')).toBeTruthy();
+    expect(screen.getByText('Cảnh báo')).toBeTruthy();
+    expect(screen.getAllByText('Vừa xong').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText('2 thông báo')).toBeTruthy();
+    expect(screen.getByText('Xóa tất cả')).toBeTruthy();
+    expect(container.textContent).not.toContain('SYSTEM · ALERT');
+    expect(container.textContent).not.toContain('CITRA · VERIFIED');
+    expect(container.textContent).not.toContain('CLEAR ALL');
   });
 });

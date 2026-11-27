@@ -46,6 +46,11 @@
           var tm = document.querySelector('meta[name="theme-color"]:not([media])');
           if (tm) tm.setAttribute('content', '#141310');
         }
+        var rawLang = localStorage.getItem('language') || localStorage.getItem('i18nextLng');
+        var resolvedLang = rawLang
+          ? rawLang.toLowerCase().split('-')[0]
+          : (navigator.language && navigator.language.toLowerCase().indexOf('vi') === 0 ? 'vi' : 'en');
+        document.documentElement.lang = resolvedLang === 'vi' ? 'vi' : 'en';
       } catch (e) {}
     </script>
 

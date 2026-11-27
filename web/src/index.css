@@ -45,11 +45,13 @@
     --secondary: 45 27% 94%;
     --secondary-foreground: 43 15% 10%;
 
-    /* Muted — Warm Taupe & Tertiary Track #ECE9E0 / #56524A */
+    /* Muted — Warm Taupe & Tertiary Track (WCAG AA >= 6.1:1 on #FBFAF6 / #F4F2EC) */
     --muted: 45 27% 94%;                /* #F4F2EC */
     --muted-foreground: 40 8% 31%;      /* #56524A - Warm Taupe Ink */
     --muted-bg: 45 25% 90%;             /* #ECE9E0 */
     --muted-fg: 40 8% 31%;              /* #56524A */
+    --slate-400: 94 90 82;              /* #5E5A52 - 6.6:1 on #FBFAF6 */
+    --slate-500: 88 84 76;              /* #58544C - 7.2:1 on #FBFAF6 */
 
     /* Accent — Warm Surface Tint */
     --accent: 45 25% 90%;               /* #ECE9E0 */
@@ -142,6 +144,8 @@
     --muted-foreground: 38 11% 63%;     /* #A8A296 */
     --muted-bg: 41 13% 15%;
     --muted-fg: 38 11% 63%;
+    --slate-400: 163 157 145;           /* #A39D91 - 6.8:1 on #141310 / 6.3:1 on #1E1C17 */
+    --slate-500: 148 142 130;           /* #948E82 - 5.6:1 on #141310 / 5.2:1 on #1E1C17 */
 
     --accent: 41 13% 15%;
     --accent-foreground: 48 45% 97%;
@@ -387,7 +391,7 @@
   }
 
   .mapping-badge-unresolved {
-    @apply bg-slate-100 text-slate-600;
+    @apply bg-slate-100 text-slate-700;
   }
   .dark .mapping-badge-unresolved {
     @apply bg-slate-800 text-slate-300;
@@ -648,7 +652,7 @@
   }
 
   .pipeline-step-completed {
-    @apply text-emerald-600 dark:text-emerald-400;
+    @apply text-emerald-700 dark:text-emerald-400;
   }
 
   .pipeline-step-active {
@@ -714,11 +718,11 @@
   }
 
   .metadata-match {
-    @apply text-emerald-600 dark:text-emerald-400;
+    @apply text-emerald-700 dark:text-emerald-400;
   }
 
   .metadata-mismatch {
-    @apply text-red-600 dark:text-red-400;
+    @apply text-red-700 dark:text-red-400;
   }
 
   /* ============================================================
@@ -902,11 +906,11 @@
   }
 
   .tag-success {
-    @apply bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300;
+    @apply bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-300;
   }
 
   .tag-warning {
-    @apply bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300;
+    @apply bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-300;
   }
 
   .tag-error {
@@ -1385,7 +1389,7 @@
   --solva-ink: #1C1A15;
   --solva-accent: #1C1A15;
   --solva-muted: #56524A;
-  --solva-subtle: #8C887E;
+  --solva-subtle: #5E5A52;
   --solva-card-elevated: #FFFFFF;
   --solva-btn-bg: #1C1A15;
   --solva-btn-fg: #FBFAF6;
@@ -1404,7 +1408,7 @@
   --solva-ink: #FBFAF6;
   --solva-accent: #FBFAF6;
   --solva-muted: #A8A296;
-  --solva-subtle: #7A756B;
+  --solva-subtle: #A39D91;
   --solva-card-elevated: #1A1814;
   --solva-btn-bg: #FBFAF6;
   --solva-btn-fg: #1C1A15;
@@ -1419,6 +1423,21 @@
 html[lang='vi'] .font-solva-serif,
 .solva-editorial-root[data-lang='vi'] .font-solva-serif {
   letter-spacing: -0.03em;
+}
+
+/* Vietnamese Serif Typography: prioritize Source Serif 4 (full 300-700 Vietnamese diacritics) */
+:lang(vi) h1,
+:lang(vi) h2,
+:lang(vi) h3,
+:lang(vi) h4,
+:lang(vi) h5,
+:lang(vi) h6,
+:lang(vi) .font-solva-serif,
+:lang(vi) .font-serif,
+:lang(vi) .font-display,
+:lang(vi) .document-content,
+.solva-editorial-root[data-lang='vi'] .font-solva-serif {
+  font-family: 'Source Serif 4', 'Sentient', Georgia, serif;
 }
 
 .font-solva-sans {

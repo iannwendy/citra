@@ -30,6 +30,7 @@ import {
   Sun,
   Moon,
   Monitor,
+  FlaskConical,
 } from 'lucide-react';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -73,6 +74,7 @@ const SIDEBAR_GROUPS: NavGroup[] = [
     items: [
       { path: '/dashboard', labelKey: 'nav.dashboard', icon: FileSearch, capability: 'upload_essay' },
       { path: '/upload', labelKey: 'nav.newCheck', icon: Upload, capability: 'upload_essay' },
+      { path: '/sandbox', labelKey: 'nav.liveSandbox', icon: FlaskConical, capability: 'upload_essay' },
       { path: '/batch-upload', labelKey: 'nav.batchCheck', icon: Layers, requiresBatch: true },
       { path: '/history', labelKey: 'nav.history', icon: History, capability: 'view_own_history' },
     ],
@@ -109,7 +111,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     batchStats,
   } = useVerificationProgress();
   const { has, role, planTier, isBasic, quota, canBatchUpload, isAdmin } = useRole();
-  const { theme, setTheme, toggleTheme } = useTheme();
+  const { theme, setTheme } = useTheme();
   const toast = useToast();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
@@ -265,7 +267,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     );
   };
 
-  // Keyboard shortcuts: Ctrl+/ (help), Ctrl+B (toggle sidebar), Ctrl+U (upload), Ctrl+D (toggle theme)
+  // Keyboard shortcuts: Ctrl+/ (help), Ctrl+B (toggle sidebar)
+  // Browser native shortcuts (Ctrl+D Bookmark, Ctrl+U View Source) are never hijacked.
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!(e.ctrlKey || e.metaKey)) return;
@@ -281,17 +284,11 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       } else if (!isEditable && e.key.toLowerCase() === 'b') {
         e.preventDefault();
         toggleSidebarCollapse();
-      } else if (!isEditable && e.key.toLowerCase() === 'u') {
-        e.preventDefault();
-        navigate('/upload');
-      } else if (!isEditable && e.key.toLowerCase() === 'd') {
-        e.preventDefault();
-        toggleTheme();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [navigate, toggleTheme, toggleSidebarCollapse]);
+  }, [toggleSidebarCollapse]);
 
   const isActive = (path: string) =>
     location.pathname === path ||
@@ -332,7 +329,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         <div className="flex items-center gap-2.5 min-w-0">
           <button
             onClick={() => setMobileOpen(true)}
-            aria-label="Open navigation menu"
+            aria-label={currentLang === 'vi' ? 'Mở menu điều hướng' : 'Open navigation menu'}
             className="p-2 min-h-10 min-w-10 rounded-xl bg-slate-100/80 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200/70 dark:hover:bg-slate-700 transition-colors flex items-center justify-center shrink-0"
           >
             <Menu className="h-5 w-5 text-slate-600 dark:text-slate-300" />
@@ -340,7 +337,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           <Link
             to="/dashboard"
             onClick={() => setMobileOpen(false)}
-            aria-label="Go to dashboard"
+            aria-label={currentLang === 'vi' ? 'Đi tới bảng điều khiển' : 'Go to dashboard'}
             className="inline-flex items-center gap-[8px] rounded-[6px] min-w-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
           >
             <span className="w-[28px] h-[28px] rounded-[7px] bg-white dark:bg-[#1E1C17] border border-[#E7E3D9] dark:border-[#332F26] shadow-sm flex items-center justify-center p-1 shrink-0 transition-colors">
@@ -454,7 +451,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               <Link
                 to="/dashboard"
                 onClick={closeMobileDrawer}
-                aria-label="Go to dashboard"
+                aria-label={currentLang === 'vi' ? 'Đi tới bảng điều khiển' : 'Go to dashboard'}
                 className="inline-flex items-center gap-[8px] rounded-[6px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
               >
                 <span className="w-[28px] h-[28px] rounded-[7px] bg-white dark:bg-[#1E1C17] border border-[#E7E3D9] dark:border-[#332F26] shadow-sm flex items-center justify-center p-1 shrink-0 transition-colors">
@@ -477,7 +474,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                 type="button"
                 data-testid="mobile-sidebar-close-btn"
                 onClick={closeMobileDrawer}
-                aria-label="Close navigation menu"
+                aria-label={currentLang === 'vi' ? 'Đóng menu điều hướng' : 'Close navigation menu'}
                 className="lg:hidden inline-flex items-center justify-center h-9 w-9 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
               >
                 <X className="h-[18px] w-[18px]" />
@@ -501,6 +498,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
           {/* Navigation — High-Frequency Daily Workspace & Teaching + Collapsible Admin Console */}
           <nav
+            aria-label={currentLang === 'vi' ? 'Điều hướng chính' : 'Primary Navigation'}
             onScroll={hideRailTooltip}
             className={`flex-1 overflow-y-auto scrollbar-none ${
               isDesktopCollapsed ? 'px-2 py-3 space-y-1' : 'px-2.5 py-3 space-y-1.5'
@@ -821,14 +819,14 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               onMouseEnter={(e) =>
                 showRailTooltip(
                   e.currentTarget,
-                  `${user?.full_name || user?.username || 'User'} (${planTier.toUpperCase()})`,
+                  `${user?.full_name || user?.username || (currentLang === 'vi' ? 'Người dùng' : 'User')} (${planTier.toUpperCase()})`,
                 )
               }
               onMouseLeave={hideRailTooltip}
               className={`w-full flex items-center rounded-xl transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
                 isDesktopCollapsed
                   ? 'justify-center p-1 hover:bg-slate-100 dark:hover:bg-slate-800'
-                  : 'gap-2.5 px-2 py-1.5 hover:bg-white dark:hover:bg-slate-800/90 border border-transparent hover:border-slate-200/90 dark:hover:border-slate-700'
+                  : 'gap-2 px-1.5 py-1.5 hover:bg-white dark:hover:bg-slate-800/90 border border-transparent hover:border-slate-200/90 dark:hover:border-slate-700'
               } ${
                 accountMenuOpen
                   ? 'bg-white dark:bg-slate-800 border-slate-200/90 dark:border-slate-700 shadow-sm'
@@ -847,12 +845,12 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
               <div className={isDesktopCollapsed ? 'sr-only' : 'flex-1 min-w-0 text-left'}>
                 <p className="text-[13px] font-semibold text-slate-900 dark:text-slate-100 truncate leading-tight">
-                  {user?.full_name || user?.username || 'User'}
+                  {user?.full_name || user?.username || (currentLang === 'vi' ? 'Người dùng' : 'User')}
                 </p>
-                <div className="flex items-center gap-1.5 mt-0.5">
+                <div className="flex flex-wrap items-center gap-x-1 gap-y-0.5 mt-0.5">
                   <span
                     data-testid="sidebar-plan-badge"
-                    className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase leading-tight ${
+                    className={`px-1 py-0.5 rounded text-[9px] font-mono font-bold uppercase leading-tight shrink-0 ${
                       planTier === 'ultra'
                         ? 'bg-violet-600 text-white'
                         : planTier === 'pro'
@@ -862,10 +860,12 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                   >
                     {planTier.toUpperCase()}
                   </span>
-                  <span className="text-[10.5px] text-slate-400">·</span>
+                  <span className="text-[10px] text-slate-400 shrink-0">·</span>
                   <span
                     data-testid="sidebar-quota-text"
-                    className="text-[10.5px] font-mono text-slate-500 dark:text-slate-400 truncate"
+                    className={`text-[10.5px] text-slate-500 dark:text-slate-400 whitespace-nowrap ${
+                      sidebarQuota.uploadsUnlimited ? 'font-sans' : 'font-mono'
+                    }`}
                   >
                     {sidebarQuota.uploadsUnlimited
                       ? sidebarQuota.usage
@@ -893,18 +893,18 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         aria-hidden={!accountMenuOpen}
         className={`citra-account-popover-gpu fixed z-[75] max-h-[calc(100dvh-70px)] overflow-y-auto rounded-2xl border border-slate-200/90 dark:border-slate-700/90 bg-white dark:bg-slate-900 shadow-[0_18px_42px_-10px_rgba(15,23,42,0.22)] dark:shadow-[0_20px_48px_-10px_rgba(0,0,0,0.7)] p-1.5 text-sm ${
           isDesktopCollapsed
-            ? 'bottom-3 left-3 lg:left-[80px] w-[244px]'
-            : 'bottom-[58px] left-2 w-[240px] max-w-[calc(85vw-16px)] lg:w-[216px]'
+            ? 'bottom-3 left-3 lg:left-[80px] w-64'
+            : 'bottom-[58px] left-2 w-64 max-w-[calc(100vw-16px)]'
         }`}
       >
         {/* Identity & Quota Header */}
         <div className="px-2.5 py-2 rounded-xl bg-slate-50/90 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-800 mb-1 space-y-1.5">
           <div className="min-w-0">
             <p className="text-xs font-semibold text-slate-900 dark:text-white truncate">
-              {user?.email || user?.username || 'User'}
+              {user?.email || user?.username || (currentLang === 'vi' ? 'Người dùng' : 'User')}
             </p>
-            <p className="text-[10.5px] font-mono text-slate-500 dark:text-slate-400 capitalize">
-              {user?.role || 'user'} · {planTier.toUpperCase()}
+            <p className="text-[10.5px] font-mono text-slate-500 dark:text-slate-400">
+              {t(`roleBadge.${user?.role || 'user'}`)} · {planTier.toUpperCase()}
             </p>
           </div>
           <div className="space-y-1">
@@ -990,18 +990,19 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                 className="pointer-events-none absolute top-0.5 bottom-0.5 left-0.5 w-[calc((100%-4px)/3)] rounded-md bg-white dark:bg-slate-900 shadow-sm transition-transform duration-[220ms] ease-[cubic-bezier(0.16,1,0.3,1)]"
               />
               {([
-                { key: 'light', icon: Sun, label: 'Light' },
-                { key: 'dark', icon: Moon, label: 'Dark' },
-                { key: 'system', icon: Monitor, label: 'System' },
+                { key: 'light', icon: Sun, label: t('settings.themeLight') },
+                { key: 'dark', icon: Moon, label: t('settings.themeDark') },
+                { key: 'system', icon: Monitor, label: t('settings.themeSystem') },
               ] as const).map(({ key, icon: ModeIcon, label }) => {
                 const activeMode = theme === key;
+                const fullLabel = `${t('nav.theme')}: ${label}`;
                 return (
                   <button
                     key={key}
                     type="button"
                     tabIndex={accountMenuOpen ? undefined : -1}
-                    title={label}
-                    aria-label={label}
+                    title={fullLabel}
+                    aria-label={fullLabel}
                     onClick={() => setTheme(key)}
                     className={`relative z-10 h-6 w-6 rounded-md inline-flex items-center justify-center transition-colors cursor-pointer ${
                       activeMode
@@ -1036,6 +1037,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                     key={lng}
                     type="button"
                     tabIndex={accountMenuOpen ? undefined : -1}
+                    aria-label={lng === 'vi' ? 'Tiếng Việt' : 'English'}
                     onClick={() => handleSelectLanguage(lng)}
                     className={`relative z-10 px-2 py-0.5 rounded-md uppercase transition-colors cursor-pointer ${
                       isCurr
@@ -1058,11 +1060,11 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             closeMobileDrawer();
             setHelpOpen(true);
           }}
-          className="w-full flex items-center justify-between gap-1.5 px-2.5 py-1.5 rounded-xl text-[12.5px] font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+          className="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-xl text-[12.5px] font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
         >
           <span className="flex items-center gap-2 min-w-0">
             <HelpCircle className="h-4 w-4 text-slate-500 dark:text-slate-400 shrink-0" />
-            <span className="truncate">{t('nav.helpShortcuts')}</span>
+            <span className="whitespace-nowrap">{t('nav.helpShortcuts')}</span>
           </span>
           <kbd className="px-1.5 py-0.5 text-[10px] font-mono bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-slate-500 shrink-0">
             Ctrl+/

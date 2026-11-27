@@ -25,7 +25,7 @@ export function EssaySortSelect({
   return (
     <div
       className={cn(
-        'relative w-full sm:w-52 xl:w-48 2xl:w-52 shrink-0 min-w-0',
+        'relative w-full sm:w-auto sm:min-w-[232px] shrink-0',
         className,
       )}
     >
@@ -49,7 +49,7 @@ export function EssaySortSelect({
         }}
         wrapperClassName="w-full"
         className={cn(
-          'h-9 w-full pl-8 pr-8 py-1.5 text-xs font-mono rounded-xl bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800',
+          'h-9 w-full pl-8 pr-9 py-1.5 text-xs font-mono rounded-xl bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800',
           isCustomSort &&
             'border-indigo-300 dark:border-indigo-700 bg-indigo-50/40 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 font-semibold',
         )}
