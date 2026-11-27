@@ -493,9 +493,9 @@ class TestStep1SubProgressCallbacks:
         parsed = parser.parse(str(pdf), use_service_manager=False, progress_callback=events.append)
 
         assert parsed.has_grobid is True
-        assert any("Checking GROBID layout cache" in m for m in events)
-        assert any("Analyzing 2-page PDF layout with GROBID" in m for m in events)
-        assert any("GROBID parsed 1 reference" in m for m in events)
+        assert any("Checking saved document layout" in m for m in events)
+        assert any("Analyzing 2-page PDF document layout and extracting references" in m for m in events)
+        assert any("Extracted 1 reference from document" in m for m in events)
 
     def test_cached_grobid_hit_emits_cache_message(self, tmp_path: Path, monkeypatch):
         pdf = tmp_path / "cached.pdf"
@@ -516,9 +516,9 @@ class TestStep1SubProgressCallbacks:
         parsed = parser.parse(str(pdf), use_service_manager=True, progress_callback=events.append)
 
         assert parsed.has_grobid is True
-        assert any("Loaded cached GROBID layout" in m for m in events)
-        assert not any("Analyzing 2-page PDF layout with GROBID" in m for m in events)
-        assert any("GROBID parsed 1 reference" in m for m in events)
+        assert any("Loaded saved document layout" in m for m in events)
+        assert not any("Analyzing 2-page PDF document layout" in m for m in events)
+        assert any("Extracted 1 reference from document" in m for m in events)
 
     def test_grobid_fallback_disabled_docx_and_scanned_empty_emit_branch_accurate_messages(
         self, tmp_path: Path
@@ -533,7 +533,7 @@ class TestStep1SubProgressCallbacks:
         )
         fail_events: list[str] = []
         parser_fail.parse(str(pdf), use_service_manager=False, progress_callback=fail_events.append)
-        assert any("regex parser" in m.lower() for m in fail_events)
+        assert any("standard document text reader" in m.lower() for m in fail_events)
 
         # 2. GROBID disabled
         parser_disabled = DocumentParser(
@@ -542,7 +542,7 @@ class TestStep1SubProgressCallbacks:
         )
         disabled_events: list[str] = []
         parser_disabled.parse(str(pdf), progress_callback=disabled_events.append)
-        assert any("Using regex parser" in m for m in disabled_events)
+        assert any("Using standard document text reader" in m for m in disabled_events)
 
         # 3. DOCX branch
         docx = tmp_path / "paper.docx"

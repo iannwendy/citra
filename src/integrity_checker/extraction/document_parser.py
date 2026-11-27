@@ -336,14 +336,14 @@ class DocumentParser:
                 logger.debug("GrobidServiceManager not available: %s", exc)
 
         if not is_docx and not is_scanned_empty_pdf and self.config.extraction.grobid.enabled:
-            _notify(f"Extracted text from {pages_lbl} · Checking GROBID layout cache...")
+            _notify(f"Read text from {pages_lbl} · Checking saved document layout...")
             try:
                 # 1. Try disk cache first (does not require live container health check)
                 cached_tei = grobid_manager.get_from_cache(pdf_path) if grobid_manager else None
                 if cached_tei:
                     logger.info("Using cached TEI XML for: %s", pdf_path)
                     _notify(
-                        f"Loaded cached GROBID layout ({pages_lbl}) · Parsing TEI-XML..."
+                        f"Loaded saved document layout ({pages_lbl}) · Extracting references from document..."
                     )
                     grobid_out = parse_tei(cached_tei)
                     if grobid_out and grobid_out.is_available:
@@ -359,7 +359,7 @@ class DocumentParser:
                     if grobid_available:
                         grobid_status = "available"
                         parser_used = "grobid"
-                        _notify(f"Analyzing {pdf_pages_lbl} layout with GROBID...")
+                        _notify(f"Analyzing {pdf_pages_lbl} document layout and extracting references...")
                         grobid_out = self._load_grobid_tei(pdf_path, grobid_manager)
 
                         # Save to cache if successful
@@ -373,7 +373,7 @@ class DocumentParser:
                         # Still try via injected grobid_post_fn (for tests/mock)
                         if self._grobid_post_fn is not None:
                             # Use injected mock/test function
-                            _notify(f"Analyzing {pdf_pages_lbl} layout with GROBID...")
+                            _notify(f"Analyzing {pdf_pages_lbl} document layout and extracting references...")
                             grobid_out = self._load_grobid_tei(pdf_path)
                             if grobid_out and grobid_out.is_available:
                                 grobid_status = "available"
@@ -395,18 +395,13 @@ class DocumentParser:
                     parser_used = "regex"
                     if not emitted_fallback:
                         emitted_fallback = True
-                        if grobid_status == "fallback":
-                            _notify(
-                                f"GROBID timed out or unavailable · Falling back to regex parser ({pages_lbl})..."
-                            )
-                        else:
-                            _notify(
-                                f"GROBID unavailable · Using regex parser ({pages_lbl})..."
-                            )
+                        _notify(
+                            f"Switching to standard document text reader ({pages_lbl})..."
+                        )
                 else:
                     bib_cnt = len(grobid_out.bibliography or [])
                     _notify(
-                        f"GROBID parsed {_fmt_refs(bib_cnt)} · Extracting & merging citations..."
+                        f"Extracted {_fmt_refs(bib_cnt)} from document · Organizing citations..."
                     )
 
             except Exception as exc:  # noqa: BLE001
@@ -418,7 +413,7 @@ class DocumentParser:
                 if not emitted_fallback:
                     emitted_fallback = True
                     _notify(
-                        f"GROBID timed out or unavailable · Falling back to regex parser ({pages_lbl})..."
+                        f"Switching to standard document text reader ({pages_lbl})..."
                     )
         elif is_docx:
             parser_used = "docx"
@@ -428,7 +423,7 @@ class DocumentParser:
             warnings.append("GROBID disabled in config")
             parser_used = "regex"
             grobid_status = "disabled"
-            _notify(f"Extracted text from {pages_lbl} · Using regex parser...")
+            _notify(f"Read text from {pages_lbl} · Using standard document text reader...")
 
         # 3. Merge
         doc_meta_pre = dict(text_doc.metadata or {})

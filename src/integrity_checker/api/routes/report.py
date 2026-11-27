@@ -66,10 +66,12 @@ def get_report(
     auto_heal: bool = False,
     style: str = "apa",
     compare_with: int | None = None,
+    lang: str = "en",
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Response:
     """Export report theo format: json | csv | pdf | docx (supports auto_heal=true)."""
+    norm_lang = "vi" if str(lang or "en").strip().lower().startswith("vi") else "en"
     repo = Repository(db)
     essay = repo.get_essay(essay_id)
     if not essay:
@@ -158,7 +160,7 @@ def get_report(
             current_user=current_user,
         )
     if format == "pdf":
-        return _pdf_response(essay.filename, essay, verdicts)
+        return _pdf_response(essay.filename, essay, verdicts, lang=norm_lang)
     if format == "docx":
         if auto_heal:
             norm_style = (style or "apa").strip().lower()
@@ -167,8 +169,10 @@ def get_report(
                     status_code=400,
                     detail=f"Unsupported bibliography style '{style}'. Allowed styles: apa, ieee, tdtu.",
                 )
-            return _healed_docx_response(essay.filename, essay, verdicts, style=norm_style)
-        return _docx_response(essay.filename, essay, verdicts)
+            return _healed_docx_response(
+                essay.filename, essay, verdicts, style=norm_style, lang=norm_lang
+            )
+        return _docx_response(essay.filename, essay, verdicts, lang=norm_lang)
     raise HTTPException(status_code=400, detail=f"Unsupported format: {format}")
 
 
@@ -176,11 +180,13 @@ def get_report(
 def export_healed_docx_endpoint(
     essay_id: int,
     style: str = Query("apa"),
+    lang: str = Query("en"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> StreamingResponse:
-    """Download an Auto-Healed Word (.docx) with repaired references & Before->After Change Log."""
+    """Download a fixed Word (.docx) with updated references & Before->After Change Log."""
     norm_style = (style or "apa").strip().lower()
+    norm_lang = "vi" if str(lang or "en").strip().lower().startswith("vi") else "en"
     if norm_style not in {"apa", "ieee", "tdtu"}:
         raise HTTPException(
             status_code=400,
@@ -200,13 +206,15 @@ def export_healed_docx_endpoint(
         raise HTTPException(
             status_code=402,
             detail=(
-                "Auto-Healed Word (.docx) Export is a Pro / Ultra feature. "
-                f"Your current plan is {policy.name}. Please upgrade to unlock automated Word remediation."
+                "Fixed Word (.docx) Export is a Pro / Ultra feature. "
+                f"Your current plan is {policy.name}. Please upgrade to unlock automated reference formatting."
             ),
         )
 
     verdicts = repo.get_verdicts(essay_id)
-    return _healed_docx_response(essay.filename, essay, verdicts, style=norm_style)
+    return _healed_docx_response(
+        essay.filename, essay, verdicts, style=norm_style, lang=norm_lang
+    )
 
 
 @router.get("/{essay_id}/revision-diff")
@@ -1659,10 +1667,17 @@ def _register_unicode_pdf_fonts() -> tuple[str, str]:
     return _PDF_UNICODE_FONTS_CACHE
 
 
-def _generate_pdf_bytes(essay, verdicts: list, citations: list | None = None) -> bytes:
+def _generate_pdf_bytes(
+    essay,
+    verdicts: list,
+    citations: list | None = None,
+    *,
+    lang: str = "en",
+) -> bytes:
     """Generate PDF report bytes with Unicode TTF fonts, Digital Verification Receipt & QR seal."""
     from integrity_checker.api.routes.essays import create_essay_share_token
 
+    is_vi = str(lang or "en").strip().lower().startswith("vi")
     font_reg, font_bold = _register_unicode_pdf_fonts()
     buffer = io.BytesIO()
 
@@ -1766,16 +1781,27 @@ def _generate_pdf_bytes(essay, verdicts: list, citations: list | None = None) ->
     elements: list[Any] = []
 
     # Title
-    elements.append(Paragraph("Citation Integrity Report", title_style))
+    elements.append(
+        Paragraph(
+            "Báo cáo kiểm tra trích dẫn học thuật" if is_vi else "Citation Integrity Report",
+            title_style,
+        )
+    )
     elements.append(Spacer(1, 0.3 * cm))
 
     # Essay info (escape filename to prevent ReportLab XML/HTML tag injection & SSRF)
     essay_id_val = int(getattr(essay, "id", 1) or 1)
     utc_now_str = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
-    elements.append(Paragraph(f"<b>File:</b> {_pdf_text(essay.filename)}", body_style))
-    elements.append(Paragraph(f"<b>Essay ID:</b> {essay_id_val}", body_style))
-    elements.append(Paragraph(f"<b>Pages:</b> {getattr(essay, 'num_pages', 0)}", body_style))
-    elements.append(Paragraph(f"<b>Generated:</b> {utc_now_str}", body_style))
+    if is_vi:
+        elements.append(Paragraph(f"<b>Tệp tài liệu:</b> {_pdf_text(essay.filename)}", body_style))
+        elements.append(Paragraph(f"<b>Mã bài kiểm tra:</b> {essay_id_val}", body_style))
+        elements.append(Paragraph(f"<b>Số trang:</b> {getattr(essay, 'num_pages', 0)}", body_style))
+        elements.append(Paragraph(f"<b>Thời gian tạo:</b> {utc_now_str}", body_style))
+    else:
+        elements.append(Paragraph(f"<b>File:</b> {_pdf_text(essay.filename)}", body_style))
+        elements.append(Paragraph(f"<b>Document ID:</b> {essay_id_val}", body_style))
+        elements.append(Paragraph(f"<b>Pages:</b> {getattr(essay, 'num_pages', 0)}", body_style))
+        elements.append(Paragraph(f"<b>Generated:</b> {utc_now_str}", body_style))
 
     # Digital Verification Receipt & Vector QR Seal (Task 6.2)
     share_info = create_essay_share_token(essay_id_val)
@@ -1787,12 +1813,21 @@ def _generate_pdf_bytes(essay, verdicts: list, citations: list | None = None) ->
     )
 
     qr_drawing = _build_qr_seal_drawing(verification_url, size=68.0)
-    receipt_text_block = [
-        Paragraph("<b>CITRA Digital Verification Receipt (HMAC-SHA256)</b>", receipt_style),
-        Paragraph(f"<b>Receipt ID:</b> {escape(receipt_id)}", receipt_style),
-        Paragraph(f"<b>HMAC-SHA256 Signature Prefix:</b> {escape(sig_prefix)}", receipt_style),
-        Paragraph(f"<b>Verification URL:</b> {escape(verification_url)}", receipt_style),
-    ]
+    receipt_text_block = (
+        [
+            Paragraph("<b>Chứng nhận kiểm tra trích dẫn CITRA</b>", receipt_style),
+            Paragraph(f"<b>Mã chứng nhận:</b> {escape(receipt_id)}", receipt_style),
+            Paragraph(f"<b>Mã xác thực:</b> {escape(sig_prefix)}", receipt_style),
+            Paragraph(f"<b>Liên kết kiểm tra:</b> {escape(verification_url)}", receipt_style),
+        ]
+        if is_vi
+        else [
+            Paragraph("<b>CITRA Digital Verification Receipt</b>", receipt_style),
+            Paragraph(f"<b>Receipt ID:</b> {escape(receipt_id)}", receipt_style),
+            Paragraph(f"<b>Verification Code:</b> {escape(sig_prefix)}", receipt_style),
+            Paragraph(f"<b>Verification URL:</b> {escape(verification_url)}", receipt_style),
+        ]
+    )
     receipt_box = Table(
         [[receipt_text_block, qr_drawing]],
         colWidths=[13.8 * cm, 2.8 * cm],
@@ -1816,7 +1851,7 @@ def _generate_pdf_bytes(essay, verdicts: list, citations: list | None = None) ->
     elements.append(receipt_box)
     elements.append(Spacer(1, 0.4 * cm))
 
-    # Document Diagnostics note (if present)
+    # Document Processing Notes (never expose internal parser mode like grobid/regex; localize scanned warning)
     style_profile_dict = None
     if getattr(essay, "style_profile_json", None):
         try:
@@ -1827,22 +1862,41 @@ def _generate_pdf_bytes(essay, verdicts: list, citations: list | None = None) ->
         essay, style_profile_dict, citations or [], verdicts
     )
     diag_notes: list[str] = []
-    if diag.get("parser_used"):
-        diag_notes.append(f"Parser: {diag['parser_used']}")
     ocr_pages = diag.get("ocr_pages_recovered")
     if ocr_pages:
         ocr_count = len(ocr_pages) if isinstance(ocr_pages, list) else int(ocr_pages)
-        diag_notes.append(f"OCR Pages Recovered: {ocr_count}")
+        diag_notes.append(
+            f"Trang ảnh đã nhận dạng chữ (OCR): {ocr_count}"
+            if is_vi
+            else f"Scanned Pages Processed (OCR): {ocr_count}"
+        )
     if diag.get("legacy_encoding_detected"):
         enc_pages = diag.get("legacy_encoding_pages_count", 0)
         diag_notes.append(
-            f"Legacy Encoding Transcoded: {diag['legacy_encoding_detected']}"
-            + (f" ({enc_pages} page(s))" if enc_pages else "")
+            (
+                f"Đã chuyển đổi font tiếng Việt cũ: {diag['legacy_encoding_detected']}"
+                + (f" ({enc_pages} trang)" if enc_pages else "")
+            )
+            if is_vi
+            else (
+                f"Legacy Vietnamese Font Converted: {diag['legacy_encoding_detected']}"
+                + (f" ({enc_pages} page(s))" if enc_pages else "")
+            )
         )
-    if diag.get("warning_message"):
-        diag_notes.append(str(diag["warning_message"]))
+    if diag.get("is_scanned_pdf"):
+        localized_warn = (
+            diag.get("warning_message_vi") or SCANNED_PDF_WARNING_VI
+            if is_vi
+            else diag.get("warning_message_en") or SCANNED_PDF_WARNING_EN
+        )
+        if localized_warn:
+            diag_notes.append(str(localized_warn))
+    elif diag.get("warning_message_vi" if is_vi else "warning_message_en"):
+        diag_notes.append(str(diag["warning_message_vi" if is_vi else "warning_message_en"]))
     if diag_notes:
-        elements.append(Paragraph("Document Diagnostics", heading_style))
+        elements.append(
+            Paragraph("Ghi chú tài liệu" if is_vi else "Document Notes", heading_style)
+        )
         elements.append(
             Paragraph(_pdf_text(" | ".join(diag_notes)), diag_style)
         )
@@ -1882,38 +1936,71 @@ def _generate_pdf_bytes(essay, verdicts: list, citations: list | None = None) ->
     if cis_score_val is not None:
         elements.append(
             Paragraph(
-                f"<b>Citation Integrity Score (CIS):</b> {float(cis_score_val):.1f} / 100",
+                (
+                    f"<b>Điểm toàn vẹn trích dẫn (CIS):</b> {float(cis_score_val):.1f} / 100"
+                    if is_vi
+                    else f"<b>Citation Integrity Score (CIS):</b> {float(cis_score_val):.1f} / 100"
+                ),
                 heading_style,
             )
         )
         if cis_comps:
             comp_str = (
-                f"Verified Ratio: {float(cis_comps.get('verified_ratio', 0))*100:.0f}% | "
-                f"Metadata Accuracy: {float(cis_comps.get('metadata_accuracy', 0))*100:.0f}% | "
-                f"Layer-1 Consistency: {float(cis_comps.get('in_text_bib_consistency', 0))*100:.0f}% | "
-                f"Format Consistency: {float(cis_comps.get('format_consistency', 0))*100:.0f}% | "
-                f"DOI Validity: {float(cis_comps.get('identifier_validity', 0))*100:.0f}%"
+                (
+                    f"Nguồn đã xác minh: {float(cis_comps.get('verified_ratio', 0))*100:.0f}% | "
+                    f"Độ chính xác thông tin: {float(cis_comps.get('metadata_accuracy', 0))*100:.0f}% | "
+                    f"Đối chiếu trích dẫn trong bài & danh mục: {float(cis_comps.get('in_text_bib_consistency', 0))*100:.0f}% | "
+                    f"Độ đồng nhất định dạng: {float(cis_comps.get('format_consistency', 0))*100:.0f}% | "
+                    f"Tính hợp lệ mã DOI: {float(cis_comps.get('identifier_validity', 0))*100:.0f}%"
+                )
+                if is_vi
+                else (
+                    f"Verified Sources: {float(cis_comps.get('verified_ratio', 0))*100:.0f}% | "
+                    f"Details Accuracy: {float(cis_comps.get('metadata_accuracy', 0))*100:.0f}% | "
+                    f"In-Text & Bibliography Match: {float(cis_comps.get('in_text_bib_consistency', 0))*100:.0f}% | "
+                    f"Format Consistency: {float(cis_comps.get('format_consistency', 0))*100:.0f}% | "
+                    f"DOI Validity: {float(cis_comps.get('identifier_validity', 0))*100:.0f}%"
+                )
             )
             elements.append(Paragraph(escape(comp_str), body_style))
         elements.append(Spacer(1, 0.3 * cm))
 
-    elements.append(Paragraph("Summary", heading_style))
+    elements.append(Paragraph("Tóm tắt kết quả" if is_vi else "Summary", heading_style))
 
-    summary_data = [
-        ["Metric", "Count", "Percentage"],
-        ["Total Citations", str(total), "100%"],
-        ["--- Source Layer ---", "", ""],
-        ["Verified", str(verified), f"{verified/total*100:.1f}%" if total > 0 else "0%"],
-        ["Metadata Error", str(metadata_error), f"{metadata_error/total*100:.1f}%" if total > 0 else "0%"],
-        ["Incomplete Metadata", str(incomplete_meta), f"{incomplete_meta/total*100:.1f}%" if total > 0 else "0%"],
-        ["Suspected Hallucination", str(suspected), f"{suspected/total*100:.1f}%" if total > 0 else "0%"],
-        ["Unresolved", str(unresolved), f"{unresolved/total*100:.1f}%" if total > 0 else "0%"],
-        ["Resource", str(resource), f"{resource/total*100:.1f}%" if total > 0 else "0%"],
-        ["--- Integrity Layer ---", "", ""],
-        ["Matched", str(matched), f"{matched/total*100:.1f}%" if total > 0 else "0%"],
-        ["Missing Reference", str(missing_ref), f"{missing_ref/total*100:.1f}%" if total > 0 else "0%"],
-        ["In-Text Mismatch", str(mismatched), f"{mismatched/total*100:.1f}%" if total > 0 else "0%"],
-    ]
+    pct_fmt = lambda count: f"{count/total*100:.1f}%" if total > 0 else "0%"  # noqa: E731
+    summary_data = (
+        [
+            ["Chỉ số", "Số lượng", "Tỷ lệ"],
+            ["Tổng số trích dẫn", str(total), "100%"],
+            ["--- Xác minh nguồn tài liệu ---", "", ""],
+            ["Đã xác minh", str(verified), pct_fmt(verified)],
+            ["Sai lệch thông tin", str(metadata_error), pct_fmt(metadata_error)],
+            ["Thiếu thông tin trích dẫn", str(incomplete_meta), pct_fmt(incomplete_meta)],
+            ["Không tìm thấy nguồn", str(suspected), pct_fmt(suspected)],
+            ["Cần kiểm tra thủ công", str(unresolved), pct_fmt(unresolved)],
+            ["Nguồn Web / Văn bản", str(resource), pct_fmt(resource)],
+            ["--- Đối chiếu trích dẫn trong bài & danh mục ---", "", ""],
+            ["Đã khớp danh mục", str(matched), pct_fmt(matched)],
+            ["Thiếu ở danh mục", str(missing_ref), pct_fmt(missing_ref)],
+            ["Lệch trích dẫn trong bài", str(mismatched), pct_fmt(mismatched)],
+        ]
+        if is_vi
+        else [
+            ["Metric", "Count", "Percentage"],
+            ["Total Citations", str(total), "100%"],
+            ["--- Source Verification ---", "", ""],
+            ["Verified", str(verified), pct_fmt(verified)],
+            ["Details Mismatch", str(metadata_error), pct_fmt(metadata_error)],
+            ["Incomplete Details", str(incomplete_meta), pct_fmt(incomplete_meta)],
+            ["Source Not Found", str(suspected), pct_fmt(suspected)],
+            ["Needs Manual Check", str(unresolved), pct_fmt(unresolved)],
+            ["Web / Legal Source", str(resource), pct_fmt(resource)],
+            ["--- In-Text & Bibliography Match ---", "", ""],
+            ["Linked", str(matched), pct_fmt(matched)],
+            ["Missing from References", str(missing_ref), pct_fmt(missing_ref)],
+            ["In-Text Mismatch", str(mismatched), pct_fmt(mismatched)],
+        ]
+    )
 
     summary_styles: list[tuple] = [
         ('FONTNAME', (0, 0), (-1, -1), font_reg),
@@ -1931,21 +2018,25 @@ def _generate_pdf_bytes(essay, verdicts: list, citations: list | None = None) ->
                 ('BACKGROUND', (0, r_idx), (-1, r_idx), colors.HexColor('#f3f4f6'))
             )
 
-    summary_table = Table(summary_data, colWidths=[5 * cm, 3 * cm, 3 * cm])
+    summary_table = Table(summary_data, colWidths=[6.5 * cm, 2.5 * cm, 2.5 * cm])
     summary_table.setStyle(TableStyle(summary_styles))
     elements.append(summary_table)
     elements.append(Spacer(1, 0.5 * cm))
 
     # Verdict details table
-    elements.append(Paragraph("Citation Details", heading_style))
+    elements.append(
+        Paragraph("Chi tiết từng trích dẫn" if is_vi else "Citation Details", heading_style)
+    )
 
-    verdict_data = [[
-        Paragraph("#", table_header_style),
-        Paragraph("Citation Raw", table_header_style),
-        Paragraph("Source Status", table_header_style),
-        Paragraph("Mapping Status", table_header_style),
-        Paragraph("Confidence", table_header_style),
-    ]]
+    verdict_data = [
+        [
+            Paragraph("#", table_header_style),
+            Paragraph("Nội dung trích dẫn" if is_vi else "Citation", table_header_style),
+            Paragraph("Trạng thái nguồn" if is_vi else "Source Status", table_header_style),
+            Paragraph("Đối chiếu danh mục" if is_vi else "Reference Match", table_header_style),
+            Paragraph("Độ tin cậy" if is_vi else "Confidence", table_header_style),
+        ]
+    ]
 
     for i, v in enumerate(verdicts, 1):
         comp_lbl = _extract_verdict_composite_label(v)
@@ -1961,10 +2052,10 @@ def _generate_pdf_bytes(essay, verdicts: list, citations: list | None = None) ->
         v_rules = _load_verdict_rules(v)
         norm_lbl = _normalize_verdict_label(v)
         if "R-INCOMPLETE-METADATA" in v_rules:
-            source_status = "Incomplete Metadata"
+            source_status = "Thiếu thông tin" if is_vi else "Incomplete Details"
             src_style = status_warn_style
         else:
-            source_status = _format_label(norm_lbl)
+            source_status = _format_label(norm_lbl, is_vi=is_vi)
             if norm_lbl in ("verified", "resource"):
                 src_style = status_verified_style
             elif norm_lbl == "metadata_error":
@@ -1975,7 +2066,7 @@ def _generate_pdf_bytes(essay, verdicts: list, citations: list | None = None) ->
                 src_style = status_muted_style
 
         raw_map = getattr(v, "mapping_status", None) or "matched"
-        mapping_status = _format_mapping_status(raw_map)
+        mapping_status = _format_mapping_status(raw_map, is_vi=is_vi)
         map_style = (
             status_verified_style
             if raw_map == "matched"
@@ -2012,10 +2103,9 @@ def _generate_pdf_bytes(essay, verdicts: list, citations: list | None = None) ->
     ]
     for row_idx, v in enumerate(verdicts, 1):
         raw_lbl = _normalize_verdict_label(v)
-        status_label = _format_label(raw_lbl)
-        if raw_lbl in ("verified", "resource") or status_label in ("Verified", "Valid"):
+        if raw_lbl in ("verified", "resource"):
             verdict_table_styles.append(('TEXTCOLOR', (2, row_idx), (2, row_idx), colors.HexColor('#15803d')))
-        elif raw_lbl == "metadata_error" or status_label == "Metadata Error" or raw_lbl == "suspected_hallucination" or status_label in ("Suspected", "Suspected Hallucination"):
+        elif raw_lbl in ("metadata_error", "suspected_hallucination"):
             verdict_table_styles.append(('TEXTCOLOR', (1, row_idx), (2, row_idx), colors.HexColor('#dc2626')))
     verdict_table.setStyle(TableStyle(verdict_table_styles))
     elements.append(verdict_table)
@@ -2026,9 +2116,9 @@ def _generate_pdf_bytes(essay, verdicts: list, citations: list | None = None) ->
     return buffer.getvalue()
 
 
-def _pdf_response(filename: str, essay, verdicts: list) -> StreamingResponse:
+def _pdf_response(filename: str, essay, verdicts: list, *, lang: str = "en") -> StreamingResponse:
     """Generate PDF report with 2-layer analysis and Digital Verification Receipt."""
-    pdf_bytes = _generate_pdf_bytes(essay, verdicts)
+    pdf_bytes = _generate_pdf_bytes(essay, verdicts, lang=lang)
     return StreamingResponse(
         iter([pdf_bytes]),
         media_type="application/pdf",
@@ -2038,7 +2128,7 @@ def _pdf_response(filename: str, essay, verdicts: list) -> StreamingResponse:
     )
 
 
-def _docx_response(filename: str, essay, verdicts: list) -> StreamingResponse:
+def _docx_response(filename: str, essay, verdicts: list, *, lang: str = "en") -> StreamingResponse:
     """Generate DOCX report with 2-layer analysis."""
     # Compute statistics
     total = len(verdicts)
@@ -2118,6 +2208,7 @@ def _docx_response(filename: str, essay, verdicts: list) -> StreamingResponse:
         style_profile=style_profile,
         cis_weights=cis_weights_used,
         document_diagnostics=doc_diag,
+        lang=lang,
     )
 
     return StreamingResponse(
@@ -2134,8 +2225,10 @@ def _healed_docx_response(
     essay,
     verdicts: list,
     style: str = "apa",
+    *,
+    lang: str = "en",
 ) -> StreamingResponse:
-    """Generate an Auto-Healed Word (.docx) with repaired references & Before->After Change Log."""
+    """Generate a fixed Word (.docx) with updated references & Before->After Change Log."""
     verdict_list = []
     for v in verdicts:
         features_dict = _load_verdict_features(v)
@@ -2180,6 +2273,7 @@ def _healed_docx_response(
         verdicts=verdict_list,
         style=style,
         original_docx_path=orig_docx_path,
+        lang=lang,
     )
     stem = Path(filename or "essay").stem
     return StreamingResponse(
@@ -2193,28 +2287,53 @@ def _healed_docx_response(
     )
 
 
-def _format_label(label: str) -> str:
-    """Format validation label for display."""
-    labels = {
-        "verified": "Verified",
-        "metadata_error": "Metadata Error",
-        "suspected_hallucination": "Suspected",
-        "unresolved": "Unresolved",
-        "resource": "URL Resource",
-    }
-    return labels.get(label, label.title())
+def _format_label(label: str, *, is_vi: bool = False) -> str:
+    """Format validation label for neutral, plain-language display."""
+    labels = (
+        {
+            "verified": "Đã xác minh",
+            "metadata_error": "Sai lệch thông tin",
+            "suspected_hallucination": "Không tìm thấy nguồn",
+            "unresolved": "Cần kiểm tra thủ công",
+            "resource": "Nguồn Web / Văn bản",
+        }
+        if is_vi
+        else {
+            "verified": "Verified",
+            "metadata_error": "Details Mismatch",
+            "suspected_hallucination": "Source Not Found",
+            "unresolved": "Needs Manual Check",
+            "resource": "Web / Legal Source",
+        }
+    )
+    return labels.get(label, label.replace("_", " ").title())
 
 
-def _format_mapping_status(status: str) -> str:
+def _format_mapping_status(status: str, *, is_vi: bool = False) -> str:
     """Format mapping status for display."""
-    statuses = {
-        "matched": "Matched",
-        "missing_reference": "Missing Ref",
-        "uncited_reference": "Uncited Ref",
-        "in_text_mismatch": "Mismatch",
-        "duplicate_reference": "Duplicate",
-        "ambiguous_mapping": "Ambiguous",
-        "style_inconsistent": "Style Issue",
-        "unresolved": "Unresolved",
-    }
-    return statuses.get(status, status.title())
+    statuses = (
+        {
+            "matched": "Đã khớp",
+            "missing_reference": "Thiếu ở danh mục",
+            "uncited_reference": "Chưa trích dẫn",
+            "in_text_mismatch": "Lệch trích dẫn",
+            "duplicate_reference": "Trùng lặp",
+            "ambiguous_mapping": "Chưa rõ ràng",
+            "style_inconsistent": "Khác chuẩn",
+            "not_applicable": "Không áp dụng",
+            "unresolved": "Chưa đối chiếu",
+        }
+        if is_vi
+        else {
+            "matched": "Linked",
+            "missing_reference": "Missing from References",
+            "uncited_reference": "Not Cited in Text",
+            "in_text_mismatch": "In-Text Mismatch",
+            "duplicate_reference": "Duplicate",
+            "ambiguous_mapping": "Ambiguous",
+            "style_inconsistent": "Style Issue",
+            "not_applicable": "N/A",
+            "unresolved": "Needs Review",
+        }
+    )
+    return statuses.get(status, status.replace("_", " ").title())

@@ -1098,12 +1098,12 @@ def remediate_verdicts(
                 rendered["ieee"] = f"[{display_index}] {raw_preserved}"
                 rendered["remediated_text"] = rendered.get(normalized_style, raw_preserved)
             warn_comment = (
-                "% [CẢNH BÁO ĐỎ / SUSPECTED HALLUCINATION: Nguồn trích dẫn bịa đặt hoặc không tồn tại trong CSDL học thuật — Cần kiểm tra / loại bỏ]\n"
+                "% [NEEDS REVIEW / CẦN KIỂM TRA: Source not found in academic libraries — please verify against the original work]\n"
             )
             rendered["bibtex"] = warn_comment + rendered["bibtex"]
             rendered["ris"] = rendered["ris"].replace(
                 "ER  - ",
-                "N1  - [WARNING: SUSPECTED HALLUCINATION / UNVERIFIED SOURCE - REMOVE FROM MANUSCRIPT]\nER  - ",
+                "N1  - [NEEDS REVIEW: Source not found in academic libraries - please verify against the original work]\nER  - ",
             )
             if normalized_style == "bibtex":
                 rendered["remediated_text"] = rendered["bibtex"]

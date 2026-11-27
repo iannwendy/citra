@@ -716,7 +716,7 @@ class IntegrityPipeline:
                     f"Report cache HIT: {Path(pdf_path).name} "
                     f"(sha256={cache_key.removeprefix(_REPORT_CACHE_VERSION + '-')[:12]}...)"
                 )
-                _emit("done", 7, message="Loaded from cache")
+                _emit("done", 7, message="Loaded saved verification report")
                 return cached_report
 
         # 1. Parse PDF / DOCX / BibTeX / RIS
@@ -1021,23 +1021,23 @@ class IntegrityPipeline:
         )
 
         _source_display_names = {
-            "local_db": "ACL FTS5",
-            "known_papers": "Seminal",
+            "local_db": "Academic Library",
+            "known_papers": "Reference Catalog",
             "vn_legal": "VN Legal",
             "crossref": "Crossref",
             "openalex": "OpenAlex",
             "datacite": "DataCite",
             "doaj": "DOAJ",
             "openaire_hal": "OpenAIRE/HAL",
-            "ncbi_biorxiv": "NCBI/bioRxiv",
+            "ncbi_biorxiv": "PubMed/bioRxiv",
             "dblp": "DBLP",
             "arxiv": "arXiv",
-            "openlibrary": "OpenLibrary",
+            "openlibrary": "Open Library",
             "europepmc": "Europe PMC",
             "huggingface": "Hugging Face",
-            "tech_standard": "RFC/PyPI/NPM/GitHub",
+            "tech_standard": "Technical Standards",
             "wikidata_opencitations": "Wikidata/OpenCitations",
-            "doi_ra": "DOI RA",
+            "doi_ra": "DOI Registry",
             "serpapi": "Google Scholar",
         }
         _cit_found_cnt = len(in_text_citations) or len(all_citations)
@@ -1074,8 +1074,8 @@ class IntegrityPipeline:
                 references_found=_ref_found_cnt,
                 sources_queried=dict(partial_status),
                 message=(
-                    f"Querying academic databases ({min(done_n, total_n)}/{total_n} papers)... "
-                    f"{sum(partial_hits.values())} hits across {len(partial_status)} databases"
+                    f"Checking academic libraries ({min(done_n, total_n)}/{total_n} papers)... "
+                    f"{sum(partial_hits.values())} matches across {len(partial_status)} libraries"
                 ),
             )
 
@@ -1170,7 +1170,7 @@ class IntegrityPipeline:
             "comparing",
             5,
             sources_queried=_src_status,
-            message=f"Compared {_total_hits} source hits across {len(_src_status)} databases{_hit_breakdown}",
+            message=f"Matched {_total_hits} records across {len(_src_status)} academic libraries{_hit_breakdown}",
         )
 
         accepted = inspect.signature(self.checker.check).parameters
@@ -1436,8 +1436,8 @@ class IntegrityPipeline:
                         5,
                         sources_queried=_src_status,
                         message=(
-                            f"Compared candidate metadata & neural evidence for "
-                            f"{pair_idx}/{len(staged_verdict_inputs)} citations{_hit_breakdown}"
+                            f"Comparing citation details and context against matched sources "
+                            f"({pair_idx}/{len(staged_verdict_inputs)} citations){_hit_breakdown}"
                         ),
                     )
 
@@ -1454,13 +1454,13 @@ class IntegrityPipeline:
                 )
             )
 
-        # Step 07/08 (checking): Apply 30 neuro-symbolic rules & Platt calibration
+        # Step 07/08 (checking): Evaluate verification results
         _emit(
             "checking",
             6,
             citations_found=len(in_text_citations) or len(verdict_pairs),
             references_found=len(ref_citations) or len(verdict_pairs),
-            message=f"Applying 30 neuro-symbolic rules & Platt calibration to {len(verdict_pairs)} citations...",
+            message=f"Evaluating verification results for {len(verdict_pairs)} citations...",
         )
 
         verdicts: list[CitationVerdict] = []
@@ -1570,7 +1570,7 @@ class IntegrityPipeline:
             6,
             citations_found=len(in_text_citations) or len(verdicts),
             references_found=len(ref_citations) or len(verdicts),
-            message=f"Applied verification rules to {len(verdicts)} citations",
+            message=f"Completed verification checks for {len(verdicts)} citations",
         )
 
         # Step 08/08 (scoring): Linking summary + CIS calculation + report generation

@@ -126,9 +126,10 @@ def test_auto_healed_docx_export_and_in_place_remediation(tmp_path: Path) -> Non
 
     reopened = WordDocument(io.BytesIO(healed_bytes))
     full_text = "\n".join(p.text for p in reopened.paragraphs)
-    assert "Auto-Healed by CITRA" in full_text
+    assert "Updated by CITRA" in full_text
     assert "2017" in full_text
-    assert "HALLUCINATION" in full_text
+    assert "NEEDS REVIEW — SOURCE NOT FOUND" in full_text
+    assert "HALLUCINATION" not in full_text
     assert len(reopened.tables) >= 1  # Before -> After Change Log table
 
 

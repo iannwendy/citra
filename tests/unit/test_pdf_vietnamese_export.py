@@ -87,7 +87,7 @@ def test_generate_pdf_bytes_preserves_vietnamese_nfc_and_nfd_and_colors_status()
         assert "mô phỏng lời/lỗ trước khi giảm giá" in full_text
         assert "Chế độ Xả phòng Đêm 1-chạm" in full_text
 
-        # Verify Source Status 'Suspected' has non-black semantic red text color while Citation Raw stays readable dark slate
+        # Verify Source Status 'Source Not Found' has non-black semantic red text color while Citation stays readable dark slate
         spans = [
             s
             for page in doc
@@ -95,8 +95,12 @@ def test_generate_pdf_bytes_preserves_vietnamese_nfc_and_nfd_and_colors_status()
             for line in b.get("lines", [])
             for s in line.get("spans", [])
         ]
-        suspected_spans = [s for s in spans if s["text"].strip() == "Suspected"]
-        assert suspected_spans, "Expected 'Suspected' status cell in PDF"
-        assert suspected_spans[0]["color"] != 0, "Expected 'Suspected' status text to be colored, not pure black 0x000000"
+        not_found_spans = [
+            s for s in spans if s["text"].strip() in ("Source Not Found", "Source Not")
+        ]
+        assert not_found_spans, "Expected 'Source Not Found' status cell in PDF"
+        assert any(s["color"] != 0 for s in not_found_spans), (
+            "Expected 'Source Not Found' status cell text to be colored red, not pure black 0x000000"
+        )
     finally:
         doc.close()

@@ -43,7 +43,7 @@ def _export(**kwargs) -> bytes:
 def test_default_labels_match_settings_weights():
     weights = _weight_column(_export())
     assert list(weights.values()) == ["35%", "25%", "25%", "10%", "5%"]
-    assert weights["In-Text ↔ Bibliography Consistency (Layer 1)"] == "25%"
+    assert weights["In-Text & Bibliography Match"] == "25%"
     assert weights["Identifier Validity (DOI / CrossRef)"] == "5%"
 
 

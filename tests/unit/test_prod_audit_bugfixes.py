@@ -642,9 +642,9 @@ def test_bug25_bug07_sandbox_gibberish_not_applicable_vn_legal_and_fabricated_do
         assert "R-FABRICATED-DOI" in r_doi_en["triggered_rules"]
         assert r_doi_en["label"] == "suspected_hallucination"
         assert "10.9999/fake.doi.2024" in r_doi_en["reasoning"]
-        assert "fabricated or placeholder doi" in r_doi_en["reasoning"].lower()
+        assert "invalid or placeholder doi" in r_doi_en["reasoning"].lower()
         assert "10.9999/fake.doi.2024" in r_doi_en["reasoning_vi"]
-        assert "ngụy tạo" in r_doi_en["reasoning_vi"].lower()
+        assert "không hợp lệ" in r_doi_en["reasoning_vi"].lower()
 
         resp_doi_vi = client.post(
             "/api/essays/sandbox/verify",
@@ -652,8 +652,8 @@ def test_bug25_bug07_sandbox_gibberish_not_applicable_vn_legal_and_fabricated_do
         )
         assert resp_doi_vi.status_code == 200, resp_doi_vi.text
         r_doi_vi = resp_doi_vi.json()["results"][0]
-        assert "ngụy tạo" in r_doi_vi["reasoning"].lower()
-        assert "fabricated or placeholder doi" in r_doi_vi["reasoning_en"].lower()
+        assert "không hợp lệ" in r_doi_vi["reasoning"].lower()
+        assert "invalid or placeholder doi" in r_doi_vi["reasoning_en"].lower()
 
         # 4. VN Legal citations respect lang='en' and return bilingual EN & VI explanations
         vn_legal_valid = "Quốc hội (2020). Luật Doanh nghiệp số 59/2020/QH14 ban hành ngày 17/06/2020."
@@ -676,9 +676,10 @@ def test_bug25_bug07_sandbox_gibberish_not_applicable_vn_legal_and_fabricated_do
         assert resp_law_fab_en.status_code == 200, resp_law_fab_en.text
         r_law_fab = resp_law_fab_en.json()["results"][0]
         assert "R-VN-LEGAL-FABRICATED" in r_law_fab["triggered_rules"]
-        assert "Suspected fabricated Vietnamese legal document" in r_law_fab["reasoning"]
+        assert "Unverified Vietnamese legal document" in r_law_fab["reasoning"]
         assert "Phát hiện sai lệch" not in r_law_fab["reasoning"]
         assert "Phát hiện sai lệch" in r_law_fab["reasoning_vi"]
+        assert "bịa đặt" not in r_law_fab["reasoning_vi"].lower()
     finally:
         app.dependency_overrides.pop(deps.get_pipeline, None)
         app.dependency_overrides.pop(deps.get_current_user, None)

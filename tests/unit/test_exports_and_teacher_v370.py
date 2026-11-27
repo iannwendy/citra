@@ -734,9 +734,9 @@ async def test_docx_exports_composite_siblings_tdtu_style_and_honest_badges(
     assert "TDTU" in para_text
 
     # Honest status badges in Change Log table (unresolved/incomplete/resource NEVER stamped VERIFIED)
-    assert "[INCOMPLETE METADATA — MANUAL COMPLETION REQUIRED]" in table_text
-    assert "[UNRESOLVED — MANUAL CHECK]" in table_text
-    assert "[WEB / STATUTORY RESOURCE]" in table_text
+    assert "[INCOMPLETE DETAILS — MANUAL COMPLETION NEEDED]" in table_text
+    assert "[NEEDS MANUAL CHECK]" in table_text
+    assert "[WEB / LEGAL SOURCE]" in table_text
 
     # Verify export-healed-docx route accepts style="TDTU" case-insensitively and rejects invalid style
     pro_user = User(
@@ -807,10 +807,11 @@ async def test_docx_exports_composite_siblings_tdtu_style_and_honest_badges(
         cell.text for tbl in audit_doc.tables for row in tbl.rows for cell in row.cells
     )
     assert "[14a]" in audit_full_text
-    assert "INCOMPLETE METADATA" in audit_full_text
-    assert "UNRESOLVED" in audit_full_text
-    assert "RESOURCE" in audit_full_text
-    assert "MuPdfParser+OCR" in audit_full_text
+    assert "Incomplete Details" in audit_full_text
+    assert "Needs Manual Check" in audit_full_text
+    assert "Web / Legal Source" in audit_full_text
+    assert "OCR" in audit_full_text
+    assert "MuPdfParser" not in audit_full_text
     assert "TCVN3" in audit_full_text
     assert "Archived NeurIPS Paper" in audit_full_text
 
@@ -908,8 +909,8 @@ async def test_pdf_vietnamese_unicode_rendering_and_csv_composite_label() -> Non
     assert "Giáo trình Đại học Tôn Đức Thắng" in extracted_text
     assert "Nghị định 356/2025/NĐ-CP" in extracted_text
     assert "[14a]" in extracted_text
-    assert "Incomplete Metadata" in extracted_text
-    assert "Resource" in extracted_text
+    assert "Incomplete Details" in extracted_text
+    assert "Web / Legal Source" in extracted_text
     assert "TCVN3" in extracted_text
 
     csv_resp = _csv_response("Luận_văn.pdf", verdicts)

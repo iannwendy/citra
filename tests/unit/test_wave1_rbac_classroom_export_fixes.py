@@ -239,8 +239,9 @@ def test_cross_user_pdf_preview_rglob_blocked_and_decision_support_virtual_badge
 
     preview_src = inspect.getsource(essays_route.get_essay_page_preview)
     assert "rglob" not in preview_src
-    assert "NGHI VẤN NGUỒN BỊA ĐẶT" in preview_src
-    assert "[NGUỒN BỊA ĐẶT /" not in preview_src
+    assert "CHƯA TÌM THẤY NGUỒN" in preview_src
+    assert "BỊA ĐẶT" not in preview_src
+    assert "HALLUCINATION" not in preview_src
 
 
 def test_sandbox_generate_pdf_sanitizes_custom_filename_rfc5987_and_renders_vietnamese_unicode(

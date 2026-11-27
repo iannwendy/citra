@@ -349,7 +349,7 @@ class TestPipelineWithDocumentParser:
         msg = comparing_events[0][2]["message"]
         assert "{" not in msg
         assert "'local_db'" not in msg
-        assert msg == "Compared 3 source hits across 2 databases (ACL FTS5: 2 · OpenAlex: 1)"
+        assert msg == "Matched 3 records across 2 academic libraries (Academic Library: 2 · OpenAlex: 1)"
 
     @pytest.mark.asyncio
     async def test_pipeline_forwards_step1_sub_progress_for_real_document_parser_and_preserves_mocks(
@@ -428,7 +428,7 @@ class TestPipelineWithDocumentParser:
         )
         step1_msgs = [e[2]["message"] for e in emitted if e[0] == "parsing"]
         assert step1_msgs[0] == "Parsing PDF structure..."
-        assert any("Using regex parser" in m for m in step1_msgs)
+        assert any("Using standard document text reader" in m for m in step1_msgs)
 
         # Spec'd MagicMock with progress_callback=None must still receive exact 1-arg call
         spec_mock = MagicMock(spec=DocumentParser)

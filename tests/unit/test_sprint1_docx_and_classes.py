@@ -328,5 +328,6 @@ def test_rich_docx_exporter_includes_cis_components_and_trace() -> None:
     doc = WordDocument(BytesIO(docx_bytes))
     all_text = "\n".join(p.text for p in doc.paragraphs)
     assert "5-Component CIS Formula Breakdown" in all_text
-    assert "Neuro-Symbolic Diagnostic Trace & Evidence" in all_text
+    assert "Verification Summary & Evidence" in all_text
+    assert "Neuro-Symbolic Diagnostic Trace & Evidence" not in all_text
     assert "The Transformer is the first transduction model" in all_text
