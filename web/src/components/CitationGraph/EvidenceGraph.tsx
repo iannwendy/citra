@@ -489,10 +489,11 @@ export function buildEvidenceGraph(
     }
     if (f.citation_intent || f.stance_label || hasCrossLingual) {
       const stance = f.stance_label || 'supported';
+      const isUnconfirmedStance = isSourceNotFound || verdict.label === 'unresolved';
       const stanceStatus: GraphNode['status'] =
         stance === 'contradiction_risk'
           ? 'error'
-          : stance === 'partially_supported' || isSourceNotFound
+          : stance === 'partially_supported' || isUnconfirmedStance
             ? 'warning'
             : 'success';
       similarityChildren.push({
@@ -504,7 +505,11 @@ export function buildEvidenceGraph(
           f.citation_intent
             ? `${isVi ? 'Vai trò trích dẫn' : 'Citation role'}: ${formatIntentLabel(f.citation_intent, resolvedLang)}`
             : null,
-          `${isVi ? 'Mức độ phù hợp' : 'Support check'}: ${formatStanceLabel(stance, resolvedLang)}`,
+          isUnconfirmedStance
+            ? isVi
+              ? 'Chưa thể đối chiếu (chưa có nguồn khớp xác nhận)'
+              : 'Not evaluated (no confirmed source match)'
+            : `${isVi ? 'Mức độ phù hợp' : 'Support check'}: ${formatStanceLabel(stance, resolvedLang)}`,
           hasCrossLingual
             ? bridgedConcepts.length > 0
               ? `${isVi ? 'Thuật ngữ Việt ↔ Anh' : 'VI ↔ EN terms'}: ${bridgedConcepts.slice(0, 3).join('; ')}`

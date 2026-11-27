@@ -180,7 +180,9 @@ function buildTraceSteps(verdict: Verdict, lang: 'vi' | 'en'): TraceStep[] {
         : `Citation role: ${formatTaxonomyIntent(f.citation_intent, lang)}`,
     );
   }
-  if (f?.stance_label) {
+  const isUnconfirmedVerdict =
+    verdict.label === 'suspected_hallucination' || verdict.label === 'unresolved';
+  if (f?.stance_label && !isUnconfirmedVerdict) {
     featureParts.push(
       lang === 'vi'
         ? `Mức độ phù hợp: ${formatTaxonomyStance(f.stance_label, lang)}`
@@ -556,8 +558,11 @@ export function NeuralAlignmentPanel({
         ? 'bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-950/70 dark:text-violet-300 dark:border-violet-800'
         : 'bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/70 dark:text-sky-300 dark:border-sky-800';
 
-  const stanceBadgeStyle =
-    stance === 'supported'
+  const isUnconfirmedSource =
+    verdict.label === 'suspected_hallucination' || verdict.label === 'unresolved';
+  const stanceBadgeStyle = isUnconfirmedSource
+    ? 'bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/70 dark:text-amber-300 dark:border-amber-800'
+    : stance === 'supported'
       ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/70 dark:text-emerald-300 dark:border-emerald-800'
       : stance === 'partially_supported'
         ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/70 dark:text-amber-300 dark:border-amber-800'
@@ -623,7 +628,11 @@ export function NeuralAlignmentPanel({
             <span
               className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold border ${stanceBadgeStyle}`}
             >
-              {formatStanceLabel(stance)}
+              {isUnconfirmedSource
+                ? lang === 'vi'
+                  ? 'Chưa có nguồn xác nhận'
+                  : 'No confirmed source'
+                : formatStanceLabel(stance)}
             </span>
           )}
           {hasCrossLingual && (
@@ -661,7 +670,7 @@ export function NeuralAlignmentPanel({
             val: abstractSim,
           },
           {
-            label: lang === 'vi' ? 'Độ khớp câu bằng chứng' : 'Best Supporting Passage',
+            label: lang === 'vi' ? 'Độ khớp dẫn chứng' : 'Supporting Passage',
             val: evidenceSim || alignScore,
           },
         ].map((metric) => {

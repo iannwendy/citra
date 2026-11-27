@@ -492,25 +492,25 @@ export function AccountManagementPage() {
           <Table className="block lg:table">
             <TableHeader className="hidden lg:table-header-group">
               <TableRow className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
-                <TableHead className="text-left py-3 px-2.5 xl:px-3 text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap">
+                <TableHead className="text-left py-3 px-2 xl:px-2.5 text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap">
                   {t('admin.tableUser')}
                 </TableHead>
-                <TableHead className="text-left py-3 px-2.5 xl:px-3 text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap">
+                <TableHead className="text-left py-3 px-2 xl:px-2.5 text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap">
                   {t('admin.tableRole')}
                 </TableHead>
-                <TableHead className="text-left py-3 px-2.5 xl:px-3 text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap">
+                <TableHead className="text-left py-3 px-2 xl:px-2.5 text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap">
                   {lang === 'vi' ? 'Gói & lượt kiểm tra' : 'Plan & Usage'}
                 </TableHead>
-                <TableHead className="text-left py-3 px-2.5 xl:px-3 text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap">
+                <TableHead className="text-left py-3 px-2 xl:px-2.5 text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap">
                   {t('admin.tableStatus')}
                 </TableHead>
-                <TableHead className="text-left py-3 px-2.5 xl:px-3 text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap">
+                <TableHead className="text-left py-3 px-2 xl:px-2.5 text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap">
                   {institutionColumnLabel}
                 </TableHead>
-                <TableHead className="text-left py-3 px-2.5 xl:px-3 min-w-[140px] text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap">
+                <TableHead className="text-left py-3 px-2 xl:px-2.5 text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap">
                   {lang === 'vi' ? 'Đăng nhập gần nhất' : 'Last Sign-In'}
                 </TableHead>
-                <TableHead className="lg:sticky lg:right-0 bg-slate-50 dark:bg-slate-800/95 text-right py-3 px-2.5 xl:px-3 text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap">
+                <TableHead className="lg:sticky lg:right-0 bg-slate-50 dark:bg-slate-800/95 text-right py-3 px-2 xl:px-2.5 text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap">
                   {t('admin.tableActions')}
                 </TableHead>
               </TableRow>
@@ -545,7 +545,7 @@ export function AccountManagementPage() {
                     key={u.id}
                     className="group flex flex-col lg:table-row p-4 lg:p-0 gap-2.5 lg:gap-0 hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors"
                   >
-                    <TableCell className="block lg:table-cell p-0 lg:py-3 lg:px-2.5 xl:px-3 lg:max-w-[230px] xl:max-w-[260px]">
+                    <TableCell className="block lg:table-cell p-0 lg:py-3 lg:px-2 xl:px-2.5 lg:max-w-[195px] xl:max-w-[215px]">
                       <div className="flex items-center gap-2.5 min-w-0">
                         <div className="w-8 h-8 rounded-xl overflow-hidden bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200/70 dark:border-indigo-800/70 flex items-center justify-center shrink-0 text-xs font-bold text-indigo-700 dark:text-indigo-300 uppercase">
                           {u.avatar_url ? (
@@ -636,33 +636,33 @@ export function AccountManagementPage() {
                       </div>
                     </TableCell>
 
-                    <TableCell className="flex lg:table-cell items-center justify-between gap-2 p-0 lg:py-3 lg:px-3 xl:px-3.5 whitespace-nowrap">
+                    <TableCell className="flex lg:table-cell items-center justify-between gap-2 p-0 lg:py-3 lg:px-2 xl:px-2.5 whitespace-nowrap">
                       <span className="lg:hidden text-[11px] font-mono uppercase text-slate-400">
                         {t('admin.tableStatus')}
                       </span>
                       <StatusBadge active={u.is_active} />
                     </TableCell>
 
-                    <TableCell className="flex lg:table-cell items-center justify-between gap-2 p-0 lg:py-3 lg:px-2.5 xl:px-3 text-xs text-slate-600 dark:text-slate-300 lg:max-w-[140px] xl:max-w-[175px]">
+                    <TableCell className="flex lg:table-cell items-center justify-between gap-2 p-0 lg:py-3 lg:px-2 xl:px-2.5 text-xs text-slate-600 dark:text-slate-300 lg:max-w-[125px] xl:max-w-[140px]">
                       <span className="lg:hidden text-[11px] font-mono uppercase text-slate-400 shrink-0">
                         {institutionColumnLabel}
                       </span>
                       <span
                         title={u.institution ?? undefined}
-                        className="truncate block max-w-[200px] lg:max-w-[135px] xl:max-w-[168px]"
+                        className="truncate block max-w-[200px] lg:max-w-[120px] xl:max-w-[134px]"
                       >
                         {u.institution ?? '—'}
                       </span>
                     </TableCell>
 
-                    <TableCell className="flex lg:table-cell items-center justify-between gap-2 p-0 lg:py-3 lg:px-2.5 xl:px-3 lg:min-w-[140px] text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap font-mono tabular-nums">
+                    <TableCell className="flex lg:table-cell items-center justify-between gap-2 p-0 lg:py-3 lg:px-2 xl:px-2.5 text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap font-mono tabular-nums">
                       <span className="lg:hidden text-[11px] font-mono uppercase text-slate-400 font-sans">
                         {lang === 'vi' ? 'Đăng nhập gần nhất' : 'Last Sign-In'}
                       </span>
                       <span className="whitespace-nowrap">{formattedLogin}</span>
                     </TableCell>
 
-                    <TableCell className="block lg:table-cell lg:sticky lg:right-0 bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800/60 p-0 pt-2 lg:pt-0 border-t border-slate-100 dark:border-slate-800/80 lg:border-0 lg:py-3 lg:px-2.5 xl:px-3 whitespace-nowrap">
+                    <TableCell className="block lg:table-cell lg:sticky lg:right-0 bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800/60 p-0 pt-2 lg:pt-0 border-t border-slate-100 dark:border-slate-800/80 lg:border-0 lg:py-3 lg:px-2 xl:px-2.5 whitespace-nowrap">
                       <div className="flex items-center justify-end gap-1.5">
                         <button
                           type="button"
