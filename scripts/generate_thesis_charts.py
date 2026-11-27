@@ -5,12 +5,13 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-import numpy as np
+
 import matplotlib
+import numpy as np
 
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt
 import matplotlib.patheffects as pe
+import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 from matplotlib.ticker import FuncFormatter
 
@@ -117,7 +118,7 @@ def make_fig5_1(data: dict, lang: str, out_path: Path) -> None:
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
 
-    for idx_r, (ac, f1) in enumerate(zip(accs, f1s)):
+    for idx_r, (ac, f1) in enumerate(zip(accs, f1s, strict=True)):
         fw = "bold" if idx_r == len(rows) - 1 else "normal"
         col = EMERALD_DARK if idx_r == len(rows) - 1 else "#1E293B"
         ax.text(ac + 1.4, idx_r + h / 2, f"{ac:.2f}%", va="center", ha="left", fontsize=7.9, fontweight=fw, color=col)
@@ -390,7 +391,7 @@ def make_fig5_2(lang: str, out_path: Path) -> None:
         va="bottom",
     )
 
-    for xi, (p90, rss) in enumerate(zip(p90_tot, rss_mb)):
+    for xi, (p90, rss) in enumerate(zip(p90_tot, rss_mb, strict=True)):
         x_txt = xi + (0.12 if xi == 0 else 0.0)
         ax.text(x_txt, p90 + 190, f"P90: {p90:,.0f} ms\n({rss:,} MB)", ha="center", va="bottom", fontsize=7.4, fontweight="bold", color="#0F172A")
 
@@ -445,7 +446,7 @@ def make_fig5_2(lang: str, out_path: Path) -> None:
     )
 
     halo = [pe.withStroke(linewidth=2.4, foreground="white")]
-    for xi, cm_v, wm_v, g in zip(xb, cold_ms, warm_ms, gains):
+    for xi, cm_v, wm_v, g in zip(xb, cold_ms, warm_ms, gains, strict=True):
         # Print orange bar values VERTICALLY centered INSIDE top of orange bars -> 100% enclosed, ZERO SLA collision!
         ax.text(xi - wb / 2, cm_v * 0.36, f"{cm_v/1000:.1f}s", ha="center", va="center", rotation=90, fontsize=7.2, fontweight="bold", color="white", zorder=6)
         w_txt = f"{wm_v:.0f}" if wm_v < 1000 else f"{wm_v/1000:.1f}s"

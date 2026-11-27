@@ -8,7 +8,6 @@ from __future__ import annotations
 import json
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 ICONS: dict[str, str] = json.loads((REPO_ROOT / "scripts" / "drawio_official_icons.json").read_text(encoding="utf-8"))
@@ -402,7 +401,7 @@ class DiagramBuilder:
         if dst_pt:
             ET.SubElement(geom, "mxPoint", x=str(dst_pt[0]), y=str(dst_pt[1]), **{"as": "targetPoint"})
         if pts:
-            for (x1, y1), (x2, y2) in zip(pts, pts[1:]):
+            for (x1, y1), (x2, y2) in zip(pts, pts[1:], strict=False):
                 minor = min(abs(x2 - x1), abs(y2 - y1))
                 assert not (0.05 < minor < 3.0), f"{self.name} edge {cid}: near-orthogonal kink {x1,y1}->{x2,y2}"
             arr = ET.SubElement(geom, "Array", **{"as": "points"})
@@ -450,7 +449,8 @@ class DiagramBuilder:
 
 def build_fig2_1(vn: bool) -> DiagramBuilder:
     d = DiagramBuilder("p21", "fig2_1_verification_paradigm", 800, 586)
-    t = lambda en, vi: vi if vn else en
+    def t(en: str, vi: str) -> str:
+        return vi if vn else en
 
     # Top Input Strip
     inp = d.card(
@@ -648,7 +648,8 @@ def build_fig2_1(vn: bool) -> DiagramBuilder:
 def build_fig3_1(vn: bool) -> DiagramBuilder:
     """True UML 2.5 Use Case Diagram strictly aligned 1:1 with Tables 3.3–3.7 (UC-01..UC-05), «include» + «extend», v3.90.10."""
     d = DiagramBuilder("p31", "fig3_1_roles", 820, 770)
-    t = lambda en, vi: vi if vn else en
+    def t(en: str, vi: str) -> str:
+        return vi if vn else en
 
     # System Boundary
     d.box(164, 12, 462, 744, "", fill="#F8FAFC", stroke="#1E3A8A", sw=1.8, rounded=1, arc=4)
@@ -756,7 +757,8 @@ def build_fig3_1(vn: bool) -> DiagramBuilder:
 def build_fig3_2(vn: bool) -> DiagramBuilder:
     """True UML 2.5 Sequence Diagram with Activation Bars, exact live HTTP 200 /events & POST override, UC-03, and 3-operand alt."""
     d = DiagramBuilder("p32", "fig3_2_workflow", 812, 836)
-    t = lambda en, vi: vi if vn else en
+    def t(en: str, vi: str) -> str:
+        return vi if vn else en
 
     xs = [68, 200, 336, 472, 608, 740]
     hdr_y = 12
@@ -802,7 +804,7 @@ def build_fig3_2(vn: bool) -> DiagramBuilder:
         ("GROBID +\n15 APIs", "#FEF3C7", "#B45309"),
         ("SQLite WAL\n(app.db)", "#F5F3FF", "#6D28D9"),
     ]
-    for lx, (hlbl, hfill, hstr) in zip(xs, headers):
+    for lx, (hlbl, hfill, hstr) in zip(xs, headers, strict=True):
         d.box(lx - 58, hdr_y, 116, hdr_h, hlbl, fill=hfill, stroke=hstr, sw=1.5, font_size=13, bold=True)
 
     d.box(14, 82, 424, 24, t("<b>(a) Async Upload, Background Queue &amp; SSE (UC-01)</b>", "<b>(a) Tải lên bất đồng bộ, Hàng đợi &amp; SSE (UC-01)</b>"), fill="#DBEAFE", stroke="#1E3A8A", sw=1.1, font_size=13, align="left", arc=4)
@@ -869,7 +871,8 @@ def build_fig3_2(vn: bool) -> DiagramBuilder:
 def build_fig3_3(vn: bool) -> DiagramBuilder:
     """Complete 15-Table Crow's Foot ERD matching src/integrity_checker/db/models.py 1:1 (ZERO hallucinated tables!)."""
     d = DiagramBuilder("p33", "fig3_3_data_model", 820, 910)
-    t = lambda en, vi: vi if vn else en
+    def t(en: str, vi: str) -> str:
+        return vi if vn else en
 
     # Band 1: Identity, Auth & API Keys (4 real ORM tables)
     d.box(24, 8, 784, 152, "", fill="#F8FAFC", stroke="#1E3A8A", sw=1.4, dashed=1)
@@ -901,7 +904,7 @@ def build_fig3_3(vn: bool) -> DiagramBuilder:
         hdr_fill="#B45309",
         stroke="#B45309",
     )
-    t_cache = d.erd_table(628, 352, 168, "9. citation_cache", ["<b>PK</b> id · cache_key (UQ)", "source · raw_response", "hit_count · last_hit_at"], hdr_fill="#0369A1", stroke="#0369A1")
+    d.erd_table(628, 352, 168, "9. citation_cache", ["<b>PK</b> id · cache_key (UQ)", "source · raw_response", "hit_count · last_hit_at"], hdr_fill="#0369A1", stroke="#0369A1")
 
     # Clean internal Band-2 FK edges (zero border overlaps!)
     d.edge(t_essays, t_cit, "1:N", ex=1, ey=0.45, nx=0, ny=0.45, start_arrow="ERmandOne", end_arrow="ERzeroToMany", stroke="#059669", oy=-12)
@@ -922,7 +925,7 @@ def build_fig3_3(vn: bool) -> DiagramBuilder:
 
     t_promo = d.erd_table(36, 646, 210, "13. promo_codes", ["<b>PK</b> id · code (UQ)", "discount_type/value · is_active", "used_count · <b>FK</b> created_by"], hdr_fill="#6D28D9", stroke="#6D28D9")
     t_red = d.erd_table(298, 646, 232, "14. promo_redemptions", ["<b>PK</b> id · <b>FK</b> promo_code_id", "<b>FK</b> user_id · <b>FK</b> transaction_id", "code · discount_usd · redeemed_at"], hdr_fill="#7C3AED", stroke="#7C3AED")
-    t_mig = d.erd_table(562, 646, 234, "15. schema_migrations", ["<b>PK</b> version (0001..0013)", "name · checksum (SHA-256)", "execution_ms · applied_at"], hdr_fill="#475569", stroke="#475569")
+    d.erd_table(562, 646, 234, "15. schema_migrations", ["<b>PK</b> version (0001..0013)", "name · checksum (SHA-256)", "execution_ms · applied_at"], hdr_fill="#475569", stroke="#475569")
 
     d.edge(t_cls, t_mem, "1:N", ex=1, ey=0.5, nx=0, ny=0.5, start_arrow="ERmandOne", end_arrow="ERzeroToMany", stroke="#0F766E", oy=-12)
     # Route classes (0..1:N) -> essays cleanly up the open left corridor x=62 (100% clear of yellow note at x=98..384!)
@@ -978,7 +981,8 @@ def build_fig3_3(vn: bool) -> DiagramBuilder:
 def build_fig3_4(vn: bool) -> DiagramBuilder:
     """True UML 2.5 Deployment Diagram: exact docker-compose names (integrity-web, essay-check-grobid), volumes, clean SSRF vs Payments."""
     d = DiagramBuilder("p34", "fig3_4_deployment", 820, 742)
-    t = lambda en, vi: vi if vn else en
+    def t(en: str, vi: str) -> str:
+        return vi if vn else en
 
     # 1. Left Node: Client Device
     c_cli = d.cube(10, 152, 154, 170, t("«device»\nClient Browser", "«device»\nTrình duyệt"), fill="#EFF6FF", stroke="#1E3A8A")
@@ -1085,7 +1089,8 @@ def build_fig3_4(vn: bool) -> DiagramBuilder:
 def build_fig4_1(vn: bool) -> DiagramBuilder:
     """8-Layer Pipeline Architecture (zero title crossings, MatchFeatures on connector, DOCX/PDF/JSON/BibTeX/RIS, clean VN)."""
     d = DiagramBuilder("p41", "fig4_1_architecture", 812, 668)
-    t = lambda en, vi: vi if vn else en
+    def t(en: str, vi: str) -> str:
+        return vi if vn else en
 
     inp = d.card(
         186,
@@ -1115,7 +1120,7 @@ def build_fig4_1(vn: bool) -> DiagramBuilder:
     d.edge(l2, l3, ex=1, ey=0.5, nx=0, ny=0.5, stroke="#1D4ED8")
     d.edge(l3, l4, ex=1, ey=0.5, nx=0, ny=0.5, stroke="#047857")
 
-    p2_box = d.box(16, 326, 780, 224, "", fill="#F0FDF4", stroke="#059669", sw=1.3, dashed=1)
+    d.box(16, 326, 780, 224, "", fill="#F0FDF4", stroke="#059669", sw=1.3, dashed=1)
     d.text(28, 330, 756, 22, t("Phase II: Multimodal Matching, Neuro-Symbolic Verification, Scoring &amp; Delivery (Layers 5–8)", "Giai đoạn II: So khớp đa phương thức, Kiểm chứng Nơ-ron–Ký hiệu &amp; Giao diện (Tầng 5–8)"), font_size=13, font_color="#065F46", bold=True, align="left")
 
     l5 = d.card(26, 376, 168, 156, t("L5. Matching", "T5. So khớp"), t("RapidFuzz + SBERT<br/>Author 1-1 + Venue<br/>+ Context &amp; VI↔EN<br/>→ <b>MatchFeatures</b>", "RapidFuzz + SBERT<br/>Tác giả + Nơi công bố<br/>+ Ngữ cảnh &amp; VI↔EN<br/>→ <b>MatchFeatures</b>"), icon_key="neural", fill="#FFFFFF", stroke="#059669", title_color="#065F46")
@@ -1164,7 +1169,8 @@ def build_fig4_1(vn: bool) -> DiagramBuilder:
 def build_fig4_2(vn: bool) -> DiagramBuilder:
     """Layer 1 & 2 Ingestion & Extraction — EXACT 11 CitationFormat Protocol implementations from patterns/*.py + VN Legal."""
     d = DiagramBuilder("p42", "fig4_2_extraction", 780, 566)
-    t = lambda en, vi: vi if vn else en
+    def t(en: str, vi: str) -> str:
+        return vi if vn else en
 
     in_pdf = d.card(80, 14, 260, 58, t("Academic PDF Input", "Tệp PDF học thuật"), t("Digital or Scanned Manuscript", "Bản thảo số hoặc bản quét OCR"), icon_key="doc_pdf", fill="#EFF6FF", stroke="#1E3A8A", title_color="#1E3A8A")
     in_str = d.card(440, 14, 260, 58, t("Structured Inputs", "Đầu vào có cấu trúc"), "DOCX · BibTeX (.bib) · RIS", icon_key="multifile", fill="#F5F3FF", stroke="#6D28D9", title_color="#5B21B6")
@@ -1233,7 +1239,8 @@ def build_fig4_2(vn: bool) -> DiagramBuilder:
 def build_fig4_3(vn: bool) -> DiagramBuilder:
     """Bidirectional Citation Linking: exact live Jaccard+difflib, POST override route, collector rail from Tiers 1-6, all 8 statuses."""
     d = DiagramBuilder("p43", "fig4_3_linking", 800, 678)
-    t = lambda en, vi: vi if vn else en
+    def t(en: str, vi: str) -> str:
+        return vi if vn else en
 
     i1a = d.card(36, 12, 336, 60, t("1A. Inline Body Markers", "1A. Ký hiệu trích dẫn nội văn"), t("[1], [1–3], [14a, 14b], (Author, 2020a)", "[1], [1–3], [14a, 14b], (Tác giả, 2020a)"), icon_key="doc_pdf", fill="#EFF6FF", stroke="#1E3A8A", title_color="#1E3A8A")
     i1b = d.card(428, 12, 336, 60, t("1B. Bibliography Entries", "1B. Mục danh mục tham khảo"), t("Structured ReferenceList[] + TEI xml:id", "Danh mục tham khảo có cấu trúc + TEI xml:id"), icon_key="multifile", fill="#ECFDF5", stroke="#047857", title_color="#065F46")
@@ -1312,7 +1319,8 @@ def build_fig4_3(vn: bool) -> DiagramBuilder:
 def build_fig4_4(vn: bool) -> DiagramBuilder:
     """4-Tier Retrieval Waterfall: removes '(All Labeled)' leak, Sub-100 ms (87.6 ms mean), connectors into Output bar."""
     d = DiagramBuilder("p44", "fig4_4_retrieval", 804, 706)
-    t = lambda en, vi: vi if vn else en
+    def t(en: str, vi: str) -> str:
+        return vi if vn else en
 
     pre = d.card(
         18,
@@ -1393,7 +1401,8 @@ def build_fig4_4(vn: bool) -> DiagramBuilder:
 def build_fig4_5(vn: bool) -> DiagramBuilder:
     """Layer 5 Multimodal Evidence Matching Engine: exact RapidFuzz token_set_ratio + Levenshtein, clean subscripts & VN."""
     d = DiagramBuilder("p45", "fig4_5_matching", 792, 614)
-    t = lambda en, vi: vi if vn else en
+    def t(en: str, vi: str) -> str:
+        return vi if vn else en
 
     in1 = d.card(14, 148, 178, 108, t("Parsed Citation", "Trích dẫn tách"), t("Title, Authors, Year,<br/>Venue, DOI, Context", "Tiêu đề, Tác giả, Năm,<br/>Nơi công bố, DOI, Ngữ cảnh"), icon_key="doc_pdf", fill="#EFF6FF", stroke="#1E3A8A", title_color="#1E3A8A")
     in2 = d.card(14, 346, 178, 108, "SourceCandidate", t("Canonical Metadata<br/>+ Enriched Abstract", "Siêu dữ liệu chuẩn<br/>+ Tóm tắt bổ sung"), icon_key="fts5", fill="#ECFDF5", stroke="#047857", title_color="#065F46")
@@ -1472,7 +1481,8 @@ def build_fig4_5(vn: bool) -> DiagramBuilder:
 def build_fig4_6(vn: bool) -> DiagramBuilder:
     """Layer 6 Neuro-Symbolic Verification & Platt Calibration — exact Order 0 + Groups 1-16 matching Table 4.6!"""
     d = DiagramBuilder("p46", "fig4_6_neurosymbolic", 804, 566)
-    t = lambda en, vi: vi if vn else en
+    def t(en: str, vi: str) -> str:
+        return vi if vn else en
 
     i_ml = d.card(14, 62, 212, 124, "MatchFeatures → x", t("16D vector x ∈ ℝ¹⁶<br/>Title, Author, Year,<br/>Venue, Context, Inter.", "Véc-tơ 16 chiều x ∈ ℝ¹⁶<br/>Tiêu đề, Tác giả, Năm,<br/>Nơi công bố, Ngữ cảnh"), icon_key="vec16", fill="#EFF6FF", stroke="#1D4ED8", title_color="#1E3A8A")
     i_sy = d.card(14, 268, 212, 134, t("Provenance Flags", "Cờ nguồn gốc rời rạc"), t("is_retracted, url_status,<br/>HTTP 429, doi_ra,<br/>VN statutory rules", "is_retracted, url_status,<br/>HTTP 429, doi_ra,<br/>quy tắc pháp luật VN"), icon_key="shield_ok", fill="#FFFBEB", stroke="#B45309", title_color="#92400E")
@@ -1536,7 +1546,8 @@ def build_fig4_6(vn: bool) -> DiagramBuilder:
 def build_fig4_7(vn: bool) -> DiagramBuilder:
     """Guarded Symbolic Decision Flow strictly aligned with Table 4.6 (Order 0, Groups 1-4, Group 5, Groups 6-16)."""
     d = DiagramBuilder("p47", "fig4_7_decision_flow", 820, 756)
-    t = lambda en, vi: vi if vn else en
+    def t(en: str, vi: str) -> str:
+        return vi if vn else en
 
     st = d.box(235, 12, 350, 42, t("<b>Input:</b> Citation + SourceResult + MatchFeatures", "<b>Đầu vào:</b> Trích dẫn + Kết quả nguồn + MatchFeatures"), fill="#EFF6FF", stroke="#1E3A8A", sw=1.5, font_size=13)
 

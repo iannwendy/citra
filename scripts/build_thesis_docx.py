@@ -773,7 +773,9 @@ def _add_word_table_borders(docx_path: Path) -> None:
         entries = {name: zin.read(name) for name in zin.namelist()}
 
     root = ET.fromstring(entries["word/document.xml"])
-    q = lambda tag: f"{{{W_NS}}}{tag}"
+
+    def q(tag: str) -> str:
+        return f"{{{W_NS}}}{tag}"
 
     for tbl in root.findall(f".//{q('tbl')}"):
         # Check if this is a data table (has >= 3 rows or bold header) vs 2-col signature block
@@ -819,7 +821,9 @@ def verify_docx(docx_path: Path, is_vn: bool) -> dict[str, object]:
         doc_xml = zf.read("word/document.xml")
 
     root = ET.fromstring(doc_xml)
-    q = lambda tag: f"{{{W_NS}}}{tag}"
+
+    def q(tag: str) -> str:
+        return f"{{{W_NS}}}{tag}"
     tables = root.findall(f".//{q('tbl')}")
     all_text = "\n".join(
         "".join(t.text or "" for t in p.findall(f".//{q('t')}"))
