@@ -3,6 +3,9 @@ import {
   getTeacherReviewGuidance,
   getHumanVerdictMeta,
   formatHumanMismatchedFields,
+  isPositiveOrNonIssueRule,
+  getTeacherIssueRuleLabel,
+  filterTopCitationIssueRules,
 } from './teacherGuidance';
 import type { PendingVerdict } from '@/api/client';
 
@@ -134,5 +137,47 @@ describe('teacherGuidance', () => {
     expect(getHumanVerdictMeta('resource', 'vi').label).toBe(
       'Tài nguyên Web / Pháp luật',
     );
+  });
+
+  it('BUG-01: filters positive/verified rules out of top citation issues and replaces spliced/chimeric jargon', () => {
+    expect(isPositiveOrNonIssueRule('R-LOCAL_DB_VERIFIED')).toBe(true);
+    expect(isPositiveOrNonIssueRule('R-WELL-LINKED')).toBe(true);
+    expect(isPositiveOrNonIssueRule('R-DOI-TITLE-AUTHOR')).toBe(true);
+    expect(isPositiveOrNonIssueRule('R-SINGLE-SOURCE-VERIFIED')).toBe(true);
+    expect(isPositiveOrNonIssueRule('R-CUSTOM-VERIFIED')).toBe(true);
+    expect(isPositiveOrNonIssueRule('R-TITLE-MISMATCH')).toBe(false);
+    expect(isPositiveOrNonIssueRule('R-CHIMERIC-DOI-MISMATCH')).toBe(false);
+    expect(isPositiveOrNonIssueRule('R-INCOMPLETE-METADATA')).toBe(false);
+
+    expect(getTeacherIssueRuleLabel('R-CHIMERIC-DOI-MISMATCH', 'vi')).toBe(
+      'Mã DOI dẫn tới một bài báo khác (có thể ghép nhầm DOI)',
+    );
+    expect(getTeacherIssueRuleLabel('R-CHIMERIC-DOI-MISMATCH', 'en')).toBe(
+      'Cited DOI points to a different publication',
+    );
+
+    const filteredVi = filterTopCitationIssueRules(
+      [
+        { rule_id: 'R-LOCAL_DB_VERIFIED', count: 14 },
+        { rule_id: 'R-WELL-LINKED', count: 12 },
+        { rule_id: 'R-CHIMERIC-DOI-MISMATCH', count: 4 },
+        { rule_id: 'R-TITLE-MISMATCH', count: 3 },
+      ],
+      'vi',
+    );
+    expect(filteredVi.map((r) => r.rule_id)).toEqual([
+      'R-CHIMERIC-DOI-MISMATCH',
+      'R-TITLE-MISMATCH',
+    ]);
+    expect(filteredVi[0].label).not.toMatch(/chimeric|ngụy tạo/i);
+    expect(filteredVi[0].label).toBe(
+      'Mã DOI dẫn tới một bài báo khác (có thể ghép nhầm DOI)',
+    );
+  });
+
+  it('BUG-23: uses non-accusatory VI phrasing for suspected_hallucination review hint', () => {
+    const g = getTeacherReviewGuidance(makePending(), 'vi');
+    expect(g.actionHint).not.toContain('tự bịa nguồn trích dẫn');
+    expect(g.actionHint).toContain('hay tài liệu không có trong các CSDL đã tra cứu');
   });
 });

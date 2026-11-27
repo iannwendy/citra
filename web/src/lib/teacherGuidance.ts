@@ -1,6 +1,126 @@
-import type { PendingVerdict, ValidationLabel } from '@/api/client';
+import type {
+  PendingVerdict,
+  TriggeredRuleStat,
+  ValidationLabel,
+} from '@/api/client';
+import { getRuleDisplayName } from '@/lib/verdictExplanation';
 
 export type ReviewSeverityKey = 'critical' | 'warning' | 'incomplete' | 'uncertain';
+
+const NON_ISSUE_RULE_IDS = new Set<string>([
+  'R-LOCAL_DB',
+  'R-LOCAL_DB_ONLY',
+  'R-LOCAL_DB_VERIFIED',
+  'R-LOCAL_DB_GOOD_MATCH',
+  'R-WELL-LINKED',
+  'R-WELL-LINKED-MODERATE',
+  'R-DOI-TITLE-AUTHOR',
+  'R-CONSENSUS-FULL',
+  'R-SINGLE-SOURCE-VERIFIED',
+  'R-BOOK-EDITION-VERIFIED',
+  'R-KNOWN-PAPER',
+  'R-KNOWN-PAPER-NO-TITLE',
+  'R-SEMINAL-PAPER',
+  'R-CANONICAL-MATCH',
+  'R-VN-LEGAL-FORMAT',
+  'R-LEGAL-DOCUMENT',
+  'R-VN-LEGAL-VERIFIED',
+  'R-LEGAL-STATUTE-VERIFIED',
+  'R-GLOBAL-DOI-RA-VERIFIED',
+  'R-HF-VERIFIED',
+  'R-RFC-VERIFIED',
+  'R-GITHUB-VERIFIED',
+  'R-PACKAGE-VERIFIED',
+  'R-SOFTWARE-PACKAGE-VERIFIED',
+  'R-WIKIDATA-VERIFIED',
+  'R-WIKIDATA-STANDARD-VERIFIED',
+  'R-OPENCITATIONS-VERIFIED',
+  'R-WAYBACK-ARCHIVED',
+  'R-DOMAIN-EXCEPTION',
+  'R-NON-SCHOLARLY-RESOURCE',
+  'R-URL-RESOURCE',
+  'R-WEB-RESOURCE',
+  'R-CONTENT-ALIGNMENT',
+  'R-CROSS-LINGUAL-ALIGNMENT',
+  'R-VN-STANDARD-VERIFIED',
+  'R-VN-TEXTBOOK-VERIFIED',
+  'R-TECH-STANDARD-VERIFIED',
+  'R01_EXACT_DOI',
+  'R01_DOI_EXACT',
+  'R01_DOI_MATCH',
+  'R04_AUTHOR_OVERLAP',
+  'R09_SEMANTIC_ALIGN',
+]);
+
+const POSITIVE_RULE_TEXT_RE =
+  /(?:^|[^a-z])(?:(?<!not\s)verified)(?=$|[^a-z])|exact\s+match|canonical\s+match|known\s+seminal|matches?\s+closely|reasonable\s+match|multiple\s+sources\s+agree|high-confidence\s+match|strong\s+match|aligns?\s+semantically|đã\s+xác\s+minh|khớp\s+chính\s+xác|khớp\s+chặt\s+chẽ|hoàn\s+toàn\s+trùng\s+khớp|kinh\s+điển|đồng\s+thuận\s+về\s+thông\s+tin\s+ấn\s+phẩm|tương\s+đồng\s+ngữ\s+nghĩa/i;
+
+const CHIMERIC_RULE_RE = /spliced\/chimeric|chimeric|ghép\s+nối\s+trích\s+dẫn\s+ngụy\s+tạo/i;
+
+/**
+ * Defense-in-depth filter excluding positive/verified provenance rules from
+ * Class Detail "Most Common Citation Issues".
+ */
+export function isPositiveOrNonIssueRule(ruleIdOrText: string): boolean {
+  const cleaned = String(ruleIdOrText ?? '').trim();
+  if (!cleaned) return true;
+  const upper = cleaned.toUpperCase();
+  if (NON_ISSUE_RULE_IDS.has(upper)) return true;
+  if (upper.endsWith('-VERIFIED') || upper.endsWith('_VERIFIED')) return true;
+  return POSITIVE_RULE_TEXT_RE.test(cleaned);
+}
+
+/**
+ * Human-readable issue label for teacher cohort analytics, replacing academic
+ * jargon such as "spliced/chimeric citation" with plain language.
+ */
+export function getTeacherIssueRuleLabel(
+  ruleId: string,
+  lang: 'en' | 'vi',
+): string {
+  const upper = String(ruleId ?? '').trim().toUpperCase();
+  if (upper === 'R-CHIMERIC-DOI-MISMATCH') {
+    return lang === 'vi'
+      ? 'Mã DOI dẫn tới một bài báo khác (có thể ghép nhầm DOI)'
+      : 'Cited DOI points to a different publication';
+  }
+  if (upper === 'R-HALLUCINATED-SOURCE') {
+    return lang === 'vi'
+      ? 'Các kết quả tìm được có độ tương đồng thấp hơn ngưỡng tối thiểu'
+      : 'Retrieved candidates fall below the minimum similarity threshold';
+  }
+  const base = getRuleDisplayName(ruleId, lang);
+  if (CHIMERIC_RULE_RE.test(base)) {
+    return lang === 'vi'
+      ? 'Mã DOI dẫn tới một bài báo khác (có thể ghép nhầm DOI)'
+      : 'Cited DOI points to a different publication';
+  }
+  return base;
+}
+
+export interface TeacherIssueRuleItem extends TriggeredRuleStat {
+  label: string;
+}
+
+/**
+ * Filter positive/verified rules out of `top_triggered_rules` and map each
+ * genuine citation issue rule to a clean, non-jargon label.
+ */
+export function filterTopCitationIssueRules(
+  rules: TriggeredRuleStat[] | undefined,
+  lang: 'en' | 'vi',
+): TeacherIssueRuleItem[] {
+  if (!Array.isArray(rules) || rules.length === 0) return [];
+  const filtered: TeacherIssueRuleItem[] = [];
+  for (const r of rules) {
+    if (!r || !r.rule_id || r.count <= 0) continue;
+    if (isPositiveOrNonIssueRule(r.rule_id)) continue;
+    const label = getTeacherIssueRuleLabel(r.rule_id, lang);
+    if (isPositiveOrNonIssueRule(label)) continue;
+    filtered.push({ ...r, label });
+  }
+  return filtered;
+}
 
 export interface TeacherReviewGuidance {
   severity: ReviewSeverityKey;
@@ -111,8 +231,8 @@ export function getTeacherReviewGuidance(
             : 'Cited DOI does not exist or points to a different paper',
         actionHint:
           lang === 'vi'
-            ? 'Kiểm tra dấu hiệu ghép nối trích dẫn AI; giữ cảnh báo nếu nguồn không có thật.'
-            : 'Verify whether the reference was AI-generated; keep the warning if unverified.',
+            ? 'Đối chiếu lại mã DOI với bài báo gốc; giữ cảnh báo nếu thông tin không khớp.'
+            : 'Verify the cited DOI against the original publication; keep the warning if it does not match.',
         confirmButtonLabel: keepWarningBtn,
         confirmNewLabel: 'suspected_hallucination',
       };
@@ -142,8 +262,8 @@ export function getTeacherReviewGuidance(
           : 'No matching publication found across scholarly databases',
       actionHint:
         lang === 'vi'
-          ? 'Kiểm tra xem sinh viên gõ sai tên bài hay tự bịa nguồn trích dẫn.'
-          : 'Check whether the student mistyped the title or cited a non-existent source.',
+          ? 'Kiểm tra xem sinh viên gõ sai tên bài hay tài liệu không có trong các CSDL đã tra cứu.'
+          : 'Check whether the student mistyped the title or the document is not indexed in the searched databases.',
       confirmButtonLabel: keepWarningBtn,
       confirmNewLabel: 'suspected_hallucination',
     };

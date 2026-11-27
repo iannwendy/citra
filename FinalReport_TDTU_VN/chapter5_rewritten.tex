@@ -3,7 +3,7 @@
 
 \section{Thiết kế thực nghiệm và môi trường kiểm định}
 
-Tuân thủ chuẩn mực đánh giá Kỹ thuật phần mềm thực nghiệm~\cite{wohlin2012experimentation}, chương này đánh giá \textbf{CITRA} (\texttt{v3.90.17}) thông qua các bộ kiểm thử tự động (đơn vị, tích hợp, trình duyệt), ma trận truy vết yêu cầu hai chiều và năm câu hỏi nghiên cứu (\textbf{RQ1}--\textbf{RQ5}) kết hợp đo kiểm tầng quyết định có kiểm soát, đánh giá trực tuyến 15 API, kiểm toán từng dòng bản thảo thực tế và kiểm thử chịu tải vận hành.
+Tuân thủ chuẩn mực đánh giá Kỹ thuật phần mềm thực nghiệm~\cite{wohlin2012experimentation}, chương này đánh giá \textbf{CITRA} (\texttt{v3.90.18}) thông qua các bộ kiểm thử tự động (đơn vị, tích hợp, trình duyệt), ma trận truy vết yêu cầu hai chiều và năm câu hỏi nghiên cứu (\textbf{RQ1}--\textbf{RQ5}) kết hợp đo kiểm tầng quyết định có kiểm soát, đánh giá trực tuyến 15 API, kiểm toán từng dòng bản thảo thực tế và kiểm thử chịu tải vận hành.
 
 \subsection{Các câu hỏi nghiên cứu}
 
@@ -22,7 +22,7 @@ Kiểm định phần mềm bao phủ ba tầng kiểm thử tự động trong 
 {\setlength{\tabcolsep}{3.5pt}
 \begin{table}[!htbp]
 \centering
-\caption[Các bộ kiểm thử phần mềm tự động (v3.90.17)]{Các bộ kiểm thử phần mềm tự động thực thi trên phiên bản \texttt{3.90.17}.}\label{tab:test-suites}
+\caption[Các bộ kiểm thử phần mềm tự động (v3.90.18)]{Các bộ kiểm thử phần mềm tự động thực thi trên phiên bản \texttt{3.90.18}.}\label{tab:test-suites}
 \begin{tabular}{|L{0.23}|L{0.26}|L{0.51}|}
 \hline
 \textbf{Tầng kiểm định} & \textbf{Kết quả thực thi} & \textbf{Phạm vi phân hệ kiểm định} \\
@@ -313,7 +313,7 @@ Nhằm kiểm chứng khả năng khái quát hóa đầu--cuối ngoài tập �
 \hline
 Kho pháp luật VN (Thực, trước v3.80) & 30 & 27 / 30 (90.0\%) & 164 (15 Luật) & 109 / 235 (46.4\%) \\
 \hline
-\textbf{Kho pháp luật VN (Thực, v3.90.17)} & \textbf{30} & \textbf{30 / 30 (100.0\%)} & \textbf{258 (91 Luật)} & \textbf{403 / 416 (96.9\%)} \\
+\textbf{Kho pháp luật VN (Thực, v3.90.18)} & \textbf{30} & \textbf{30 / 30 (100.0\%)} & \textbf{258 (91 Luật)} & \textbf{403 / 416 (96.9\%)} \\
 \hline
 \textbf{Chẩn đoán 12 chuẩn (Tổng hợp, $12 \times 5$)} & \textbf{60} & \textbf{60 / 60 (100.0\%)} & \textbf{397 / 397 (100.0\%)} & \textbf{60 / 60 PDF (100\%)} \\
 \hline
@@ -354,7 +354,7 @@ Kho pháp luật VN (Thực, trước v3.80) & 30 & 27 / 30 (90.0\%) & 164 (15 L
 \end{table}
 }
 
-Các Hình~\ref{fig:demo-debugger}--\ref{fig:demo-consistency} trình bày giao diện chẩn đoán tiếng Việt \texttt{v3.90.17} trên bộ mẫu đồ án cài sẵn 6 TLTK ($\text{CIS} = 75.08 / 100$ theo \texttt{CISCalculator} mức kết luận, hiển thị \texttt{75.1\%} trên đầu trang báo cáo và \texttt{75/100} trên bảng điều khiển khi có 1 mục chưa trích dẫn \texttt{[6]}; $75.50$ khi đủ cả 6 liên kết), cắt thanh điều hướng trái để rõ nét trên khổ A4. Lưu ý thẻ tổng hợp \textit{Hợp lệ (4)} trên UI gộp 3 công trình học thuật \texttt{verified} cùng 1 mục \texttt{resource} hợp lệ, trong khi Bảng~\ref{tab:samples} và \texttt{CISCalculator} tách riêng hai nhóm này. Hình~\ref{fig:demo-debugger} đối chiếu cảnh báo ảo giác DOI lai ghép AlphaFold2 (hiển thị kèm bản ghi Crossref gốc) và bảng sai lệch năm xuất bản (\texttt{2021} so với chuẩn \texttt{2019}). Hình~\ref{fig:demo-trace-context} hiển thị tiêu đề Logic Trace 5 giai đoạn kèm các bước đầu mở rộng (cầu nối \texttt{VI}$\leftrightarrow$\texttt{EN} ONNX INT8) cùng luồng ngữ cảnh Trình kiểm tra tài liệu, còn Hình~\ref{fig:demo-consistency} phân tách trích dẫn mồ côi và mục chưa được trích dẫn.
+Các Hình~\ref{fig:demo-debugger}--\ref{fig:demo-consistency} trình bày giao diện chẩn đoán tiếng Việt \texttt{v3.90.18} trên bộ mẫu đồ án cài sẵn 6 TLTK ($\text{CIS} = 75.08 / 100$ theo \texttt{CISCalculator} mức kết luận, hiển thị \texttt{75.1\%} trên đầu trang báo cáo và \texttt{75/100} trên bảng điều khiển khi có 1 mục chưa trích dẫn \texttt{[6]}; $75.50$ khi đủ cả 6 liên kết), cắt thanh điều hướng trái để rõ nét trên khổ A4. Lưu ý thẻ tổng hợp \textit{Hợp lệ (4)} trên UI gộp 3 công trình học thuật \texttt{verified} cùng 1 mục \texttt{resource} hợp lệ, trong khi Bảng~\ref{tab:samples} và \texttt{CISCalculator} tách riêng hai nhóm này. Hình~\ref{fig:demo-debugger} đối chiếu cảnh báo ảo giác DOI lai ghép AlphaFold2 (hiển thị kèm bản ghi Crossref gốc) và bảng sai lệch năm xuất bản (\texttt{2021} so với chuẩn \texttt{2019}). Hình~\ref{fig:demo-trace-context} hiển thị tiêu đề Logic Trace 5 giai đoạn kèm các bước đầu mở rộng (cầu nối \texttt{VI}$\leftrightarrow$\texttt{EN} ONNX INT8) cùng luồng ngữ cảnh Trình kiểm tra tài liệu, còn Hình~\ref{fig:demo-consistency} phân tách trích dẫn mồ côi và mục chưa được trích dẫn.
 
 \begin{figure}[!htbp]
     \centering
@@ -515,4 +515,4 @@ Dù \textbf{RQ1}/\textbf{RQ2} dùng McNemar hiệu chỉnh liên tục, Holm--Bo
 
 \section{Tóm tắt chương}
 
-Chương này đã kiểm định \textbf{CITRA} (\texttt{v3.90.17}) qua 3,110 kiểm tra mặc định (2,437 mặc định / 2,446 tổng \texttt{pytest}, 495 \texttt{Vitest}, 178 \texttt{Playwright}), RTM 20 FR/10 NFR và năm câu hỏi nghiên cứu---chứng minh $99.67\%$ độ chính xác tầng quyết định ($\text{ECE} = 0.0405$), $99.95\%$ OOD i.i.d., $89.17\%$ trực tuyến 15 API (F1 hợp lệ $98.36\%$; $100.00\%$ ngoại tuyến), $12.64\text{\,s}$ WAN lạnh 50 trang, GROBID 0-swap trên GCE ($95.53\text{\,s} \rightarrow 17.44\text{\,s}$) và 0 lỗi tải I/O 50 người dùng. Chương~\ref{chap:conclusion} tổng kết kết quả, hạn chế và hướng phát triển.
+Chương này đã kiểm định \textbf{CITRA} (\texttt{v3.90.18}) qua 3,110 kiểm tra mặc định (2,437 mặc định / 2,446 tổng \texttt{pytest}, 495 \texttt{Vitest}, 178 \texttt{Playwright}), RTM 20 FR/10 NFR và năm câu hỏi nghiên cứu---chứng minh $99.67\%$ độ chính xác tầng quyết định ($\text{ECE} = 0.0405$), $99.95\%$ OOD i.i.d., $89.17\%$ trực tuyến 15 API (F1 hợp lệ $98.36\%$; $100.00\%$ ngoại tuyến), $12.64\text{\,s}$ WAN lạnh 50 trang, GROBID 0-swap trên GCE ($95.53\text{\,s} \rightarrow 17.44\text{\,s}$) và 0 lỗi tải I/O 50 người dùng. Chương~\ref{chap:conclusion} tổng kết kết quả, hạn chế và hướng phát triển.

@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { X, Search } from 'lucide-react';
 import { api, type ClassStudent } from '@/api/client';
+import { formatUserError, resolveAcademicLang } from '@/lib/academicTaxonomy';
 import { useDebounce } from '@/hooks/useDebounce';
 import { useModalA11y } from '@/hooks/useModalA11y';
 import { Input } from '@/components/ui/input';
@@ -29,7 +31,8 @@ export function AddStudentDialog({
   onClose,
   onAdded,
 }: AddStudentDialogProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const lang = resolveAcademicLang(i18n.resolvedLanguage || i18n.language);
   const [users, setUsers] = useState<ClassStudent[]>([]);
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebounce(search, 300);
@@ -57,7 +60,7 @@ export function AddStudentDialog({
       })
       .catch((e) => {
         if (!cancelled)
-          setError(e instanceof Error ? e.message : t('teacher.loadStudentsFailed'));
+          setError(formatUserError(e, lang, t('teacher.loadStudentsFailed')));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -65,7 +68,7 @@ export function AddStudentDialog({
     return () => {
       cancelled = true;
     };
-  }, [open, debouncedSearch, t]);
+  }, [open, debouncedSearch, lang, t]);
 
   const { dialogProps, titleId } = useModalA11y<HTMLDivElement>(open, onClose);
 
@@ -78,8 +81,17 @@ export function AddStudentDialog({
       (!q ||
         u.username.toLowerCase().includes(q) ||
         (u.full_name ?? '').toLowerCase().includes(q) ||
-        (u.email ?? '').toLowerCase().includes(q))
+        (u.email ?? '').toLowerCase().includes(q)),
   );
+
+  const searchPlaceholder =
+    lang === 'vi'
+      ? 'Tìm theo họ tên, email hoặc tên đăng nhập…'
+      : 'Search by name, email, or username…';
+  const minCharsHint =
+    lang === 'vi'
+      ? 'Nhập ít nhất 2 ký tự để tìm sinh viên theo họ tên, email hoặc tên đăng nhập'
+      : 'Type at least 2 characters to search all students by name, email, or username';
 
   const handleAdd = async (studentId: number) => {
     setSubmitting(true);
@@ -89,15 +101,15 @@ export function AddStudentDialog({
       onAdded();
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('teacher.addStudentFailed'));
+      setError(formatUserError(err, lang, t('teacher.addStudentFailed')));
     } finally {
       setSubmitting(false);
     }
   };
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in"
+      className="fixed inset-0 !mt-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in"
       onClick={onClose}
     >
       <div
@@ -105,7 +117,7 @@ export function AddStudentDialog({
         className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 max-w-md w-full max-h-[90dvh] overflow-y-auto p-4 sm:p-6 shadow-2xl animate-scale-in outline-none"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between gap-3 mb-4">
           <h2
             id={titleId}
             className="font-display text-lg font-bold text-slate-900 dark:text-white"
@@ -113,9 +125,10 @@ export function AddStudentDialog({
             {t('teacher.addStudentModalTitle')}
           </h2>
           <button
+            type="button"
             onClick={onClose}
             aria-label={t('teacher.closeModal')}
-            className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
           >
             <X className="h-5 w-5 text-slate-500" />
           </button>
@@ -127,7 +140,7 @@ export function AddStudentDialog({
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder={t('teacher.searchStudentsPlaceholder')}
+            placeholder={searchPlaceholder}
             aria-label={t('teacher.searchStudentsAria')}
             className="pl-10"
           />
@@ -138,7 +151,7 @@ export function AddStudentDialog({
             data-testid="student-search-hint"
             className="text-xs text-slate-500 dark:text-slate-400 mb-3"
           >
-            {t('teacher.searchStudentsMinCharsHint')}
+            {minCharsHint}
           </p>
         )}
 
@@ -157,22 +170,35 @@ export function AddStudentDialog({
               {t('teacher.loadingStudents')}
             </li>
           ) : candidates.length === 0 ? (
-            <li className="text-sm text-slate-500 px-2 py-6 text-center">
-              {t('teacher.noMatchingStudents')}
+            <li
+              data-testid="student-search-empty-state"
+              className="text-sm text-slate-500 dark:text-slate-400 px-2 py-6 text-center"
+            >
+              {q.length < 2
+                ? lang === 'vi'
+                  ? 'Nhập tên hoặc email sinh viên để tìm kiếm...'
+                  : 'Type a student name or email to search...'
+                : t('teacher.noMatchingStudents')}
             </li>
           ) : (
             candidates.map((u) => (
               <li
                 key={u.id}
-                className="flex items-center justify-between p-2.5 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors"
+                className="flex items-center justify-between gap-2 p-2.5 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors"
               >
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
-                    {u.username}
-                  </p>
-                  {u.full_name && (
-                    <p className="text-xs text-slate-500 truncate">
-                      {u.full_name}
+                  {u.full_name ? (
+                    <>
+                      <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
+                        {u.full_name}
+                      </p>
+                      <p className="text-xs text-slate-500 truncate">
+                        {u.username}
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
+                      {u.username}
                     </p>
                   )}
                 </div>
@@ -180,6 +206,7 @@ export function AddStudentDialog({
                   size="sm"
                   onClick={() => handleAdd(u.id)}
                   disabled={submitting}
+                  className="shrink-0"
                 >
                   {t('teacher.addStudentBtn')}
                 </Button>
@@ -188,6 +215,7 @@ export function AddStudentDialog({
           )}
         </ul>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

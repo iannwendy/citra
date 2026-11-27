@@ -7,8 +7,16 @@ import type {
   Verdict,
   OverrideRequest,
 } from '@/api/client';
+import {
+  formatLocalizedDateTime,
+  formatUserError,
+  getMappingStatusDisplay,
+  getVerdictDisplay,
+  resolveAcademicLang,
+} from '@/lib/academicTaxonomy';
+import { DecisionSupportBanner } from '@/components/DecisionSupportBanner';
 import { cn } from '@/lib/utils';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, X } from 'lucide-react';
 import { useRole } from '@/hooks/useRole';
 import { useModalA11y } from '@/hooks/useModalA11y';
 import { useToast } from '@/contexts/ToastContext';
@@ -16,23 +24,25 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 
-const LABEL_OPTIONS: { value: ValidationLabel; key: string; label: string; color: string }[] = [
-  { value: 'verified', key: 'override.labelVerified', label: '✓ Verified', color: 'text-green-700 dark:text-green-400' },
-  { value: 'metadata_error', key: 'override.labelMetadataError', label: '△ Metadata Error', color: 'text-amber-700 dark:text-amber-400' },
-  { value: 'suspected_hallucination', key: 'override.labelSuspected', label: '✗ Suspected', color: 'text-red-700 dark:text-red-400' },
-  { value: 'unresolved', key: 'override.labelUnresolved', label: '— Unresolved', color: 'text-gray-600 dark:text-slate-400' },
-  { value: 'resource', key: 'override.labelResource', label: '↗ URL Resource', color: 'text-violet-700 dark:text-violet-400' },
+const MIN_OVERRIDE_REASON_LENGTH = 5;
+
+const LABEL_OPTIONS: { value: ValidationLabel; symbol: string; color: string }[] = [
+  { value: 'verified', symbol: '✓', color: 'text-emerald-700 dark:text-emerald-400' },
+  { value: 'metadata_error', symbol: '△', color: 'text-amber-800 dark:text-amber-300' },
+  { value: 'suspected_hallucination', symbol: '✗', color: 'text-red-700 dark:text-red-400' },
+  { value: 'unresolved', symbol: '—', color: 'text-slate-700 dark:text-slate-300' },
+  { value: 'resource', symbol: '↗', color: 'text-violet-700 dark:text-violet-400' },
 ];
 
-const STATUS_OPTIONS: { value: CitationMappingStatus; key: string; label: string }[] = [
-  { value: 'matched', key: 'override.statusMatched', label: 'Matched' },
-  { value: 'missing_reference', key: 'override.statusMissingRef', label: 'Missing Ref' },
-  { value: 'uncited_reference', key: 'override.statusUncitedRef', label: 'Uncited Ref' },
-  { value: 'in_text_mismatch', key: 'override.statusMismatch', label: 'Mismatch' },
-  { value: 'duplicate_reference', key: 'override.statusDuplicate', label: 'Duplicate' },
-  { value: 'ambiguous_mapping', key: 'override.statusAmbiguous', label: 'Ambiguous' },
-  { value: 'style_inconsistent', key: 'override.statusStyleIssue', label: 'Style Issue' },
-  { value: 'unresolved', key: 'override.statusUnresolved', label: 'Unresolved' },
+const STATUS_OPTIONS: CitationMappingStatus[] = [
+  'matched',
+  'missing_reference',
+  'uncited_reference',
+  'in_text_mismatch',
+  'duplicate_reference',
+  'ambiguous_mapping',
+  'style_inconsistent',
+  'unresolved',
 ];
 
 function OverrideForm({
@@ -44,25 +54,47 @@ function OverrideForm({
   onClose: () => void;
   onSubmit: (req: OverrideRequest) => Promise<void>;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const lang = resolveAcademicLang(i18n.resolvedLanguage || i18n.language);
+  const isVi = lang === 'vi';
   const toast = useToast();
   const [label, setLabel] = useState<ValidationLabel>(verdict.label);
   const [status, setStatus] = useState<CitationMappingStatus>(verdict.mapping_status);
   const [reason, setReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
-  const { dialogProps, titleId } = useModalA11y<HTMLFormElement>(true, onClose);
+  const { dialogProps, titleId } = useModalA11y<HTMLFormElement>(true, onClose, {
+    disableEscape: submitting,
+  });
+
+  const trimmedReason = reason.trim();
+  const hasValidReason = trimmedReason.length >= MIN_OVERRIDE_REASON_LENGTH;
+  const hasChanges = label !== verdict.label || status !== verdict.mapping_status;
+  const canSubmit = !submitting && hasValidReason;
+  const selectedMapping = getMappingStatusDisplay(status, lang);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!canSubmit) return;
     setSubmitting(true);
     try {
-      await onSubmit({ verdict_id: verdict.citation_id, new_label: label, new_mapping_status: status, reason });
+      await onSubmit({
+        verdict_id: verdict.citation_id,
+        new_label: label,
+        new_mapping_status: status,
+        reason: trimmedReason,
+      });
       toast.success(t('override.successToast'));
       setDone(true);
       setTimeout(onClose, 500);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : t('override.errorToast', 'Override failed'));
+      toast.error(
+        formatUserError(
+          err,
+          lang,
+          t('override.errorToast', isVi ? 'Không thể lưu điều chỉnh. Vui lòng thử lại.' : 'Override failed'),
+        ),
+      );
     } finally {
       setSubmitting(false);
     }
@@ -70,77 +102,152 @@ function OverrideForm({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm"
-      onClick={onClose}
+      className="fixed inset-0 !mt-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+      onClick={() => {
+        if (!submitting) onClose();
+      }}
     >
       <form
         {...dialogProps}
         onClick={(e) => e.stopPropagation()}
         onSubmit={handleSubmit}
-        className="bg-background rounded-2xl border shadow-2xl w-full max-w-md max-h-[90dvh] overflow-y-auto mx-4 p-4 sm:p-6 space-y-4 outline-none"
+        className="bg-background rounded-2xl border border-slate-200 dark:border-slate-700 shadow-2xl w-full max-w-lg max-h-[90dvh] overflow-y-auto p-4 sm:p-6 space-y-4 outline-none"
       >
-        <h3 id={titleId} className="text-base font-bold flex items-center gap-2">
-          <RefreshCw className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
-          {t('override.title')}
-        </h3>
+        <div className="flex items-center justify-between gap-3">
+          <h3 id={titleId} className="text-base font-bold flex items-center gap-2 text-slate-900 dark:text-white">
+            <RefreshCw className="h-4 w-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+            <span>{t('override.title')}</span>
+          </h3>
+          <button
+            type="button"
+            data-testid="override-close-btn"
+            onClick={onClose}
+            disabled={submitting}
+            aria-label={t('teacher.closeModal', isVi ? 'Đóng' : 'Close')}
+            className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer disabled:opacity-50"
+          >
+            <X className="h-5 w-5 text-slate-500" />
+          </button>
+        </div>
 
-        {/* Source label */}
+        <DecisionSupportBanner variant="compact" lang={lang} />
+
+        {/* Source verification result */}
         <div>
-          <Label className="text-sm font-medium block mb-2">{t('override.sourceLabel')}</Label>
-          <div className="grid grid-cols-2 gap-2">
-            {LABEL_OPTIONS.map((opt) => (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => setLabel(opt.value)}
-                className={cn(
-                  'px-3 py-2 border rounded-lg text-sm text-left transition-colors',
-                  label === opt.value
-                    ? 'border-primary bg-primary/10 font-medium ring-1 ring-primary'
-                    : 'hover:bg-muted'
-                )}
-              >
-                <span className={opt.color}>{t(opt.key, opt.label)}</span>
-              </button>
-            ))}
+          <Label className="text-sm font-medium block mb-2">
+            {isVi ? 'Kết quả xác minh nguồn' : 'Source Verification Result'}
+          </Label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {LABEL_OPTIONS.map((opt) => {
+              const display = getVerdictDisplay(opt.value, lang);
+              const isSelected = label === opt.value;
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  aria-pressed={isSelected}
+                  data-testid={`override-label-${opt.value}`}
+                  onClick={() => setLabel(opt.value)}
+                  className={cn(
+                    'px-3 py-2 border rounded-lg text-sm text-left transition-colors cursor-pointer',
+                    isSelected
+                      ? 'border-primary bg-primary/10 font-medium ring-1 ring-primary'
+                      : 'hover:bg-muted',
+                  )}
+                >
+                  <span className={opt.color}>
+                    {opt.symbol} {display.label}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </div>
 
         {/* Mapping status */}
         <div>
-          <Label className="text-sm font-medium block mb-2">{t('override.mappingStatus')}</Label>
+          <Label className="text-sm font-medium block mb-2">
+            {isVi
+              ? 'Tình trạng trình bày & đối chiếu trong bài'
+              : 'In-Text Presentation & Cross-Reference Status'}
+          </Label>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-            {STATUS_OPTIONS.map((opt) => (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => setStatus(opt.value)}
-                className={cn(
-                  'px-2 py-1.5 border rounded-lg text-xs text-center transition-colors',
-                  status === opt.value
-                    ? 'border-primary bg-primary/10 font-medium ring-1 ring-primary'
-                    : 'hover:bg-muted'
-                )}
-              >
-                {t(opt.key, opt.label)}
-              </button>
-            ))}
+            {STATUS_OPTIONS.map((opt) => {
+              const display = getMappingStatusDisplay(opt, lang);
+              const isSelected = status === opt;
+              return (
+                <button
+                  key={opt}
+                  type="button"
+                  aria-pressed={isSelected}
+                  data-testid={`override-status-${opt}`}
+                  onClick={() => setStatus(opt)}
+                  className={cn(
+                    'px-2 py-1.5 border rounded-lg text-xs text-center transition-colors cursor-pointer',
+                    isSelected
+                      ? 'border-primary bg-primary/10 font-medium ring-1 ring-primary'
+                      : 'hover:bg-muted',
+                  )}
+                >
+                  {display.label}
+                </button>
+              );
+            })}
           </div>
+          <p
+            data-testid="override-mapping-description"
+            className="mt-2 text-xs text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700/80 rounded-lg px-3 py-2 leading-relaxed"
+          >
+            <span className="font-semibold text-slate-800 dark:text-slate-100">
+              {selectedMapping.label}:
+            </span>{' '}
+            {selectedMapping.description}
+          </p>
         </div>
 
-        {/* Reason */}
+        {/* Audit rationale (required >= 5 chars) */}
         <div>
           <Label htmlFor="override-reason" className="text-sm font-medium block mb-1">
-            {t('override.reason')} <span className="text-muted-foreground font-normal">{t('override.optional')}</span>
+            {isVi ? 'Lý do điều chỉnh' : 'Review note'}{' '}
+            <span className="text-rose-500" aria-hidden="true">*</span>{' '}
+            <span className="text-muted-foreground font-normal text-xs">
+              {isVi ? '(bắt buộc)' : '(required)'}
+            </span>
           </Label>
           <Textarea
             id="override-reason"
+            data-testid="override-reason-input"
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             placeholder={t('override.reasonPlaceholder')}
             rows={2}
+            required
+            minLength={MIN_OVERRIDE_REASON_LENGTH}
+            aria-describedby="override-reason-hint"
             className="resize-none"
           />
+          <p
+            id="override-reason-hint"
+            data-testid="override-reason-hint"
+            className={cn(
+              'mt-1 text-xs leading-snug',
+              hasValidReason
+                ? 'text-emerald-700 dark:text-emerald-400'
+                : 'text-slate-500 dark:text-slate-400',
+            )}
+          >
+            {!hasValidReason
+              ? isVi
+                ? `Nhập tối thiểu ${MIN_OVERRIDE_REASON_LENGTH} ký tự để ghi vào nhật ký duyệt (${trimmedReason.length}/${MIN_OVERRIDE_REASON_LENGTH}).`
+                : `Enter at least ${MIN_OVERRIDE_REASON_LENGTH} characters for the audit log (${trimmedReason.length}/${MIN_OVERRIDE_REASON_LENGTH}).`
+              : hasChanges
+                ? isVi
+                  ? 'Sẵn sàng lưu điều chỉnh và ghi vào nhật ký duyệt trích dẫn.'
+                  : 'Ready to save your update to the citation review log.'
+                : isVi
+                  ? 'Xác nhận giữ nguyên phân loại hiện tại kèm ghi chú rà soát của bạn.'
+                  : 'Confirming the current classification with your review note.'}
+          </p>
         </div>
 
         <div className="flex justify-end gap-2 pt-2">
@@ -148,19 +255,21 @@ function OverrideForm({
             type="button"
             variant="outline"
             onClick={onClose}
+            disabled={submitting}
           >
             {t('override.cancel')}
           </Button>
           <Button
             type="submit"
-            disabled={submitting}
+            data-testid="override-submit-btn"
+            disabled={!canSubmit}
           >
             {submitting ? t('override.saving') : done ? t('override.saved') : t('override.confirm')}
           </Button>
         </div>
       </form>
     </div>,
-    document.body
+    document.body,
   );
 }
 
@@ -179,7 +288,8 @@ export function OverrideControls({
 
   if (!has('override_verdict')) return null;
 
-  const isVi = i18n.language?.startsWith('vi');
+  const lang = resolveAcademicLang(i18n.resolvedLanguage || i18n.language);
+  const isVi = lang === 'vi';
   const overriddenBy =
     verdict.overridden_by || verdict.override_record?.overridden_by || null;
   const overrideNote =
@@ -203,7 +313,7 @@ export function OverrideControls({
 
   const transitionSummary =
     previousOverrideLabel && resolvedOverrideLabel
-      ? `${previousOverrideLabel} → ${resolvedOverrideLabel}`
+      ? `${getVerdictDisplay(previousOverrideLabel, lang).label} → ${getVerdictDisplay(resolvedOverrideLabel, lang).label}`
       : null;
 
   const tooltipText = verdict.is_overridden
@@ -225,9 +335,9 @@ export function OverrideControls({
         onClick={() => setOpen(true)}
         className={cn(
           verdict.is_overridden
-            ? 'flex items-center flex-wrap gap-1 text-xs text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/50 px-2.5 py-1.5 rounded-lg border border-amber-200 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-colors'
-            : 'flex items-center gap-1 px-2.5 py-1.5 text-xs border rounded-lg hover:bg-muted transition-colors',
-          className
+            ? 'flex items-center flex-wrap gap-1 text-xs text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/50 px-2.5 py-1.5 rounded-lg border border-amber-200 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-colors cursor-pointer'
+            : 'flex items-center gap-1 px-2.5 py-1.5 text-xs border rounded-lg hover:bg-muted transition-colors cursor-pointer',
+          className,
         )}
         title={tooltipText}
         aria-label={tooltipText}
@@ -252,7 +362,7 @@ export function OverrideControls({
         )}
         {verdict.is_overridden && overriddenAt && (
           <span className="text-muted-foreground ml-0.5 text-[11px]">
-            ({new Date(overriddenAt).toLocaleString(i18n.language || 'vi-VN')})
+            ({formatLocalizedDateTime(overriddenAt, lang)})
           </span>
         )}
       </button>

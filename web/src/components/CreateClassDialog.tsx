@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { X } from 'lucide-react';
 import { api, type Class, type ClassCreate } from '@/api/client';
+import { formatUserError, resolveAcademicLang } from '@/lib/academicTaxonomy';
 import { useModalA11y } from '@/hooks/useModalA11y';
 import { UpgradeModal } from '@/components/UpgradeModal';
 import { Button } from '@/components/ui/button';
@@ -27,7 +29,8 @@ export function CreateClassDialog({
   onClose,
   onCreated,
 }: CreateClassDialogProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const lang = resolveAcademicLang(i18n.resolvedLanguage || i18n.language);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -63,11 +66,12 @@ export function CreateClassDialog({
       onCreated(cls);
       onClose();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : t('teacher.createClassFailed');
-      setError(msg);
+      const rawMsg = err instanceof Error ? err.message : t('teacher.createClassFailed');
+      const friendlyMsg = formatUserError(err, lang, t('teacher.createClassFailed'));
+      setError(friendlyMsg);
       if (
         /API\s+(402|403)\b|HTTP\s+(402|403)\b|CLASS_LIMIT|limit|upgrade|max_classes|tối đa|giới hạn/i.test(
-          msg,
+          rawMsg,
         )
       ) {
         setUpgradeOpen(true);
@@ -78,83 +82,89 @@ export function CreateClassDialog({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in"
-      onClick={onClose}
-    >
-      <div
-        {...dialogProps}
-        className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 max-w-md w-full max-h-[90dvh] overflow-y-auto p-4 sm:p-6 shadow-2xl animate-scale-in outline-none"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between mb-5">
-          <h2
-            id={titleId}
-            className="font-display text-lg font-bold text-slate-900 dark:text-white"
+    <>
+      {createPortal(
+        <div
+          className="fixed inset-0 !mt-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in"
+          onClick={onClose}
+        >
+          <div
+            {...dialogProps}
+            className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 max-w-md w-full max-h-[90dvh] overflow-y-auto p-4 sm:p-6 shadow-2xl animate-scale-in outline-none"
+            onClick={(e) => e.stopPropagation()}
           >
-            {t('teacher.createClassModalTitle')}
-          </h2>
-          <button
-            onClick={onClose}
-            aria-label={t('teacher.closeModal')}
-            className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-          >
-            <X className="h-5 w-5 text-slate-500" />
-          </button>
-        </div>
+            <div className="flex items-center justify-between gap-3 mb-5">
+              <h2
+                id={titleId}
+                className="font-display text-lg font-bold text-slate-900 dark:text-white"
+              >
+                {t('teacher.createClassModalTitle')}
+              </h2>
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label={t('teacher.closeModal')}
+                className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                <X className="h-5 w-5 text-slate-500" />
+              </button>
+            </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="class-name">
-              {t('teacher.classNameLabel')} <span className="text-rose-500">*</span>
-            </Label>
-            <Input
-              id="class-name"
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-              maxLength={120}
-              autoFocus
-            />
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="class-name">
+                  {t('teacher.classNameLabel')} <span className="text-rose-500">*</span>
+                </Label>
+                <Input
+                  id="class-name"
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  required
+                  maxLength={120}
+                  autoFocus
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="class-desc">{t('teacher.classDescriptionLabel')}</Label>
+                <Textarea
+                  id="class-desc"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  maxLength={1000}
+                  rows={3}
+                />
+              </div>
+
+              {error && (
+                <Alert variant="destructive">
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              )}
+
+              <div className="flex justify-end gap-2 pt-2">
+                <Button type="button" variant="outline" onClick={onClose}>
+                  {t('teacher.cancelBtn')}
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={submitting || !name.trim()}
+                >
+                  {submitting ? t('teacher.creatingBtn') : t('teacher.createBtn')}
+                </Button>
+              </div>
+            </form>
           </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="class-desc">{t('teacher.classDescriptionLabel')}</Label>
-            <Textarea
-              id="class-desc"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              maxLength={1000}
-              rows={3}
-            />
-          </div>
-
-          {error && (
-            <Alert variant="destructive">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-
-          <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={onClose}>
-              {t('teacher.cancelBtn')}
-            </Button>
-            <Button
-              type="submit"
-              disabled={submitting || !name.trim()}
-            >
-              {submitting ? t('teacher.creatingBtn') : t('teacher.createBtn')}
-            </Button>
-          </div>
-        </form>
-      </div>
+        </div>,
+        document.body,
+      )}
       <UpgradeModal
         open={upgradeOpen}
         onOpenChange={setUpgradeOpen}
         featureName="Classroom Cohorts"
         reasonDescription={error || undefined}
       />
-    </div>
+    </>
   );
 }

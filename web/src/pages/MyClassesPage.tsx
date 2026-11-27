@@ -1,5 +1,6 @@
-import { useEffect, useState, useCallback } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useEffect, useState, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
+import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   GraduationCap,
@@ -14,8 +15,11 @@ import {
   Copy,
   Check,
   KeyRound,
+  X,
 } from 'lucide-react';
 import { api, type Class, type TeacherDashboard } from '@/api/client';
+import { formatUserError, resolveAcademicLang } from '@/lib/academicTaxonomy';
+import { useAuth } from '@/contexts/AuthContext';
 import { useModalA11y } from '@/hooks/useModalA11y';
 import { useToast } from '@/contexts/ToastContext';
 import { CreateClassDialog } from '@/components/CreateClassDialog';
@@ -31,6 +35,17 @@ import {
   TextMorph,
 } from '@/components/ui/transitions';
 
+type ClassWithInstructorMeta = Class & {
+  teacher_full_name?: string | null;
+  teacher_name?: string | null;
+};
+
+function getInstructorDisplayName(c: ClassWithInstructorMeta): string {
+  const fullName = c.teacher_full_name?.trim() || c.teacher_name?.trim();
+  if (fullName) return fullName;
+  return c.teacher_username || '—';
+}
+
 /**
  * MyClassesPage — Visual Classroom Hub for faculty.
  *
@@ -39,12 +54,12 @@ import {
  */
 export function MyClassesPage() {
   const { t, i18n } = useTranslation();
-  const lang: 'en' | 'vi' = i18n.language?.startsWith('vi') ? 'vi' : 'en';
-  const navigate = useNavigate();
+  const lang = resolveAcademicLang(i18n.resolvedLanguage || i18n.language);
+  const { user } = useAuth();
   const toast = useToast();
   const [dashboard, setDashboard] = useState<TeacherDashboard | null>(null);
-  const [enrolledClasses, setEnrolledClasses] = useState<Class[]>([]);
-  const [pendingLeaveClass, setPendingLeaveClass] = useState<Class | null>(null);
+  const [enrolledClasses, setEnrolledClasses] = useState<ClassWithInstructorMeta[]>([]);
+  const [pendingLeaveClass, setPendingLeaveClass] = useState<ClassWithInstructorMeta | null>(null);
   const [pendingDeleteClass, setPendingDeleteClass] = useState<Class | null>(null);
   const [copiedClassId, setCopiedClassId] = useState<number | null>(null);
   const [error, setError] = useState('');
@@ -70,9 +85,32 @@ export function MyClassesPage() {
     } catch (e) {
       const enrolled = await enrolledPromise;
       setEnrolledClasses(Array.isArray(enrolled) ? enrolled : []);
-      setError(e instanceof Error ? e.message : 'Failed to load dashboard');
+      setError(
+        formatUserError(
+          e,
+          lang,
+          lang === 'vi' ? 'Không thể tải danh sách lớp học.' : 'Failed to load dashboard',
+        ),
+      );
     }
-  }, []);
+  }, [lang]);
+
+  const handleClassCreated = useCallback(
+    (created: Class) => {
+      toast.success(
+        lang === 'vi'
+          ? `Đã tạo lớp "${created.name}" thành công`
+          : `Created class "${created.name}"`,
+        created.join_code
+          ? lang === 'vi'
+            ? `Mã tham gia lớp: ${created.join_code}`
+            : `Join code: ${created.join_code}`
+          : undefined,
+      );
+      void load();
+    },
+    [lang, load, toast],
+  );
 
   const handleCopyCode = async (e: React.MouseEvent, c: Class) => {
     e.stopPropagation();
@@ -107,7 +145,13 @@ export function MyClassesPage() {
           : `Left class ${target.name}`,
       );
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to leave class');
+      toast.error(
+        formatUserError(
+          e,
+          lang,
+          lang === 'vi' ? 'Không thể rời khỏi lớp học.' : 'Failed to leave class',
+        ),
+      );
     }
   };
 
@@ -124,7 +168,13 @@ export function MyClassesPage() {
       );
       void load();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to delete class');
+      toast.error(
+        formatUserError(
+          e,
+          lang,
+          lang === 'vi' ? 'Không thể xóa lớp học.' : 'Failed to delete class',
+        ),
+      );
     }
   };
 
@@ -132,10 +182,17 @@ export function MyClassesPage() {
     void load();
   }, [load]);
 
-  const maxStudentsInCohort = Math.max(
-    1,
-    ...(dashboard?.classes ?? []).map((c) => c.student_count || 0),
-  );
+  // BUG-22: Never show classes owned/taught by the current teacher under Enrolled Classes
+  const visibleEnrolledClasses = useMemo(() => {
+    const ownedClassIds = new Set((dashboard?.classes ?? []).map((c) => c.id));
+    return enrolledClasses.filter(
+      (c) =>
+        (user?.id == null || c.teacher_id !== user.id) &&
+        !ownedClassIds.has(c.id),
+    );
+  }, [dashboard?.classes, enrolledClasses, user?.id]);
+
+  const classCount = dashboard?.classes?.length ?? 0;
 
   return (
     <div className="space-y-5 pb-10">
@@ -155,7 +212,7 @@ export function MyClassesPage() {
                 {dashboard
                   ? lang === 'vi'
                     ? `${dashboard.total_classes} LỚP ĐANG HOẠT ĐỘNG`
-                    : `${dashboard.total_classes} ACTIVE CLASSES`
+                    : `${dashboard.total_classes} ACTIVE ${dashboard.total_classes === 1 ? 'CLASS' : 'CLASSES'}`
                   : lang === 'vi'
                     ? 'ĐANG ĐỒNG BỘ...'
                     : 'SYNCING...'}
@@ -282,14 +339,14 @@ export function MyClassesPage() {
               className="font-mono text-[11px] bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/60"
             >
               {lang === 'vi'
-                ? `${dashboard?.classes?.length ?? 0} lớp học`
-                : `${dashboard?.classes?.length ?? 0} classes`}
+                ? `${classCount} lớp học`
+                : `${classCount} ${classCount === 1 ? 'class' : 'classes'}`}
             </Badge>
           }
         />
 
         <div className="p-4 sm:p-5">
-          {(dashboard?.classes?.length ?? 0) === 0 ? (
+          {classCount === 0 ? (
             <div className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 p-10 text-center">
               <p className="text-slate-700 dark:text-slate-300 font-medium">
                 {t('teacher.noClassesYet')}
@@ -299,36 +356,25 @@ export function MyClassesPage() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {(dashboard?.classes ?? []).map((c: Class) => {
-                const submissionRatio =
-                  c.student_count > 0
-                    ? Math.min(100, Math.round((c.essay_count / c.student_count) * 100))
-                    : c.essay_count > 0
-                      ? 100
-                      : 0;
-                const studentBarPct = Math.min(
-                  100,
-                  Math.round(((c.student_count || 0) / maxStudentsInCohort) * 100),
-                );
                 const isCopied = copiedClassId === c.id;
 
                 return (
                   <CardHoverTilt key={c.id} maxTilt={3.2} className="h-full">
                     <div
-                      onClick={() => navigate(`/teacher/classes/${c.id}`)}
-                      className="h-full w-full text-left rounded-2xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/90 dark:border-slate-800 p-4 sm:p-5 hover:bg-white dark:hover:bg-slate-800 hover:border-indigo-300 dark:hover:border-indigo-700 transition-colors flex flex-col justify-between gap-4 group cursor-pointer shadow-sm"
+                      data-testid={`class-card-${c.id}`}
+                      className="relative h-full w-full text-left rounded-2xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/90 dark:border-slate-800 p-4 sm:p-5 hover:bg-white dark:hover:bg-slate-800 hover:border-indigo-300 dark:hover:border-indigo-700 focus-within:ring-2 focus-within:ring-indigo-500 focus-within:border-indigo-400 transition-colors flex flex-col justify-between gap-4 group shadow-sm"
                     >
                       <div className="space-y-2">
                         <div className="flex items-start justify-between gap-2">
                           <h3 className="font-display font-bold text-base sm:text-lg text-slate-900 dark:text-white break-words">
                             <Link
                               to={`/teacher/classes/${c.id}`}
-                              onClick={(e) => e.stopPropagation()}
-                              className="group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 rounded"
+                              className="group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors focus-visible:outline-none rounded after:content-[''] after:absolute after:inset-0"
                             >
                               {c.name}
                             </Link>
                           </h3>
-                          <div className="flex items-center gap-1 shrink-0">
+                          <div className="relative z-10 flex items-center gap-1 shrink-0">
                             <button
                               type="button"
                               data-testid={`delete-class-card-btn-${c.id}`}
@@ -342,11 +388,14 @@ export function MyClassesPage() {
                                 e.stopPropagation();
                                 setPendingDeleteClass(c);
                               }}
-                              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition-colors cursor-pointer"
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500"
                             >
                               <Trash2 className="h-4 w-4" />
                             </button>
-                            <ChevronRight className="h-4 w-4 text-slate-400 group-hover:text-indigo-500 transition-transform group-hover:translate-x-0.5" />
+                            <ChevronRight
+                              aria-hidden="true"
+                              className="h-4 w-4 text-slate-400 group-hover:text-indigo-500 transition-transform group-hover:translate-x-0.5 pointer-events-none"
+                            />
                           </div>
                         </div>
 
@@ -358,45 +407,47 @@ export function MyClassesPage() {
                       </div>
 
                       <div className="space-y-3 pt-1">
-                        {/* Visual Activity Bar */}
-                        <div className="space-y-1.5">
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="inline-flex items-center gap-1.5 text-slate-600 dark:text-slate-300 font-medium">
-                              <Users className="h-3.5 w-3.5 text-emerald-500" />
-                              {c.student_count}{' '}
-                              {lang === 'vi' ? 'sinh viên' : 'students'}
+                        {/* Explicit Student & Submission Counts */}
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900/70 border border-slate-200/80 dark:border-slate-700/80 text-slate-700 dark:text-slate-200 font-medium">
+                            <Users className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                            <span className="font-mono font-semibold tabular-nums">
+                              {c.student_count}
                             </span>
-                            <span className="inline-flex items-center gap-1.5 text-slate-600 dark:text-slate-300 font-medium">
-                              <FileCheck className="h-3.5 w-3.5 text-indigo-500" />
-                              {c.essay_count}{' '}
-                              {lang === 'vi' ? 'bài nộp' : 'submissions'}
+                            <span>
+                              {lang === 'vi'
+                                ? 'sinh viên'
+                                : c.student_count === 1
+                                  ? 'student'
+                                  : 'students'}
                             </span>
-                          </div>
-                          <div className="h-1.5 w-full rounded-full bg-slate-200/80 dark:bg-slate-700/80 overflow-hidden">
-                            <div
-                              style={{
-                                width: `${Math.max(
-                                  submissionRatio,
-                                  c.student_count > 0 ? Math.min(25, studentBarPct) : 0,
-                                )}%`,
-                                transition: 'width 420ms cubic-bezier(0.22, 1, 0.36, 1)',
-                              }}
-                              className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-emerald-500"
-                            />
-                          </div>
+                          </span>
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900/70 border border-slate-200/80 dark:border-slate-700/80 text-slate-700 dark:text-slate-200 font-medium">
+                            <FileCheck className="h-3.5 w-3.5 text-indigo-500 shrink-0" />
+                            <span className="font-mono font-semibold tabular-nums">
+                              {c.essay_count}
+                            </span>
+                            <span>
+                              {lang === 'vi'
+                                ? 'bài nộp'
+                                : c.essay_count === 1
+                                  ? 'submission'
+                                  : 'submissions'}
+                            </span>
+                          </span>
                         </div>
 
                         {/* Interactive Join Code Ticket Pill */}
                         {c.join_code && (
                           <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-200/70 dark:border-slate-700/70">
-                            <span className="text-[11px] text-slate-400 dark:text-slate-500">
+                            <span className="text-[11px] text-slate-500 dark:text-slate-400">
                               {lang === 'vi' ? 'Mã tham gia lớp' : 'Class Join Code'}
                             </span>
                             <button
                               type="button"
                               data-testid={`copy-class-code-${c.id}`}
                               onClick={(e) => void handleCopyCode(e, c)}
-                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50/90 hover:bg-indigo-100 dark:bg-indigo-950/80 dark:hover:bg-indigo-900/70 border border-indigo-200/80 dark:border-indigo-800 text-xs font-mono font-semibold text-indigo-700 dark:text-indigo-300 transition-colors cursor-pointer"
+                              className="relative z-10 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50/90 hover:bg-indigo-100 dark:bg-indigo-950/80 dark:hover:bg-indigo-900/70 border border-indigo-200/80 dark:border-indigo-800 text-xs font-mono font-semibold text-indigo-700 dark:text-indigo-300 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
                             >
                               {isCopied ? (
                                 <Check className="h-3 w-3 text-emerald-500" />
@@ -426,7 +477,7 @@ export function MyClassesPage() {
         </div>
       </div>
 
-      {enrolledClasses.length > 0 && (
+      {visibleEnrolledClasses.length > 0 && (
         <div
           data-testid="enrolled-classes-section"
           className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden"
@@ -435,22 +486,23 @@ export function MyClassesPage() {
             title={lang === 'vi' ? 'LỚP HỌC ĐÃ THAM GIA' : 'ENROLLED CLASSES'}
             badge={
               <Badge variant="secondary" className="font-mono text-[11px]">
-                {enrolledClasses.length}
+                {visibleEnrolledClasses.length}
               </Badge>
             }
           />
           <div className="p-4 sm:p-5 space-y-3">
-            {enrolledClasses.map((c) => (
+            {visibleEnrolledClasses.map((c) => (
               <div
                 key={c.id}
                 className="rounded-xl bg-slate-50/60 dark:bg-slate-800/40 border border-slate-200/90 dark:border-slate-800 p-4 flex flex-wrap items-center justify-between gap-3"
               >
                 <div className="min-w-0">
-                  <h3 className="font-display font-semibold text-sm sm:text-base text-slate-900 dark:text-white">
+                  <h3 className="font-display font-semibold text-sm sm:text-base text-slate-900 dark:text-white break-words">
                     {c.name}
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                    {lang === 'vi' ? 'Giảng viên:' : 'Instructor:'} {c.teacher_username}
+                    {lang === 'vi' ? 'Giảng viên:' : 'Instructor:'}{' '}
+                    {getInstructorDisplayName(c)}
                   </p>
                 </div>
                 <Button
@@ -470,47 +522,59 @@ export function MyClassesPage() {
         </div>
       )}
 
-      {pendingLeaveClass && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
-          onClick={() => setPendingLeaveClass(null)}
-        >
+      {pendingLeaveClass &&
+        createPortal(
           <div
-            {...leaveClassDialog.dialogProps}
-            className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 max-w-md w-full p-5 shadow-2xl space-y-4 outline-none"
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 !mt-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+            onClick={() => setPendingLeaveClass(null)}
           >
-            <h3
-              id={leaveClassDialog.titleId}
-              className="font-display text-lg font-bold text-slate-900 dark:text-white"
+            <div
+              {...leaveClassDialog.dialogProps}
+              className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 max-w-md w-full p-5 shadow-2xl space-y-4 outline-none"
+              onClick={(e) => e.stopPropagation()}
             >
-              {lang === 'vi' ? 'Xác nhận rời lớp học' : 'Leave Class?'}
-            </h3>
-            <p className="text-sm text-slate-600 dark:text-slate-300">
-              {lang === 'vi'
-                ? `Bạn có chắc muốn rời khỏi lớp "${pendingLeaveClass.name}"?`
-                : `Are you sure you want to leave "${pendingLeaveClass.name}"?`}
-            </p>
-            <div className="flex justify-end gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setPendingLeaveClass(null)}
-              >
-                {t('common.cancel')}
-              </Button>
-              <Button
-                type="button"
-                variant="destructive"
-                data-testid="confirm-leave-class-btn"
-                onClick={() => void handleConfirmLeave()}
-              >
-                {lang === 'vi' ? 'Rời lớp' : 'Leave Class'}
-              </Button>
+              <div className="flex items-center justify-between gap-3">
+                <h3
+                  id={leaveClassDialog.titleId}
+                  className="font-display text-lg font-bold text-slate-900 dark:text-white"
+                >
+                  {lang === 'vi' ? 'Xác nhận rời lớp học' : 'Leave Class?'}
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setPendingLeaveClass(null)}
+                  aria-label={t('teacher.closeModal')}
+                  className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                >
+                  <X className="h-5 w-5 text-slate-500" />
+                </button>
+              </div>
+              <p className="text-sm text-slate-600 dark:text-slate-300">
+                {lang === 'vi'
+                  ? `Bạn có chắc muốn rời khỏi lớp "${pendingLeaveClass.name}"?`
+                  : `Are you sure you want to leave "${pendingLeaveClass.name}"?`}
+              </p>
+              <div className="flex justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setPendingLeaveClass(null)}
+                >
+                  {t('common.cancel')}
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  data-testid="confirm-leave-class-btn"
+                  onClick={() => void handleConfirmLeave()}
+                >
+                  {lang === 'vi' ? 'Rời lớp' : 'Leave Class'}
+                </Button>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
 
       <ConfirmationModal
         isOpen={pendingDeleteClass !== null}
@@ -532,7 +596,7 @@ export function MyClassesPage() {
       <CreateClassDialog
         open={createOpen}
         onClose={() => setCreateOpen(false)}
-        onCreated={load}
+        onCreated={handleClassCreated}
       />
     </div>
   );

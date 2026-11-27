@@ -246,7 +246,7 @@ describe('v3.70.0 Classroom, Pending Reviews, Sandbox, Modals & RuleInspector', 
     // Smart routing for ClassEssay rows
     const completedRow = screen.getByTestId('class-essay-row-101');
     expect(completedRow.getAttribute('href')).toBe('/verification/report/101');
-    expect(within(completedRow).getByText('CIS 91.4%')).toBeTruthy();
+    expect(within(completedRow).getByText('CIS 91.4 / 100')).toBeTruthy();
 
     const queuedRow = screen.getByTestId('class-essay-row-102');
     expect(queuedRow.getAttribute('href')).toBe('/verification/processing/102');
@@ -730,6 +730,8 @@ describe('v3.70.0 Classroom, Pending Reviews, Sandbox, Modals & RuleInspector', 
           triggered_rules: ['R-INCOMPLETE-METADATA', 'R-RETRACTED-PAPER'],
           is_retracted: true,
           reasoning: 'Incomplete reference missing year and venue.',
+          reasoning_vi:
+            'Trích dẫn chưa đủ thông tin định danh học thuật (thiếu năm xuất bản và nơi công bố).',
         },
         {
           index: 3,
@@ -757,13 +759,13 @@ describe('v3.70.0 Classroom, Pending Reviews, Sandbox, Modals & RuleInspector', 
       'Incomplete Ref: 1',
     );
     expect(screen.getByTestId('sandbox-summary-unresolved').textContent).toContain(
-      'Unresolved: 1',
+      'Unverified: 1',
     );
 
     const card1 = screen.getByTestId('sandbox-result-card-1');
     expect(card1.textContent).toContain('[14a]');
     expect(screen.getByTestId('sandbox-url-status-1').textContent).toContain(
-      'URL Unchecked (Scholarly Match)',
+      'Scholarly Match',
     );
     expect(screen.getByTestId('sandbox-observed-meta-1').textContent).toContain(
       'TCVN 7572-1:2020 Aggregates for concrete and mortar',
@@ -793,17 +795,17 @@ describe('v3.70.0 Classroom, Pending Reviews, Sandbox, Modals & RuleInspector', 
     );
   });
 
-  it('HelpModal renders Incomplete Reference (R-INCOMPLETE-METADATA) and 4 canonical CIS bands in EN & VI, and RuleInspector defines R-DOI-CONFLICT & updated R-CROSS-LINGUAL-TITLE-MATCH', async () => {
+  it('HelpModal renders Incomplete Reference and 4 canonical 0–100 CIS bands in EN & VI, and RuleInspector defines R-DOI-CONFLICT & updated R-CROSS-LINGUAL-TITLE-MATCH', async () => {
     const { unmount } = renderWithAuth(<HelpModal isOpen={true} onClose={vi.fn()} />);
 
     fireEvent.click(screen.getByRole('button', { name: /Understanding Verdicts/i }));
 
     expect(screen.getByText('Incomplete Reference')).toBeTruthy();
-    expect(screen.getByText('R-INCOMPLETE-METADATA')).toBeTruthy();
-    expect(screen.getByText('85–100%')).toBeTruthy();
-    expect(screen.getByText('70–84%')).toBeTruthy();
-    expect(screen.getByText('50–69%')).toBeTruthy();
-    expect(screen.getByText('< 50%')).toBeTruthy();
+    expect(screen.queryByText('R-INCOMPLETE-METADATA')).toBeNull();
+    expect(screen.getByText('85 – 100')).toBeTruthy();
+    expect(screen.getByText('70 – 84')).toBeTruthy();
+    expect(screen.getByText('50 – 69')).toBeTruthy();
+    expect(screen.getByText('< 50')).toBeTruthy();
 
     unmount();
 
@@ -814,7 +816,7 @@ describe('v3.70.0 Classroom, Pending Reviews, Sandbox, Modals & RuleInspector', 
     expect(screen.getByText('Xuất sắc')).toBeTruthy();
     expect(screen.getByText('Tốt')).toBeTruthy();
     expect(screen.getByText('Trung bình / Cần rà soát')).toBeTruthy();
-    expect(screen.getByText('Nghiêm trọng')).toBeTruthy();
+    expect(screen.getByText('Cần rà soát kỹ')).toBeTruthy();
 
     // RuleInspector definitions check
     expect(RULE_DEFINITIONS['R-DOI-CONFLICT']).toBeDefined();
@@ -841,5 +843,310 @@ describe('v3.70.0 Classroom, Pending Reviews, Sandbox, Modals & RuleInspector', 
     expect(
       screen.getByText('Xung đột mã DOI giữa các CSDL học thuật'),
     ).toBeTruthy();
+  });
+
+  it('Phase 2 Agent E — ClassDetailPage filters positive rules, requires join-code regenerate confirmation, supports submission search/filter/sort + VI DD/MM/YYYY dates + empty onboarding & friendly 404', async () => {
+    await i18n.changeLanguage('vi');
+    vi.spyOn(api, 'listMyClasses').mockResolvedValue([
+      makeClass({
+        id: 15,
+        name: 'Khóa luận CNTT 2026',
+        join_code: 'CITRA-1001',
+        student_count: 2,
+        essay_count: 2,
+      }),
+    ]);
+    vi.spyOn(api, 'listClassStudents').mockResolvedValue([
+      {
+        id: 31,
+        username: 'sv_an',
+        email: 'an@tdtu.edu.vn',
+        full_name: 'Nguyễn Văn An',
+        is_active: true,
+      },
+    ]);
+    vi.spyOn(api, 'listClassEssays').mockResolvedValue([
+      {
+        id: 201,
+        filename: 'High_Score_Paper.pdf',
+        num_pages: 20,
+        user_id: 31,
+        username: 'sv_an',
+        uploaded_at: '2026-11-24T08:00:00Z',
+        job_status: 'completed',
+        cis_score: 94.5,
+      },
+      {
+        id: 202,
+        filename: 'Failed_Scan.pdf',
+        num_pages: 4,
+        user_id: 31,
+        username: 'sv_an',
+        uploaded_at: '2026-11-23T08:00:00Z',
+        job_status: 'failed',
+        job_error: 'Parse error',
+        quota_charged: false,
+      },
+    ]);
+    vi.spyOn(api, 'getClassAnalytics').mockResolvedValue({
+      class_id: 15,
+      class_name: 'Khóa luận CNTT 2026',
+      total_students: 2,
+      total_essays: 2,
+      failed_essays: 1,
+      queued_essays: 0,
+      avg_cis: 94.5,
+      recency_5yr_ratio: 80,
+      cis_distribution: { excellent: 1, good: 0, fair: 0, poor: 0 },
+      verdict_breakdown: { verified: 10, metadata_error: 2 },
+      top_triggered_rules: [
+        { rule_id: 'R-LOCAL_DB_VERIFIED', count: 10 },
+        { rule_id: 'R-WELL-LINKED', count: 8 },
+        { rule_id: 'R-CHIMERIC-DOI-MISMATCH', count: 2 },
+      ],
+      shared_hallucinations: [],
+    });
+    const regenSpy = vi.spyOn(api, 'regenerateClassCode').mockResolvedValue(
+      makeClass({
+        id: 15,
+        name: 'Khóa luận CNTT 2026',
+        join_code: 'CITRA-9999',
+      }),
+    );
+
+    const { unmount } = renderWithAuth(
+      <Routes>
+        <Route path="/teacher/classes/:classId" element={<ClassDetailPage />} />
+      </Routes>,
+      { route: '/teacher/classes/15' },
+    );
+
+    // BUG-01: positive rules excluded, chimeric DOI translated cleanly
+    const issuesCard = await screen.findByTestId('top-citation-issues-card');
+    expect(issuesCard.textContent).toContain(
+      'Mã DOI dẫn tới một bài báo khác (có thể ghép nhầm DOI)',
+    );
+    expect(issuesCard.textContent).not.toContain('R-LOCAL_DB_VERIFIED');
+    expect(issuesCard.textContent).not.toContain('khớp chặt chẽ');
+
+    // BUG-48: VI localized DD/MM/YYYY date
+    expect(screen.getByTestId('class-essay-row-201').textContent).toContain('24/11/2026');
+
+    // BUG-43: Clicking failed pill filters submissions to failed only
+    fireEvent.click(screen.getByTestId('cohort-failed-essays-pill'));
+    expect(screen.queryByTestId('class-essay-row-201')).toBeNull();
+    expect(screen.getByTestId('class-essay-row-202')).toBeTruthy();
+
+    // BUG-23: Regenerate join code requires explicit confirmation dialog
+    fireEvent.click(screen.getByTestId('regenerate-join-code-btn'));
+    expect(regenSpy).not.toHaveBeenCalled();
+    expect(await screen.findByText('Tạo mã tham gia lớp mới?')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('confirmation-confirm-btn'));
+    await waitFor(() => expect(regenSpy).toHaveBeenCalledWith(15));
+
+    // BUG-11 & BUG-54: Edit Class modal portals with !mt-0 and has close × button
+    fireEvent.click(screen.getByTestId('edit-class-btn'));
+    const closeEditBtn = await screen.findByTestId('edit-class-close-btn');
+    expect(closeEditBtn.closest('[role="dialog"]')?.parentElement?.className).toContain(
+      '!mt-0',
+    );
+    fireEvent.click(closeEditBtn);
+    unmount();
+
+    // BUG-50: Empty class renders — on CIS/Recency, disabled exports, and 3-step onboarding
+    vi.spyOn(api, 'listMyClasses').mockResolvedValue([
+      makeClass({
+        id: 16,
+        name: 'Empty Class',
+        join_code: 'CITRA-2026',
+        student_count: 0,
+        essay_count: 0,
+      }),
+    ]);
+    vi.spyOn(api, 'listClassStudents').mockResolvedValue([]);
+    vi.spyOn(api, 'listClassEssays').mockResolvedValue([]);
+    vi.spyOn(api, 'getClassAnalytics').mockResolvedValue({
+      class_id: 16,
+      class_name: 'Empty Class',
+      total_students: 0,
+      total_essays: 0,
+      avg_cis: 0,
+      recency_5yr_ratio: 0,
+      cis_distribution: {},
+      verdict_breakdown: {},
+      top_triggered_rules: [],
+      shared_hallucinations: [],
+    });
+
+    const { unmount: unmountEmpty } = renderWithAuth(
+      <Routes>
+        <Route path="/teacher/classes/:classId" element={<ClassDetailPage />} />
+      </Routes>,
+      { route: '/teacher/classes/16' },
+    );
+
+    expect((await screen.findByTestId('cohort-avg-cis-value')).textContent).toBe('—');
+    expect(screen.getByTestId('cohort-recency-value').textContent).toBe('—');
+    expect(
+      (screen.getByTestId('export-class-csv-btn') as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect(
+      (screen.getByTestId('export-class-zip-btn') as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect(screen.getByTestId('empty-class-onboarding')).toBeTruthy();
+    unmountEmpty();
+
+    // Invalid class ID 999999 renders friendly not-found/access-restricted message
+    renderWithAuth(
+      <Routes>
+        <Route path="/teacher/classes/:classId" element={<ClassDetailPage />} />
+      </Routes>,
+      { route: '/teacher/classes/999999' },
+    );
+    expect(
+      await screen.findByText(
+        'Không tìm thấy lớp học này hoặc bạn không có quyền truy cập.',
+      ),
+    ).toBeTruthy();
+  });
+
+  it('Phase 2 Agent E — OverrideControls mounts DecisionSupportBanner, close × button, unified taxonomy, mapping description, and enforces >=5-char audit note', async () => {
+    await i18n.changeLanguage('vi');
+    const onOverride = vi.fn().mockResolvedValue(undefined);
+    const verdict: Verdict = {
+      citation_id: 'cit-42',
+      citation_raw: 'Nguyen (2024). Study.',
+      mapping_status: 'missing_reference',
+      mapping_confidence: 0.5,
+      label: 'suspected_hallucination',
+      confidence: 0.4,
+      reasoning: 'Not found.',
+      triggered_rules: [],
+      mismatched_fields: [],
+      matched_sources: [],
+      is_overridden: false,
+    };
+
+    renderWithAuth(<OverrideControls verdict={verdict} onOverride={onOverride} />);
+    fireEvent.click(screen.getByTestId('override-badge'));
+
+    expect(screen.getByTestId('decision-support-banner')).toBeTruthy();
+    expect(screen.getByTestId('override-close-btn')).toBeTruthy();
+    expect(screen.getByText('Kết quả xác minh nguồn')).toBeTruthy();
+    expect(
+      screen.getByText('Tình trạng trình bày & đối chiếu trong bài'),
+    ).toBeTruthy();
+    expect(screen.getByTestId('override-mapping-description').textContent).toContain(
+      'Thiếu nguồn:',
+    );
+
+    const submitBtn = screen.getByTestId('override-submit-btn') as HTMLButtonElement;
+    expect(submitBtn.disabled).toBe(true);
+
+    // Too short (< 5 chars) keeps submit disabled
+    fireEvent.change(screen.getByTestId('override-reason-input'), {
+      target: { value: 'abc' },
+    });
+    expect(submitBtn.disabled).toBe(true);
+
+    // Select verified + >= 5 char rationale enables submit
+    fireEvent.click(screen.getByTestId('override-label-verified'));
+    fireEvent.change(screen.getByTestId('override-reason-input'), {
+      target: { value: 'Đã kiểm tra bản in gốc' },
+    });
+    expect(submitBtn.disabled).toBe(false);
+
+    fireEvent.click(submitBtn);
+    await waitFor(() =>
+      expect(onOverride).toHaveBeenCalledWith(
+        expect.objectContaining({
+          verdict_id: 'cit-42',
+          new_label: 'verified',
+          reason: 'Đã kiểm tra bản in gốc',
+        }),
+      ),
+    );
+  });
+
+  it('Phase 2 Agent E — PendingReviewsPage mounts DecisionSupportBanner, shows student_name & class_name, uses real <a href> report links, guards actions with target picker & Undo toast', async () => {
+    await i18n.changeLanguage('vi');
+    vi.spyOn(api, 'listMyClasses').mockResolvedValue([
+      makeClass({ id: 9, name: 'KLTN 2026' }),
+    ]);
+    vi.spyOn(api, 'listPendingReviews').mockResolvedValue([
+      {
+        verdict_id: 701,
+        essay_id: 88,
+        filename: 'KhoaLuan_NguyenVanAn_Final_Version_2026.pdf',
+        student_username: 'sv_an',
+        student_name: 'Nguyễn Văn An',
+        class_id: 9,
+        class_name: 'KLTN 2026',
+        citation_raw: 'Unknown Paper (2025).',
+        label: 'unresolved',
+        confidence: 0.45,
+        reasoning: 'Not indexed.',
+        validated_at: '2026-11-24T10:00:00Z',
+      },
+    ]);
+    const overrideSpy = vi
+      .spyOn(api, 'overrideVerdict')
+      .mockResolvedValue({ citation_id: '701', label: 'suspected_hallucination' } as Verdict);
+
+    renderWithAuth(<PendingReviewsPage />, { route: '/teacher/reviews' });
+
+    expect(await screen.findByTestId('decision-support-banner')).toBeTruthy();
+    expect(screen.getByTestId('pending-group-student-88').textContent).toContain(
+      'Nguyễn Văn An',
+    );
+    expect(screen.getByTestId('pending-group-class-88').textContent).toContain(
+      'KLTN 2026',
+    );
+    expect(
+      screen.getByTestId('pending-open-report-link-701').getAttribute('href'),
+    ).toBe('/verification/report/88?citation=701');
+    expect(
+      screen.getByTestId('pending-full-report-link-88').getAttribute('href'),
+    ).toBe('/verification/report/88');
+
+    // Clicking Flag opens confirmation bar without immediately mutating
+    fireEvent.click(screen.getByTestId('pending-confirm-issue-btn-701'));
+    expect(overrideSpy).not.toHaveBeenCalled();
+    expect(screen.getByTestId('pending-confirm-bar-701')).toBeTruthy();
+
+    // Teacher chooses suspected_hallucination explicitly instead of forced metadata_error
+    fireEvent.click(
+      screen.getByTestId('pending-target-option-701-suspected_hallucination'),
+    );
+    fireEvent.change(screen.getByTestId('pending-confirm-note-701'), {
+      target: { value: 'Không có trong kỷ yếu hội nghị' },
+    });
+    fireEvent.click(screen.getByTestId('pending-confirm-submit-701'));
+
+    await waitFor(() =>
+      expect(overrideSpy).toHaveBeenCalledWith(
+        88,
+        expect.objectContaining({
+          verdict_id: '701',
+          new_label: 'suspected_hallucination',
+          reason: 'Không có trong kỷ yếu hội nghị',
+        }),
+      ),
+    );
+
+    // Undo button appears in toast and reverts back to original_label ('unresolved')
+    const undoBtn = await screen.findByRole('button', { name: 'Hoàn tác' });
+    fireEvent.click(undoBtn);
+    await waitFor(() =>
+      expect(overrideSpy).toHaveBeenNthCalledWith(
+        2,
+        88,
+        expect.objectContaining({
+          verdict_id: '701',
+          new_label: 'unresolved',
+        }),
+      ),
+    );
+    expect(await screen.findByTestId('pending-review-row-701')).toBeTruthy();
   });
 });
