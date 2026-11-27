@@ -748,12 +748,13 @@ class TestConfigsPackagingCiAndDocsParity:
             REPO_ROOT / "web" / "src" / "components" / "AuthSplitShell.tsx"
         ).read_text(encoding="utf-8")
         assert prop_acc_pct in landing_src
-        assert prop_ece_str in landing_src
+        # Raw ECE calibration metric belongs in technical docs/README, not consumer Landing copy.
+        assert prop_ece_str in bench_report_md
         assert prop_acc_pct in pricing_src
-        assert prop_acc_pct in auth_shell_src
         for stale_web in ("98.58", "97.18%", "0.0433", "2.1621", "99.86", "99.20", "0.0411", "1.8304"):
             assert stale_web not in landing_src
             assert stale_web not in pricing_src
+            assert stale_web not in auth_shell_src
         assert "/api/auth/token" not in readme
         assert "/api/verify" not in readme
         assert "src/integrity_checker/ingestion" not in readme
