@@ -10,13 +10,13 @@ import type {
 import {
   formatLocalizedDateTime,
   formatUserError,
-  getMappingStatusDisplay,
   getVerdictDisplay,
   resolveAcademicLang,
+  type AcademicLang,
 } from '@/lib/academicTaxonomy';
 import { DecisionSupportBanner } from '@/components/DecisionSupportBanner';
 import { cn } from '@/lib/utils';
-import { RefreshCw, X } from 'lucide-react';
+import { ChevronDown, RefreshCw, X } from 'lucide-react';
 import { useRole } from '@/hooks/useRole';
 import { useModalA11y } from '@/hooks/useModalA11y';
 import { useToast } from '@/contexts/ToastContext';
@@ -34,6 +34,36 @@ const LABEL_OPTIONS: { value: ValidationLabel; symbol: string; color: string }[]
   { value: 'resource', symbol: '↗', color: 'text-violet-700 dark:text-violet-400' },
 ];
 
+/**
+ * Lecturer-facing explanations for each canonical source verification status
+ * (written strictly for instructors evaluating a student submission).
+ */
+const LECTURER_VERDICT_DESCRIPTIONS: Record<
+  ValidationLabel,
+  Record<AcademicLang, string>
+> = {
+  verified: {
+    vi: 'Xác nhận trích dẫn này có nguồn gốc hợp lệ sau khi đối chiếu.',
+    en: 'Confirm that this citation refers to a valid source after verification.',
+  },
+  metadata_error: {
+    vi: 'Xác nhận tài liệu gốc có thật nhưng bài nộp ghi sai một số chi tiết (tác giả, năm, tiêu đề hoặc mã DOI).',
+    en: 'Confirm that the source exists, but the submission has inaccurate citation details (author, year, title, or DOI).',
+  },
+  suspected_hallucination: {
+    vi: 'Ghi nhận chưa tìm thấy nguồn gốc tương ứng; giữ cảnh báo để sinh viên kiểm tra lại bản gốc hoặc thay thế tài liệu.',
+    en: 'Record that no matching publication was found; keep the alert so the student checks the original source or replaces it.',
+  },
+  unresolved: {
+    vi: 'Ghi nhận chưa đủ dữ liệu trực tuyến để kết luận (ví dụ sách in, giáo trình hoặc tài liệu nội bộ).',
+    en: 'Record that online records are insufficient to confirm (e.g., print books, textbooks, or internal documents).',
+  },
+  resource: {
+    vi: 'Xác nhận đây là trang web, báo cáo hoặc văn bản quy định chung thay vì bài báo học thuật (không bị tính điểm trừ).',
+    en: 'Confirm this is a web page, report, or official regulation rather than a journal article (not penalized).',
+  },
+};
+
 const STATUS_OPTIONS: CitationMappingStatus[] = [
   'matched',
   'missing_reference',
@@ -44,6 +74,121 @@ const STATUS_OPTIONS: CitationMappingStatus[] = [
   'style_inconsistent',
   'unresolved',
 ];
+
+/**
+ * Non-colliding in-text link status labels and neutral third-person descriptions
+ * tailored for lecturers (avoids colliding with Section 1 labels and never
+ * addresses the lecturer as the essay author).
+ */
+const LECTURER_MAPPING_SPECS: Record<
+  CitationMappingStatus,
+  Record<AcademicLang, { label: string; description: string }>
+> = {
+  matched: {
+    vi: {
+      label: 'Khớp trong bài & danh mục',
+      description:
+        'Trích dẫn trong nội dung bài khớp chính xác với mục tương ứng ở danh mục Tài liệu tham khảo cuối bài.',
+    },
+    en: {
+      label: 'Matched in Text & List',
+      description:
+        'The in-text citation cleanly matches its corresponding entry in the bibliography.',
+    },
+  },
+  missing_reference: {
+    vi: {
+      label: 'Thiếu trong danh mục',
+      description:
+        'Có trích dẫn trong nội dung bài nhưng chưa được liệt kê ở danh mục Tài liệu tham khảo cuối bài.',
+    },
+    en: {
+      label: 'Missing from Bibliography',
+      description:
+        'Cited in the text of the submission, but missing from the bibliography at the end.',
+    },
+  },
+  uncited_reference: {
+    vi: {
+      label: 'Chưa trích trong nội dung',
+      description:
+        'Có tên trong danh mục Tài liệu tham khảo cuối bài nhưng chưa được trích dẫn ở đoạn văn nào trong bài.',
+    },
+    en: {
+      label: 'Listed but Not Cited',
+      description:
+        'Appears in the bibliography, but is never referenced in the body of the submission.',
+    },
+  },
+  in_text_mismatch: {
+    vi: {
+      label: 'Lệch tên/năm với danh mục',
+      description:
+        'Tên tác giả hoặc năm xuất bản ghi trong câu văn chưa khớp với mục tương ứng ở danh mục cuối bài.',
+    },
+    en: {
+      label: 'In-Text vs. List Differs',
+      description:
+        'The author spelling or publication year in the text differs from the matching bibliography entry.',
+    },
+  },
+  duplicate_reference: {
+    vi: {
+      label: 'Trùng lặp',
+      description:
+        'Tài liệu này đang được liệt kê lặp lại nhiều hơn một lần trong danh mục Tài liệu tham khảo.',
+    },
+    en: {
+      label: 'Duplicate Entry',
+      description:
+        'This work is listed more than once in the submission’s reference list.',
+    },
+  },
+  ambiguous_mapping: {
+    vi: {
+      label: 'Trùng tác giả & năm',
+      description:
+        'Trích dẫn trong bài có thể trỏ tới nhiều tài liệu cùng tác giả và năm xuất bản (thiếu ký hiệu a, b).',
+    },
+    en: {
+      label: 'Same Author & Year',
+      description:
+        'This in-text citation could match multiple bibliography entries with the same author and year (missing a/b suffix).',
+    },
+  },
+  style_inconsistent: {
+    vi: {
+      label: 'Định dạng chưa chuẩn',
+      description:
+        'Cách trình bày trích dẫn không đồng nhất với chuẩn chung của bài (ví dụ trộn lẫn kiểu số [1] và tên–năm).',
+    },
+    en: {
+      label: 'Mixed Citation Style',
+      description:
+        'Formatting differs from the rest of the paper (e.g., mixing numbered and author–year styles).',
+    },
+  },
+  unresolved: {
+    vi: {
+      label: 'Chưa rõ liên kết',
+      description:
+        'Chưa thể tự động đối chiếu trích dẫn này giữa nội dung bài viết và danh mục Tài liệu tham khảo.',
+    },
+    en: {
+      label: 'Link Unclear',
+      description:
+        'Could not automatically pair this citation between the text and the reference list.',
+    },
+  },
+};
+
+function getLecturerMappingSpec(
+  status: CitationMappingStatus,
+  lang: AcademicLang,
+): { label: string; description: string } {
+  const spec = LECTURER_MAPPING_SPECS[status] ?? LECTURER_MAPPING_SPECS.unresolved;
+  return spec[lang];
+}
 
 function OverrideForm({
   verdict,
@@ -60,6 +205,7 @@ function OverrideForm({
   const toast = useToast();
   const [label, setLabel] = useState<ValidationLabel>(verdict.label);
   const [status, setStatus] = useState<CitationMappingStatus>(verdict.mapping_status);
+  const [showMappingSection, setShowMappingSection] = useState(false);
   const [reason, setReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
@@ -71,7 +217,9 @@ function OverrideForm({
   const hasValidReason = trimmedReason.length >= MIN_OVERRIDE_REASON_LENGTH;
   const hasChanges = label !== verdict.label || status !== verdict.mapping_status;
   const canSubmit = !submitting && hasValidReason;
-  const selectedMapping = getMappingStatusDisplay(status, lang);
+  const selectedVerdictDisplay = getVerdictDisplay(label, lang);
+  const selectedVerdictDesc = LECTURER_VERDICT_DESCRIPTIONS[label][lang];
+  const selectedMapping = getLecturerMappingSpec(status, lang);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -84,7 +232,11 @@ function OverrideForm({
         new_mapping_status: status,
         reason: trimmedReason,
       });
-      toast.success(t('override.successToast'));
+      toast.success(
+        isVi
+          ? 'Đã lưu kết quả đánh giá vào lịch sử duyệt trích dẫn.'
+          : 'Review result saved to the citation review log.',
+      );
       setDone(true);
       setTimeout(onClose, 500);
     } catch (err) {
@@ -92,7 +244,9 @@ function OverrideForm({
         formatUserError(
           err,
           lang,
-          t('override.errorToast', isVi ? 'Không thể lưu điều chỉnh. Vui lòng thử lại.' : 'Override failed'),
+          isVi
+            ? 'Không thể lưu kết quả đánh giá. Vui lòng thử lại.'
+            : 'Could not save the review result. Please try again.',
         ),
       );
     } finally {
@@ -116,7 +270,9 @@ function OverrideForm({
         <div className="flex items-center justify-between gap-3">
           <h3 id={titleId} className="text-base font-bold flex items-center gap-2 text-slate-900 dark:text-white">
             <RefreshCw className="h-4 w-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
-            <span>{t('override.title')}</span>
+            <span>
+              {isVi ? 'Cập nhật kết quả kiểm tra' : 'Update Review Result'}
+            </span>
           </h3>
           <button
             type="button"
@@ -132,10 +288,10 @@ function OverrideForm({
 
         <DecisionSupportBanner variant="compact" lang={lang} />
 
-        {/* Source verification result */}
+        {/* Section 1: Source verification status (5 canonical options) */}
         <div>
           <Label className="text-sm font-medium block mb-2">
-            {isVi ? 'Kết quả xác minh nguồn' : 'Source Verification Result'}
+            {isVi ? 'Kết quả kiểm tra nguồn gốc' : 'Source Verification Status'}
           </Label>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {LABEL_OPTIONS.map((opt) => {
@@ -162,53 +318,86 @@ function OverrideForm({
               );
             })}
           </div>
-        </div>
-
-        {/* Mapping status */}
-        <div>
-          <Label className="text-sm font-medium block mb-2">
-            {isVi
-              ? 'Tình trạng trình bày & đối chiếu trong bài'
-              : 'In-Text Presentation & Cross-Reference Status'}
-          </Label>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-            {STATUS_OPTIONS.map((opt) => {
-              const display = getMappingStatusDisplay(opt, lang);
-              const isSelected = status === opt;
-              return (
-                <button
-                  key={opt}
-                  type="button"
-                  aria-pressed={isSelected}
-                  data-testid={`override-status-${opt}`}
-                  onClick={() => setStatus(opt)}
-                  className={cn(
-                    'px-2 py-1.5 border rounded-lg text-xs text-center transition-colors cursor-pointer',
-                    isSelected
-                      ? 'border-primary bg-primary/10 font-medium ring-1 ring-primary'
-                      : 'hover:bg-muted',
-                  )}
-                >
-                  {display.label}
-                </button>
-              );
-            })}
-          </div>
           <p
-            data-testid="override-mapping-description"
+            data-testid="override-verdict-description"
             className="mt-2 text-xs text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700/80 rounded-lg px-3 py-2 leading-relaxed"
           >
             <span className="font-semibold text-slate-800 dark:text-slate-100">
-              {selectedMapping.label}:
+              {selectedVerdictDisplay.label}:
             </span>{' '}
-            {selectedMapping.description}
+            {selectedVerdictDesc}
           </p>
         </div>
 
-        {/* Audit rationale (required >= 5 chars) */}
+        {/* Section 2: Collapsible optional in-text link status */}
+        <div className="rounded-xl border border-slate-200/90 dark:border-slate-700/90 bg-slate-50/40 dark:bg-slate-900/40 overflow-hidden">
+          <button
+            type="button"
+            data-testid="override-mapping-toggle"
+            aria-expanded={showMappingSection}
+            onClick={() => setShowMappingSection((prev) => !prev)}
+            className="w-full flex items-center justify-between gap-2 px-3 py-2.5 text-left text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100/70 dark:hover:bg-slate-800/60 transition-colors cursor-pointer"
+          >
+            <span className="min-w-0">
+              {isVi
+                ? 'Điều chỉnh liên kết trong bài (nâng cao)'
+                : 'Adjust In-Text Link Status (optional)'}
+            </span>
+            <span className="inline-flex items-center gap-1.5 shrink-0">
+              <span className="px-2 py-0.5 rounded-md bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 text-[11px] font-medium text-slate-600 dark:text-slate-300">
+                {selectedMapping.label}
+              </span>
+              <ChevronDown
+                className={cn(
+                  'h-4 w-4 text-slate-400 transition-transform',
+                  showMappingSection && 'rotate-180',
+                )}
+              />
+            </span>
+          </button>
+
+          {showMappingSection && (
+            <div className="px-3 pb-3 pt-1 border-t border-slate-200/80 dark:border-slate-700/80 space-y-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-1.5">
+                {STATUS_OPTIONS.map((opt) => {
+                  const spec = getLecturerMappingSpec(opt, lang);
+                  const isSelected = status === opt;
+                  return (
+                    <button
+                      key={opt}
+                      type="button"
+                      aria-pressed={isSelected}
+                      data-testid={`override-status-${opt}`}
+                      onClick={() => setStatus(opt)}
+                      className={cn(
+                        'px-2.5 py-1.5 border rounded-lg text-xs text-left transition-colors cursor-pointer bg-background',
+                        isSelected
+                          ? 'border-primary bg-primary/10 font-medium ring-1 ring-primary'
+                          : 'hover:bg-muted',
+                      )}
+                    >
+                      {spec.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <p
+                data-testid="override-mapping-description"
+                className="text-xs text-slate-600 dark:text-slate-300 bg-background border border-slate-200/80 dark:border-slate-700/80 rounded-lg px-3 py-2 leading-relaxed"
+              >
+                <span className="font-semibold text-slate-800 dark:text-slate-100">
+                  {selectedMapping.label}:
+                </span>{' '}
+                {selectedMapping.description}
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Instructor review note (required >= 5 chars) */}
         <div>
           <Label htmlFor="override-reason" className="text-sm font-medium block mb-1">
-            {isVi ? 'Lý do điều chỉnh' : 'Review note'}{' '}
+            {isVi ? 'Ghi chú của giảng viên' : 'Instructor review note'}{' '}
             <span className="text-rose-500" aria-hidden="true">*</span>{' '}
             <span className="text-muted-foreground font-normal text-xs">
               {isVi ? '(bắt buộc)' : '(required)'}
@@ -219,7 +408,11 @@ function OverrideForm({
             data-testid="override-reason-input"
             value={reason}
             onChange={(e) => setReason(e.target.value)}
-            placeholder={t('override.reasonPlaceholder')}
+            placeholder={
+              isVi
+                ? 'VD: Đã đối chiếu sách in tại thư viện, thông tin chính xác...'
+                : 'E.g., Verified against print book or original PDF...'
+            }
             rows={2}
             required
             minLength={MIN_OVERRIDE_REASON_LENGTH}
@@ -238,15 +431,15 @@ function OverrideForm({
           >
             {!hasValidReason
               ? isVi
-                ? `Nhập tối thiểu ${MIN_OVERRIDE_REASON_LENGTH} ký tự để ghi vào nhật ký duyệt (${trimmedReason.length}/${MIN_OVERRIDE_REASON_LENGTH}).`
-                : `Enter at least ${MIN_OVERRIDE_REASON_LENGTH} characters for the audit log (${trimmedReason.length}/${MIN_OVERRIDE_REASON_LENGTH}).`
+                ? `Nhập tối thiểu ${MIN_OVERRIDE_REASON_LENGTH} ký tự để lưu vào lịch sử duyệt (${trimmedReason.length}/${MIN_OVERRIDE_REASON_LENGTH}).`
+                : `Enter at least ${MIN_OVERRIDE_REASON_LENGTH} characters for the review history (${trimmedReason.length}/${MIN_OVERRIDE_REASON_LENGTH}).`
               : hasChanges
                 ? isVi
-                  ? 'Sẵn sàng lưu điều chỉnh và ghi vào nhật ký duyệt trích dẫn.'
-                  : 'Ready to save your update to the citation review log.'
+                  ? 'Sẵn sàng lưu kết quả đánh giá vào lịch sử duyệt trích dẫn.'
+                  : 'Ready to save your review result to the citation review log.'
                 : isVi
-                  ? 'Xác nhận giữ nguyên phân loại hiện tại kèm ghi chú rà soát của bạn.'
-                  : 'Confirming the current classification with your review note.'}
+                  ? 'Xác nhận giữ nguyên kết quả hiện tại kèm ghi chú của giảng viên.'
+                  : 'Confirming the current result with your instructor review note.'}
           </p>
         </div>
 
@@ -264,7 +457,13 @@ function OverrideForm({
             data-testid="override-submit-btn"
             disabled={!canSubmit}
           >
-            {submitting ? t('override.saving') : done ? t('override.saved') : t('override.confirm')}
+            {submitting
+              ? t('override.saving')
+              : done
+                ? t('override.saved')
+                : isVi
+                  ? 'Lưu kết quả đánh giá'
+                  : 'Save Review'}
           </Button>
         </div>
       </form>
@@ -282,7 +481,7 @@ export function OverrideControls({
   onOverride: (req: OverrideRequest) => Promise<void>;
   className?: string;
 }) {
-  const { t, i18n } = useTranslation();
+  const { i18n } = useTranslation();
   const { has } = useRole();
   const [open, setOpen] = useState(false);
 
@@ -316,16 +515,24 @@ export function OverrideControls({
       ? `${getVerdictDisplay(previousOverrideLabel, lang).label} → ${getVerdictDisplay(resolvedOverrideLabel, lang).label}`
       : null;
 
+  const buttonLabel = verdict.is_overridden
+    ? isVi
+      ? 'Đã cập nhật kết quả'
+      : 'Review Result Updated'
+    : isVi
+      ? 'Cập nhật kết quả kiểm tra'
+      : 'Update Review Result';
+
   const tooltipText = verdict.is_overridden
     ? [
-        t('override.overriddenBtn'),
+        buttonLabel,
         transitionSummary,
         attributionLabel,
         overrideNote ? `"${overrideNote}"` : null,
       ]
         .filter(Boolean)
         .join(' · ')
-    : t('override.overrideBtn');
+    : buttonLabel;
 
   return (
     <>
@@ -343,7 +550,7 @@ export function OverrideControls({
         aria-label={tooltipText}
       >
         <RefreshCw className="h-3 w-3 shrink-0" />
-        <span>{verdict.is_overridden ? t('override.overriddenBtn') : t('override.overrideBtn')}</span>
+        <span>{buttonLabel}</span>
         {verdict.is_overridden && attributionLabel && (
           <span
             data-testid="override-attribution"
@@ -362,7 +569,7 @@ export function OverrideControls({
         )}
         {verdict.is_overridden && overriddenAt && (
           <span className="text-muted-foreground ml-0.5 text-[11px]">
-            ({formatLocalizedDateTime(overriddenAt, lang)})
+            · {formatLocalizedDateTime(overriddenAt, lang)}
           </span>
         )}
       </button>

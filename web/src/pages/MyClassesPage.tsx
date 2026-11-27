@@ -89,7 +89,9 @@ export function MyClassesPage() {
         formatUserError(
           e,
           lang,
-          lang === 'vi' ? 'Không thể tải danh sách lớp học.' : 'Failed to load dashboard',
+          lang === 'vi'
+            ? 'Không thể tải danh sách lớp học.'
+            : 'Could not load your classes. Please try again.',
         ),
       );
     }
@@ -214,14 +216,14 @@ export function MyClassesPage() {
                     ? `${dashboard.total_classes} LỚP ĐANG HOẠT ĐỘNG`
                     : `${dashboard.total_classes} ACTIVE ${dashboard.total_classes === 1 ? 'CLASS' : 'CLASSES'}`
                   : lang === 'vi'
-                    ? 'ĐANG ĐỒNG BỘ...'
-                    : 'SYNCING...'}
+                    ? 'Đang tải lớp học...'
+                    : 'Loading classes...'}
               </span>
             </div>
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
               {lang === 'vi'
-                ? 'Quản lý danh sách sinh viên, mã tham gia và tiến độ nộp bài theo từng lớp.'
-                : 'Manage student rosters, join codes, and citation health across your classes.'}
+                ? 'Quản lý lớp học, mã tham gia và theo dõi kết quả kiểm tra trích dẫn của sinh viên.'
+                : 'Manage your classes, join codes, and student citation checks in one place.'}
             </p>
           </div>
         </div>
@@ -283,8 +285,17 @@ export function MyClassesPage() {
                 {t('teacher.submissions')}
               </span>
             </div>
-            <p className="text-2xl sm:text-3xl font-bold font-mono tabular-nums text-amber-600 dark:text-amber-400">
-              <NumberPopIn value={dashboard.total_essays} />
+            <p className="flex items-baseline gap-1.5 flex-wrap">
+              <span className="text-2xl sm:text-3xl font-bold font-mono tabular-nums text-amber-600 dark:text-amber-400">
+                <NumberPopIn value={dashboard.total_essays} />
+              </span>
+              <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                {lang === 'vi'
+                  ? 'bài nộp'
+                  : dashboard.total_essays === 1
+                    ? 'submission'
+                    : 'submissions'}
+              </span>
             </p>
           </Card>
 
@@ -301,13 +312,22 @@ export function MyClassesPage() {
                       <ClipboardCheck className="h-4 w-4 text-rose-600 dark:text-rose-400" />
                     </div>
                     <span className="text-xs font-semibold text-rose-700 dark:text-rose-300">
-                      {t('teacher.needsReview')}
+                      {lang === 'vi' ? 'Trích dẫn cần xem xét' : 'Citations to Review'}
                     </span>
                   </div>
                   <ChevronRight className="h-4 w-4 text-rose-500 transition-transform group-hover:translate-x-0.5 shrink-0" />
                 </div>
-                <p className="text-2xl sm:text-3xl font-bold font-mono tabular-nums text-rose-600 dark:text-rose-400">
-                  <NumberPopIn value={dashboard.pending_reviews} />
+                <p className="flex items-baseline gap-1.5 flex-wrap">
+                  <span className="text-2xl sm:text-3xl font-bold font-mono tabular-nums text-rose-600 dark:text-rose-400">
+                    <NumberPopIn value={dashboard.pending_reviews} />
+                  </span>
+                  <span className="text-xs font-medium text-rose-700/80 dark:text-rose-300/80">
+                    {lang === 'vi'
+                      ? 'mục cần xem'
+                      : dashboard.pending_reviews === 1
+                        ? 'item to review'
+                        : 'items to review'}
+                  </span>
                 </p>
               </Card>
             </Link>
@@ -318,11 +338,16 @@ export function MyClassesPage() {
                   <ClipboardCheck className="h-4 w-4 text-slate-500 dark:text-slate-400" />
                 </div>
                 <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                  {t('teacher.needsReview')}
+                  {lang === 'vi' ? 'Trích dẫn cần xem xét' : 'Citations to Review'}
                 </span>
               </div>
-              <p className="text-2xl sm:text-3xl font-bold font-mono tabular-nums text-slate-700 dark:text-slate-200">
-                <NumberPopIn value={dashboard.pending_reviews} />
+              <p className="flex items-baseline gap-1.5 flex-wrap">
+                <span className="text-2xl sm:text-3xl font-bold font-mono tabular-nums text-slate-700 dark:text-slate-200">
+                  <NumberPopIn value={dashboard.pending_reviews} />
+                </span>
+                <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                  {lang === 'vi' ? 'mục cần xem' : 'items to review'}
+                </span>
               </p>
             </Card>
           )}
@@ -458,8 +483,8 @@ export function MyClassesPage() {
                                 text={
                                   isCopied
                                     ? lang === 'vi'
-                                      ? 'Đã chép!'
-                                      : 'Copied!'
+                                      ? 'Đã sao chép'
+                                      : 'Copied'
                                     : c.join_code
                                 }
                               />
@@ -551,8 +576,8 @@ export function MyClassesPage() {
               </div>
               <p className="text-sm text-slate-600 dark:text-slate-300">
                 {lang === 'vi'
-                  ? `Bạn có chắc muốn rời khỏi lớp "${pendingLeaveClass.name}"?`
-                  : `Are you sure you want to leave "${pendingLeaveClass.name}"?`}
+                  ? `Bạn có chắc muốn rời khỏi lớp "${pendingLeaveClass.name}"? Các bài bạn đã nộp trước đó vẫn được lưu trong lịch sử cá nhân.`
+                  : `Are you sure you want to leave "${pendingLeaveClass.name}"? Any papers you previously submitted will remain in your personal history.`}
               </p>
               <div className="flex justify-end gap-2">
                 <Button
@@ -582,8 +607,8 @@ export function MyClassesPage() {
         message={
           pendingDeleteClass
             ? lang === 'vi'
-              ? `Xóa vĩnh viễn lớp "${pendingDeleteClass.name}"? Các bài luận đã nộp vẫn được giữ nguyên cho sinh viên.`
-              : `Permanently delete "${pendingDeleteClass.name}"? Student essays remain intact.`
+              ? `Xóa vĩnh viễn lớp "${pendingDeleteClass.name}"? Các bài nộp của sinh viên vẫn được giữ nguyên.`
+              : `Permanently delete "${pendingDeleteClass.name}"? Student submissions remain intact.`
             : ''
         }
         confirmLabel={t('common.delete')}

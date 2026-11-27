@@ -35,8 +35,10 @@ import {
   formatCisScore,
   formatLocalizedDate,
   formatUserError,
+  getCisBand,
   getVerdictDisplay,
   resolveAcademicLang,
+  type CisBandKey,
 } from '@/lib/academicTaxonomy';
 import {
   filterTopCitationIssueRules,
@@ -63,6 +65,23 @@ import {
 
 type SubmissionStatusFilter = 'all' | 'completed' | 'processing' | 'failed' | 'low_cis';
 type SubmissionSortOrder = 'newest' | 'cis_asc' | 'cis_desc';
+
+const CIS_BAND_RING_HEX: Record<CisBandKey, string> = {
+  excellent: '#10b981',
+  good: '#6366f1',
+  review: '#f59e0b',
+  critical: '#f43f5e',
+};
+
+/**
+ * Infrastructure/transient network rules that should never appear in
+ * student-facing "Most Common Citation Issues" analytics.
+ */
+const INFRA_ISSUE_RULE_IDS = new Set([
+  'R-API_EXHAUSTED',
+  'R-FAIL-ALL',
+  'R-RATE-LIMITED-ABSTAIN',
+]);
 
 function parseSubmissionTimestamp(value?: string | null): number {
   if (!value) return 0;
@@ -94,6 +113,15 @@ function formatStudentDisplayName(
     return rawUser;
   }
   return '—';
+}
+
+function formatStudentRemovalLabel(student: ClassStudent): string {
+  const display = formatStudentDisplayName(student.full_name, student.username);
+  const uname = (student.username ?? '').trim();
+  if (uname && display.toLowerCase() !== uname.toLowerCase()) {
+    return `${display} (@${uname})`;
+  }
+  return display;
 }
 
 /**
@@ -197,12 +225,17 @@ export function ClassDetailPage() {
   const handleRemove = async () => {
     if (!pendingRemove) return;
     const studentId = pendingRemove.id;
-    const studentUsername = pendingRemove.username;
+    const studentDisplay = formatStudentDisplayName(
+      pendingRemove.full_name,
+      pendingRemove.username,
+    );
     setPendingRemove(null);
     try {
       await api.removeStudentFromClass(cid, studentId);
       toast.success(
-        t('teacher.studentRemovedSuccess', { username: studentUsername }),
+        lang === 'vi'
+          ? `Đã xóa ${studentDisplay} khỏi lớp`
+          : `Removed ${studentDisplay} from class`,
       );
       void load();
     } catch (e) {
@@ -373,6 +406,14 @@ export function ClassDetailPage() {
     return map;
   }, [students]);
 
+  const essayById = useMemo(() => {
+    const map = new Map<number, ClassEssay>();
+    for (const e of essays) {
+      map.set(e.id, e);
+    }
+    return map;
+  }, [essays]);
+
   const submissionStatusCounts = useMemo(() => {
     let completed = 0;
     let processing = 0;
@@ -463,9 +504,12 @@ export function ClassDetailPage() {
     submissionSort,
   ]);
 
-  // BUG-01 defense-in-depth: strip positive/verified rules and replace chimeric jargon
+  // BUG-01 defense-in-depth: strip positive/verified and transient infra rules
   const filteredTopIssueRules = useMemo(
-    () => filterTopCitationIssueRules(analytics?.top_triggered_rules, lang),
+    () =>
+      filterTopCitationIssueRules(analytics?.top_triggered_rules, lang).filter(
+        (r) => !INFRA_ISSUE_RULE_IDS.has(String(r.rule_id ?? '').trim().toUpperCase()),
+      ),
     [analytics?.top_triggered_rules, lang],
   );
 
@@ -503,6 +547,8 @@ export function ClassDetailPage() {
 
   const avgCisSafe =
     analytics && Number.isFinite(analytics.avg_cis) ? analytics.avg_cis : 0;
+  const avgCisBand =
+    analytics && hasAnySubmissions ? getCisBand(avgCisSafe, lang) : null;
   const recencySafe =
     analytics && Number.isFinite(analytics.recency_5yr_ratio)
       ? analytics.recency_5yr_ratio
@@ -512,6 +558,14 @@ export function ClassDetailPage() {
     lang === 'vi'
       ? 'Chưa có bài nộp nào trong lớp để xuất báo cáo.'
       : 'No submissions in this class to export yet.';
+  const exportCsvTooltip =
+    lang === 'vi'
+      ? 'Tải bảng tổng hợp điểm trích dẫn và số lỗi của cả lớp (mở được bằng Excel)'
+      : 'Download a class summary spreadsheet (CSV, compatible with Excel)';
+  const exportZipTooltip =
+    lang === 'vi'
+      ? 'Tải trọn bộ báo cáo chi tiết của từng bài nộp trong lớp (.ZIP)'
+      : 'Download full verification reports for all submissions in this class (.ZIP)';
 
   return (
     <div className="space-y-5 pb-10">
@@ -559,7 +613,7 @@ export function ClassDetailPage() {
                     <span>
                       {copiedCode
                         ? lang === 'vi'
-                          ? 'Đã chép'
+                          ? 'Đã sao chép'
                           : 'Copied'
                         : lang === 'vi'
                           ? 'Sao chép'
@@ -618,7 +672,7 @@ export function ClassDetailPage() {
               variant="outline"
               data-testid="export-class-csv-btn"
               disabled={!hasAnySubmissions}
-              title={!hasAnySubmissions ? emptyExportHint : undefined}
+              title={!hasAnySubmissions ? emptyExportHint : exportCsvTooltip}
               onClick={() => void handleExport()}
               className="gap-1.5 rounded-xl text-xs h-9"
             >
@@ -631,7 +685,7 @@ export function ClassDetailPage() {
               variant="outline"
               data-testid="export-class-zip-btn"
               disabled={exportingZip || !hasAnySubmissions}
-              title={!hasAnySubmissions ? emptyExportHint : undefined}
+              title={!hasAnySubmissions ? emptyExportHint : exportZipTooltip}
               onClick={() => void handleExportZip()}
               className="gap-1.5 rounded-xl text-xs h-9 border-violet-200 dark:border-violet-800 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-950/50"
             >
@@ -651,7 +705,7 @@ export function ClassDetailPage() {
               className="gap-1.5 rounded-xl text-xs h-9 border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50"
             >
               <Trash2 className="h-3.5 w-3.5" />
-              {lang === 'vi' ? 'Xóa lớp' : 'Delete'}
+              {lang === 'vi' ? 'Xóa lớp' : 'Delete Class'}
             </Button>
           </div>
         </div>
@@ -670,17 +724,24 @@ export function ClassDetailPage() {
 
         <Card className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm flex flex-col justify-between">
           <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-            {t('teacher.cohortSubmissions')}
+            {lang === 'vi' ? 'Bài nộp của lớp' : 'Class Submissions'}
           </span>
           <p className="mt-2 text-2xl sm:text-3xl font-bold font-mono tabular-nums text-emerald-600 dark:text-emerald-400">
             <NumberPopIn value={essays.length} />
           </p>
         </Card>
 
-        <Card className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm flex items-center justify-between gap-3">
+        <Card
+          title={
+            lang === 'vi'
+              ? 'Điểm trích dẫn trung bình của cả lớp (thang 0–100, CIS — đánh giá độ chính xác của tài liệu tham khảo)'
+              : 'Average Citation Integrity Score across submissions (0–100 CIS)'
+          }
+          className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm flex items-center justify-between gap-3"
+        >
           <div className="min-w-0">
             <span className="text-xs font-medium text-slate-500 dark:text-slate-400 block">
-              {lang === 'vi' ? 'Điểm CIS TB' : 'Average CIS'}
+              {lang === 'vi' ? 'Điểm trích dẫn TB (CIS)' : 'Avg Citation Score'}
             </span>
             <p
               data-testid="cohort-avg-cis-value"
@@ -688,26 +749,46 @@ export function ClassDetailPage() {
             >
               {analytics && hasAnySubmissions ? formatCisScore(avgCisSafe) : '—'}
             </p>
+            {avgCisBand && (
+              <span
+                data-testid="cohort-avg-cis-band"
+                className={`mt-1 inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ${avgCisBand.badgeClass}`}
+              >
+                {avgCisBand.label}
+              </span>
+            )}
           </div>
           <ScoreRing
             data-testid="cohort-cis-ring"
             value={hasAnySubmissions ? avgCisSafe : 0}
             size={46}
             thickness={4.5}
-            color={hasAnySubmissions ? '#8b5cf6' : '#cbd5e1'}
+            color={avgCisBand ? CIS_BAND_RING_HEX[avgCisBand.key] : '#cbd5e1'}
           />
         </Card>
 
-        <Card className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm flex items-center justify-between gap-3">
+        <Card
+          title={
+            lang === 'vi'
+              ? 'Tỷ lệ nguồn xuất bản trong 5 năm gần đây trên tổng số trích dẫn của lớp (chỉ mang tính tham khảo tùy chuyên ngành)'
+              : 'Share of cited sources published in the last 5 years across all class submissions (for reference — norms vary by discipline)'
+          }
+          className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm flex items-center justify-between gap-3"
+        >
           <div className="min-w-0">
             <span className="text-xs font-medium text-slate-500 dark:text-slate-400 block">
-              {lang === 'vi' ? 'Tài liệu mới (≤ 5 năm)' : '5-Year Recency'}
+              {lang === 'vi' ? 'Nguồn mới (≤ 5 năm)' : 'Recent Sources (≤ 5 yrs)'}
             </span>
             <p
               data-testid="cohort-recency-value"
               className="mt-1.5 text-xl sm:text-2xl font-bold font-mono tabular-nums whitespace-nowrap text-amber-600 dark:text-amber-400"
             >
               {analytics && hasAnySubmissions ? `${recencySafe.toFixed(1)}%` : '—'}
+            </p>
+            <p className="mt-1 text-[11px] text-slate-400 dark:text-slate-500 leading-snug">
+              {lang === 'vi'
+                ? 'Tỷ lệ nguồn xuất bản trong 5 năm gần đây'
+                : 'Share published in the last 5 years'}
             </p>
           </div>
           <ScoreRing
@@ -810,8 +891,8 @@ export function ClassDetailPage() {
                 count: vb.incomplete_metadata ?? 0,
                 label:
                   lang === 'vi'
-                    ? 'Thiếu quy cách trích dẫn'
-                    : 'Incomplete Reference',
+                    ? 'Thiếu thông tin trích dẫn'
+                    : 'Incomplete Citation',
                 colorHex: '#fb923c',
                 barClass: 'bg-orange-400',
                 pillClass:
@@ -932,34 +1013,38 @@ export function ClassDetailPage() {
           })()}
 
           <div className="p-4 sm:p-5 grid grid-cols-1 lg:grid-cols-12 gap-5">
-            {/* Left: Visual Grade Histogram & Natural-Language Issue Bars */}
+            {/* Left: Visual Citation Score Distribution & Natural-Language Issue Bars */}
             <div className="lg:col-span-5 space-y-4">
               {(() => {
                 const dist = analytics.cis_distribution ?? {};
                 const bands = [
                   {
-                    key: 'A',
+                    key: 'excellent',
+                    label: getCisBand(90, lang).shortLabel,
                     range: '≥ 85',
                     count: dist.excellent ?? 0,
                     barClass: 'bg-emerald-500',
                     textClass: 'text-emerald-700 dark:text-emerald-300',
                   },
                   {
-                    key: 'B',
+                    key: 'good',
+                    label: getCisBand(75, lang).shortLabel,
                     range: '70–84',
                     count: dist.good ?? 0,
                     barClass: 'bg-indigo-500',
                     textClass: 'text-indigo-700 dark:text-indigo-300',
                   },
                   {
-                    key: 'C',
+                    key: 'review',
+                    label: getCisBand(60, lang).shortLabel,
                     range: '50–69',
                     count: dist.fair ?? 0,
                     barClass: 'bg-amber-500',
                     textClass: 'text-amber-700 dark:text-amber-300',
                   },
                   {
-                    key: 'D',
+                    key: 'critical',
+                    label: getCisBand(30, lang).shortLabel,
                     range: '< 50',
                     count: dist.poor ?? 0,
                     barClass: 'bg-rose-500',
@@ -969,19 +1054,39 @@ export function ClassDetailPage() {
                 const maxBand = Math.max(1, ...bands.map((b) => b.count));
 
                 return (
-                  <div className="p-4 rounded-2xl bg-slate-50/80 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800">
-                    <p className="text-xs font-semibold text-slate-700 dark:text-slate-200 mb-3">
+                  <div
+                    title={
+                      lang === 'vi'
+                        ? 'Thống kê số lượng bài nộp theo 4 mức điểm trích dẫn (thang 0–100), không phải điểm chữ học phần'
+                        : 'Number of submissions grouped by 0–100 citation score band (not course letter grades)'
+                    }
+                    className="p-4 rounded-2xl bg-slate-50/80 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800"
+                  >
+                    <p className="text-xs font-semibold text-slate-700 dark:text-slate-200">
                       {lang === 'vi'
-                        ? 'Phân bố mức điểm tin cậy (A – D)'
-                        : 'Score Band Distribution (A – D)'}
+                        ? 'Phân bố mức điểm trích dẫn'
+                        : 'Citation Score Distribution'}
                     </p>
-                    <div className="grid grid-cols-4 gap-2.5 items-end pt-2">
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 mb-3">
+                      {lang === 'vi'
+                        ? 'Số bài nộp theo từng mức điểm trích dẫn (thang 0–100)'
+                        : 'Number of submissions in each 0–100 citation score band'}
+                    </p>
+                    <div className="grid grid-cols-4 gap-2 items-end pt-2">
                       {bands.map((b) => {
                         const heightPct =
                           b.count > 0 ? Math.max(18, (b.count / maxBand) * 100) : 6;
+                        const bandTooltip = `${b.label} (${b.range}): ${b.count} ${
+                          lang === 'vi'
+                            ? 'bài nộp'
+                            : b.count === 1
+                              ? 'submission'
+                              : 'submissions'
+                        }`;
                         return (
                           <div
                             key={b.key}
+                            title={bandTooltip}
                             className="flex flex-col items-center gap-1.5"
                           >
                             <span
@@ -1000,8 +1105,8 @@ export function ClassDetailPage() {
                               />
                             </div>
                             <div className="text-center">
-                              <p className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                                {b.key}
+                              <p className="text-[11px] font-semibold text-slate-800 dark:text-slate-200 leading-tight">
+                                {b.label}
                               </p>
                               <p className="text-[10px] font-mono text-slate-400">
                                 {b.range}
@@ -1083,8 +1188,8 @@ export function ClassDetailPage() {
                   <p className="text-xs font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
                     <AlertTriangle className="h-3.5 w-3.5 text-rose-500" />
                     {lang === 'vi'
-                      ? 'Nguồn cần rà soát xuất hiện ở các bài nộp'
-                      : 'Flagged Citations Across Submissions'}
+                      ? 'Trích dẫn cảnh báo & nguồn lỗi trùng lặp trong lớp'
+                      : 'Flagged & Repeated Citations Across Papers'}
                   </p>
                   <span className="text-xs text-slate-400">
                     {(analytics.shared_hallucinations ?? []).length}{' '}
@@ -1099,8 +1204,8 @@ export function ClassDetailPage() {
                 {(analytics.shared_hallucinations ?? []).length === 0 ? (
                   <div className="py-10 text-center text-xs text-slate-400">
                     {lang === 'vi'
-                      ? 'Chưa phát hiện trích dẫn cần chú ý trùng lặp nào giữa các bài nộp.'
-                      : 'No shared or repeated citation warnings detected across this class.'}
+                      ? 'Chưa có trích dẫn cảnh báo hoặc trùng lặp giữa các bài nộp trong lớp.'
+                      : 'No flagged or repeated citation warnings across submissions yet.'}
                   </div>
                 ) : (
                   <div className="space-y-2.5 max-h-64 overflow-y-auto pr-1">
@@ -1146,19 +1251,61 @@ export function ClassDetailPage() {
                           {item.essay_ids && item.essay_ids.length > 0 && (
                             <div className="flex flex-wrap items-center gap-1.5 mt-2 pt-2 border-t border-slate-200/60 dark:border-slate-800/80">
                               <span className="text-[11px] text-slate-400">
-                                {lang === 'vi' ? 'Mở báo cáo:' : 'Reports:'}
+                                {lang === 'vi' ? 'Xem báo cáo của:' : 'Open report:'}
                               </span>
-                              {item.essay_ids.map((eid) => (
-                                <Link
-                                  key={eid}
-                                  to={`/verification/report/${eid}`}
-                                  data-testid={`shared-hallucination-essay-link-${eid}`}
-                                  className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-md bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/70 dark:hover:bg-indigo-900/70 border border-indigo-200/80 dark:border-indigo-800/80 font-mono text-[11px] font-semibold text-indigo-700 dark:text-indigo-300 transition-colors"
-                                >
-                                  #{eid}
-                                  <ExternalLink className="h-2.5 w-2.5" />
-                                </Link>
-                              ))}
+                              {item.essay_ids.map((eid, eidIdx) => {
+                                const matchedEssay = essayById.get(eid);
+                                const essayStudentName = matchedEssay
+                                  ? (matchedEssay.user_id != null
+                                      ? studentNameById.get(matchedEssay.user_id)
+                                      : undefined) ||
+                                    (matchedEssay.username
+                                      ? studentNameByUsername.get(
+                                          matchedEssay.username.trim().toLowerCase(),
+                                        ) ||
+                                        formatStudentDisplayName(
+                                          undefined,
+                                          matchedEssay.username,
+                                        )
+                                      : '')
+                                  : '';
+                                const fallbackStudentRaw = item.students?.[eidIdx]?.trim();
+                                const fallbackStudentName = fallbackStudentRaw
+                                  ? studentNameByUsername.get(
+                                      fallbackStudentRaw.toLowerCase(),
+                                    ) ||
+                                    formatStudentDisplayName(undefined, fallbackStudentRaw)
+                                  : '';
+                                const chipLabel = matchedEssay
+                                  ? essayStudentName && matchedEssay.filename
+                                    ? item.essay_ids.length > 1 &&
+                                      resolvedStudentNames.length === 1
+                                      ? matchedEssay.filename
+                                      : `${essayStudentName} · ${matchedEssay.filename}`
+                                    : essayStudentName || matchedEssay.filename
+                                  : fallbackStudentName ||
+                                    (lang === 'vi'
+                                      ? `Bài nộp ${eidIdx + 1}`
+                                      : `Submission ${eidIdx + 1}`);
+                                const fullTooltip = matchedEssay
+                                  ? essayStudentName
+                                    ? `${essayStudentName} — ${matchedEssay.filename}`
+                                    : matchedEssay.filename
+                                  : chipLabel;
+
+                                return (
+                                  <Link
+                                    key={eid}
+                                    to={`/verification/report/${eid}`}
+                                    data-testid={`shared-hallucination-essay-link-${eid}`}
+                                    title={fullTooltip}
+                                    className="inline-flex items-center gap-1 max-w-[200px] px-2 py-0.5 rounded-md bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/70 dark:hover:bg-indigo-900/70 border border-indigo-200/80 dark:border-indigo-800/80 text-[11px] font-medium text-indigo-700 dark:text-indigo-300 transition-colors"
+                                  >
+                                    <span className="truncate">{chipLabel}</span>
+                                    <ExternalLink className="h-2.5 w-2.5 shrink-0" />
+                                  </Link>
+                                );
+                              })}
                             </div>
                           )}
                         </div>
@@ -1188,7 +1335,7 @@ export function ClassDetailPage() {
               className="gap-1.5 rounded-xl h-8 text-xs"
             >
               <UserPlus className="h-3.5 w-3.5" />
-              {t('teacher.addStudent')}
+              {lang === 'vi' ? 'Thêm sinh viên' : 'Add Student'}
             </Button>
           }
         />
@@ -1230,7 +1377,9 @@ export function ClassDetailPage() {
                     size="icon"
                     onClick={() => setPendingRemove(s)}
                     aria-label={
-                      lang === 'vi' ? `Xóa ${s.username} khỏi lớp` : `Remove ${s.username}`
+                      lang === 'vi'
+                        ? `Xóa ${displayName} khỏi lớp`
+                        : `Remove ${displayName}`
                     }
                     className="text-rose-600 hover:bg-rose-50 hover:text-rose-700 dark:hover:bg-rose-950/30 rounded-lg"
                   >
@@ -1294,7 +1443,7 @@ export function ClassDetailPage() {
               </div>
 
               {/* Sort dropdown */}
-              <div className="relative sm:w-56 shrink-0">
+              <div className="relative sm:w-64 shrink-0">
                 <ArrowUpDown className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
                 <select
                   value={submissionSort}
@@ -1310,11 +1459,13 @@ export function ClassDetailPage() {
                   </option>
                   <option value="cis_asc">
                     {lang === 'vi'
-                      ? 'CIS thấp → cao (ưu tiên chấm)'
-                      : 'CIS Low → High (priority)'}
+                      ? 'Điểm trích dẫn thấp → cao (ưu tiên kiểm tra)'
+                      : 'Citation Score Low → High (review priority)'}
                   </option>
                   <option value="cis_desc">
-                    {lang === 'vi' ? 'CIS cao → thấp' : 'CIS High → Low'}
+                    {lang === 'vi'
+                      ? 'Điểm trích dẫn cao → thấp'
+                      : 'Citation Score High → Low'}
                   </option>
                 </select>
               </div>
@@ -1341,7 +1492,10 @@ export function ClassDetailPage() {
                   },
                   {
                     key: 'low_cis' as SubmissionStatusFilter,
-                    label: lang === 'vi' ? 'CIS < 70' : 'CIS < 70',
+                    label:
+                      lang === 'vi'
+                        ? 'Điểm trích dẫn < 70'
+                        : 'Citation Score < 70',
                     count: submissionStatusCounts.lowCis,
                   },
                   {
@@ -1447,8 +1601,8 @@ export function ClassDetailPage() {
                   </div>
                   <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
                     {lang === 'vi'
-                      ? 'Sinh viên tham gia bằng mã lớp và tải tệp PDF, DOCX, BibTeX hoặc RIS lên hệ thống.'
-                      : 'Students join using the code and submit PDF, DOCX, BibTeX, or RIS manuscripts.'}
+                      ? 'Sinh viên nhập mã lớp rồi tải lên bài viết (PDF, Word) hoặc tệp danh mục tham khảo (BibTeX, RIS).'
+                      : 'Students join with the code and upload their paper (PDF, Word) or reference list (BibTeX, RIS).'}
                   </p>
                 </li>
 
@@ -1463,8 +1617,8 @@ export function ClassDetailPage() {
                   </div>
                   <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
                     {lang === 'vi'
-                      ? 'Điểm tin cậy trích dẫn (CIS), các lỗi thường gặp và báo cáo chi tiết sẽ hiển thị tự động.'
-                      : 'CIS scores, recurring citation issues, and exportable CSV/ZIP reports appear automatically.'}
+                      ? 'Điểm trích dẫn (CIS), các lỗi thường gặp và báo cáo chi tiết sẽ hiển thị tự động.'
+                      : 'Citation scores (CIS), recurring citation issues, and downloadable Excel/ZIP reports appear automatically.'}
                   </p>
                 </li>
               </ol>
@@ -1504,6 +1658,17 @@ export function ClassDetailPage() {
                 e.cis_score != null && Number.isFinite(Number(e.cis_score))
                   ? Number(e.cis_score)
                   : null;
+              const cisBand = cisVal !== null ? getCisBand(cisVal, lang) : null;
+              const friendlyJobError =
+                isFailed && e.job_error
+                  ? formatUserError(
+                      e.job_error,
+                      lang,
+                      lang === 'vi'
+                        ? 'Không thể đọc tệp này. Hãy mở trang chi tiết để thử lại hoặc nhắc sinh viên nộp bản PDF/Word khác.'
+                        : 'Could not read this file. Open details to retry or ask the student to re-upload a clean PDF/Word file.',
+                    )
+                  : undefined;
               const resolvedFullName =
                 (e.user_id != null ? studentNameById.get(e.user_id) : undefined) ||
                 (e.username
@@ -1519,7 +1684,7 @@ export function ClassDetailPage() {
                   key={e.id}
                   to={targetHref}
                   data-testid={`class-essay-row-${e.id}`}
-                  title={isFailed && e.job_error ? e.job_error : undefined}
+                  title={friendlyJobError}
                   className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5 hover:bg-slate-50 dark:hover:bg-slate-800/50 focus-visible:outline-none focus-visible:bg-slate-50 dark:focus-visible:bg-slate-800/50 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500 transition-colors group"
                 >
                   <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -1562,7 +1727,7 @@ export function ClassDetailPage() {
                     ) : isFailed ? (
                       <>
                         <span
-                          title={e.job_error ?? undefined}
+                          title={friendlyJobError}
                           className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-rose-50 dark:bg-rose-950/80 border border-rose-200/80 dark:border-rose-800/80 text-xs font-medium text-rose-700 dark:text-rose-300"
                         >
                           <AlertCircle className="h-3 w-3" />
@@ -1579,24 +1744,23 @@ export function ClassDetailPage() {
                       </>
                     ) : (
                       <>
-                        {cisVal !== null && (
+                        {cisVal !== null && cisBand && (
                           <div className="inline-flex items-center gap-2">
                             <ScoreRing
                               value={cisVal}
                               size={28}
                               thickness={3.2}
-                              color={
-                                cisVal >= 85
-                                  ? '#10b981'
-                                  : cisVal >= 70
-                                    ? '#6366f1'
-                                    : cisVal >= 50
-                                      ? '#f59e0b'
-                                      : '#f43f5e'
-                              }
+                              color={CIS_BAND_RING_HEX[cisBand.key]}
                             />
                             <span className="text-xs font-mono font-bold text-slate-800 dark:text-slate-200 tabular-nums whitespace-nowrap">
-                              CIS {formatCisScore(cisVal)}
+                              {lang === 'vi'
+                                ? `Điểm ${formatCisScore(cisVal)}`
+                                : `CIS ${formatCisScore(cisVal)}`}
+                            </span>
+                            <span
+                              className={`hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap ${cisBand.badgeClass}`}
+                            >
+                              {cisBand.shortLabel}
                             </span>
                           </div>
                         )}
@@ -1628,13 +1792,12 @@ export function ClassDetailPage() {
         title={t('teacher.removeStudentTitle')}
         message={
           pendingRemove
-            ? t('teacher.removeStudentConfirm', {
-                username: pendingRemove.username,
-                className: cls.name,
-              })
+            ? lang === 'vi'
+              ? `Bạn có chắc muốn xóa sinh viên "${formatStudentRemovalLabel(pendingRemove)}" khỏi lớp "${cls.name}"? Sinh viên có thể tham gia lại bằng mã lớp bất cứ lúc nào; các bài đã nộp trước đó vẫn được giữ nguyên.`
+              : `Remove "${formatStudentRemovalLabel(pendingRemove)}" from "${cls.name}"? The student can rejoin anytime using the class join code; previously submitted papers remain intact.`
             : ''
         }
-        confirmLabel={t('common.delete')}
+        confirmLabel={lang === 'vi' ? 'Xóa khỏi lớp' : 'Remove Student'}
         cancelLabel={t('common.cancel')}
         variant="danger"
         onConfirm={handleRemove}
@@ -1749,8 +1912,8 @@ export function ClassDetailPage() {
         title={lang === 'vi' ? 'Xóa lớp học' : 'Delete Class'}
         message={
           lang === 'vi'
-            ? `Bạn có chắc muốn xóa vĩnh viễn lớp "${cls.name}"? Các bài luận đã nộp của sinh viên vẫn được bảo toàn.`
-            : `Permanently delete "${cls.name}"? Student essays remain intact.`
+            ? `Bạn có chắc muốn xóa vĩnh viễn lớp "${cls.name}"? Các bài nộp của sinh viên vẫn được giữ nguyên.`
+            : `Permanently delete "${cls.name}"? Student submissions remain intact.`
         }
         confirmLabel={t('common.delete')}
         cancelLabel={t('common.cancel')}
@@ -1762,7 +1925,11 @@ export function ClassDetailPage() {
       <UpgradeModal
         open={upgradeOpen}
         onOpenChange={setUpgradeOpen}
-        featureName="Class ZIP Export"
+        featureName={
+          lang === 'vi'
+            ? 'Tải trọn bộ báo cáo lớp (.ZIP)'
+            : 'Class Report Bundle (.ZIP)'
+        }
       />
     </div>
   );

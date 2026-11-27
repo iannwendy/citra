@@ -90,8 +90,8 @@ export function AddStudentDialog({
       : 'Search by name, email, or username…';
   const minCharsHint =
     lang === 'vi'
-      ? 'Nhập ít nhất 2 ký tự để tìm sinh viên theo họ tên, email hoặc tên đăng nhập'
-      : 'Type at least 2 characters to search all students by name, email, or username';
+      ? 'Nhập ít nhất 2 ký tự để tìm sinh viên đã đăng ký tài khoản CITRA.'
+      : 'Type at least 2 characters to search all students with a CITRA account.';
 
   const handleAdd = async (studentId: number) => {
     setSubmitting(true);
@@ -172,46 +172,76 @@ export function AddStudentDialog({
           ) : candidates.length === 0 ? (
             <li
               data-testid="student-search-empty-state"
-              className="text-sm text-slate-500 dark:text-slate-400 px-2 py-6 text-center"
+              className="text-sm text-slate-500 dark:text-slate-400 px-2 py-6 text-center leading-relaxed"
             >
               {q.length < 2
                 ? lang === 'vi'
-                  ? 'Nhập tên hoặc email sinh viên để tìm kiếm...'
-                  : 'Type a student name or email to search...'
-                : t('teacher.noMatchingStudents')}
+                  ? 'Nhập tên hoặc email sinh viên để tìm kiếm... Bạn cũng có thể gửi mã lớp để sinh viên tự tham gia.'
+                  : 'Type a student name or email to search, or share the class join code so students can enroll themselves.'
+                : lang === 'vi'
+                  ? 'Chưa tìm thấy tài khoản — hãy gửi mã lớp để sinh viên tự đăng ký và tham gia.'
+                  : 'No account found — share the class join code so the student can sign up and join.'}
             </li>
           ) : (
-            candidates.map((u) => (
-              <li
-                key={u.id}
-                className="flex items-center justify-between gap-2 p-2.5 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors"
-              >
-                <div className="min-w-0">
-                  {u.full_name ? (
-                    <>
-                      <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
-                        {u.full_name}
-                      </p>
-                      <p className="text-xs text-slate-500 truncate">
-                        {u.username}
-                      </p>
-                    </>
-                  ) : (
-                    <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
-                      {u.username}
-                    </p>
-                  )}
-                </div>
-                <Button
-                  size="sm"
-                  onClick={() => handleAdd(u.id)}
-                  disabled={submitting}
-                  className="shrink-0"
+            candidates.map((u) => {
+              const emailText = u.email?.trim() || '';
+              return (
+                <li
+                  key={u.id}
+                  className="flex items-center justify-between gap-2 p-2.5 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors"
                 >
-                  {t('teacher.addStudentBtn')}
-                </Button>
-              </li>
-            ))
+                  <div className="min-w-0">
+                    {u.full_name ? (
+                      <>
+                        <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
+                          {u.full_name}
+                        </p>
+                        <div className="flex flex-wrap items-center gap-x-1.5 text-xs text-slate-500 dark:text-slate-400 min-w-0">
+                          {emailText && (
+                            <span
+                              data-testid={`student-result-email-${u.id}`}
+                              className="truncate text-slate-600 dark:text-slate-300"
+                            >
+                              {emailText}
+                            </span>
+                          )}
+                          {emailText && u.username && (
+                            <span aria-hidden="true" className="text-slate-300 dark:text-slate-600">
+                              ·
+                            </span>
+                          )}
+                          {u.username && (
+                            <span className="truncate">{u.username}</span>
+                          )}
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
+                          {u.username}
+                        </p>
+                        {emailText && (
+                          <p
+                            data-testid={`student-result-email-${u.id}`}
+                            className="text-xs text-slate-500 dark:text-slate-400 truncate"
+                          >
+                            {emailText}
+                          </p>
+                        )}
+                      </>
+                    )}
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={() => handleAdd(u.id)}
+                    disabled={submitting}
+                    className="shrink-0"
+                  >
+                    {t('teacher.addStudentBtn')}
+                  </Button>
+                </li>
+              );
+            })
           )}
         </ul>
       </div>

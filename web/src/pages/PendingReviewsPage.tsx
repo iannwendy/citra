@@ -154,12 +154,104 @@ function parseTimestamp(value?: string | null): number {
   return Number.isFinite(ts) ? ts : 0;
 }
 
+const ARXIV_REF_RE = /\barxiv\s*:|arxiv\.org\/(?:abs|pdf)\//i;
+const REAL_DOI_RE = /\b10\.\d{4,9}\/\S+/i;
+const BAD_DOI_RULE_IDS = new Set([
+  'R-FABRICATED-DOI',
+  'R-NONEXISTENT-DOI',
+  'R-CHIMERIC-DOI-MISMATCH',
+]);
+
 /**
- * PendingReviewsPage — Visual Action Studio for faculty citation adjudication.
+ * Plain-language refinement layer for busy university lecturers:
+ * 1. Prevents false DOI blame on arXiv preprints that carry no 10.xxxx/ DOI.
+ * 2. Ensures retracted publications never default to "Details Mismatch" (metadata_error).
+ * 3. Smooths technical/abbreviated phrasing (CSDL, "trỏ sang", "dữ liệu tự động").
+ */
+function refineTeacherGuidance(
+  item: PendingVerdict,
+  base: TeacherReviewGuidance,
+  lang: 'en' | 'vi',
+): TeacherReviewGuidance {
+  const rules = item.triggered_rules ?? [];
+  const isRetracted =
+    Boolean(item.is_retracted) || rules.includes('R-RETRACTED-PAPER');
+  const rawText = item.citation_raw ?? '';
+  const hasArxivRef = ARXIV_REF_RE.test(rawText);
+  const hasDoiPattern = REAL_DOI_RE.test(rawText);
+
+  let headline = base.headline;
+  let actionHint = base.actionHint;
+  let confirmButtonLabel = base.confirmButtonLabel;
+  let confirmNewLabel = base.confirmNewLabel;
+
+  // 1. Retracted paper: never default to 'metadata_error' ("Sai lệch thông tin")
+  if (isRetracted) {
+    confirmNewLabel = 'suspected_hallucination';
+    confirmButtonLabel =
+      lang === 'vi' ? 'Giữ cảnh báo bài đã rút' : 'Keep Retraction Warning';
+  }
+
+  // 2. arXiv preprint without a 10.xxxx/ DOI: never blame a nonexistent DOI
+  const isDoiBlame =
+    rules.some((rule) => BAD_DOI_RULE_IDS.has(rule)) ||
+    /Mã DOI không tồn tại|Cited DOI does not exist|DOI.*không tồn tại|DOI.*different paper/i.test(
+      headline,
+    );
+  const rawLabelLower = String(item.label ?? '').toLowerCase();
+  if (
+    !isRetracted &&
+    hasArxivRef &&
+    !hasDoiPattern &&
+    (isDoiBlame || rawLabelLower === 'suspected_hallucination')
+  ) {
+    headline =
+      lang === 'vi'
+        ? 'Chưa tìm thấy bản ghi khớp cho bài tiền xuất bản (arXiv) này — cần đối chiếu thủ công'
+        : 'No matching publication record found for this preprint — manual check recommended';
+    actionHint =
+      lang === 'vi'
+        ? 'Mở bài tiền xuất bản trên arXiv để đối chiếu trực tiếp tác giả, tiêu đề và năm công bố trước khi xác nhận.'
+        : 'Check the cited arXiv preprint directly to verify its authors, title, and year before confirming.';
+  }
+
+  // 3. Smooth awkward phrasing & CS abbreviations
+  if (lang === 'vi') {
+    headline = headline
+      .replace(/trỏ sang/gi, 'dẫn tới')
+      .replace(
+        /Trích dẫn chưa đủ thông tin định danh học thuật/gi,
+        'Trích dẫn còn thiếu thông tin cần thiết (tác giả, năm hoặc nơi xuất bản)',
+      )
+      .replace(
+        /Hệ thống chưa đủ dữ liệu tự động để kết luận chắc chắn/gi,
+        'Hệ thống chưa tìm đủ thông tin trực tuyến để xác minh tự động',
+      );
+    actionHint = actionHint
+      .replace(/\bCSDL\b/g, 'thư viện học thuật')
+      .replace(/trỏ sang/gi, 'dẫn tới');
+  } else {
+    headline = headline.replace(
+      /Not enough automated evidence to confirm or refute/gi,
+      'Not enough online records to verify automatically',
+    );
+  }
+
+  return {
+    ...base,
+    headline,
+    actionHint,
+    confirmButtonLabel,
+    confirmNewLabel,
+  };
+}
+
+/**
+ * PendingReviewsPage — Visual Action Studio for lecturer citation review.
  *
- * Groups flagged citations by student submission, translates symbolic/system signals
+ * Groups flagged citations by student submission, translates verification signals
  * into a 1-line issue + 1-line action hint, and provides guarded inline confirmation
- * with explicit target verdict selection and Undo support.
+ * with explicit target status selection and Undo support.
  */
 export function PendingReviewsPage() {
   const { t, i18n } = useTranslation();
@@ -255,7 +347,9 @@ export function PendingReviewsPage() {
           formatUserError(
             e,
             lang,
-            lang === 'vi' ? 'Không thể tải hàng đợi duyệt.' : 'Failed to load reviews',
+            lang === 'vi'
+              ? 'Không thể tải danh sách cần xem xét.'
+              : 'Could not load the review queue.',
           ),
         );
       } finally {
@@ -281,9 +375,10 @@ export function PendingReviewsPage() {
         const resolvedClassName =
           item.class_name?.trim() ||
           (item.class_id != null ? classNameById.get(item.class_id) ?? null : null);
+        const baseGuidance = getTeacherReviewGuidance(item, lang);
         return {
           item,
-          guidance: getTeacherReviewGuidance(item, lang),
+          guidance: refineTeacherGuidance(item, baseGuidance, lang),
           studentLabel: resolveStudentLabel(item),
           className: resolvedClassName,
         };
@@ -404,8 +499,8 @@ export function PendingReviewsPage() {
           new_label: revertLabel,
           reason:
             lang === 'vi'
-              ? 'Hoàn tác thao tác duyệt nhanh từ hàng đợi giảng viên'
-              : 'Undid quick adjudication from faculty review queue',
+              ? 'Hoàn tác thao tác đánh giá nhanh từ danh sách cần xem xét'
+              : 'Undid quick review decision from the review queue',
         });
         setReviews((prev) =>
           prev.some((x) => x.verdict_id === originalItem.verdict_id)
@@ -415,14 +510,14 @@ export function PendingReviewsPage() {
         setResolvedSessionCount((c) => Math.max(0, c - 1));
         toast.info(
           lang === 'vi'
-            ? 'Đã hoàn tác quyết định duyệt'
+            ? 'Đã hoàn tác kết quả đánh giá'
             : 'Review decision undone',
           originalItem.filename,
         );
       } catch (e) {
         toast.error(
           lang === 'vi'
-            ? 'Không thể hoàn tác quyết định duyệt'
+            ? 'Không thể hoàn tác kết quả đánh giá'
             : 'Failed to undo review decision',
           formatUserError(e, lang),
         );
@@ -441,14 +536,21 @@ export function PendingReviewsPage() {
       if (inFlightIds[r.verdict_id]) return;
       setInFlightIds((prev) => ({ ...prev, [r.verdict_id]: true }));
       const trimmedNote = (customNote ?? '').trim();
+      const isRetracted =
+        Boolean(r.is_retracted) ||
+        Boolean(r.triggered_rules?.includes('R-RETRACTED-PAPER'));
       const defaultReason =
         actionType === 'approve'
           ? lang === 'vi'
-            ? 'Giảng viên xác nhận trích dẫn hợp lệ từ hàng đợi duyệt'
-            : 'Approved as valid from faculty review queue'
-          : lang === 'vi'
-            ? `Giảng viên cập nhật phân loại (${getVerdictDisplay(newLabel, 'vi').label}) từ hàng đợi duyệt`
-            : `Updated classification (${getVerdictDisplay(newLabel, 'en').label}) from faculty review queue`;
+            ? 'Giảng viên xác nhận trích dẫn hợp lệ từ danh sách cần xem xét'
+            : 'Instructor confirmed citation as valid from the review queue'
+          : isRetracted
+            ? lang === 'vi'
+              ? 'Giảng viên giữ cảnh báo bài báo đã bị tạp chí rút bỏ từ danh sách cần xem xét'
+              : 'Instructor kept retraction warning from the review queue'
+            : lang === 'vi'
+              ? `Giảng viên cập nhật kết quả (${getVerdictDisplay(newLabel, 'vi').label}) từ danh sách cần xem xét`
+              : `Instructor updated review result (${getVerdictDisplay(newLabel, 'en').label}) from the review queue`;
 
       try {
         await api.overrideVerdict(r.essay_id, {
@@ -469,9 +571,13 @@ export function PendingReviewsPage() {
             ? lang === 'vi'
               ? `Đã cập nhật: ${appliedLabel}`
               : `Marked as ${appliedLabel}`
-            : lang === 'vi'
-              ? `Đã ghi nhận: ${appliedLabel}`
-              : `Recorded as ${appliedLabel}`,
+            : isRetracted
+              ? lang === 'vi'
+                ? 'Đã giữ cảnh báo bài báo đã rút'
+                : 'Kept retraction warning'
+              : lang === 'vi'
+                ? `Đã ghi nhận: ${appliedLabel}`
+                : `Recorded as ${appliedLabel}`,
           r.filename,
           {
             duration: 8000,
@@ -486,8 +592,8 @@ export function PendingReviewsPage() {
       } catch (e) {
         toast.error(
           lang === 'vi'
-            ? 'Không thể lưu quyết định duyệt'
-            : 'Failed to save review decision',
+            ? 'Không thể lưu kết quả đánh giá'
+            : 'Failed to save review result',
           formatUserError(e, lang),
         );
       } finally {
@@ -592,13 +698,17 @@ export function PendingReviewsPage() {
     const reportHref = `/verification/report/${r.essay_id}?citation=${r.verdict_id}`;
 
     const openReport = () => navigate(reportHref);
+    const handleCardClick = () => {
+      if (window.getSelection?.()?.toString().trim()) return;
+      openReport();
+    };
 
     return (
       <m.div
         key={r.verdict_id}
         layout
         exit={{ opacity: 0, y: -6, transition: TRANSITION_EXIT }}
-        onClick={openReport}
+        onClick={handleCardClick}
         data-testid={`pending-review-row-${r.verdict_id}`}
         className="relative w-full text-left px-4 sm:px-5 py-4 hover:bg-slate-50/80 dark:hover:bg-slate-800/40 focus-within:bg-slate-50/90 dark:focus-within:bg-slate-800/40 focus-within:ring-1 focus-within:ring-inset focus-within:ring-indigo-300 dark:focus-within:ring-indigo-700 transition-colors group cursor-pointer"
       >
@@ -632,7 +742,7 @@ export function PendingReviewsPage() {
                   className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-600 text-white text-[11px] font-semibold"
                 >
                   <AlertTriangle className="h-3 w-3" />
-                  {lang === 'vi' ? 'ĐÃ RÚT BÀI (RETRACTED)' : 'RETRACTED'}
+                  {lang === 'vi' ? 'Bài báo gốc đã bị rút' : 'Paper Retracted'}
                 </span>
               )}
 
@@ -653,8 +763,8 @@ export function PendingReviewsPage() {
                       : 'Link Active'
                     : r.url_status === 'restricted_alive'
                       ? lang === 'vi'
-                        ? 'Trang chặn bot'
-                        : 'Protected Link'
+                        ? 'Trang web hạn chế truy cập tự động'
+                        : 'Access-restricted website'
                       : r.url_status === 'archived_alive'
                         ? (() => {
                             const safeArchiveHref = toSafeExternalHref(r.archive_url);
@@ -666,20 +776,18 @@ export function PendingReviewsPage() {
                                 onClick={(e) => e.stopPropagation()}
                                 className="underline hover:text-amber-950 dark:hover:text-amber-100"
                               >
-                                {lang === 'vi'
-                                  ? '🏛️ Bản lưu Wayback'
-                                  : '🏛️ Wayback Archived'}
+                                {lang === 'vi' ? 'Bản lưu trữ web' : 'Web Archive'}
                               </a>
                             ) : lang === 'vi' ? (
-                              '🏛️ Bản lưu Wayback'
+                              'Bản lưu trữ web'
                             ) : (
-                              '🏛️ Wayback Archived'
+                              'Web Archive'
                             );
                           })()
                         : r.url_status === 'fake_domain'
                           ? lang === 'vi'
-                            ? '✕ Tên miền không tồn tại'
-                            : '✕ Invalid Domain'
+                            ? '✕ Địa chỉ web không tồn tại'
+                            : '✕ Website Not Found'
                           : lang === 'vi'
                             ? '✕ Liên kết hỏng'
                             : '✕ Dead Link'}
@@ -687,8 +795,8 @@ export function PendingReviewsPage() {
               )}
             </div>
 
-            {/* Student & Class badges on every item card */}
-            {(studentLabel || className) && (
+            {/* Student & Class badges only in flat list view (grouped view already shows them in group header) */}
+            {showPaperMeta && (studentLabel || className) && (
               <div className="flex items-center gap-1.5 flex-wrap text-[11px]">
                 {studentLabel && (
                   <span
@@ -741,15 +849,15 @@ export function PendingReviewsPage() {
               className="px-3 py-2 rounded-xl bg-amber-50/80 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-800/80 text-xs text-amber-900 dark:text-amber-200 break-words"
             >
               {lang === 'vi'
-                ? `Tiêu đề trang URL thực tế: "${observedWeb.title}"`
-                : `Observed web page title: "${observedWeb.title}"`}
+                ? `Tiêu đề thực tế của đường dẫn: "${observedWeb.title}"`
+                : `Actual page title at this link: "${observedWeb.title}"`}
               {observedWeb.venue ? ` (${observedWeb.venue})` : ''}
             </div>
           )}
 
-          {/* Quoted citation */}
+          {/* Quoted citation — select-text enabled so lecturers can copy-paste to Google Scholar */}
           {r.citation_raw && (
-            <p className="text-xs sm:text-[13px] font-serif text-slate-600 dark:text-slate-300 line-clamp-2 break-words [overflow-wrap:anywhere] pl-2.5 border-l-2 border-slate-200 dark:border-slate-700">
+            <p className="text-xs sm:text-[13px] font-serif text-slate-600 dark:text-slate-300 line-clamp-2 break-words [overflow-wrap:anywhere] pl-2.5 border-l-2 border-slate-200 dark:border-slate-700 select-text cursor-text">
               &ldquo;{r.citation_raw}&rdquo;
             </p>
           )}
@@ -779,7 +887,7 @@ export function PendingReviewsPage() {
                   ) : (
                     <Check className="h-3.5 w-3.5" />
                   )}
-                  <span>{lang === 'vi' ? 'Chấp nhận hợp lệ' : 'Approve Valid'}</span>
+                  <span>{lang === 'vi' ? 'Xác nhận hợp lệ' : 'Mark as Valid'}</span>
                 </button>
 
                 <button
@@ -805,12 +913,12 @@ export function PendingReviewsPage() {
                 onClick={(e) => e.stopPropagation()}
                 className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
               >
-                <span>{lang === 'vi' ? 'Xem trong bài' : 'Open Report'}</span>
+                <span>{lang === 'vi' ? 'Xem vị trí trong bài' : 'View in Report'}</span>
                 <ExternalLink className="h-3.5 w-3.5" />
               </Link>
             </div>
 
-            {/* BUG-23: Inline confirmation bar with explicit target status selector & optional note */}
+            {/* BUG-23: Inline confirmation bar with explicit target status selector, calm impact note & optional comment */}
             {activeDraft && (
               <div
                 data-testid={`pending-confirm-bar-${r.verdict_id}`}
@@ -820,11 +928,15 @@ export function PendingReviewsPage() {
                   <span className="text-xs font-semibold text-slate-800 dark:text-slate-100">
                     {activeDraft.actionType === 'approve'
                       ? lang === 'vi'
-                        ? 'Xác nhận kết quả áp dụng:'
-                        : 'Confirm classification to apply:'
-                      : lang === 'vi'
-                        ? 'Chọn trạng thái ghi nhận:'
-                        : 'Choose status to record:'}
+                        ? 'Lưu kết quả là:'
+                        : 'Save result as:'
+                      : isRetracted
+                        ? lang === 'vi'
+                          ? 'Giữ cảnh báo bài báo đã bị rút:'
+                          : 'Keep retraction warning as:'
+                        : lang === 'vi'
+                          ? 'Chọn mức cảnh báo giữ lại:'
+                          : 'Choose warning status to keep:'}
                   </span>
                   <div className="flex flex-wrap items-center gap-1.5">
                     {(activeDraft.actionType === 'approve'
@@ -857,6 +969,19 @@ export function PendingReviewsPage() {
                   </div>
                 </div>
 
+                <p
+                  data-testid={`pending-confirm-impact-${r.verdict_id}`}
+                  className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed"
+                >
+                  {activeDraft.actionType === 'approve'
+                    ? lang === 'vi'
+                      ? 'Đánh dấu mục này đã được giảng viên xem xét và gỡ cảnh báo trên báo cáo của sinh viên.'
+                      : 'Marks this item as reviewed by the instructor and clears the warning on the student’s report.'
+                    : lang === 'vi'
+                      ? 'Đánh dấu mục này đã được giảng viên xem xét và vẫn giữ cảnh báo hiển thị trên báo cáo của sinh viên.'
+                      : 'Marks this item as reviewed by the instructor while keeping the alert visible on the student’s report.'}
+                </p>
+
                 <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                   <Input
                     type="text"
@@ -869,10 +994,10 @@ export function PendingReviewsPage() {
                     data-testid={`pending-confirm-note-${r.verdict_id}`}
                     placeholder={
                       lang === 'vi'
-                        ? 'Ghi chú ngắn cho nhật ký duyệt (tùy chọn)…'
-                        : 'Optional review note for audit log…'
+                        ? 'Ghi chú ngắn cho lịch sử duyệt (tùy chọn, VD: Đã đối chiếu bản gốc)…'
+                        : 'Optional note for review history (e.g., Checked against original PDF)…'
                     }
-                    aria-label={lang === 'vi' ? 'Ghi chú duyệt' : 'Review note'}
+                    aria-label={lang === 'vi' ? 'Ghi chú đánh giá' : 'Review note'}
                     className="h-8 text-xs rounded-lg bg-white dark:bg-slate-900 flex-1"
                   />
                   <div className="flex items-center justify-end gap-1.5 shrink-0">
@@ -907,7 +1032,7 @@ export function PendingReviewsPage() {
                       }`}
                     >
                       {isBusy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                      <span>{lang === 'vi' ? 'Xác nhận' : 'Confirm'}</span>
+                      <span>{lang === 'vi' ? 'Lưu kết quả' : 'Save Review'}</span>
                     </Button>
                   </div>
                 </div>
@@ -960,7 +1085,7 @@ export function PendingReviewsPage() {
     },
     {
       key: 'incomplete',
-      label: lang === 'vi' ? 'Thiếu quy cách' : 'Incomplete Ref',
+      label: lang === 'vi' ? 'Thiếu thông tin trích dẫn' : 'Incomplete Citation',
       count: counts.incomplete,
       dotClass: 'bg-orange-400',
       activeClass:
@@ -992,12 +1117,12 @@ export function PendingReviewsPage() {
           </div>
           <div className="min-w-0">
             <h1 className="font-display text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
-              {t('teacher.pendingReviews')}
+              {lang === 'vi' ? 'Danh sách cần xem xét' : 'Review Queue'}
             </h1>
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
               {lang === 'vi'
-                ? 'Xem nhanh gợi ý xử lý và xác nhận từng trích dẫn có kèm nhật ký & hoàn tác.'
-                : 'Review plain-language guidance and confirm each citation with audit notes and undo.'}
+                ? 'Kiểm tra các trích dẫn cần xác minh từ bài nộp của sinh viên và cập nhật kết quả đánh giá.'
+                : 'Inspect flagged citations from student submissions and confirm your final review result.'}
             </p>
           </div>
         </div>
@@ -1008,7 +1133,7 @@ export function PendingReviewsPage() {
               <SuccessCheck size={14} />
               <span>
                 {lang === 'vi'
-                  ? `Đã xử lý ${resolvedSessionCount} mục`
+                  ? `Đã xem xét ${resolvedSessionCount} mục`
                   : `${resolvedSessionCount} reviewed`}
               </span>
             </span>
@@ -1025,8 +1150,8 @@ export function PendingReviewsPage() {
                   ? `${counts.total} mục trên ${totalPaperCount} bài nộp`
                   : `${counts.total} ${counts.total === 1 ? 'item' : 'items'} across ${totalPaperCount} ${totalPaperCount === 1 ? 'paper' : 'papers'}`
                 : lang === 'vi'
-                  ? 'Đã duyệt sạch'
-                  : 'Queue clear'}
+                  ? 'Đã xem xét xong'
+                  : 'All reviewed'}
             </span>
           </span>
         </div>
@@ -1048,17 +1173,28 @@ export function PendingReviewsPage() {
           <span className="ml-3 text-slate-500 text-sm">{t('common.loading')}</span>
         </div>
       ) : classes.length === 0 ? (
-        <Card className="rounded-2xl border-dashed border-slate-300 dark:border-slate-700 p-12 text-center">
-          <p className="text-slate-700 dark:text-slate-300 font-medium">
-            {t('teacher.noClassesAssigned')}
-          </p>
-          <p className="text-sm text-slate-500 mt-1">
-            {t('teacher.noClassesAssignedHint')}
-          </p>
+        <Card className="rounded-2xl border-dashed border-slate-300 dark:border-slate-700 p-12 text-center space-y-3">
+          <div>
+            <p className="text-slate-700 dark:text-slate-300 font-medium">
+              {lang === 'vi'
+                ? 'Bạn chưa tạo lớp học nào.'
+                : "You haven't created any classes yet."}
+            </p>
+            <p className="text-sm text-slate-500 mt-1">
+              {lang === 'vi'
+                ? 'Hãy tạo lớp học và nhận bài nộp từ sinh viên để bắt đầu rà soát trích dẫn.'
+                : 'Create a class to receive student submissions and review flagged citations here.'}
+            </p>
+          </div>
+          <Button asChild size="sm" variant="outline" className="rounded-xl">
+            <Link to="/teacher/classes">
+              {lang === 'vi' ? 'Đến trang Lớp học của tôi' : 'Go to My Classes'}
+            </Link>
+          </Button>
         </Card>
       ) : (
         <>
-          {/* Visual Triage Overview: Summary Donut + Non-Truncating Responsive Filter Cards */}
+          {/* Priority Summary Overview: Summary Donut + Non-Truncating Responsive Filter Cards */}
           <div className="space-y-3.5">
             <Card className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm flex items-center gap-4">
               <DonutChart
@@ -1089,19 +1225,19 @@ export function PendingReviewsPage() {
                   {counts.total > 0
                     ? lang === 'vi'
                       ? 'Phân loại mức độ ưu tiên'
-                      : 'Priority Triage Breakdown'
+                      : 'Priority Summary'
                     : lang === 'vi'
-                      ? 'Hoàn tất rà soát!'
-                      : 'All Caught Up!'}
+                      ? 'Hoàn tất xem xét!'
+                      : 'All Reviewed!'}
                 </p>
                 <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
                   {counts.total > 0
                     ? lang === 'vi'
-                      ? 'Chọn một mức ưu tiên bên dưới để lọc và xử lý các trích dẫn cần chú ý trước.'
-                      : 'Choose a priority category below to focus on similar citation issues first.'
+                      ? 'Chọn một nhóm bên dưới để lọc và ưu tiên kiểm tra các trích dẫn cần chú ý trước.'
+                      : 'Choose a category below to filter and focus on similar citation issues first.'
                     : lang === 'vi'
-                      ? 'Mọi trích dẫn cần chú ý trong lớp đã được xử lý.'
-                      : 'Every flagged citation across your classes has been reviewed.'}
+                      ? 'Tất cả trích dẫn cần chú ý trong lớp đã được giảng viên xem xét.'
+                      : 'All flagged citations across your classes have been reviewed.'}
                 </p>
               </div>
             </Card>
@@ -1148,7 +1284,7 @@ export function PendingReviewsPage() {
           {/* Review Queue Studio Container */}
           <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
             <StudioWindowHeader
-              title={lang === 'vi' ? 'DANH SÁCH CẦN DUYỆT' : 'REVIEW QUEUE'}
+              title={lang === 'vi' ? 'DANH SÁCH CẦN XEM XÉT' : 'REVIEW QUEUE'}
               badge={
                 <Badge
                   variant="secondary"
@@ -1200,14 +1336,16 @@ export function PendingReviewsPage() {
                   <SlidingFilterPills
                     value={viewMode}
                     onChange={setViewMode}
-                    ariaLabel={lang === 'vi' ? 'Chế độ hiển thị' : 'Queue layout'}
+                    ariaLabel={lang === 'vi' ? 'Chế độ hiển thị' : 'Display mode'}
                     options={[
                       {
                         key: 'grouped',
                         label: (
                           <>
                             <Layers className="h-3.5 w-3.5" />
-                            <span>{lang === 'vi' ? 'Theo bài nộp' : 'By Paper'}</span>
+                            <span>
+                              {lang === 'vi' ? 'Gom theo bài nộp' : 'Group by Paper'}
+                            </span>
                           </>
                         ),
                       },
@@ -1216,7 +1354,9 @@ export function PendingReviewsPage() {
                         label: (
                           <>
                             <List className="h-3.5 w-3.5" />
-                            <span>{lang === 'vi' ? 'Từng mục' : 'List'}</span>
+                            <span>
+                              {lang === 'vi' ? 'Danh sách trích dẫn' : 'All Citations'}
+                            </span>
                           </>
                         ),
                       },
@@ -1242,7 +1382,9 @@ export function PendingReviewsPage() {
                         : 'Search by paper filename, student, class, or citation text…'
                     }
                     aria-label={
-                      lang === 'vi' ? 'Tìm kiếm trong hàng đợi duyệt' : 'Search pending reviews'
+                      lang === 'vi'
+                        ? 'Tìm kiếm trong danh sách cần xem xét'
+                        : 'Search review queue'
                     }
                     className="h-9 pl-9 pr-8 text-xs rounded-xl bg-white dark:bg-slate-900"
                   />
@@ -1258,17 +1400,23 @@ export function PendingReviewsPage() {
                   )}
                 </div>
 
-                <div className="relative sm:w-52 shrink-0">
+                <div className="relative sm:w-56 shrink-0">
                   <ArrowUpDown className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
                   <select
                     value={sortMode}
                     onChange={(e) => setSortMode(e.target.value as ReviewSortMode)}
                     data-testid="pending-sort-select"
-                    aria-label={lang === 'vi' ? 'Sắp xếp hàng đợi' : 'Sort review queue'}
+                    aria-label={
+                      lang === 'vi'
+                        ? 'Sắp xếp danh sách cần xem xét'
+                        : 'Sort review queue'
+                    }
                     className="h-9 w-full pl-8 pr-8 rounded-xl border border-input bg-white dark:bg-slate-900 text-xs font-medium text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
                   >
                     <option value="urgent">
-                      {lang === 'vi' ? 'Ưu tiên gấp nhất trước' : 'Most urgent first'}
+                      {lang === 'vi'
+                        ? 'Lỗi nghiêm trọng nhất trước'
+                        : 'Most serious issues first'}
                     </option>
                     <option value="newest">
                       {lang === 'vi' ? 'Mới cập nhật nhất' : 'Newest first'}
@@ -1293,12 +1441,12 @@ export function PendingReviewsPage() {
                 </div>
                 <p className="text-base font-semibold text-slate-900 dark:text-slate-100">
                   {lang === 'vi'
-                    ? 'Không có trích dẫn nào chờ duyệt'
+                    ? 'Không có trích dẫn nào cần xem xét'
                     : 'No citations awaiting review'}
                 </p>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
                   {lang === 'vi'
-                    ? 'Không có trích dẫn nào cần kiểm tra thủ công ở thời điểm này.'
+                    ? 'Hiện chưa có trích dẫn nào cần giảng viên kiểm tra thủ công.'
                     : 'No citations need manual review right now.'}
                 </p>
               </div>

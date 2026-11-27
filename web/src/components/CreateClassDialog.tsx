@@ -120,6 +120,11 @@ export function CreateClassDialog({
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
+                  placeholder={
+                    lang === 'vi'
+                      ? 'VD: Kinh tế lượng — K26 (HK1 2026)'
+                      : 'e.g., Macroeconomics — Fall 2026 (Sec. 02)'
+                  }
                   required
                   maxLength={120}
                   autoFocus
@@ -132,6 +137,11 @@ export function CreateClassDialog({
                   id="class-desc"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
+                  placeholder={
+                    lang === 'vi'
+                      ? 'VD: Lớp khóa luận tốt nghiệp thứ Ba, ca 2 (hiển thị cho sinh viên trong lớp)'
+                      : 'e.g., Senior thesis seminar — visible to enrolled students'
+                  }
                   maxLength={1000}
                   rows={3}
                 />
@@ -162,7 +172,9 @@ export function CreateClassDialog({
       <UpgradeModal
         open={upgradeOpen}
         onOpenChange={setUpgradeOpen}
-        featureName="Classroom Cohorts"
+        featureName={
+          lang === 'vi' ? 'Quản lý lớp học & bài nộp' : 'Classroom Management'
+        }
         reasonDescription={error || undefined}
       />
     </>
