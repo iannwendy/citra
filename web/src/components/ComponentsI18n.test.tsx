@@ -70,8 +70,8 @@ describe('Task 5.6 — Localized components in EN and VI', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: 'Ghi đè' }));
     expect(screen.getByText('✓ Đã xác minh')).toBeDefined();
-    expect(screen.getByText('△ Sai lệch Metadata')).toBeDefined();
-    expect(screen.getByText('Đã khớp')).toBeDefined();
+    expect(screen.getByText('△ Sai lệch thông tin')).toBeDefined();
+    expect(screen.getByText('Đã liên kết')).toBeDefined();
     expect(screen.getByText('Thiếu nguồn')).toBeDefined();
   });
 

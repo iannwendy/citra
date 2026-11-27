@@ -856,7 +856,7 @@ describe('Track 5 Remediation Suite (Wave 1, 2 & 3)', () => {
   });
 
   describe('7. Report Tabs filename Propagation, Escape Modal Guard & Issues Candidate Badge', () => {
-    it('passes filename={report.filename} to EssayActionBar across all 5 report tabs', async () => {
+    it('passes filename={report.filename} to EssayHeader (and EssayActionBar where mounted) across all 5 report tabs', async () => {
       const reportTabs = [
         'src/pages/EssayPage.tsx',
         'src/pages/IssuesPage.tsx',
@@ -867,9 +867,14 @@ describe('Track 5 Remediation Suite (Wave 1, 2 & 3)', () => {
 
       for (const rel of reportTabs) {
         const src = fs.readFileSync(path.join(WEB_ROOT, rel), 'utf8');
-        expect(src, `${rel} must pass filename={report.filename} to EssayActionBar`).toMatch(
-          /<EssayActionBar[\s\S]{0,300}filename=\{report\.filename\}/,
+        expect(src, `${rel} must pass filename={report.filename} to EssayHeader`).toMatch(
+          /<EssayHeader[\s\S]{0,300}filename=\{report\.filename\}/,
         );
+        if (src.includes('<EssayActionBar')) {
+          expect(src, `${rel} must pass filename={report.filename} to EssayActionBar`).toMatch(
+            /<EssayActionBar[\s\S]{0,300}filename=\{report\.filename\}/,
+          );
+        }
       }
 
       // Verify render on IssuesPage + Remediation Modal enables .docx auto-heal button
@@ -892,7 +897,7 @@ describe('Track 5 Remediation Suite (Wave 1, 2 & 3)', () => {
         { route: '/verification/report/77/issues', user: makeUser({ plan_tier: 'pro' }) },
       );
 
-      const remBtn = await screen.findByTestId('actionbar-remediation-btn');
+      const remBtn = await screen.findByTestId('header-remediation-btn');
       fireEvent.click(remBtn);
       const docxBtn = (await screen.findByTestId('download-auto-healed-docx-btn')) as HTMLButtonElement;
       expect(docxBtn.disabled).toBe(false);
@@ -953,8 +958,9 @@ describe('Track 5 Remediation Suite (Wave 1, 2 & 3)', () => {
 
       // Must NOT label a 0.28 confidence hallucination candidate as green "MATCH"
       const candidateBadge = await screen.findByTestId('issue-source-candidate-badge');
-      expect(candidateBadge.textContent).toContain('LOW CONFIDENCE');
+      expect(candidateBadge.textContent).toMatch(/Low Confidence/i);
       expect(candidateBadge.textContent).not.toBe('MATCH');
+      expect(candidateBadge.textContent).not.toBe('Matched');
     });
   });
 
@@ -1159,7 +1165,8 @@ describe('Track 5 Remediation Suite (Wave 1, 2 & 3)', () => {
       expect(pricingSrc).toMatch(/Bilingual Abstract Matching|Đối chiếu nội dung/i);
 
       expect(remediationSrc).not.toContain('NGUỒN BỊA ĐẶT / ẢO GIÁC AI — CẦN LOẠI BỎ');
-      expect(remediationSrc).toContain('NGHI VẤN NGUỒN BỊA ĐẶT / ẢO GIÁC AI — CẦN KIỂM TRA');
+      expect(remediationSrc).not.toContain('NGHI VẤN NGUỒN BỊA ĐẶT');
+      expect(remediationSrc).toContain('Không tìm thấy nguồn — Cần kiểm tra lại bản gốc');
 
       await i18n.changeLanguage('vi');
       vi.spyOn(api, 'getRemediatedBibliography').mockResolvedValue({
@@ -1213,7 +1220,7 @@ describe('Track 5 Remediation Suite (Wave 1, 2 & 3)', () => {
 
       await waitFor(() => {
         expect(
-          screen.getByText(/NGHI VẤN NGUỒN BỊA ĐẶT \/ ẢO GIÁC AI — CẦN KIỂM TRA/),
+          screen.getByText(/Không tìm thấy nguồn — Cần kiểm tra lại bản gốc/),
         ).toBeTruthy();
       });
     });

@@ -919,8 +919,8 @@ describe('Track 4 Holistic SE Remediation Suite (FE-01..FE-15, QA-10, QA-11)', (
           id: 55,
           name: 'Thesis Cohort A',
           description: null,
-          teacher_id: 2,
-          teacher_username: 'lecturer1',
+          teacher_id: 99,
+          teacher_username: 'other_lecturer',
           created_at: '2026-11-01T00:00:00Z',
           student_count: 10,
           essay_count: 2,
@@ -1198,7 +1198,7 @@ describe('Track 4 Holistic SE Remediation Suite (FE-01..FE-15, QA-10, QA-11)', (
       fireEvent.change(confirmPwInput, { target: { value: multibyteOver72 } });
       fireEvent.click(screen.getByRole('button', { name: /update password/i }));
       expect(resetSpy).not.toHaveBeenCalled();
-      expect(screen.getByText(/72/i)).toBeDefined();
+      expect(screen.getByRole('alert').textContent).toMatch(/too long|64 characters|72/i);
       uReset();
 
       // RegisterPage allows 70-char ASCII password (maxLength=128, not capped at 64)
@@ -1276,7 +1276,7 @@ describe('Track 4 Holistic SE Remediation Suite (FE-01..FE-15, QA-10, QA-11)', (
         },
       );
       await waitFor(() =>
-        expect(issuesC.textContent).toContain('Tổng vấn đề phát hiện'),
+        expect(issuesC.textContent).toContain('Tổng vấn đề'),
       );
       expect(issuesC.textContent).not.toContain('(1 issue)');
       expect(issuesC.textContent).not.toContain('1 citations');

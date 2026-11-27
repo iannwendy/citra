@@ -106,7 +106,8 @@ describe('Bilingual Completeness & Runtime Test Hygiene (BUG-10b & BUG-11)', () 
 
     await waitFor(() => expect(screen.getAllByText(/Fake Paper/).length).toBeGreaterThan(0));
     expect(container.textContent).toContain('Tất cả (1)');
-    expect(container.textContent).toContain('✕ Bịa đặt (1)');
+    expect(container.textContent).toContain('✕ Không tìm thấy nguồn (1)');
+    expect(container.textContent).not.toContain('Bịa đặt');
     expect(container.textContent).toContain('Độ tin cậy:');
     expect(container.textContent).toContain('Trích dẫn trong bài');
     expect(container.textContent).toContain('Bản ghi chuẩn truy xuất');

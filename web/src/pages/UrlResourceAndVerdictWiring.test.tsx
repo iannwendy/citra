@@ -786,7 +786,7 @@ describe('Wave 2A: URL Resource Metadata, Verdict Diff Table, Composite Sub-Refs
     const resCard0 = screen.getByTestId('sandbox-result-card-1');
     expect(resCard0.className).toContain('border-sky-200');
     expect(resCard0.textContent).toContain('[1a]');
-    expect(resCard0.textContent).toContain('URL RESOURCE');
+    expect(resCard0.textContent).toContain('Web / Legal Source');
     expect(resCard0.textContent).toContain(
       'React – The library for web and native user interfaces',
     );
@@ -878,8 +878,8 @@ describe('Wave 2A: URL Resource Metadata, Verdict Diff Table, Composite Sub-Refs
       expect(screen.getByTestId('sandbox-result-card-1')).toBeDefined(),
     );
     expect(sbContainer.textContent).not.toContain('FAKE URL');
-    expect(sbContainer.textContent).toContain('WAYBACK ARCHIVED');
-    expect(sbContainer.textContent).toContain('URL Resource: 1');
+    expect(sbContainer.textContent).toContain('Wayback Archived');
+    expect(sbContainer.textContent).toContain('Web Source: 1');
     expect(sbContainer.textContent).toContain('Legal Statute: 1');
     expect(sbContainer.textContent).toContain('· Vietnamese Legal Registry');
     expect(sbContainer.textContent).not.toContain('· the Vietnamese Legal Registry');
@@ -982,7 +982,7 @@ describe('Wave 2A: URL Resource Metadata, Verdict Diff Table, Composite Sub-Refs
     expect(essayDocxContainer.textContent).not.toContain('title similarity = 0.00');
     unmountEssayDocx();
 
-    // 3. DocumentInspectorPage highlights [8a] inside <mark>, shows document_inspector.docx, and never shows FAKE URL on Wayback-rescued unchecked URLs
+    // 3. DocumentInspectorPage highlights [8a] inside <mark>, shows DOCX header, and never shows FAKE URL on Wayback-rescued unchecked URLs
     const { container: inspContainer, unmount: unmountInsp } = renderWithProviders(
       <Routes>
         <Route path="/verification/inspector/:id" element={<DocumentInspectorPage />} />
@@ -993,8 +993,9 @@ describe('Wave 2A: URL Resource Metadata, Verdict Diff Table, Composite Sub-Refs
       },
     );
     await waitFor(() =>
-      expect(inspContainer.textContent).toContain('document_inspector.docx'),
+      expect(inspContainer.textContent).toContain('Document Inspector'),
     );
+    expect(inspContainer.textContent).toContain('thesis_submission.docx');
     const marks = Array.from(inspContainer.querySelectorAll('mark')).map(
       (m) => m.textContent,
     );
@@ -1002,7 +1003,7 @@ describe('Wave 2A: URL Resource Metadata, Verdict Diff Table, Composite Sub-Refs
     expect(inspContainer.textContent).not.toContain('FAKE URL');
     unmountInsp();
 
-    // 4. LogicTracePage shows WAYBACK ARCHIVED (never FAKE URL) and strips duplicate [1] prefix
+    // 4. LogicTracePage shows Wayback Archived (never FAKE URL) and strips duplicate [1] prefix
     const { container: traceContainer } = renderWithProviders(
       <Routes>
         <Route path="/verification/trace/:id" element={<LogicTracePage />} />
@@ -1013,7 +1014,7 @@ describe('Wave 2A: URL Resource Metadata, Verdict Diff Table, Composite Sub-Refs
       },
     );
     await waitFor(() =>
-      expect(traceContainer.textContent).toContain('WAYBACK ARCHIVED'),
+      expect(traceContainer.textContent).toContain('Wayback Archived'),
     );
     expect(traceContainer.textContent).not.toContain('FAKE URL');
     expect(traceContainer.textContent).not.toContain('[1][1]');

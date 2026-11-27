@@ -116,7 +116,7 @@ describe('Landing Page Vietnamese Typography & Sentient Font Integrity', () => {
     const heroH2 = container.querySelector('h2.font-solva-serif');
     expect(heroH2).not.toBeNull();
     expect(heroH2?.textContent).toBe('Xác minh mọi trích dẫn. Truy vết mọi nguồn tài liệu.');
-    expect(container.textContent).toContain(`SourceLogic v${APP_VERSION}`);
-    expect(container.textContent).not.toContain('SourceLogic v2.3');
+    expect(container.textContent).toContain(`CITRA · v${APP_VERSION}`);
+    expect(container.textContent).not.toContain('SourceLogic');
   });
 });

@@ -76,7 +76,7 @@ describe('R-INCOMPLETE-METADATA localization & VerdictBadge sub-label', () => {
     );
 
     expect(screen.getByText('Incomplete Reference')).toBeDefined();
-    expect(screen.getByText('Metadata Error')).toBeDefined();
+    expect(screen.getByText('Details Mismatch')).toBeDefined();
     unmount();
 
     await i18n.changeLanguage('vi');
@@ -95,7 +95,7 @@ describe('R-INCOMPLETE-METADATA localization & VerdictBadge sub-label', () => {
     );
 
     expect(screen.getByText('Thiếu quy cách trích dẫn')).toBeDefined();
-    expect(screen.getByText('Lỗi Metadata')).toBeDefined();
+    expect(screen.getByText('Sai lệch thông tin')).toBeDefined();
   });
 
   it('returns localized Incomplete Reference badge visuals in EssayPage getVerdictBadgeVisuals without breaking standard or legal METADATA_ERROR', () => {
@@ -113,11 +113,11 @@ describe('R-INCOMPLETE-METADATA localization & VerdictBadge sub-label', () => {
         ['R-SINGLE-SOURCE-PARTIAL'],
         'en',
       ).text,
-    ).toBe('⚠ METADATA_ERROR');
+    ).toBe('⚠ Details Mismatch');
     expect(
       getVerdictBadgeVisuals('metadata_error', ['R-LEGAL-YEAR-MISMATCH'], 'vi')
         .text,
-    ).toBe('⚠ LEGAL_METADATA_ERROR');
+    ).toBe('⚠ Sai lệch thông tin');
   });
 
   it('propagates triggered_rules to VerdictBadge on OrphanDetectionPage in EN and VI', async () => {
@@ -166,7 +166,7 @@ describe('R-INCOMPLETE-METADATA localization & VerdictBadge sub-label', () => {
     await waitFor(() =>
       expect(screen.getAllByText('Incomplete Reference')).toHaveLength(2),
     );
-    expect(screen.getByText('Metadata Error')).toBeDefined();
+    expect(screen.getByText('Details Mismatch')).toBeDefined();
     unmount();
 
     await i18n.changeLanguage('vi');
@@ -185,7 +185,7 @@ describe('R-INCOMPLETE-METADATA localization & VerdictBadge sub-label', () => {
     await waitFor(() =>
       expect(screen.getAllByText('Thiếu quy cách trích dẫn')).toHaveLength(2),
     );
-    expect(screen.getByText('Lỗi Metadata')).toBeDefined();
+    expect(screen.getByText('Sai lệch thông tin')).toBeDefined();
     vi.restoreAllMocks();
   });
 });

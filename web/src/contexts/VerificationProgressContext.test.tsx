@@ -135,7 +135,7 @@ describe('VerificationProgressContext — Cross-Tab & Reload Progress Persistenc
     );
 
     // 3. Navigate away to Dashboard via sidebar
-    fireEvent.click(screen.getByRole('link', { name: /Bảng điều khiển/i }));
+    fireEvent.click(screen.getByRole('link', { name: /^Bảng điều khiển$/i }));
     expect(await screen.findByTestId('mock-dashboard-view')).toBeDefined();
 
     // Sidebar live badge & mobile sticky pill remain visible while on Dashboard
@@ -162,7 +162,7 @@ describe('VerificationProgressContext — Cross-Tab & Reload Progress Persistenc
     ).toContain('Luan_Van_Tot_Nghiep.pdf');
 
     // 6. Switch back to Dashboard and let the essay finish in the background
-    fireEvent.click(screen.getByRole('link', { name: /Bảng điều khiển/i }));
+    fireEvent.click(screen.getByRole('link', { name: /^Bảng điều khiển$/i }));
     expect(await screen.findByTestId('mock-dashboard-view')).toBeDefined();
 
     currentStatus = makeStatus({
@@ -228,7 +228,7 @@ describe('VerificationProgressContext — Cross-Tab & Reload Progress Persistenc
     await waitFor(() => expect(uploadGates.length).toBe(3));
 
     // Switch away to Dashboard while batch is actively running
-    fireEvent.click(screen.getByRole('link', { name: /Bảng điều khiển/i }));
+    fireEvent.click(screen.getByRole('link', { name: /^Bảng điều khiển$/i }));
     expect(await screen.findByTestId('mock-dashboard-view')).toBeDefined();
 
     // Sidebar badge reflects active batch (0/4)
@@ -467,7 +467,7 @@ describe('VerificationProgressContext — Cross-Tab & Reload Progress Persistenc
     fireEvent.click(await screen.findByRole('button', { name: /Bắt đầu xác minh/i }));
 
     // Navigate away to Dashboard BEFORE uploadEssay resolves!
-    fireEvent.click(screen.getByRole('link', { name: /Bảng điều khiển/i }));
+    fireEvent.click(screen.getByRole('link', { name: /^Bảng điều khiển$/i }));
     expect(await screen.findByTestId('mock-dashboard-view')).toBeDefined();
 
     // Now resolve upload in background -> UploadPage is unmounted, so background SSE MUST start immediately!
