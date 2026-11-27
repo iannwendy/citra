@@ -1,22 +1,28 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { AuthContext } from '@/contexts/AuthContext';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import i18n from '@/i18n';
 import { APP_VERSION } from '@/version';
 import { LoginPage } from './LoginPage';
 
+function LocationProbe() {
+  const location = useLocation();
+  return <div data-testid="location-probe">{`${location.pathname}${location.search}`}</div>;
+}
+
 function renderLoginPage(
   loginMock = vi.fn().mockResolvedValue(undefined),
   loginWithGoogleMock = vi.fn().mockResolvedValue(undefined),
+  initialEntry = '/login',
 ) {
   return {
     loginMock,
     loginWithGoogleMock,
     ...render(
       <ThemeProvider defaultTheme="light">
-        <MemoryRouter initialEntries={['/login']}>
+        <MemoryRouter initialEntries={[initialEntry]}>
           <AuthContext.Provider
             value={{
               user: null,
@@ -29,7 +35,10 @@ function renderLoginPage(
               refreshUser: async () => {},
             }}
           >
-            <LoginPage />
+            <Routes>
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="*" element={<LocationProbe />} />
+            </Routes>
           </AuthContext.Provider>
         </MemoryRouter>
       </ThemeProvider>
@@ -61,26 +70,27 @@ describe('LoginPage', () => {
       screen.getByRole('heading', { name: /welcome back|chào mừng trở lại/i })
     ).toBeDefined();
     expect(screen.getByLabelText(/username|tên đăng nhập/i)).toBeDefined();
-    expect(screen.getByLabelText(/password|mật khẩu/i)).toBeDefined();
+    expect(screen.getByLabelText(/^(password|mật khẩu)$/i)).toBeDefined();
     expect(
       screen.getByRole('button', { name: /sign in|đăng nhập/i })
     ).toBeDefined();
-    expect(screen.getByText(/symbolic_verifier\.py/i)).toBeDefined();
+    expect(screen.getByText(/Verification Report Sample/i)).toBeDefined();
+    expect(screen.queryByText(/symbolic_verifier\.py/i)).toBeNull();
   });
 
   it('toggles password visibility when clicking the eye button', () => {
     renderLoginPage();
 
     const passwordInput = screen.getByLabelText(
-      /password|mật khẩu/i
+      /^(password|mật khẩu)$/i
     ) as HTMLInputElement;
     expect(passwordInput.type).toBe('password');
 
-    const toggleBtn = screen.getByRole('button', { name: /show characters/i });
+    const toggleBtn = screen.getByRole('button', { name: /show password/i });
     fireEvent.click(toggleBtn);
     expect(passwordInput.type).toBe('text');
 
-    const hideBtn = screen.getByRole('button', { name: /hide characters/i });
+    const hideBtn = screen.getByRole('button', { name: /hide password/i });
     fireEvent.click(hideBtn);
     expect(passwordInput.type).toBe('password');
   });
@@ -92,7 +102,7 @@ describe('LoginPage', () => {
     fireEvent.change(screen.getByLabelText(/username|tên đăng nhập/i), {
       target: { value: 'admin' },
     });
-    fireEvent.change(screen.getByLabelText(/password|mật khẩu/i), {
+    fireEvent.change(screen.getByLabelText(/^(password|mật khẩu)$/i), {
       target: { value: 'admin123' },
     });
 
@@ -103,7 +113,7 @@ describe('LoginPage', () => {
     });
   });
 
-  it('displays destructive alert when login fails', async () => {
+  it('displays destructive alert with localized formatUserError when login fails', async () => {
     const loginMock = vi
       .fn()
       .mockRejectedValue(new Error('Invalid username or password'));
@@ -112,14 +122,16 @@ describe('LoginPage', () => {
     fireEvent.change(screen.getByLabelText(/username|tên đăng nhập/i), {
       target: { value: 'wrong' },
     });
-    fireEvent.change(screen.getByLabelText(/password|mật khẩu/i), {
+    fireEvent.change(screen.getByLabelText(/^(password|mật khẩu)$/i), {
       target: { value: 'wrongpass' },
     });
 
     fireEvent.click(screen.getByRole('button', { name: /sign in|đăng nhập/i }));
 
     await waitFor(() => {
-      expect(screen.getByText('Invalid username or password')).toBeDefined();
+      expect(
+        screen.getByText('Incorrect username/email or password. Please try again.')
+      ).toBeDefined();
     });
   });
 
@@ -138,21 +150,24 @@ describe('LoginPage', () => {
     });
   });
 
-  it('switches live debugger trace preview tabs and detects email vs username input format', () => {
+  it('switches live verification report preview tabs and detects email vs username input format', () => {
     renderLoginPage();
 
-    // Initially shows trace [1] Vaswani et al. (2017)
-    expect(screen.getByText(/R01_DOI_MATCH/i)).toBeDefined();
+    // Initially shows sample [1] Vaswani et al. (2017) with human-friendly academic label (no raw rule codes)
+    expect(screen.getByText(/Exact DOI Match/i)).toBeDefined();
+    expect(screen.queryByText(/R01_DOI_MATCH/i)).toBeNull();
 
-    // Click second trace tab [4] Nguyen & Tran
+    // Click second sample tab [4] Nguyen & Tran
     const tabs = screen.getAllByRole('tab');
     expect(tabs.length).toBe(3);
     fireEvent.click(tabs[1]);
-    expect(screen.getByText(/R05_YEAR_DRIFT/i)).toBeDefined();
+    expect(screen.getByText(/Year & Venue Mismatch/i)).toBeDefined();
+    expect(screen.queryByText(/R05_YEAR_DRIFT/i)).toBeNull();
 
-    // Click third trace tab [7] Robertson & Walker
+    // Click third sample tab [7] Robertson & Walker
     fireEvent.click(tabs[2]);
-    expect(screen.getByText(/R12_GHOST_DOI/i)).toBeDefined();
+    expect(screen.getByText(/Unregistered DOI/i)).toBeDefined();
+    expect(screen.queryByText(/R12_GHOST_DOI/i)).toBeNull();
 
     // Typing a username shows USERNAME pill, typing an email shows EMAIL pill
     const usernameInput = screen.getByLabelText(/username|tên đăng nhập/i);
@@ -183,7 +198,7 @@ describe('LoginPage', () => {
     const enSvgButtons = enContainer.querySelectorAll('button svg');
     expect(enSvgButtons.length).toBeGreaterThan(0);
     const firstSvgButtonEn = enSvgButtons[0].closest('button');
-    expect(firstSvgButtonEn?.getAttribute('aria-label')).toBe('Show characters');
+    expect(firstSvgButtonEn?.getAttribute('aria-label')).toBe('Show password');
 
     // Empty submission shows clear inline error without calling login()
     fireEvent.click(screen.getByRole('button', { name: /sign in/i }));
@@ -205,7 +220,7 @@ describe('LoginPage', () => {
 
     // DOM SVG button order preserved in VI too
     const firstSvgButtonVi = viContainer.querySelectorAll('button svg')[0]?.closest('button');
-    expect(firstSvgButtonVi?.getAttribute('aria-label')).toBe('Show characters');
+    expect(firstSvgButtonVi?.getAttribute('aria-label')).toBe('Hiện mật khẩu');
 
     // Empty submission in VI shows Vietnamese inline validation alert
     fireEvent.click(screen.getByRole('button', { name: /đăng nhập/i }));
@@ -226,8 +241,12 @@ describe('LoginPage', () => {
     expect(leftPanelEn.innerHTML).not.toMatch(/\bshadow-2?xs\b/);
     expect(leftPanelEn.innerHTML).not.toMatch(/bg-(emerald|amber|red)-500\/12\b/);
     expect(leftPanelEn.textContent).toContain('Semantic Scholar');
-    expect(leftPanelEn.textContent).toContain('symbolic_verifier.py');
-    expect(leftPanelEn.textContent).toContain('R01_DOI_MATCH');
+    expect(leftPanelEn.textContent).toContain('Verification Report Sample');
+    expect(leftPanelEn.textContent).toContain('Exact DOI Match');
+    expect(leftPanelEn.textContent).not.toContain('symbolic_verifier.py');
+    expect(leftPanelEn.textContent).not.toContain('R01_DOI_MATCH');
+    expect(leftPanelEn.textContent).not.toContain('Engine: SourceLogic');
+    expect(leftPanelEn.textContent).toContain(`CITRA · v${APP_VERSION}`);
     expect(leftPanelEn.textContent).toContain('Content match: 96%');
     expect(leftPanelEn.textContent).not.toContain('NLI:');
     expect(leftPanelEn.textContent).not.toContain('expr:');
@@ -245,7 +264,10 @@ describe('LoginPage', () => {
     expect(leftPanelVi.innerHTML).not.toMatch(/\bline-clamp-\d+\b/);
     expect(leftPanelVi.textContent).toContain('Semantic Scholar');
     expect(leftPanelVi.textContent).toContain('Xác minh mọi trích dẫn. Truy vết mọi nguồn tài liệu.');
-    expect(leftPanelVi.textContent).toContain(`SourceLogic v${APP_VERSION}`);
+    expect(leftPanelVi.textContent).toContain(`CITRA · v${APP_VERSION}`);
+    expect(leftPanelVi.textContent).toContain('Ví dụ báo cáo kiểm tra');
+    expect(leftPanelVi.textContent).toContain('Khớp mã DOI gốc');
+    expect(leftPanelVi.textContent).not.toContain('SourceLogic');
     expect(leftPanelVi.textContent).toContain('Độ khớp nội dung: 96%');
     expect(leftPanelVi.textContent).toContain('Đối chiếu:');
     expect(leftPanelVi.textContent).not.toContain('NLI:');
@@ -325,19 +347,19 @@ describe('LoginPage', () => {
 
     unmountEn();
 
-    // 4. Vietnamese hover title on Eye button + acronym-free feature card tags + non-tech Google fallback
+    // 4. Vietnamese aria-label & hover title on Eye button + acronym-free feature card tags + non-tech Google fallback
     await i18n.changeLanguage('vi');
     const { container: viContainer, unmount: unmountVi } = renderLoginPage();
-    const eyeBtnVi = screen.getByRole('button', { name: 'Show characters' });
+    const eyeBtnVi = screen.getByRole('button', { name: 'Hiện mật khẩu' });
     expect(eyeBtnVi.getAttribute('title')).toBe('Hiện mật khẩu');
     fireEvent.click(eyeBtnVi);
     expect(
-      screen.getByRole('button', { name: 'Hide characters' }).getAttribute('title'),
+      screen.getByRole('button', { name: 'Ẩn mật khẩu' }).getAttribute('title'),
     ).toBe('Ẩn mật khẩu');
 
     const leftPanelVi = viContainer.firstElementChild?.firstElementChild as HTMLElement;
     expect(leftPanelVi.textContent).toContain('thư viện');
-    expect(leftPanelVi.textContent).toContain('Quy tắc R01–R30');
+    expect(leftPanelVi.textContent).toContain('Hơn 30 tiêu chí đối chiếu');
     expect(leftPanelVi.textContent).not.toContain('CSDL');
     expect(leftPanelVi.textContent).not.toContain('Luật R01–R30 · CIS');
 
@@ -349,5 +371,53 @@ describe('LoginPage', () => {
     });
 
     unmountVi();
+  });
+
+  it('BUG-09 / BUG-10 / BUG-16 / BUG-27 — renders z-10 left icons, wrapping footer, VI identifier pill & localized auth errors, and preserves safe ?redirect= destination after login', async () => {
+    await i18n.changeLanguage('vi');
+    const loginFailMock = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('Invalid username or password'))
+      .mockResolvedValueOnce(undefined);
+
+    const { container } = renderLoginPage(
+      loginFailMock,
+      vi.fn(),
+      '/login?redirect=%2Fbilling%2Fcheckout%3Fplan%3Dpro%26billing%3Dannual',
+    );
+
+    // BUG-27: Friendly redirect banner is shown
+    const banner = screen.getByTestId('login-redirect-banner');
+    expect(banner.textContent).toMatch(/Đăng nhập để tiếp tục/i);
+
+    // BUG-09: Left input icon containers have z-10 pointer-events-none so icons sit above opaque inputs
+    const iconWrappers = Array.from(
+      container.querySelectorAll('form .pointer-events-none.z-10'),
+    );
+    expect(iconWrappers.length).toBeGreaterThanOrEqual(2);
+
+    // BUG-16: Typing a username in VI shows localized TÊN ĐĂNG NHẬP pill (not raw USERNAME)
+    const usernameInput = container.querySelector('#username') as HTMLInputElement;
+    const passwordInput = container.querySelector('#password') as HTMLInputElement;
+    fireEvent.change(usernameInput, { target: { value: 'scholar_vn' } });
+    expect(screen.getByText('TÊN ĐĂNG NHẬP')).toBeDefined();
+
+    // BUG-16: Raw backend English error is translated into Vietnamese via formatUserError
+    fireEvent.change(passwordInput, { target: { value: 'wrongpass' } });
+    fireEvent.click(screen.getByRole('button', { name: /đăng nhập/i }));
+    await waitFor(() => {
+      const alertText = screen.getByRole('alert').textContent ?? '';
+      expect(alertText).toContain('Tên đăng nhập/email hoặc mật khẩu chưa đúng');
+      expect(alertText).not.toContain('Invalid username or password');
+    });
+
+    // BUG-27: Successful login navigates to the preserved ?redirect= target
+    fireEvent.change(passwordInput, { target: { value: 'correctpass' } });
+    fireEvent.click(screen.getByRole('button', { name: /đăng nhập/i }));
+    await waitFor(() => {
+      expect(screen.getByTestId('location-probe').textContent).toBe(
+        '/billing/checkout?plan=pro&billing=annual',
+      );
+    });
   });
 });

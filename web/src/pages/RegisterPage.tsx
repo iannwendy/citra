@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { api } from '@/api/client';
 import { validatePasswordClient } from '@/lib/utils';
+import { formatUserError, resolveAcademicLang } from '@/lib/academicTaxonomy';
 import {
   AuthSplitShell,
   PasswordStrengthIndicator,
@@ -98,7 +99,7 @@ const getSolvaInputBorderClasses = (invalid: boolean) =>
 
 export function RegisterPage() {
   const { t, i18n } = useTranslation();
-  const lang = i18n.language?.startsWith('vi') ? 'vi' : 'en';
+  const lang = resolveAcademicLang(i18n.language);
 
   const [fullName, setFullName] = useState('');
   const [username, setUsername] = useState('');
@@ -108,6 +109,7 @@ export function RegisterPage() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [privacyConsent, setPrivacyConsent] = useState(false);
   const [consentShake, setConsentShake] = useState(false);
   const [invalidField, setInvalidField] = useState<RegisterInvalidField>(null);
@@ -128,12 +130,23 @@ export function RegisterPage() {
     return () => window.clearInterval(timer);
   }, [cooldown]);
 
+  const handleFullNameChange = (nextFullName: string) => {
+    setFullName(nextFullName);
+    if (error) setError('');
+    if (invalidField) setInvalidField(null);
+    if (!usernameManuallyEdited && !email.trim()) {
+      setUsername(deriveUsernameFromEmailOrName(nextFullName));
+    }
+  };
+
   const handleEmailChange = (nextEmail: string) => {
     setEmail(nextEmail);
     if (error) setError('');
     if (invalidField) setInvalidField(null);
     if (!usernameManuallyEdited) {
-      if (nextEmail.includes('@')) {
+      if (!nextEmail.trim()) {
+        setUsername(deriveUsernameFromEmailOrName(fullName));
+      } else if (nextEmail.includes('@')) {
         const localDerived = deriveUsernameFromEmailOrName(
           nextEmail.trim().split('@')[0],
         );
@@ -227,15 +240,23 @@ export function RegisterPage() {
       setRegisteredEmail(resp.email);
       setCooldown(60);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Registration failed';
-      if (/email/i.test(msg)) {
+      const rawMsg = err instanceof Error ? err.message : '';
+      if (/email/i.test(rawMsg)) {
         setInvalidField('email');
-      } else if (/username|tên đăng nhập/i.test(msg)) {
+      } else if (/username|tên đăng nhập/i.test(rawMsg)) {
         setInvalidField('username');
-      } else if (/password|mật khẩu/i.test(msg)) {
+      } else if (/password|mật khẩu/i.test(rawMsg)) {
         setInvalidField('password');
       }
-      setError(msg);
+      setError(
+        formatUserError(
+          err,
+          lang,
+          lang === 'vi'
+            ? 'Không thể đăng ký tài khoản. Vui lòng thử lại.'
+            : 'Registration failed. Please try again.',
+        ),
+      );
     } finally {
       setLoading(false);
     }
@@ -252,7 +273,13 @@ export function RegisterPage() {
       setCooldown(60);
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : 'Failed to resend activation email',
+        formatUserError(
+          err,
+          lang,
+          lang === 'vi'
+            ? 'Không thể gửi lại email kích hoạt. Vui lòng thử lại sau.'
+            : 'Failed to resend activation email. Please try again.',
+        ),
       );
     } finally {
       setResending(false);
@@ -360,7 +387,7 @@ export function RegisterPage() {
               </div>
 
               {resendMessage && (
-                <Alert className="rounded-[12px] border-emerald-500/30 bg-emerald-500/10 text-emerald-900 dark:text-emerald-200">
+                <Alert className="px-3.5 py-2.5 rounded-[12px] border-emerald-500/30 bg-emerald-500/10 text-emerald-900 dark:text-emerald-200 flex items-start gap-2.5 [&>svg]:static [&>svg]:mt-0.5 [&>svg]:shrink-0 [&>svg~*]:pl-0 [&>svg+div]:translate-y-0">
                   <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                   <AlertDescription className="text-xs sm:text-sm font-medium text-emerald-900 dark:text-emerald-200">
                     {resendMessage}
@@ -369,7 +396,10 @@ export function RegisterPage() {
               )}
 
               {error && (
-                <Alert variant="destructive" className="rounded-[12px]">
+                <Alert
+                  variant="destructive"
+                  className="px-3.5 py-2.5 rounded-[12px] flex items-start gap-2.5 [&>svg]:static [&>svg]:mt-0.5 [&>svg]:shrink-0 [&>svg~*]:pl-0 [&>svg+div]:translate-y-0"
+                >
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription className="text-xs sm:text-sm font-medium">
                     {error}
@@ -493,10 +523,10 @@ export function RegisterPage() {
                 <Alert
                   id="register-form-error"
                   variant="destructive"
-                  className="mb-2.5 py-2 rounded-[10px]"
+                  className="mb-2.5 px-3.5 py-2.5 rounded-[10px] flex items-start gap-2.5 [&>svg]:static [&>svg]:mt-0.5 [&>svg]:shrink-0 [&>svg~*]:pl-0 [&>svg+div]:translate-y-0"
                 >
                   <AlertCircle className="h-4 w-4" />
-                  <AlertDescription className="text-xs font-medium">
+                  <AlertDescription className="text-xs font-medium leading-snug">
                     {error}
                   </AlertDescription>
                 </Alert>
@@ -505,7 +535,7 @@ export function RegisterPage() {
               <form onSubmit={handleSubmit} noValidate className="space-y-2.5">
                 {/* Row 1: Full Name + Email Address (True Email-First Tab Order) */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  <div className="space-y-1">
+                  <div className="space-y-1 min-w-0">
                     <Label
                       htmlFor="full_name"
                       style={{ color: 'var(--solva-ink)' }}
@@ -516,7 +546,7 @@ export function RegisterPage() {
                     <div className="relative">
                       <div
                         style={{ color: 'var(--solva-muted)' }}
-                        className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2"
+                        className="pointer-events-none z-10 absolute left-3 top-1/2 -translate-y-1/2"
                       >
                         <User className="h-3.5 w-3.5" />
                       </div>
@@ -528,24 +558,20 @@ export function RegisterPage() {
                         aria-describedby={
                           fullNameInvalid ? 'register-form-error' : undefined
                         }
-                        onChange={(e) => {
-                          setFullName(e.target.value);
-                          if (error) setError('');
-                          if (invalidField) setInvalidField(null);
-                        }}
+                        onChange={(e) => handleFullNameChange(e.target.value)}
                         required
                         autoComplete="name"
                         style={{
                           backgroundColor: 'var(--solva-surface)',
                           color: 'var(--solva-ink)',
                         }}
-                        className={`t-input ${getSolvaInputBorderClasses(fullNameInvalid)} h-9 pl-8 rounded-[10px] font-solva-sans text-[13.5px]`}
+                        className={`t-input ${getSolvaInputBorderClasses(fullNameInvalid)} w-full min-w-0 h-9 pl-9 pr-2.5 rounded-[10px] font-solva-sans text-[13px]`}
                         placeholder={t('auth.fullNamePlaceholder')}
                       />
                     </div>
                   </div>
 
-                  <div className="space-y-1">
+                  <div className="space-y-1 min-w-0">
                     <Label
                       htmlFor="email"
                       style={{ color: 'var(--solva-ink)' }}
@@ -556,7 +582,7 @@ export function RegisterPage() {
                     <div className="relative">
                       <div
                         style={{ color: 'var(--solva-muted)' }}
-                        className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2"
+                        className="pointer-events-none z-10 absolute left-3 top-1/2 -translate-y-1/2"
                       >
                         <Mail className="h-3.5 w-3.5" />
                       </div>
@@ -575,16 +601,20 @@ export function RegisterPage() {
                           backgroundColor: 'var(--solva-surface)',
                           color: 'var(--solva-ink)',
                         }}
-                        className={`t-input ${getSolvaInputBorderClasses(emailInvalid)} h-9 pl-8 rounded-[10px] font-solva-sans text-[13.5px]`}
-                        placeholder={t('auth.emailPlaceholder')}
+                        className={`t-input ${getSolvaInputBorderClasses(emailInvalid)} w-full min-w-0 h-9 pl-9 pr-2.5 rounded-[10px] font-solva-sans text-[13px]`}
+                        placeholder={
+                          lang === 'vi'
+                            ? 'ban@truongdaihoc.edu.vn'
+                            : 'you@university.edu'
+                        }
                       />
                     </div>
                   </div>
                 </div>
 
-                {/* Row 2: Username (auto-suggested from Email until manually edited) + Institution (Optional) */}
+                {/* Row 2: Username (auto-suggested from Full Name / Email until manually edited) + Institution (Optional) */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  <div className="space-y-1">
+                  <div className="space-y-1 min-w-0">
                     <Label
                       htmlFor="username"
                       style={{ color: 'var(--solva-ink)' }}
@@ -595,7 +625,7 @@ export function RegisterPage() {
                     <div className="relative">
                       <div
                         style={{ color: 'var(--solva-muted)' }}
-                        className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 font-mono text-xs font-bold"
+                        className="pointer-events-none z-10 absolute left-3 top-1/2 -translate-y-1/2 font-mono text-xs font-bold"
                       >
                         @
                       </div>
@@ -614,13 +644,13 @@ export function RegisterPage() {
                           backgroundColor: 'var(--solva-surface)',
                           color: 'var(--solva-ink)',
                         }}
-                        className={`t-input ${getSolvaInputBorderClasses(usernameInvalid)} h-9 pl-7 rounded-[10px] font-solva-sans text-[13.5px]`}
+                        className={`t-input ${getSolvaInputBorderClasses(usernameInvalid)} w-full min-w-0 h-9 pl-8 pr-2.5 rounded-[10px] font-solva-sans text-[13px]`}
                         placeholder={t('auth.usernamePlaceholder')}
                       />
                     </div>
                   </div>
 
-                  <div className="space-y-1">
+                  <div className="space-y-1 min-w-0">
                     <Label
                       htmlFor="institution"
                       style={{ color: 'var(--solva-ink)' }}
@@ -631,7 +661,7 @@ export function RegisterPage() {
                     <div className="relative">
                       <div
                         style={{ color: 'var(--solva-muted)' }}
-                        className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2"
+                        className="pointer-events-none z-10 absolute left-3 top-1/2 -translate-y-1/2"
                       >
                         <Building2 className="h-3.5 w-3.5" />
                       </div>
@@ -649,8 +679,12 @@ export function RegisterPage() {
                           backgroundColor: 'var(--solva-surface)',
                           color: 'var(--solva-ink)',
                         }}
-                        className={`t-input ${getSolvaInputBorderClasses(false)} h-9 pl-8 rounded-[10px] font-solva-sans text-[13.5px]`}
-                        placeholder={t('auth.institutionPlaceholder')}
+                        className={`t-input ${getSolvaInputBorderClasses(false)} w-full min-w-0 h-9 pl-9 pr-2.5 rounded-[10px] font-solva-sans text-[13px]`}
+                        placeholder={
+                          lang === 'vi'
+                            ? 'VD: Trường Đại học...'
+                            : 'e.g. University name'
+                        }
                       />
                     </div>
                   </div>
@@ -658,7 +692,7 @@ export function RegisterPage() {
 
                 {/* Row 3: Password & Confirm Password */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  <div className="space-y-1">
+                  <div className="space-y-1 min-w-0">
                     <Label
                       htmlFor="password"
                       style={{ color: 'var(--solva-ink)' }}
@@ -669,7 +703,7 @@ export function RegisterPage() {
                     <div className="relative">
                       <div
                         style={{ color: 'var(--solva-muted)' }}
-                        className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2"
+                        className="pointer-events-none z-10 absolute left-3 top-1/2 -translate-y-1/2"
                       >
                         <KeyRound className="h-3.5 w-3.5" />
                       </div>
@@ -694,24 +728,32 @@ export function RegisterPage() {
                           backgroundColor: 'var(--solva-surface)',
                           color: 'var(--solva-ink)',
                         }}
-                        className={`t-input ${getSolvaInputBorderClasses(passwordInvalid)} h-9 pl-8 pr-8 rounded-[10px] font-solva-sans text-[13.5px]`}
+                        className={`t-input ${getSolvaInputBorderClasses(passwordInvalid)} w-full min-w-0 h-9 pl-9 pr-9 rounded-[10px] font-solva-sans text-[13px]`}
                         placeholder={t('auth.passwordPlaceholder')}
                       />
                       <button
                         type="button"
                         onClick={() => setShowPassword(!showPassword)}
                         aria-label={
-                          showPassword ? 'Hide characters' : 'Show characters'
+                          lang === 'vi'
+                            ? showPassword
+                              ? 'Ẩn mật khẩu'
+                              : 'Hiện mật khẩu'
+                            : showPassword
+                              ? 'Hide password'
+                              : 'Show password'
                         }
                         title={
                           lang === 'vi'
                             ? showPassword
                               ? 'Ẩn mật khẩu'
                               : 'Hiện mật khẩu'
-                            : undefined
+                            : showPassword
+                              ? 'Hide password'
+                              : 'Show password'
                         }
                         style={{ color: 'var(--solva-muted)' }}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-[6px] hover:bg-[#ECE9E0] dark:hover:bg-[#29261F] hover:text-[#1C1A15] dark:hover:text-[#FBFAF6] transition-colors cursor-pointer"
+                        className="z-10 absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-[6px] hover:bg-[#ECE9E0] dark:hover:bg-[#29261F] hover:text-[#1C1A15] dark:hover:text-[#FBFAF6] transition-colors cursor-pointer"
                       >
                         <IconSwap
                           active={showPassword}
@@ -722,7 +764,7 @@ export function RegisterPage() {
                     </div>
                   </div>
 
-                  <div className="space-y-1">
+                  <div className="space-y-1 min-w-0">
                     <Label
                       htmlFor="confirm_password"
                       style={{ color: 'var(--solva-ink)' }}
@@ -733,13 +775,13 @@ export function RegisterPage() {
                     <div className="relative">
                       <div
                         style={{ color: 'var(--solva-muted)' }}
-                        className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2"
+                        className="pointer-events-none z-10 absolute left-3 top-1/2 -translate-y-1/2"
                       >
                         <KeyRound className="h-3.5 w-3.5" />
                       </div>
                       <Input
                         id="confirm_password"
-                        type={showPassword ? 'text' : 'password'}
+                        type={showConfirmPassword ? 'text' : 'password'}
                         value={confirmPassword}
                         minLength={6}
                         maxLength={128}
@@ -760,9 +802,39 @@ export function RegisterPage() {
                           backgroundColor: 'var(--solva-surface)',
                           color: 'var(--solva-ink)',
                         }}
-                        className={`t-input ${getSolvaInputBorderClasses(confirmPasswordInvalid)} h-9 pl-8 rounded-[10px] font-solva-sans text-[13.5px]`}
+                        className={`t-input ${getSolvaInputBorderClasses(confirmPasswordInvalid)} w-full min-w-0 h-9 pl-9 pr-9 rounded-[10px] font-solva-sans text-[13px]`}
                         placeholder={t('auth.confirmPasswordPlaceholder')}
                       />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        aria-label={
+                          lang === 'vi'
+                            ? showConfirmPassword
+                              ? 'Ẩn mật khẩu xác nhận'
+                              : 'Hiện mật khẩu xác nhận'
+                            : showConfirmPassword
+                              ? 'Hide confirm password'
+                              : 'Show confirm password'
+                        }
+                        title={
+                          lang === 'vi'
+                            ? showConfirmPassword
+                              ? 'Ẩn mật khẩu xác nhận'
+                              : 'Hiện mật khẩu xác nhận'
+                            : showConfirmPassword
+                              ? 'Hide confirm password'
+                              : 'Show confirm password'
+                        }
+                        style={{ color: 'var(--solva-muted)' }}
+                        className="z-10 absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-[6px] hover:bg-[#ECE9E0] dark:hover:bg-[#29261F] hover:text-[#1C1A15] dark:hover:text-[#FBFAF6] transition-colors cursor-pointer"
+                      >
+                        <IconSwap
+                          active={showConfirmPassword}
+                          iconA={<Eye className="h-3.5 w-3.5" />}
+                          iconB={<EyeOff className="h-3.5 w-3.5" />}
+                        />
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -823,10 +895,6 @@ export function RegisterPage() {
                       </span>
                     </span>
                     <span className="font-solva-sans text-[11.5px] leading-[16.5px] text-[#56524A] dark:text-[#A8A296]">
-                      <span className="inline-flex items-center gap-1 font-mono text-[10px] font-semibold uppercase tracking-wider text-[#1C1A15] dark:text-[#FBFAF6] mr-1 whitespace-nowrap">
-                        <ShieldCheck className="h-3 w-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                        <span>91/2025/QH15</span>
-                      </span>
                       {t('privacyCompliance.registerConsentPrefix')}
                       <Link
                         to="/privacy"
@@ -845,7 +913,13 @@ export function RegisterPage() {
                       >
                         {lang === 'vi' ? 'Điều khoản Dịch vụ' : 'Terms of Service'}
                       </Link>
-                      {t('privacyCompliance.registerConsentSuffix')}
+                      {t('privacyCompliance.registerConsentSuffix')}{' '}
+                      <span className="inline-flex items-center gap-1 font-mono text-[10px] font-semibold uppercase tracking-wider text-[#1C1A15] dark:text-[#FBFAF6] whitespace-nowrap">
+                        <ShieldCheck className="h-3 w-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                        <span>
+                          {lang === 'vi' ? '(Luật 91/2025/QH15)' : '(Law 91/2025/QH15)'}
+                        </span>
+                      </span>
                     </span>
                   </label>
                 </div>
@@ -877,7 +951,7 @@ export function RegisterPage() {
                 compact
                 onError={(msg) => {
                   setInvalidField(null);
-                  setError(msg);
+                  setError(msg ? formatUserError(msg, lang) : '');
                 }}
                 disabled={loading}
                 beforeAuth={() => {

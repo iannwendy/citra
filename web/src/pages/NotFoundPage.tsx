@@ -1,9 +1,10 @@
 import { useContext } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   Compass,
   Home,
+  ArrowLeft,
   FileSearch,
   Sparkles,
   LogIn,
@@ -40,6 +41,7 @@ function CitraBrandLogo({ size = 20 }: { size?: number }) {
 export function NotFoundPage(): JSX.Element {
   const { i18n } = useTranslation();
   const location = useLocation();
+  const navigate = useNavigate();
   const auth = useContext(AuthContext);
   const isAuthenticated = Boolean(auth?.user);
   const lang: Lang = i18n.language?.startsWith('vi') ? 'vi' : 'en';
@@ -68,7 +70,7 @@ export function NotFoundPage(): JSX.Element {
         },
         {
           title: 'Bảng giá & Gói dịch vụ',
-          desc: 'So sánh gói Basic miễn phí ($0), Pro và Ultra cho cá nhân & bộ môn.',
+          desc: 'So sánh gói Basic miễn phí, Pro và Ultra cho cá nhân & bộ môn.',
           to: '/pricing',
           icon: Sparkles,
         },
@@ -157,6 +159,12 @@ export function NotFoundPage(): JSX.Element {
       data-lang={lang}
       className="solva-editorial-root min-h-screen flex flex-col justify-between overflow-x-clip selection:bg-[#1C1A15] selection:text-[#FBFAF6]"
     >
+      <a
+        href="#not-found-main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[100] focus:px-4 focus:py-2 focus:rounded-[10px] focus:bg-[#1C1A15] focus:text-[#FBFAF6] dark:focus:bg-[#FBFAF6] dark:focus:text-[#1C1A15] focus:shadow-lg font-solva-sans text-sm font-medium"
+      >
+        {isVi ? 'Chuyển đến nội dung chính' : 'Skip to main content'}
+      </a>
       {/* Single-Row Top Editorial Bar */}
       <header
         style={{
@@ -211,7 +219,10 @@ export function NotFoundPage(): JSX.Element {
       </header>
 
       {/* Main 404 Editorial Recovery View */}
-      <main className="flex-1 flex items-center px-5 sm:px-6 lg:px-[40px] py-[40px] sm:py-[64px]">
+      <main
+        id="not-found-main-content"
+        className="flex-1 flex items-center px-5 sm:px-6 lg:px-[40px] py-[40px] sm:py-[64px]"
+      >
         <div className="max-w-[1040px] w-full mx-auto flex flex-col gap-[36px] sm:gap-[48px]">
           <div className="flex flex-col items-start gap-[20px] max-w-[700px]">
             <div
@@ -229,17 +240,17 @@ export function NotFoundPage(): JSX.Element {
             </div>
 
             <h1
-              className={`font-solva-serif font-light text-[34px] sm:text-[46px] xl:text-[54px] ${headingTypography}`}
+              className={`font-solva-serif font-light text-[34px] sm:text-[46px] xl:text-[54px] [text-wrap:balance] ${headingTypography}`}
             >
               <span className="block" style={{ color: 'var(--solva-ink)' }}>
                 {isVi
-                  ? 'Không tìm thấy trang bạn yêu cầu.'
+                  ? 'Không tìm thấy trang này.'
                   : 'This page could not be found.'}
               </span>{' '}
               <span className="block" style={{ color: 'var(--solva-muted)' }}>
                 {isVi
-                  ? 'Hãy quay lại không gian kiểm chứng học thuật của bạn.'
-                  : 'Let’s guide you back to your research workspace.'}
+                  ? 'Quay lại không gian học thuật CITRA.'
+                  : 'Let’s guide you back to your workspace.'}
               </span>
             </h1>
 
@@ -285,6 +296,21 @@ export function NotFoundPage(): JSX.Element {
               <SolvaButton to="/" variant="primary" testId="not-found-home-cta">
                 <Home className="w-4 h-4 shrink-0" />
                 <span>{isVi ? 'Về trang chủ' : 'Back to Home'}</span>
+              </SolvaButton>
+
+              <SolvaButton
+                variant="outline"
+                testId="not-found-go-back-cta"
+                onClick={() => {
+                  if (typeof window !== 'undefined' && window.history.length > 1) {
+                    navigate(-1);
+                  } else {
+                    navigate('/');
+                  }
+                }}
+              >
+                <ArrowLeft className="w-4 h-4 shrink-0" />
+                <span>{isVi ? 'Quay lại trang trước' : 'Go Back'}</span>
               </SolvaButton>
 
               {isAuthenticated ? (

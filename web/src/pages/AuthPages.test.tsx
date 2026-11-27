@@ -62,7 +62,7 @@ describe('Auth Pages (Register, Activate, Forgot & Reset Password)', () => {
       { target: { value: 'Pass12345' } },
     );
     fireEvent.change(
-      screen.getByLabelText(/confirm password|xác nhận mật khẩu/i),
+      screen.getByLabelText(/^(confirm password|xác nhận mật khẩu)$/i),
       { target: { value: 'Pass12345' } },
     );
 
@@ -606,5 +606,75 @@ describe('Auth Pages (Register, Activate, Forgot & Reset Password)', () => {
     expect(resendBtn.className).toContain('border-[#E7E3D9]');
 
     unmount();
+  });
+
+  it('BUG-09 / BUG-32 / BUG-49 / BUG-54 — RegisterPage decouples password strength from confirm_password, provides confirm_password eye toggle, auto-derives username from full_name, neutralizes TDTU placeholders, and Activate/Reset omit duplicate missing-token paragraphs', async () => {
+    await i18n.changeLanguage('vi');
+    const { container: regContainer, unmount: unmountReg } = render(
+      <ThemeProvider defaultTheme="light">
+        <MemoryRouter initialEntries={['/register']}>
+          <RegisterPage />
+        </MemoryRouter>
+      </ThemeProvider>,
+    );
+
+    // BUG-09: All 6 left input icon wrappers have z-10 pointer-events-none
+    expect(regContainer.querySelectorAll('form .pointer-events-none.z-10').length).toBeGreaterThanOrEqual(6);
+
+    // BUG-49: Neutral university placeholders (no hardcoded TDTU email/institution)
+    expect((regContainer.querySelector('#email') as HTMLInputElement).placeholder).toBe('ban@truongdaihoc.edu.vn');
+    expect((regContainer.querySelector('#institution') as HTMLInputElement).placeholder).not.toMatch(/Tôn Đức Thắng/i);
+
+    // BUG-49: Full name auto-derives #username even before #email is typed
+    const fullNameInput = regContainer.querySelector('#full_name') as HTMLInputElement;
+    const usernameInput = regContainer.querySelector('#username') as HTMLInputElement;
+    fireEvent.change(fullNameInput, { target: { value: 'Nguyễn Bảo Minh' } });
+    expect(usernameInput.value).toBe('nguyen_bao_minh');
+
+    // BUG-49: VeryStrong!Pass2026# scores 4/4 "Mạnh" immediately even with empty #confirm_password
+    const passwordInput = regContainer.querySelector('#password') as HTMLInputElement;
+    const confirmInput = regContainer.querySelector('#confirm_password') as HTMLInputElement;
+    fireEvent.change(passwordInput, { target: { value: 'VeryStrong!Pass2026#' } });
+    expect(regContainer.textContent).toContain('Mạnh');
+
+    // BUG-49: Confirm password has its own eye toggle button
+    expect(confirmInput.type).toBe('password');
+    const confirmToggle = screen.getByRole('button', { name: /Hiện mật khẩu xác nhận/i });
+    fireEvent.click(confirmToggle);
+    expect(confirmInput.type).toBe('text');
+
+    unmountReg();
+
+    // BUG-32 & BUG-54: ActivateAccountPage without ?token= renders ONE distinct missing-token alert + 24h expiry note
+    const { container: actContainer, unmount: unmountAct } = render(
+      <ThemeProvider defaultTheme="light">
+        <MemoryRouter initialEntries={['/activate-account']}>
+          <ActivateAccountPage />
+        </MemoryRouter>
+      </ThemeProvider>,
+    );
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toBeDefined();
+    });
+    const actText = actContainer.textContent ?? '';
+    expect(actText).toContain('24 giờ');
+    expect(actText.match(/Thiếu mã kích hoạt trong đường dẫn/g)?.length ?? 0).toBe(1);
+    unmountAct();
+
+    // BUG-32 & BUG-54: ResetPasswordPage without ?token= renders ONE distinct missing-token alert + 30m expiry note
+    const { container: resetContainer, unmount: unmountReset } = render(
+      <ThemeProvider defaultTheme="light">
+        <MemoryRouter initialEntries={['/reset-password']}>
+          <ResetPasswordPage />
+        </MemoryRouter>
+      </ThemeProvider>,
+    );
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toBeDefined();
+    });
+    const resetText = resetContainer.textContent ?? '';
+    expect(resetText).toContain('30 phút');
+    expect(resetText.match(/Thiếu mã xác thực trong liên kết đặt lại mật khẩu/g)?.length ?? 0).toBe(1);
+    unmountReset();
   });
 });

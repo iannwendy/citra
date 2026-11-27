@@ -894,8 +894,8 @@ describe('Premium Subscription, Pricing, Stripe Checkout & Paywall UI/UX Flows',
       ).toBeDefined();
     });
 
-    expect(screen.getByText('15+ INDEXES')).toBeDefined();
-    expect(screen.getByText('30 SYMBOLIC RULES')).toBeDefined();
+    expect(screen.getByText('15+ Libraries')).toBeDefined();
+    expect(screen.getByText('30 Checks')).toBeDefined();
     expect(screen.queryByTestId('federated-source-retrieval-card')).toBeNull();
     expect(screen.queryByText('Local ACL FTS5 (128K+)')).toBeNull();
     expect(screen.queryByText('Seminal Whitelist')).toBeNull();
@@ -1786,11 +1786,9 @@ describe('Premium Subscription, Pricing, Stripe Checkout & Paywall UI/UX Flows',
         </AuthSplitShell>,
         { user: null, initialEntries: ['/login'] },
       );
-      expect(authContainer.textContent ?? '').toContain(`Engine: SourceLogic v${APP_VERSION}`);
-      expect(authContainer.textContent ?? '').toContain(`SourceLogic v${APP_VERSION}`);
-      const srPrefix = authContainer.querySelector('span.sr-only');
-      expect(srPrefix?.textContent).toBe('Engine: ');
-      expect(srPrefix?.className).toContain('xl:not-sr-only');
+      expect(authContainer.textContent ?? '').toContain(`CITRA · v${APP_VERSION}`);
+      expect(authContainer.textContent ?? '').not.toContain('Engine: SourceLogic');
+      expect(authContainer.textContent ?? '').not.toContain('SourceLogic');
       const leftPanel = authContainer.firstElementChild?.firstElementChild as HTMLElement | null;
       expect(leftPanel).not.toBeNull();
       expect(leftPanel?.querySelectorAll('button').length).toBe(0);
@@ -2541,14 +2539,18 @@ describe('Premium Subscription, Pricing, Stripe Checkout & Paywall UI/UX Flows',
           expect(fullPageText).toContain('mã DOI không tồn tại');
           expect(fullPageText).toContain('Thư viện & kho dữ liệu học thuật uy tín');
           expect(fullPageText).toContain('Độ chính xác kiểm chứng trích dẫn');
-          expect(fullPageText).toContain('Độ chuẩn xác phát hiện nguồn ảo (0 kết luận oan)');
+          expect(fullPageText).toContain('Độ chuẩn xác đối chiếu');
+          expect(fullPageText).not.toContain('0 kết luận oan');
+          expect(fullPageText).not.toContain('CITRA Lab');
           expect(fullPageText).toContain('99,67%');
           expect(fullPageText).toContain('99,93%');
         } else {
           expect(nav.textContent).toContain('120K Benchmark');
           expect(fullPageText).toContain('Trusted academic libraries & indexes');
           expect(fullPageText).toContain('Overall citation verification accuracy');
-          expect(fullPageText).toContain('Unverified-source precision (zero false accusations)');
+          expect(fullPageText).toContain('Verification precision');
+          expect(fullPageText).not.toContain('zero false accusations');
+          expect(fullPageText).not.toContain('CITRA Lab');
         }
 
         unmount();
@@ -2556,5 +2558,146 @@ describe('Premium Subscription, Pricing, Stripe Checkout & Paywall UI/UX Flows',
     } finally {
       await i18n.changeLanguage('en');
     }
+  });
+
+  it('BUG-16 / BUG-17 / BUG-27 / BUG-39 / BUG-40 / BUG-51 / BUG-55 — preserves ?redirect= on unauth pricing CTA, fixes active Ultra CTAs & dynamic FAQ price, cleans checkout jargon & promo length, and handles VNPay cancelled callback', async () => {
+    await i18n.changeLanguage('en');
+
+    // 1. Active annual Ultra user on /pricing: Basic shows "Included in your plan" (single text node, no duplicate roll span),
+    //    Monthly view shows "Switch to Monthly" instead of "Upgrade to Ultra", FAQ #2 reflects billing cycle, and table header is sticky.
+    const { container: ultraPricing, unmount: unmountUltra } = renderWithAuth(
+      <PricingPage />,
+      {
+        user: createMockUser({ plan_tier: 'ultra', billing_cycle: 'annual' }),
+        initialEntries: ['/pricing'],
+      },
+    );
+
+    const basicCta = screen.getByTestId('select-basic-btn');
+    expect(basicCta.textContent?.trim()).toBe('Included in your plan');
+    expect((basicCta as HTMLButtonElement).disabled).toBe(true);
+
+    // Sticky comparison table header
+    const comparisonThead = ultraPricing.querySelector('table thead');
+    expect(comparisonThead?.className).toContain('sticky');
+
+    // FAQ #2 dynamically reflects annual ($16/mo billed annually) vs monthly ($20/mo billed monthly)
+    const faqBtns = Array.from(
+      ultraPricing.querySelectorAll('#pricing-faq button[aria-expanded]'),
+    ) as HTMLButtonElement[];
+    fireEvent.click(faqBtns[1]);
+    expect(ultraPricing.querySelector('#pricing-faq')?.textContent).toContain('$16/mo billed annually');
+
+    // Switch to monthly cycle: Ultra CTA offers "Switch to Monthly" (with aria-hidden="true" on roll-animation clone)
+    fireEvent.click(screen.getByTestId('billing-toggle-monthly'));
+    const ultraBtn = screen.getByTestId('select-ultra-btn');
+    expect(ultraBtn.textContent).toContain('Switch to Monthly');
+    expect(ultraBtn.querySelector('[aria-hidden="true"]')?.textContent?.trim()).toBe('Switch to Monthly');
+    expect(ultraPricing.querySelector('#pricing-faq')?.textContent).toContain('$20/mo billed monthly');
+    unmountUltra();
+
+    // 2. Checkout page: promo code maxLength >= 32, VNPay tab hides raw vnp_Amount=/VNBANK/VNPAYQR/INTCARD/HMAC-SHA512 & Luhn badge
+    vi.spyOn(api, 'getCheckoutSessionDetails').mockResolvedValue({
+      session_id: 'cs_test_clean_ui_001',
+      status: 'pending',
+      payment_mode: 'stripe_demo',
+      merchant_name: 'CITRA (SourceLogic) Inc.',
+      customer_email: 'minh@tdtu.edu.vn',
+      customer_name: 'Nguyen Bao Minh',
+      plan_tier: 'ultra',
+      plan_name: 'Ultra Institutional',
+      billing_cycle: 'monthly',
+      amount_usd: 200,
+      amount_vnd: 5000000,
+      usd_to_vnd_rate: 25000,
+      currency: 'usd',
+      monthly_equivalent_usd: 200,
+      annual_savings_usd: 0,
+      features_en: [
+        'Unlimited manuscript verification',
+        'SerpAPI Google Scholar Fallback',
+      ],
+      features_vi: [
+        'Kiểm tra bản thảo không giới hạn',
+        'SerpAPI Google Scholar Fallback',
+      ],
+    });
+
+    const { container: checkoutContainer, unmount: unmountCheckout } = renderWithAuth(
+      <Routes>
+        <Route path="/billing/checkout" element={<StripeDemoCheckoutPage />} />
+      </Routes>,
+      {
+        user: createMockUser({ plan_tier: 'basic' }),
+        initialEntries: ['/billing/checkout?session_id=cs_test_clean_ui_001'],
+      },
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('checkout-promo-input')).toBeDefined();
+    });
+
+    const promoInput = screen.getByTestId('checkout-promo-input') as HTMLInputElement;
+    expect(promoInput.maxLength).toBeGreaterThanOrEqual(32);
+    expect(checkoutContainer.textContent).not.toContain('SourceLogic');
+    expect(checkoutContainer.textContent).not.toContain('SerpAPI');
+    expect(checkoutContainer.textContent).not.toContain('Luhn Verified');
+
+    // Switch to VNPay tab and verify zero raw vnp_Amount= / VNBANK / VNPAYQR / INTCARD / HMAC-SHA512 leaks
+    fireEvent.click(screen.getByTestId('method-tab-vnpay'));
+    await waitFor(() => {
+      expect(screen.getByTestId('vnpay-tab-panel')).toBeDefined();
+    });
+    const vnpayText = screen.getByTestId('vnpay-tab-panel').textContent ?? '';
+    expect(vnpayText).not.toContain('vnp_Amount');
+    expect(vnpayText).not.toContain('VNBANK');
+    expect(vnpayText).not.toContain('VNPAYQR');
+    expect(vnpayText).not.toContain('INTCARD');
+    expect(vnpayText).not.toContain('HMAC-SHA512');
+    unmountCheckout();
+
+    // 3. BillingSuccessPage: VNPay vnp_ResponseCode=24 renders friendly cancelled state (BUG-51)
+    await i18n.changeLanguage('vi');
+    const { unmount: unmountCancel } = renderWithAuth(
+      <Routes>
+        <Route path="/billing/success" element={<BillingSuccessPage />} />
+      </Routes>,
+      {
+        user: createMockUser({ plan_tier: 'basic' }),
+        initialEntries: ['/billing/success?session_id=cs_cancelled_24&vnp_ResponseCode=24'],
+      },
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('billing-verification-cancelled')).toBeDefined();
+    });
+    expect(
+      screen.getByTestId('billing-verification-cancelled').textContent,
+    ).toContain('Giao dịch đã được hủy');
+    unmountCancel();
+
+    // 4. BillingSuccessPage: fake session 404 error is translated to Vietnamese via formatUserError (BUG-16)
+    vi.spyOn(api, 'verifyCheckoutSession').mockRejectedValue(
+      new Error('API 404: Checkout session not found'),
+    );
+    const { unmount: unmountErr } = renderWithAuth(
+      <Routes>
+        <Route path="/billing/success" element={<BillingSuccessPage />} />
+      </Routes>,
+      {
+        user: createMockUser({ plan_tier: 'basic' }),
+        initialEntries: ['/billing/success?session_id=fake-session-id'],
+      },
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('billing-verification-error')).toBeDefined();
+    });
+    const errText = screen.getByTestId('billing-verification-error').textContent ?? '';
+    expect(errText).not.toContain('API 404:');
+    expect(errText).not.toContain('Checkout session not found');
+    unmountErr();
+
+    await i18n.changeLanguage('en');
   });
 });

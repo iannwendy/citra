@@ -36,6 +36,7 @@ import { api, type BillingCycle, type PlanTier } from '@/api/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRole } from '@/hooks/useRole';
 import { getQuotaView } from '@/lib/quotaDisplay';
+import { formatUserError, resolveAcademicLang } from '@/lib/academicTaxonomy';
 import { toSafeExternalHref } from '@/lib/utils';
 import { ThemeToggle } from '@/contexts/ThemeContext';
 import {
@@ -169,7 +170,7 @@ const COMPARISON_MATRIX: ComparisonRow[] = [
   {
     category_en: 'Academic Report Export Formats',
     category_vi: 'Định dạng xuất báo cáo thẩm định',
-    basic: { en: 'Interactive Web Report (JSON)', vi: 'Báo cáo trực tuyến (JSON)' },
+    basic: { en: 'Interactive Web Report', vi: 'Báo cáo tương tác trực tuyến' },
     pro: {
       en: 'Word (DOCX), PDF, CSV, JSON, BibTeX, RIS',
       vi: 'Word (DOCX), PDF, CSV, JSON, BibTeX, RIS',
@@ -188,8 +189,8 @@ const COMPARISON_MATRIX: ComparisonRow[] = [
       vi: 'Tối đa 3 lớp học + Thống kê & Duyệt kết luận',
     },
     ultra: {
-      en: 'Unlimited Cohorts & Full Audit Log',
-      vi: 'Không giới hạn lớp học & Nhật ký kiểm toán',
+      en: 'Unlimited Cohorts & Citation Review Log',
+      vi: 'Không giới hạn lớp học & Nhật ký duyệt trích dẫn',
     },
   },
   {
@@ -282,12 +283,14 @@ function SolvaPlanActionButton({
           <span className="h-[21px] flex items-center justify-center whitespace-nowrap gap-1.5">
             {children}
           </span>
-          <span
-            className="h-[21px] flex items-center justify-center whitespace-nowrap gap-1.5"
-            aria-hidden="true"
-          >
-            {children}
-          </span>
+          {!disabled && (
+            <span
+              className="h-[21px] flex items-center justify-center whitespace-nowrap gap-1.5"
+              aria-hidden="true"
+            >
+              {children}
+            </span>
+          )}
         </span>
       </span>
     </button>
@@ -301,7 +304,7 @@ export function PricingPage() {
   const { user } = useAuth();
   const { planTier, quota, isAdmin } = useRole();
 
-  const lang: Lang = i18n.language?.startsWith('vi') ? 'vi' : 'en';
+  const lang: Lang = resolveAcademicLang(i18n.language);
   const quotaView = getQuotaView(quota, lang, { isAdmin });
   // Admins always have Ultra-level access (contract C3): every checkout CTA is
   // disabled and Ultra is shown as the current plan.
@@ -334,7 +337,8 @@ export function PricingPage() {
     }
 
     if (!user) {
-      navigate('/login');
+      const checkoutTarget = `/billing/checkout?plan=${encodeURIComponent(targetTier)}&billing=${encodeURIComponent(billingCycle)}`;
+      navigate(`/login?redirect=${encodeURIComponent(checkoutTarget)}`);
       return;
     }
 
@@ -358,11 +362,13 @@ export function PricingPage() {
       }
     } catch (err) {
       setError(
-        err instanceof Error
-          ? err.message
-          : lang === 'vi'
-            ? 'Không thể khởi tạo thanh toán Stripe.'
-            : 'Failed to create Stripe checkout session.',
+        formatUserError(
+          err,
+          lang,
+          lang === 'vi'
+            ? 'Không thể khởi tạo phiên thanh toán. Vui lòng thử lại sau.'
+            : 'Failed to create checkout session. Please try again.',
+        ),
       );
     } finally {
       setLoadingTier(null);
@@ -411,6 +417,16 @@ export function PricingPage() {
       } selection:bg-[#1C1A15] selection:text-[#FBFAF6]`}
       data-testid="pricing-page"
     >
+      {/* Accessible Skip-to-Content Link on Public View */}
+      {!user && (
+        <a
+          href="#pricing-main-content"
+          className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[100] focus:px-4 focus:py-2 focus:rounded-[10px] focus:bg-[#1C1A15] focus:text-[#FBFAF6] dark:focus:bg-[#FBFAF6] dark:focus:text-[#1C1A15] focus:shadow-lg font-solva-sans text-sm font-medium"
+        >
+          {lang === 'vi' ? 'Chuyển đến nội dung chính' : 'Skip to main content'}
+        </a>
+      )}
+
       {/* Fixed Solva Navbar when accessed publicly */}
       {!user && (
         <PricingSolvaHeader
@@ -426,39 +442,52 @@ export function PricingPage() {
         <section
           className={`${
             user
-              ? 'pt-[16px] sm:pt-[24px] pb-[40px] sm:pb-[64px] px-3 sm:px-6'
-              : 'pt-[96px] sm:pt-[116px] lg:pt-[136px] pb-[48px] sm:pb-[64px] lg:pb-[88px] px-5 sm:px-6 lg:px-[40px]'
+              ? 'pt-[12px] sm:pt-[18px] pb-[36px] sm:pb-[56px] px-3 sm:px-6'
+              : 'pt-[74px] sm:pt-[84px] lg:pt-[92px] pb-[40px] sm:pb-[56px] lg:pb-[72px] px-5 sm:px-6 lg:px-[40px]'
           }`}
         >
-          <div className="max-w-[1200px] mx-auto flex flex-col items-center gap-[28px] sm:gap-[36px] lg:gap-[48px]">
+          <div className="max-w-[1200px] mx-auto flex flex-col items-center gap-[20px] sm:gap-[24px] lg:gap-[28px]">
             {/* Hero Header */}
-            <div className="flex flex-col items-center text-center gap-[16px] max-w-[760px]">
+            <div className="flex flex-col items-center text-center gap-[10px] max-w-[760px]">
               <SolvaEyebrow centered>
                 {lang === 'vi'
                   ? 'Bảng giá học thuật minh bạch · Thanh toán Stripe & VNPay'
                   : 'Transparent academic pricing · Powered by Stripe & VNPay'}
               </SolvaEyebrow>
 
-              <SolvaTwoToneHeading
-                as="h1"
-                size="h1"
-                centered
-                primary={
+              <h1
+                className={`font-solva-serif font-light text-center mx-auto text-[30px] sm:text-[36px] xl:text-[42px] ${
                   lang === 'vi'
-                    ? 'Đầu tư cho sự toàn vẹn khoa học.'
-                    : 'Invest in rigorous citation integrity.'
-                }
-                secondary={
-                  lang === 'vi'
-                    ? 'Minh bạch chi phí, tối ưu mọi quy mô.'
-                    : 'Simple plans, built for every research scale.'
-                }
-              />
+                    ? 'leading-[1.15] tracking-[-0.03em]'
+                    : 'leading-[1.08] tracking-[-0.045em]'
+                }`}
+              >
+                <span className="block" style={{ color: 'var(--solva-ink)' }}>
+                  {lang === 'vi' ? (
+                    <>
+                      {'Đầu tư cho sự toàn vẹn '.normalize('NFC')}
+                      <span className="whitespace-nowrap">{'khoa học.'.normalize('NFC')}</span>
+                    </>
+                  ) : (
+                    'Invest in rigorous citation integrity.'
+                  )}
+                </span>{' '}
+                <span className="block" style={{ color: 'var(--solva-muted)' }}>
+                  {lang === 'vi' ? (
+                    <>
+                      {'Minh bạch chi phí, tối ưu mọi '.normalize('NFC')}
+                      <span className="whitespace-nowrap">{'quy mô.'.normalize('NFC')}</span>
+                    </>
+                  ) : (
+                    'Simple plans, built for every research scale.'
+                  )}
+                </span>
+              </h1>
 
-              <SolvaScrollReveal delayMs={80} yOffset={20}>
+              <SolvaScrollReveal delayMs={60} yOffset={16}>
                 <p
                   style={{ color: 'var(--solva-muted)' }}
-                  className="font-solva-sans text-[15px] sm:text-[16px] font-normal leading-[23.8px] max-w-[680px] pt-1"
+                  className="font-solva-sans text-[14.5px] sm:text-[15px] font-normal leading-[22px] max-w-[660px]"
                 >
                   {lang === 'vi'
                     ? 'Bắt đầu miễn phí với gói Basic cho tiểu luận môn học, hoặc nâng cấp lên Pro & Ultra để tra cứu hơn 15 cơ sở dữ liệu học thuật quốc tế (Crossref, OpenAlex, PubMed, arXiv, DOAJ, DataCite, Wayback Machine, Retraction Watch), đối chiếu ngữ nghĩa sâu giữa câu trích dẫn với tài liệu gốc và xuất báo cáo Word/PDF chuẩn hội đồng.'
@@ -752,17 +781,21 @@ export function PricingPage() {
                       </p>
                     </div>
 
-                    {/* Row 3: Price Display (`Sentient` 44px Light) */}
+                    {/* Row 3: Price Display (`Sentient` 44px Light + Prominent VND in VI) */}
                     <div
                       style={{ borderColor: 'var(--solva-border)' }}
                       className={`pt-[16px] ${subgridRowPb18Class} border-t`}
                     >
-                      <div className="flex items-baseline gap-1.5">
+                      <div className="flex items-baseline gap-1.5 flex-wrap">
                         <span
                           style={{ color: 'var(--solva-ink)' }}
-                          className="font-solva-serif font-light text-[40px] sm:text-[44px] leading-[48px] tracking-[-0.05em]"
+                          className={`font-solva-serif font-light leading-[44px] ${
+                            lang === 'vi'
+                              ? 'text-[34px] sm:text-[38px] tracking-[-0.03em]'
+                              : 'text-[40px] sm:text-[44px] tracking-[-0.05em]'
+                          }`}
                         >
-                          $0
+                          {lang === 'vi' ? '0 ₫' : '$0'}
                         </span>
                         <span
                           style={{ color: 'var(--solva-muted)' }}
@@ -776,7 +809,7 @@ export function PricingPage() {
                         className="font-mono text-[12px] mt-1"
                       >
                         {lang === 'vi'
-                          ? 'Miễn phí trọn đời · Không cần thẻ'
+                          ? '$0 USD · Miễn phí trọn đời · Không cần thẻ'
                           : 'Free forever · No credit card required'}
                       </p>
                       {lang === 'vi' && (
@@ -856,7 +889,10 @@ export function PricingPage() {
                     >
                       <SolvaPlanActionButton
                         variant="outline"
-                        disabled={adminLocked || Boolean(user && planTier === 'basic')}
+                        disabled={
+                          adminLocked ||
+                          Boolean(user && (planTier === 'basic' || planTier === 'pro' || planTier === 'ultra'))
+                        }
                         onClick={() => handleSelectPlan('basic')}
                         testId="select-basic-btn"
                       >
@@ -864,13 +900,17 @@ export function PricingPage() {
                           ? lang === 'vi'
                             ? 'Mở sẵn cho Quản trị'
                             : 'Included with Admin'
-                          : user && planTier === 'basic'
+                          : user && (planTier === 'pro' || planTier === 'ultra')
                             ? lang === 'vi'
-                              ? 'Đang sử dụng gói Basic'
-                              : 'Current Active Plan'
-                            : lang === 'vi'
-                              ? 'Bắt đầu miễn phí'
-                              : 'Get Started Free'}
+                              ? 'Đã bao gồm trong gói của bạn'
+                              : 'Included in your plan'
+                            : user && planTier === 'basic'
+                              ? lang === 'vi'
+                                ? 'Đang sử dụng gói Basic'
+                                : 'Current Active Plan'
+                              : lang === 'vi'
+                                ? 'Bắt đầu miễn phí'
+                                : 'Get Started Free'}
                       </SolvaPlanActionButton>
                     </div>
                   </div>
@@ -898,7 +938,7 @@ export function PricingPage() {
                     data-testid="plan-card-pro"
                   >
                     {/* Row 1: Top Gallery Floral Painting Banner (`/solva/pricing-floral.webp`) */}
-                    <div className="relative min-h-[100px] sm:min-h-[104px] rounded-t-[11px] overflow-hidden px-4 sm:px-5 py-3.5 flex flex-col justify-between">
+                    <div className="relative min-h-[100px] sm:min-h-[104px] rounded-t-[11px] overflow-hidden px-3.5 sm:px-4 py-3.5 flex flex-col justify-between">
                       <div
                         className="solva-floral-banner-mask absolute inset-0 pointer-events-none select-none z-0"
                         aria-hidden="true"
@@ -914,13 +954,13 @@ export function PricingPage() {
                       </div>
                       <div className="solva-noise-overlay z-0" aria-hidden="true" />
 
-                      <div className="relative z-10 flex items-start justify-between gap-x-2 gap-y-2 flex-wrap">
+                      <div className="relative z-10 flex items-center justify-between gap-x-1.5 gap-y-2 flex-wrap">
                         <span
                           style={{
                             backgroundColor: '#1C1A15',
                             color: '#FBFAF6',
                           }}
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[6px] border border-white/15 shadow-sm font-mono text-[11px] font-semibold leading-none tracking-wide whitespace-nowrap shrink-0"
+                          className="inline-flex items-center gap-1 px-2 py-1 rounded-[6px] border border-white/15 shadow-sm font-mono text-[10px] font-semibold leading-none tracking-tight whitespace-nowrap shrink-0"
                         >
                           <Sparkles className="w-3 h-3 shrink-0" />
                           <span>
@@ -928,7 +968,7 @@ export function PricingPage() {
                           </span>
                         </span>
                         {billingCycle === 'annual' && (
-                          <span className="inline-flex items-center px-2.5 py-1 rounded-[6px] bg-[#FBFAF6] text-emerald-800 border border-emerald-700/25 dark:bg-[#141310] dark:text-emerald-300 dark:border-emerald-400/30 shadow-sm font-mono text-[11px] font-semibold leading-none whitespace-nowrap shrink-0">
+                          <span className="inline-flex items-center px-2 py-1 rounded-[6px] bg-[#FBFAF6] text-emerald-800 border border-emerald-700/25 dark:bg-[#141310] dark:text-emerald-300 dark:border-emerald-400/30 shadow-sm font-mono text-[10px] font-semibold leading-none whitespace-nowrap shrink-0">
                             {lang === 'vi' ? 'Tiết kiệm $48/năm' : 'Save $48/yr'}
                           </span>
                         )}
@@ -979,34 +1019,78 @@ export function PricingPage() {
                         </p>
                       </div>
 
-                      {/* Row 3: Price Display (`Sentient` 44px Light + #02 Per-Digit NumberPopIn + VI VND Context) */}
+                      {/* Row 3: Price Display (`Sentient` Light + Prominent VND in VI + USD Subtext) */}
                       <div
                         style={{ borderColor: 'var(--solva-border)' }}
                         className={`pt-[16px] ${subgridRowPb18Class} border-t`}
                       >
-                        <div className="flex items-baseline gap-2 flex-wrap">
-                          <span
-                            style={{ color: 'var(--solva-ink)' }}
-                            className="font-solva-serif font-light text-[40px] sm:text-[44px] leading-[48px] tracking-[-0.05em]"
-                            data-testid="pro-price-display"
-                          >
-                            <NumberPopIn value={`$${proPrice}`} />
-                          </span>
-                          <span
-                            style={{ color: 'var(--solva-muted)' }}
-                            className="font-solva-sans text-[14px]"
-                          >
-                            / {lang === 'vi' ? 'tháng' : 'month'}
-                          </span>
-                          {billingCycle === 'annual' && (
+                        {lang === 'vi' ? (
+                          <>
+                            <div className="flex items-baseline gap-1.5 flex-wrap">
+                              <span
+                                style={{ color: 'var(--solva-ink)' }}
+                                className="font-solva-serif font-light text-[34px] sm:text-[38px] leading-[44px] tracking-[-0.03em] whitespace-nowrap"
+                              >
+                                <NumberPopIn
+                                  value={billingCycle === 'annual' ? '400.000 ₫' : '500.000 ₫'}
+                                />
+                              </span>
+                              <span
+                                style={{ color: 'var(--solva-muted)' }}
+                                className="font-solva-sans text-[14px] whitespace-nowrap"
+                              >
+                                / tháng
+                              </span>
+                            </div>
+                            <div className="flex items-baseline gap-2 flex-wrap mt-1">
+                              <span
+                                style={{ color: 'var(--solva-ink)' }}
+                                className="font-mono text-[13px] font-semibold"
+                                data-testid="pro-price-display"
+                              >
+                                <NumberPopIn value={`$${proPrice}`} />
+                              </span>
+                              <span
+                                style={{ color: 'var(--solva-muted)' }}
+                                className="font-mono text-[12px]"
+                              >
+                                USD / tháng
+                              </span>
+                              {billingCycle === 'annual' && (
+                                <span
+                                  style={{ color: 'var(--solva-muted)' }}
+                                  className="text-[12px] line-through font-mono"
+                                >
+                                  $20
+                                </span>
+                              )}
+                            </div>
+                          </>
+                        ) : (
+                          <div className="flex items-baseline gap-2 flex-wrap">
+                            <span
+                              style={{ color: 'var(--solva-ink)' }}
+                              className="font-solva-serif font-light text-[40px] sm:text-[44px] leading-[48px] tracking-[-0.05em]"
+                              data-testid="pro-price-display"
+                            >
+                              <NumberPopIn value={`$${proPrice}`} />
+                            </span>
                             <span
                               style={{ color: 'var(--solva-muted)' }}
-                              className="text-[14px] line-through font-mono"
+                              className="font-solva-sans text-[14px]"
                             >
-                              $20
+                              / month
                             </span>
-                          )}
-                        </div>
+                            {billingCycle === 'annual' && (
+                              <span
+                                style={{ color: 'var(--solva-muted)' }}
+                                className="text-[14px] line-through font-mono"
+                              >
+                                $20
+                              </span>
+                            )}
+                          </div>
+                        )}
                         <p
                           style={{ color: 'var(--solva-muted)' }}
                           className="font-mono text-[12px] mt-1"
@@ -1027,13 +1111,13 @@ export function PricingPage() {
                           >
                             {billingCycle === 'annual' ? (
                               <>
-                                <span className="whitespace-nowrap">≈ 400.000 ₫/tháng</span> ·{' '}
+                                <span className="whitespace-nowrap">400.000 ₫/tháng</span> ·{' '}
                                 <span className="whitespace-nowrap">4.800.000 ₫/năm</span>{' '}
                                 <span className="whitespace-nowrap">qua VNPay</span>
                               </>
                             ) : (
                               <>
-                                <span className="whitespace-nowrap">≈ 500.000 ₫/tháng</span>{' '}
+                                <span className="whitespace-nowrap">500.000 ₫/tháng</span>{' '}
                                 <span className="whitespace-nowrap">qua VNPay &amp; thẻ quốc tế</span>
                               </>
                             )}
@@ -1149,6 +1233,18 @@ export function PricingPage() {
                                   Pro Plan
                                 </>
                               )
+                            ) : user && planTier === 'pro' ? (
+                              billingCycle === 'monthly' ? (
+                                lang === 'vi' ? (
+                                  'Chuyển sang gói Tháng'
+                                ) : (
+                                  'Switch to Monthly'
+                                )
+                              ) : lang === 'vi' ? (
+                                'Chuyển sang gói Năm (-20%)'
+                              ) : (
+                                'Switch to Annual (-20%)'
+                              )
                             ) : lang === 'vi' ? (
                               <>
                                 Nâng cấp lên Pro
@@ -1190,23 +1286,27 @@ export function PricingPage() {
                   data-testid="plan-card-ultra"
                 >
                   {/* Row 1: Top Architectural Gallery Header Band */}
-                  <div className="relative min-h-[100px] sm:min-h-[104px] rounded-t-[11px] px-4 sm:px-5 py-3.5 flex flex-col justify-between bg-gradient-to-b from-[#E8E3D6]/95 via-[#F4F2EC]/55 to-transparent dark:from-[#2A261E]/95 dark:via-[#1E1C17]/55 dark:to-transparent">
-                    <div className="flex items-start justify-between gap-x-2 gap-y-2 flex-wrap">
+                  <div className="relative min-h-[100px] sm:min-h-[104px] rounded-t-[11px] px-3.5 sm:px-4 py-3.5 flex flex-col justify-between bg-gradient-to-b from-[#E8E3D6]/95 via-[#F4F2EC]/55 to-transparent dark:from-[#2A261E]/95 dark:via-[#1E1C17]/55 dark:to-transparent">
+                    <div className="flex items-center justify-between gap-x-1.5 gap-y-2 flex-wrap">
                       <span
                         style={{
                           backgroundColor: 'var(--solva-bg)',
                           borderColor: 'var(--solva-border)',
                           color: 'var(--solva-muted)',
                         }}
-                        className="inline-flex items-center px-2.5 py-1 rounded-[6px] border font-mono text-[11px] font-medium leading-none whitespace-nowrap shrink-0"
+                        className="inline-flex items-center px-2 py-1 rounded-[6px] border font-mono text-[10px] font-medium leading-none whitespace-nowrap shrink-0"
                       >
                         {lang === 'vi' ? 'QUY MÔ LỚN' : 'ENTERPRISE LAB'}
                       </span>
-                      {billingCycle === 'annual' && (
-                        <span className="inline-flex items-center px-2.5 py-1 rounded-[6px] bg-[#FBFAF6] text-emerald-800 border border-emerald-700/25 dark:bg-[#141310] dark:text-emerald-300 dark:border-emerald-400/30 shadow-sm font-mono text-[11px] font-semibold leading-none whitespace-nowrap shrink-0">
+                      {billingCycle === 'annual' ? (
+                        <span className="inline-flex items-center px-2 py-1 rounded-[6px] bg-[#FBFAF6] text-emerald-800 border border-emerald-700/25 dark:bg-[#141310] dark:text-emerald-300 dark:border-emerald-400/30 shadow-sm font-mono text-[10px] font-semibold leading-none whitespace-nowrap shrink-0">
                           {lang === 'vi' ? 'Tiết kiệm $480/năm' : 'Save $480/yr'}
                         </span>
-                      )}
+                      ) : user && planTier === 'ultra' && user.billing_cycle === 'annual' ? (
+                        <span className="inline-flex items-center px-2 py-1 rounded-[6px] bg-emerald-500/[0.12] text-emerald-800 border border-emerald-700/25 dark:text-emerald-300 dark:border-emerald-400/30 font-mono text-[10px] font-semibold leading-none whitespace-nowrap shrink-0">
+                          {lang === 'vi' ? 'Đang dùng gói Ultra (Năm)' : 'Active: Ultra (Annual)'}
+                        </span>
+                      ) : null}
                     </div>
                     <span
                       style={{ color: 'var(--solva-muted)' }}
@@ -1265,34 +1365,78 @@ export function PricingPage() {
                       </p>
                     </div>
 
-                    {/* Row 3: Price Display (`Sentient` 44px Light + #02 Per-Digit NumberPopIn + VI VND Context) */}
+                    {/* Row 3: Price Display (`Sentient` Light + Prominent VND in VI + USD Subtext) */}
                     <div
                       style={{ borderColor: 'var(--solva-border)' }}
                       className={`pt-[16px] ${subgridRowPb18Class} border-t`}
                     >
-                      <div className="flex items-baseline gap-2 flex-wrap">
-                        <span
-                          style={{ color: 'var(--solva-ink)' }}
-                          className="font-solva-serif font-light text-[40px] sm:text-[44px] leading-[48px] tracking-[-0.05em]"
-                          data-testid="ultra-price-display"
-                        >
-                          <NumberPopIn value={`$${ultraPrice}`} />
-                        </span>
-                        <span
-                          style={{ color: 'var(--solva-muted)' }}
-                          className="font-solva-sans text-[14px]"
-                        >
-                          / {lang === 'vi' ? 'tháng' : 'month'}
-                        </span>
-                        {billingCycle === 'annual' && (
+                      {lang === 'vi' ? (
+                        <>
+                          <div className="flex items-baseline gap-1.5 flex-wrap">
+                            <span
+                              style={{ color: 'var(--solva-ink)' }}
+                              className="font-solva-serif font-light text-[34px] sm:text-[38px] leading-[44px] tracking-[-0.03em] whitespace-nowrap"
+                            >
+                              <NumberPopIn
+                                value={billingCycle === 'annual' ? '4.000.000 ₫' : '5.000.000 ₫'}
+                              />
+                            </span>
+                            <span
+                              style={{ color: 'var(--solva-muted)' }}
+                              className="font-solva-sans text-[14px] whitespace-nowrap"
+                            >
+                              / tháng
+                            </span>
+                          </div>
+                          <div className="flex items-baseline gap-2 flex-wrap mt-1">
+                            <span
+                              style={{ color: 'var(--solva-ink)' }}
+                              className="font-mono text-[13px] font-semibold"
+                              data-testid="ultra-price-display"
+                            >
+                              <NumberPopIn value={`$${ultraPrice}`} />
+                            </span>
+                            <span
+                              style={{ color: 'var(--solva-muted)' }}
+                              className="font-mono text-[12px]"
+                            >
+                              USD / tháng
+                            </span>
+                            {billingCycle === 'annual' && (
+                              <span
+                                style={{ color: 'var(--solva-muted)' }}
+                                className="text-[12px] line-through font-mono"
+                              >
+                                $200
+                              </span>
+                            )}
+                          </div>
+                        </>
+                      ) : (
+                        <div className="flex items-baseline gap-2 flex-wrap">
+                          <span
+                            style={{ color: 'var(--solva-ink)' }}
+                            className="font-solva-serif font-light text-[40px] sm:text-[44px] leading-[48px] tracking-[-0.05em]"
+                            data-testid="ultra-price-display"
+                          >
+                            <NumberPopIn value={`$${ultraPrice}`} />
+                          </span>
                           <span
                             style={{ color: 'var(--solva-muted)' }}
-                            className="text-[14px] line-through font-mono"
+                            className="font-solva-sans text-[14px]"
                           >
-                            $200
+                            / month
                           </span>
-                        )}
-                      </div>
+                          {billingCycle === 'annual' && (
+                            <span
+                              style={{ color: 'var(--solva-muted)' }}
+                              className="text-[14px] line-through font-mono"
+                            >
+                              $200
+                            </span>
+                          )}
+                        </div>
+                      )}
                       <p
                         style={{ color: 'var(--solva-muted)' }}
                         className="font-mono text-[12px] mt-1"
@@ -1313,13 +1457,13 @@ export function PricingPage() {
                         >
                           {billingCycle === 'annual' ? (
                             <>
-                              <span className="whitespace-nowrap">≈ 4.000.000 ₫/tháng</span> ·{' '}
+                              <span className="whitespace-nowrap">4.000.000 ₫/tháng</span> ·{' '}
                               <span className="whitespace-nowrap">48.000.000 ₫/năm</span>{' '}
                               <span className="whitespace-nowrap">qua VNPay</span>
                             </>
                           ) : (
                             <>
-                              <span className="whitespace-nowrap">≈ 5.000.000 ₫/tháng</span>{' '}
+                              <span className="whitespace-nowrap">5.000.000 ₫/tháng</span>{' '}
                               <span className="whitespace-nowrap">qua VNPay &amp; thẻ quốc tế</span>
                             </>
                           )}
@@ -1407,6 +1551,18 @@ export function PricingPage() {
                               <>
                                 Current <span className="hidden 2xl:inline">Active </span>Ultra Plan
                               </>
+                            )
+                          ) : user && planTier === 'ultra' ? (
+                            billingCycle === 'monthly' ? (
+                              lang === 'vi' ? (
+                                'Chuyển sang gói Tháng'
+                              ) : (
+                                'Switch to Monthly'
+                              )
+                            ) : lang === 'vi' ? (
+                              'Chuyển sang gói Năm (-20%)'
+                            ) : (
+                              'Switch to Annual (-20%)'
                             )
                           ) : lang === 'vi' ? (
                             <>
@@ -1789,7 +1945,10 @@ export function PricingPage() {
                   {mobileCompareTier === 'basic' ? (
                     <SolvaPlanActionButton
                       variant="outline"
-                      disabled={adminLocked || Boolean(user && planTier === 'basic')}
+                      disabled={
+                        adminLocked ||
+                        Boolean(user && (planTier === 'basic' || planTier === 'pro' || planTier === 'ultra'))
+                      }
                       onClick={() => handleSelectPlan('basic')}
                       testId="mobile-compare-tier-cta"
                     >
@@ -1797,13 +1956,17 @@ export function PricingPage() {
                         ? lang === 'vi'
                           ? 'Mở sẵn cho Quản trị'
                           : 'Included with Admin'
-                        : user && planTier === 'basic'
+                        : user && (planTier === 'pro' || planTier === 'ultra')
                           ? lang === 'vi'
-                            ? 'Đang sử dụng gói Basic'
-                            : 'Current Active Plan'
-                          : lang === 'vi'
-                            ? 'Bắt đầu miễn phí'
-                            : 'Get Started Free'}
+                            ? 'Đã bao gồm trong gói của bạn'
+                            : 'Included in your plan'
+                          : user && planTier === 'basic'
+                            ? lang === 'vi'
+                              ? 'Đang sử dụng gói Basic'
+                              : 'Current Active Plan'
+                            : lang === 'vi'
+                              ? 'Bắt đầu miễn phí'
+                              : 'Get Started Free'}
                     </SolvaPlanActionButton>
                   ) : mobileCompareTier === 'pro' ? (
                     <SolvaPlanActionButton
@@ -1835,9 +1998,17 @@ export function PricingPage() {
                               ? lang === 'vi'
                                 ? 'Đang sử dụng gói Pro'
                                 : 'Current Pro Plan'
-                              : lang === 'vi'
-                                ? 'Nâng cấp lên Pro'
-                                : 'Upgrade to Pro'}
+                              : user && planTier === 'pro'
+                                ? billingCycle === 'monthly'
+                                  ? lang === 'vi'
+                                    ? 'Chuyển sang gói Tháng'
+                                    : 'Switch to Monthly'
+                                  : lang === 'vi'
+                                    ? 'Chuyển sang gói Năm'
+                                    : 'Switch to Annual'
+                                : lang === 'vi'
+                                  ? 'Nâng cấp lên Pro'
+                                  : 'Upgrade to Pro'}
                       </span>
                     </SolvaPlanActionButton>
                   ) : (
@@ -1861,9 +2032,17 @@ export function PricingPage() {
                             ? lang === 'vi'
                               ? 'Đang sử dụng gói Ultra'
                               : 'Current Ultra Plan'
-                            : lang === 'vi'
-                              ? 'Nâng cấp lên Ultra'
-                              : 'Upgrade to Ultra'}
+                            : user && planTier === 'ultra'
+                              ? billingCycle === 'monthly'
+                                ? lang === 'vi'
+                                  ? 'Chuyển sang gói Tháng'
+                                  : 'Switch to Monthly'
+                                : lang === 'vi'
+                                  ? 'Chuyển sang gói Năm'
+                                  : 'Switch to Annual'
+                              : lang === 'vi'
+                                ? 'Nâng cấp lên Ultra'
+                                : 'Upgrade to Ultra'}
                       </span>
                     </SolvaPlanActionButton>
                   )}
@@ -1879,23 +2058,34 @@ export function PricingPage() {
                     backgroundColor: 'var(--solva-surface)',
                     borderColor: 'var(--solva-border)',
                   }}
-                  className="rounded-[16px] border p-4 sm:p-5 xl:p-[32px] overflow-hidden"
+                  className="rounded-[16px] border p-4 sm:p-5 xl:p-[32px] overflow-x-clip"
                 >
-                  <div className="overflow-x-auto">
+                  <div>
                     <table className="w-full table-fixed text-left border-collapse font-solva-sans text-[13px] xl:text-[14px]">
-                      <thead>
+                      <thead
+                        className={`sticky ${
+                          user ? 'top-0' : 'top-[64px] lg:top-[76px]'
+                        } z-20`}
+                      >
                         <tr
                           style={{
+                            backgroundColor: 'var(--solva-surface)',
                             borderColor: 'var(--solva-border)',
                             color: 'var(--solva-muted)',
                           }}
-                          className="border-b font-mono uppercase text-[11px]"
+                          className="border-b font-mono uppercase text-[11px] shadow-[0_1px_0_var(--solva-border)]"
                         >
-                          <th className="w-[34%] py-3.5 pr-3 xl:pr-4 font-semibold">
+                          <th
+                            style={{ backgroundColor: 'var(--solva-surface)' }}
+                            className="w-[34%] py-3.5 pr-3 xl:pr-4 font-semibold"
+                          >
                             {lang === 'vi' ? 'Danh mục tính năng' : 'Feature / Quota'}
                           </th>
-                          <th className="w-[18%] py-3.5 px-2.5 xl:px-4 text-center font-semibold">
-                            Basic ($0)
+                          <th
+                            style={{ backgroundColor: 'var(--solva-surface)' }}
+                            className="w-[18%] py-3.5 px-2.5 xl:px-4 text-center font-semibold"
+                          >
+                            {lang === 'vi' ? 'Basic (0 ₫)' : 'Basic ($0)'}
                           </th>
                           <th
                             style={{
@@ -1907,7 +2097,10 @@ export function PricingPage() {
                             Pro (${proPrice}/{lang === 'vi' ? 'tháng' : 'mo'})
                           </th>
                           <th
-                            style={{ color: 'var(--solva-ink)' }}
+                            style={{
+                              backgroundColor: 'var(--solva-surface)',
+                              color: 'var(--solva-ink)',
+                            }}
                             className="w-[24%] py-3.5 pl-2.5 xl:pl-4 text-center font-bold"
                           >
                             Ultra (${ultraPrice}/{lang === 'vi' ? 'tháng' : 'mo'})
@@ -2056,10 +2249,12 @@ export function PricingPage() {
 
                       <div
                         style={{ color: 'var(--solva-ink)' }}
-                        className="font-solva-sans text-[15px] font-medium tracking-tight shrink-0 flex items-center gap-1.5"
+                        className="font-solva-sans text-[14px] font-medium tracking-tight shrink-0 flex items-center gap-1.5"
                       >
-                        <GraduationCap className="w-5 h-5" />
-                        <span>CITRA Lab</span>
+                        <GraduationCap className="w-4 h-4" />
+                        <span>
+                          {lang === 'vi' ? 'Kiểm định Hội đồng' : 'Committee Study'}
+                        </span>
                       </div>
                     </div>
 
@@ -2116,8 +2311,8 @@ export function PricingPage() {
                       decimalSeparator={lang === 'vi' ? ',' : '.'}
                       label={
                         lang === 'vi'
-                          ? 'Độ chuẩn xác phát hiện nguồn ảo (0 kết luận oan)'
-                          : 'Unverified-source precision (zero false accusations)'
+                          ? 'Độ chuẩn xác đối chiếu'
+                          : 'Verification precision'
                       }
                     />
                   </div>
@@ -2212,6 +2407,7 @@ export function PricingPage() {
           lang={lang}
           isEmbedded={Boolean(user)}
           demoEvaluatorMode={demoEvaluatorMode}
+          billingCycle={billingCycle}
         />
 
         {/* ============================================================
@@ -2713,10 +2909,12 @@ function PricingSolvaFAQSection({
   lang,
   isEmbedded,
   demoEvaluatorMode,
+  billingCycle,
 }: {
   lang: Lang;
   isEmbedded: boolean;
   demoEvaluatorMode: boolean;
+  billingCycle: BillingCycle;
 }) {
   const [openIds, setOpenIds] = useState<Record<string, boolean>>({
     'pfaq-0': true,
@@ -2726,12 +2924,19 @@ function PricingSolvaFAQSection({
     setOpenIds((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
+  const activeProLabelVi =
+    billingCycle === 'annual'
+      ? '400.000 ₫/tháng · $16/tháng khi trả theo năm'
+      : '500.000 ₫/tháng · $20/tháng khi trả theo tháng';
+  const activeProLabelEn =
+    billingCycle === 'annual' ? '$16/mo billed annually' : '$20/mo billed monthly';
+
   const leftFaqs = [
     {
       id: 'pfaq-0',
       q:
         lang === 'vi'
-          ? 'Gói Basic ($0) có giới hạn thời gian sử dụng không?'
+          ? 'Gói Basic miễn phí có giới hạn thời gian sử dụng không?'
           : 'Is the Basic ($0) tier really free forever?',
       a:
         lang === 'vi'
@@ -2742,8 +2947,8 @@ function PricingSolvaFAQSection({
       id: 'pfaq-1',
       q:
         lang === 'vi'
-          ? 'Sự khác biệt lớn nhất khi nâng cấp lên gói Pro ($16/tháng) là gì?'
-          : 'What unlocks immediately when I upgrade to Pro ($16/mo)?',
+          ? `Sự khác biệt lớn nhất khi nâng cấp lên gói Pro (${activeProLabelVi}) là gì?`
+          : `What unlocks immediately when I upgrade to Pro (${activeProLabelEn})?`,
       a:
         lang === 'vi'
           ? 'Gói Pro nâng hạn mức lên 50 tài liệu/tháng (tối đa 100 trang, 200 trích dẫn/bài), mở khóa toàn bộ hơn 15 thư viện học thuật quốc tế (PubMed, arXiv, DBLP, DOAJ, DataCite, Retraction Watch, Wayback Machine), đối chiếu nội dung tóm tắt bài gốc, gợi ý sửa định dạng trích dẫn 1 chạm, trình đọc đối chiếu trực tiếp trên trang PDF và xuất báo cáo ra PDF/DOCX/CSV.'

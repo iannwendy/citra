@@ -260,9 +260,14 @@ describe('Task 1.5 — Public Routes, Clean IA Anchors, 3-Role Workspaces, /term
     expect(termsPage.textContent).toMatch(/Stripe/i);
     expect(termsPage.textContent).toMatch(/VNPay/i);
     expect(termsPage.textContent).toMatch(/91\/2025\/QH15/i);
-    expect(termsPage.textContent).toMatch(/iannwendii@gmail\.com/i);
+    expect(termsPage.textContent).toMatch(/privacy@citra\.io\.vn/i);
+    expect(termsPage.textContent).not.toMatch(/iannwendii@gmail\.com/i);
     expect(termsPage.textContent).toMatch(/Ton Duc Thang University/i);
-    expect(termsPage.querySelector('a[href="/privacy"]')).not.toBeNull();
+    const privacyLinks = Array.from(termsPage.querySelectorAll('a[href="/privacy"]'));
+    expect(privacyLinks.length).toBeGreaterThan(0);
+    privacyLinks.forEach((lnk) => {
+      expect(lnk.textContent).not.toContain('(/privacy)');
+    });
 
     // Switch to Vietnamese via header toggle and verify localized editorial copy
     fireEvent.click(within(termsPage).getByRole('button', { name: /VI \/ EN/i }));
@@ -332,6 +337,7 @@ describe('Task 1.5 — Public Routes, Clean IA Anchors, 3-Role Workspaces, /term
 
     const backHomeCta = within(notFound).getByRole('link', { name: /Back to Home/i });
     expect(backHomeCta.getAttribute('href')).toBe('/');
+    expect(within(notFound).getByTestId('not-found-go-back-cta')).toBeDefined();
 
     // Helpful recovery quick links (Card 1 routes directly to /#interactive-demo)
     expect(notFound.querySelector('a[href="/#interactive-demo"]')).not.toBeNull();
@@ -341,11 +347,15 @@ describe('Task 1.5 — Public Routes, Clean IA Anchors, 3-Role Workspaces, /term
     expect(notFound.querySelector('a[href="/terms"]')).not.toBeNull();
     expect(notFound.querySelector('a[href="/login"]')).not.toBeNull();
 
-    // Toggle to Vietnamese and verify localized "Về trang chủ" CTA
+    // Toggle to Vietnamese and verify localized "Về trang chủ" & "Quay lại trang trước" CTAs + zero "($0)"
     fireEvent.click(within(notFound).getByRole('button', { name: /VI \/ EN/i }));
     await waitFor(() => {
       const backHomeVi = within(notFound).getByRole('link', { name: /Về trang chủ/i });
       expect(backHomeVi.getAttribute('href')).toBe('/');
+      expect(within(notFound).getByTestId('not-found-go-back-cta').textContent).toMatch(
+        /Quay lại trang trước/i,
+      );
+      expect(notFound.textContent).not.toContain('($0)');
     });
 
     unmount();

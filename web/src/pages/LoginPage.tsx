@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/contexts/AuthContext';
 import { api } from '@/api/client';
+import { formatUserError, resolveAcademicLang } from '@/lib/academicTaxonomy';
 import { AuthSplitShell } from '@/components/AuthSplitShell';
 import { GoogleAuthButton } from '@/components/GoogleAuthButton';
 import {
@@ -18,6 +19,7 @@ import {
   CheckCircle2,
   Mail,
   ShieldCheck,
+  Sparkles,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -32,6 +34,56 @@ import {
 } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { IconSwap, useErrorShake } from '@/components/ui/transitions';
+
+function resolveSafeRedirect(
+  rawRedirect: string | null,
+  plan: string | null,
+  billing: string | null,
+): string | null {
+  if (rawRedirect) {
+    const trimmed = rawRedirect.trim();
+    if (
+      trimmed.startsWith('/') &&
+      !trimmed.startsWith('//') &&
+      !trimmed.startsWith('/\\')
+    ) {
+      return trimmed;
+    }
+  }
+  if (plan && (plan === 'pro' || plan === 'ultra' || plan === 'basic')) {
+    if (plan === 'basic') return '/upload';
+    const cycle = billing === 'monthly' ? 'monthly' : 'annual';
+    return `/billing/checkout?plan=${encodeURIComponent(plan)}&billing=${encodeURIComponent(cycle)}`;
+  }
+  return null;
+}
+
+function getRedirectNotice(
+  redirectTarget: string | null,
+  lang: 'vi' | 'en',
+): string | null {
+  if (!redirectTarget) return null;
+  if (redirectTarget.startsWith('/billing/checkout')) {
+    const qs = redirectTarget.includes('?') ? redirectTarget.split('?')[1] : '';
+    const params = new URLSearchParams(qs);
+    const plan = (params.get('plan') || '').toLowerCase();
+    const billing = (params.get('billing') || '').toLowerCase();
+    const planLabel = plan === 'ultra' ? 'CITRA Ultra' : plan === 'pro' ? 'CITRA Pro' : 'CITRA';
+    const cycleLabelVi = billing === 'monthly' ? 'theo tháng' : 'theo năm';
+    const cycleLabelEn = billing === 'monthly' ? 'Monthly' : 'Annual';
+    if (plan === 'pro' || plan === 'ultra') {
+      return lang === 'vi'
+        ? `Đăng nhập để tiếp tục nâng cấp gói ${planLabel} (${cycleLabelVi}).`
+        : `Sign in to continue upgrading to ${planLabel} (${cycleLabelEn}).`;
+    }
+    return lang === 'vi'
+      ? 'Đăng nhập để tiếp tục hoàn tất thanh toán gói cước của bạn.'
+      : 'Sign in to continue to checkout.';
+  }
+  return lang === 'vi'
+    ? 'Đăng nhập để tiếp tục truy cập trang bạn vừa chọn.'
+    : 'Sign in to continue where you left off.';
+}
 
 export function LoginPage() {
   const { t, i18n } = useTranslation();
@@ -60,9 +112,15 @@ export function LoginPage() {
     return () => window.cancelAnimationFrame(raf);
   }, []);
 
-  const lang = i18n.language?.startsWith('vi') ? 'vi' : 'en';
+  const lang = resolveAcademicLang(i18n.language);
   const activatedParam = searchParams.get('activated') === '1';
   const resetParam = searchParams.get('reset') === '1';
+  const safeRedirect = resolveSafeRedirect(
+    searchParams.get('redirect'),
+    searchParams.get('plan'),
+    searchParams.get('billing'),
+  );
+  const redirectNotice = getRedirectNotice(safeRedirect, lang);
   const isEmailFormat = username.includes('@');
 
   const handleFillDemo = () => {
@@ -107,18 +165,24 @@ export function LoginPage() {
 
     try {
       await login(username.trim(), password);
-      navigate('/dashboard');
+      navigate(safeRedirect ?? '/dashboard');
     } catch (err) {
       triggerShake();
       setInvalidField('credentials');
-      const msg = err instanceof Error ? err.message : t('auth.loginError');
-      if (msg.includes('ACCOUNT_NOT_ACTIVATED')) {
+      const rawMsg = err instanceof Error ? err.message : '';
+      if (rawMsg.includes('ACCOUNT_NOT_ACTIVATED')) {
         setNeedsActivation(true);
         setError(t('auth.accountNotActivatedDesc'));
-      } else if (msg.includes('ACCOUNT_DEACTIVATED')) {
-        setError(msg.replace('ACCOUNT_DEACTIVATED: ', ''));
+      } else if (rawMsg.includes('ACCOUNT_DEACTIVATED')) {
+        setError(
+          formatUserError(
+            rawMsg.replace('ACCOUNT_DEACTIVATED: ', ''),
+            lang,
+            t('auth.loginError'),
+          ),
+        );
       } else {
-        setError(msg);
+        setError(formatUserError(err, lang, t('auth.loginError')));
       }
     } finally {
       setLoading(false);
@@ -136,7 +200,13 @@ export function LoginPage() {
       setNeedsActivation(false);
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : 'Failed to resend activation email',
+        formatUserError(
+          err,
+          lang,
+          lang === 'vi'
+            ? 'Không thể gửi lại email kích hoạt. Vui lòng thử lại sau.'
+            : 'Failed to resend activation email. Please try again.',
+        ),
       );
     } finally {
       setResending(false);
@@ -175,7 +245,7 @@ export function LoginPage() {
 
         <CardHeader className="space-y-2.5 pb-4 sm:pb-5 pt-5 sm:pt-6 px-5 sm:px-7">
           {/* Eyebrow Row */}
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5">
             <div
               style={{
                 backgroundColor: 'var(--solva-surface)',
@@ -193,7 +263,7 @@ export function LoginPage() {
 
             <span
               style={{ color: 'var(--solva-muted)' }}
-              className="inline-flex items-center gap-1 font-mono text-[10px] whitespace-nowrap shrink-0"
+              className="inline-flex items-center gap-1 font-mono text-[10px] shrink-0"
             >
               <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
               <span>{t('auth.loginSecurityChip')}</span>
@@ -227,9 +297,25 @@ export function LoginPage() {
         </CardHeader>
 
         <CardContent className="px-5 sm:px-7 pb-5 sm:pb-6">
+          {/* Preserved Redirect Intent Banner */}
+          {redirectNotice && !error && !activatedParam && !resetParam && !resentSuccess && (
+            <Alert
+              data-testid="login-redirect-banner"
+              className="mb-4 px-3.5 py-2.5 rounded-[12px] border-[#E7E3D9] dark:border-[#332F26] bg-[#F4F2EC] dark:bg-[#1E1C17] flex items-start gap-2.5 [&>svg]:static [&>svg]:mt-0.5 [&>svg]:shrink-0 [&>svg~*]:pl-0 [&>svg+div]:translate-y-0"
+            >
+              <Sparkles className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+              <AlertDescription
+                style={{ color: 'var(--solva-ink)' }}
+                className="text-xs sm:text-sm font-medium"
+              >
+                {redirectNotice}
+              </AlertDescription>
+            </Alert>
+          )}
+
           {/* Activated or Password Reset Success Banner */}
           {(activatedParam || resetParam || resentSuccess) && !error && (
-            <Alert className="mb-4 rounded-[12px] border-emerald-500/30 bg-emerald-500/10 text-emerald-900 dark:text-emerald-200 animate-debugger-switch">
+            <Alert className="mb-4 px-3.5 py-2.5 rounded-[12px] border-emerald-500/30 bg-emerald-500/10 text-emerald-900 dark:text-emerald-200 animate-debugger-switch flex items-start gap-2.5 [&>svg]:static [&>svg]:mt-0.5 [&>svg]:shrink-0 [&>svg~*]:pl-0 [&>svg+div]:translate-y-0">
               <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
               <AlertDescription className="text-xs sm:text-sm font-medium text-emerald-900 dark:text-emerald-200">
                 {resentSuccess
@@ -246,7 +332,7 @@ export function LoginPage() {
             <Alert
               id="login-form-error"
               variant="destructive"
-              className="mb-4 rounded-[12px] animate-error-shake"
+              className="mb-4 px-3.5 py-2.5 rounded-[12px] animate-error-shake flex items-start gap-2.5 [&>svg]:static [&>svg]:mt-0.5 [&>svg]:shrink-0 [&>svg~*]:pl-0 [&>svg+div]:translate-y-0"
             >
               <AlertCircle className="h-4 w-4" />
               <AlertDescription className="text-xs sm:text-sm font-medium">
@@ -277,7 +363,11 @@ export function LoginPage() {
                     className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-mono font-semibold border whitespace-nowrap"
                   >
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                    {isEmailFormat ? 'EMAIL' : 'USERNAME'}
+                    {isEmailFormat
+                      ? 'EMAIL'
+                      : lang === 'vi'
+                        ? 'TÊN ĐĂNG NHẬP'
+                        : 'USERNAME'}
                   </span>
                 )}
               </div>
@@ -290,7 +380,7 @@ export function LoginPage() {
                         ? 'var(--solva-ink)'
                         : 'var(--solva-muted)',
                   }}
-                  className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 transition-colors duration-200"
+                  className="pointer-events-none z-10 absolute left-3.5 top-1/2 -translate-y-1/2 transition-colors duration-200"
                 >
                   {isEmailFormat ? (
                     <Mail className="h-4 w-4" />
@@ -360,7 +450,7 @@ export function LoginPage() {
                         ? 'var(--solva-ink)'
                         : 'var(--solva-muted)',
                   }}
-                  className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 transition-colors duration-200"
+                  className="pointer-events-none z-10 absolute left-3.5 top-1/2 -translate-y-1/2 transition-colors duration-200"
                 >
                   <KeyRound className="h-4 w-4" />
                 </div>
@@ -398,16 +488,26 @@ export function LoginPage() {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  aria-label={showPassword ? 'Hide characters' : 'Show characters'}
+                  aria-label={
+                    lang === 'vi'
+                      ? showPassword
+                        ? 'Ẩn mật khẩu'
+                        : 'Hiện mật khẩu'
+                      : showPassword
+                        ? 'Hide password'
+                        : 'Show password'
+                  }
                   title={
                     lang === 'vi'
                       ? showPassword
                         ? 'Ẩn mật khẩu'
                         : 'Hiện mật khẩu'
-                      : undefined
+                      : showPassword
+                        ? 'Hide password'
+                        : 'Show password'
                   }
                   style={{ color: 'var(--solva-muted)' }}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1.5 rounded-[8px] hover:bg-[#ECE9E0] dark:hover:bg-[#29261F] hover:text-[#1C1A15] dark:hover:text-[#FBFAF6] transition-colors cursor-pointer"
+                  className="z-10 absolute right-2.5 top-1/2 -translate-y-1/2 p-1.5 rounded-[8px] hover:bg-[#ECE9E0] dark:hover:bg-[#29261F] hover:text-[#1C1A15] dark:hover:text-[#FBFAF6] transition-colors cursor-pointer"
                 >
                   <IconSwap
                     active={showPassword}
@@ -478,7 +578,7 @@ export function LoginPage() {
           <GoogleAuthButton
             onError={(msg) => {
               setInvalidField(null);
-              setError(msg);
+              setError(msg ? formatUserError(msg, lang) : '');
             }}
             disabled={loading}
           />

@@ -150,7 +150,7 @@ function getTermsSections(lang: Lang): TermsSectionItem[] {
           'Hoạt động xử lý và bảo vệ dữ liệu cá nhân tuân thủ nghiêm ngặt Luật Bảo vệ dữ liệu cá nhân số 91/2025/QH15 và Nghị định 356/2025/NĐ-CP, được quy định chi tiết tại Chính sách Bảo vệ Dữ liệu Cá nhân (/privacy).',
           'Khi có cập nhật quan trọng về điều khoản hoặc quyền lợi gói cước, CITRA sẽ thông báo rõ ràng trên hệ thống kèm phiên bản hiệu lực mới.',
           'Đơn vị phát triển & vận hành học thuật: Nhóm nghiên cứu CITRA tại Trường Đại học Tôn Đức Thắng (19 Nguyễn Hữu Thọ, phường Tân Hưng, TP. Hồ Chí Minh).',
-          'Liên hệ hỗ trợ học thuật, gói dịch vụ và pháp lý dữ liệu: iannwendii@gmail.com.',
+          'Liên hệ hỗ trợ học thuật, gói dịch vụ và pháp lý dữ liệu: privacy@citra.io.vn.',
         ],
         calloutTitle: 'Đồng bộ cùng Chính sách Bảo vệ Dữ liệu Cá nhân',
         calloutBody:
@@ -247,7 +247,7 @@ function getTermsSections(lang: Lang): TermsSectionItem[] {
         'Personal data protection, cross-border bibliographic queries, and statutory user rights are governed by Vietnam’s Personal Data Protection Law No. 91/2025/QH15 and Decree 356/2025/ND-CP, detailed in our Personal Data Protection Policy (/privacy).',
         'Material updates to these terms are announced clearly with an updated version identifier.',
         'Academic research & operational base: CITRA Research Group, Ton Duc Thang University (19 Nguyen Huu Tho Street, Tan Hung Ward, Ho Chi Minh City, Vietnam).',
-        'Direct contact for academic support, institutional plans, or legal inquiries: iannwendii@gmail.com.',
+        'Direct contact for academic support, institutional plans, or legal inquiries: privacy@citra.io.vn.',
       ],
       calloutTitle: 'Paired with our Personal Data Protection Policy',
       calloutBody:
@@ -288,14 +288,14 @@ function TermsSolvaHeader({
     lang === 'vi'
       ? [
           { label: 'Trang chủ', to: '/' },
-          { label: 'Vai trò', to: '/#workspaces' },
+          { label: 'Quy trình hoạt động', to: '/#how-it-works' },
           { label: 'Bảng giá', to: '/pricing' },
           { label: 'Bảo vệ dữ liệu', to: '/privacy' },
           { label: 'Điều khoản', to: '/terms', active: true },
         ]
       : [
           { label: 'Home', to: '/' },
-          { label: 'Workspaces', to: '/#workspaces' },
+          { label: 'How It Works', to: '/#how-it-works' },
           { label: 'Pricing', to: '/pricing' },
           { label: 'Privacy', to: '/privacy' },
           { label: 'Terms', to: '/terms', active: true },
@@ -785,6 +785,12 @@ export function TermsOfServicePage(): JSX.Element {
       data-lang={lang}
       className="solva-editorial-root min-h-screen overflow-x-clip selection:bg-[#1C1A15] selection:text-[#FBFAF6]"
     >
+      <a
+        href="#terms-main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[100] focus:px-4 focus:py-2 focus:rounded-[10px] focus:bg-[#1C1A15] focus:text-[#FBFAF6] dark:focus:bg-[#FBFAF6] dark:focus:text-[#1C1A15] focus:shadow-lg font-solva-sans text-sm font-medium"
+      >
+        {isVi ? 'Chuyển đến nội dung chính' : 'Skip to main content'}
+      </a>
       <TermsSolvaHeader
         lang={lang}
         onToggleLanguage={toggleLanguage}
@@ -825,10 +831,10 @@ export function TermsOfServicePage(): JSX.Element {
                   borderColor: 'var(--solva-border)',
                   color: 'var(--solva-ink)',
                 }}
-                className="inline-flex flex-wrap items-center gap-2 px-3 py-1.5 rounded-full border font-mono text-[11px] font-medium tracking-wide"
+                className="inline-flex items-center gap-1.5 max-w-full px-3 py-1.5 rounded-full border font-mono text-[11px] font-medium tracking-wide"
               >
                 <span className="w-2 h-2 rounded-full bg-emerald-600 dark:bg-emerald-400 shrink-0" />
-                <span>
+                <span className="leading-snug">
                   {isVi
                     ? `ĐIỀU KHOẢN DỊCH VỤ HỌC THUẬT · PHIÊN BẢN ${TERMS_OF_SERVICE_VERSION}`
                     : `ACADEMIC TERMS OF SERVICE · v${TERMS_OF_SERVICE_VERSION}`}
@@ -1043,10 +1049,10 @@ export function TermsOfServicePage(): JSX.Element {
                             <div className="flex items-center gap-2 font-mono text-[13px] text-[var(--solva-muted)]">
                               <Mail className="w-4 h-4 shrink-0" />
                               <a
-                                href="mailto:iannwendii@gmail.com"
+                                href="mailto:privacy@citra.io.vn"
                                 className="underline underline-offset-4 text-[var(--solva-ink)] hover:opacity-80"
                               >
-                                iannwendii@gmail.com
+                                privacy@citra.io.vn
                               </a>
                             </div>
                           </div>
@@ -1056,7 +1062,7 @@ export function TermsOfServicePage(): JSX.Element {
                             variant="primary"
                             className="shrink-0 self-start md:self-auto"
                           >
-                            {isVi ? 'Xem Chính sách Dữ liệu (/privacy)' : 'Read Privacy Policy (/privacy)'}
+                            {isVi ? 'Xem Chính sách bảo vệ dữ liệu' : 'Read Privacy Policy'}
                           </SolvaButton>
                         </div>
                       )}

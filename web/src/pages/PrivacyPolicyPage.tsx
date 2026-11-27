@@ -348,8 +348,8 @@ function buildDataMappingRows(demoEvaluatorMode: boolean): DataMappingRow[] {
         'cis_score',
         'verdict',
       ],
-      sourceVi: 'Trang Tải lên (/upload), Kiểm tra hàng loạt (/batch) và Lớp học (/classes).',
-      sourceEn: 'Upload (/upload), Batch Check (/batch), and Classes (/classes).',
+      sourceVi: 'Trang Tải lên (/upload), Kiểm tra hàng loạt (/batch-upload) và Lớp học (/teacher/classes).',
+      sourceEn: 'Upload (/upload), Batch Check (/batch-upload), and Classes (/teacher/classes).',
       purposeVi:
         'Phân tích tính toàn vẹn trích dẫn hai tầng, hiển thị Trình kiểm tra tài liệu (Document Inspector), xuất báo cáo PDF/DOCX/CSV/JSON và tạo liên kết chia sẻ có chữ ký số khi người dùng yêu cầu.',
       purposeEn:
@@ -1155,8 +1155,8 @@ function PrivacyRightsAccordion({ lang }: { lang: Lang }) {
           : 'What are an Instructor’s obligations when batch-uploading student theses?',
       a:
         lang === 'vi'
-          ? 'Khi tải lên tối đa 50 bản thảo tại /batch, Giảng viên hoặc Hội đồng thẩm định chịu trách nhiệm thông báo trước và bảo đảm đã có sự đồng ý hợp pháp hoặc căn cứ quy chế đào tạo của cơ sở giáo dục đối với việc trích xuất danh mục tài liệu tham khảo để kiểm chứng.'
-          : 'When uploading up to 50 manuscripts via /batch, the instructor or review board is responsible for informing student/co-author contributors and ensuring lawful consent or institutional academic policy authorization.',
+          ? 'Khi tải lên tối đa 50 bản thảo tại /batch-upload, Giảng viên hoặc Hội đồng thẩm định chịu trách nhiệm thông báo trước và bảo đảm đã có sự đồng ý hợp pháp hoặc căn cứ quy chế đào tạo của cơ sở giáo dục đối với việc trích xuất danh mục tài liệu tham khảo để kiểm chứng.'
+          : 'When uploading up to 50 manuscripts via /batch-upload, the instructor or review board is responsible for informing student/co-author contributors and ensuring lawful consent or institutional academic policy authorization.',
     },
     {
       id: 'pfaq-5',
@@ -1497,6 +1497,12 @@ export function PrivacyPolicyPage(): JSX.Element {
       data-lang={lang}
       className="solva-editorial-root min-h-screen overflow-x-clip selection:bg-[#1C1A15] selection:text-[#FBFAF6]"
     >
+      <a
+        href="#privacy-main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[100] focus:px-4 focus:py-2 focus:rounded-[10px] focus:bg-[#1C1A15] focus:text-[#FBFAF6] dark:focus:bg-[#FBFAF6] dark:focus:text-[#1C1A15] focus:shadow-lg font-solva-sans text-sm font-medium"
+      >
+        {isVi ? 'Chuyển đến nội dung chính' : 'Skip to main content'}
+      </a>
       {/* Căn cứ pháp lý: Luật Bảo vệ dữ liệu cá nhân 91/2025/QH15 (Điều 4, 9, 11, 14, 20, 23, 37) & Nghị định 356/2025/NĐ-CP (Điều 4, 5, 6, 7, 18) */}
       <PrivacySolvaHeader
         lang={lang}
@@ -1543,6 +1549,15 @@ export function PrivacyPolicyPage(): JSX.Element {
                     {isVi
                       ? 'Văn bản này công bố minh bạch quy trình thu thập, phân loại, bảo mật và thực thi quyền chủ thể dữ liệu trên hệ thống CITRA theo Luật Bảo vệ dữ liệu cá nhân số 91/2025/QH15 và Nghị định số 356/2025/NĐ-CP.'
                       : 'This notice governs how CITRA classifies, minimizes, safeguards, and honors data subject rights under Vietnam Personal Data Protection Law No. 91/2025/QH15 and Decree No. 356/2025/ND-CP.'}
+                  </p>
+                  <p
+                    style={{ color: 'var(--solva-muted)' }}
+                    className="font-mono text-[11.5px] pt-0.5"
+                    data-testid="privacy-effective-date"
+                  >
+                    {isVi
+                      ? 'Hiệu lực từ: 05/11/2026'
+                      : 'Effective Date: Nov 5, 2026'}
                   </p>
                 </div>
               </div>
@@ -1819,7 +1834,7 @@ export function PrivacyPolicyPage(): JSX.Element {
                       }}
                       className="px-2.5 py-1 rounded-[6px] border font-mono text-[10px] font-semibold shrink-0"
                     >
-                      01 · ENTITY
+                      {isVi ? '01 · ĐƠN VỊ' : '01 · ENTITY'}
                     </span>
                   </div>
                   <div
@@ -1862,7 +1877,7 @@ export function PrivacyPolicyPage(): JSX.Element {
                       }}
                       className="px-2.5 py-1 rounded-[6px] border font-mono text-[10px] font-semibold shrink-0"
                     >
-                      02 · ADDRESS
+                      {isVi ? '02 · ĐỊA CHỈ' : '02 · ADDRESS'}
                     </span>
                   </div>
                   <div
@@ -1905,7 +1920,7 @@ export function PrivacyPolicyPage(): JSX.Element {
                       }}
                       className="px-2.5 py-1 rounded-[6px] border font-mono text-[10px] font-semibold shrink-0"
                     >
-                      03 · DPO &amp; INTAKE
+                      {isVi ? '03 · LIÊN HỆ BẢO VỆ DỮ LIỆU' : '03 · DPO & INTAKE'}
                     </span>
                   </div>
                   <div
@@ -1922,11 +1937,11 @@ export function PrivacyPolicyPage(): JSX.Element {
                     <span style={{ color: 'var(--solva-muted)' }} className="text-[13px] sm:text-[14px]">
                       Email:{' '}
                       <a
-                        href="mailto:iannwendii@gmail.com"
+                        href="mailto:privacy@citra.io.vn"
                         style={{ color: 'var(--solva-ink)' }}
                         className="font-mono underline underline-offset-4 hover:opacity-75 transition-opacity"
                       >
-                        iannwendii@gmail.com
+                        privacy@citra.io.vn
                       </a>
                     </span>
                   </div>
@@ -2056,6 +2071,17 @@ export function PrivacyPolicyPage(): JSX.Element {
                 }}
                 className="rounded-[16px] border p-[8px] sm:p-[12px]"
               >
+                <div
+                  style={{ color: 'var(--solva-muted)' }}
+                  className="lg:hidden flex items-center justify-center gap-1.5 px-3 pb-2 pt-1 font-mono text-[11px]"
+                  data-testid="privacy-table-scroll-hint"
+                >
+                  <span>
+                    {isVi
+                      ? '← Cuộn ngang để xem đủ cột →'
+                      : '← Scroll horizontally to view all columns →'}
+                  </span>
+                </div>
                 <div
                   style={{
                     backgroundColor: 'var(--solva-card-elevated)',
@@ -2411,8 +2437,8 @@ export function PrivacyPolicyPage(): JSX.Element {
                         <HardDrive className="w-4 h-4 text-emerald-600 dark:text-emerald-400 mt-1 shrink-0" />
                         <span style={{ color: 'var(--solva-ink)' }}>
                           {isVi
-                            ? 'Hồ sơ tài khoản, tệp bản thảo đã tải lên và báo cáo kiểm chứng trích dẫn được lưu giữ an toàn trong thời gian tài khoản còn hoạt động để bạn tra cứu lịch sử, đối chiếu phiên bản chỉnh sửa và xuất báo cáo học thuật.'
-                            : 'Account profiles, uploaded manuscripts, and citation verification reports are securely retained while your account remains active for revision comparison and academic exports.'}
+                            ? 'Thời hạn lưu trữ lịch sử báo cáo kiểm chứng trích dẫn tuân theo gói dịch vụ bạn sử dụng: gói Basic lưu 7 ngày, gói Pro lưu 1 năm và gói Ultra lưu trữ vĩnh viễn trong thời gian tài khoản còn hoạt động. Hồ sơ tài khoản được giữ trong thời gian sử dụng và bạn luôn có thể xóa sớm bất cứ lúc nào.'
+                            : 'Verification report history retention follows your active plan tier: Basic retains history for 7 days, Pro for 1 year, and Ultra provides lifetime retention while your account remains active. You may also delete individual reports earlier at any time.'}
                         </span>
                       </li>
                       <li className="flex items-start gap-2.5">
@@ -2587,7 +2613,9 @@ export function PrivacyPolicyPage(): JSX.Element {
                           style={{ color: 'var(--solva-ink)' }}
                           className="font-solva-sans text-[15px] font-medium"
                         >
-                          Stripe, Inc. (US / Global) &amp; VNPay (Việt Nam)
+                          {isVi
+                            ? 'Stripe, Inc. (Hoa Kỳ / Quốc tế) & VNPay (Việt Nam)'
+                            : 'Stripe, Inc. (US / Global) & VNPay (Vietnam)'}
                         </div>
                         <p
                           style={{ color: 'var(--solva-muted)' }}
@@ -2606,8 +2634,8 @@ export function PrivacyPolicyPage(): JSX.Element {
                     className="font-mono text-[11px] leading-relaxed pt-3 border-t border-[#E7E3D9] dark:border-[#332F26]"
                   >
                     {isVi
-                      ? 'Mọi kết nối truyền dữ liệu ra nước ngoài đều được mã hóa HTTPS/TLS 1.2+.'
-                      : 'All outbound cross-border connections are encrypted over HTTPS/TLS 1.2+.'}
+                      ? 'Mọi kết nối truyền dữ liệu ra nước ngoài đều được mã hóa HTTPS/TLS 1.3.'
+                      : 'All outbound cross-border connections are encrypted over HTTPS/TLS 1.3.'}
                   </p>
                 </div>
               </SolvaScrollReveal>
@@ -2689,8 +2717,8 @@ export function PrivacyPolicyPage(): JSX.Element {
                   >
                     <p style={{ color: 'var(--solva-ink)' }} className="font-medium">
                       {isVi
-                        ? 'Trách nhiệm của Giảng viên / Người tải hộ (/upload & /batch tối đa 50 tệp):'
-                        : 'Instructor / Uploader Responsibility (/upload & /batch up to 50 files):'}
+                        ? 'Trách nhiệm của Giảng viên / Người tải hộ (/upload & /batch-upload tối đa 50 tệp):'
+                        : 'Instructor / Uploader Responsibility (/upload & /batch-upload up to 50 files):'}
                     </p>
                     <p style={{ color: 'var(--solva-muted)' }}>
                       {isVi
@@ -2828,8 +2856,8 @@ export function PrivacyPolicyPage(): JSX.Element {
                       {isVi ? 'Thông báo tiếp nhận yêu cầu: ' : 'Request acknowledgment: '}
                     </strong>
                     {isVi
-                      ? 'Chậm nhất trong 02 ngày làm việc kể từ khi nhận được yêu cầu hợp lệ qua kênh tiếp nhận (iannwendii@gmail.com).'
-                      : 'Within 2 business days from receipt of a valid request via our intake channel (iannwendii@gmail.com).'}
+                      ? 'Chậm nhất trong 02 ngày làm việc kể từ khi nhận được yêu cầu hợp lệ qua kênh tiếp nhận (privacy@citra.io.vn).'
+                      : 'Within 2 business days from receipt of a valid request via our intake channel (privacy@citra.io.vn).'}
                   </li>
                   <li
                     style={{

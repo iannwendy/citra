@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { api } from '@/api/client';
+import { formatUserError, resolveAcademicLang } from '@/lib/academicTaxonomy';
 import { AuthSplitShell } from '@/components/AuthSplitShell';
 import {
   Mail,
@@ -33,7 +34,7 @@ const getSolvaInputBorderClasses = (invalid: boolean) =>
 
 export function ForgotPasswordPage() {
   const { t, i18n } = useTranslation();
-  const lang = i18n.language?.startsWith('vi') ? 'vi' : 'en';
+  const lang = resolveAcademicLang(i18n.language);
 
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
@@ -67,7 +68,13 @@ export function ForgotPasswordPage() {
       setCooldown(30);
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : 'Failed to send password reset link',
+        formatUserError(
+          err,
+          lang,
+          lang === 'vi'
+            ? 'Không thể gửi liên kết đặt lại mật khẩu. Vui lòng thử lại sau.'
+            : 'Failed to send password reset link. Please try again.',
+        ),
       );
     } finally {
       setLoading(false);
@@ -83,7 +90,13 @@ export function ForgotPasswordPage() {
       setCooldown(30);
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : 'Failed to resend reset link',
+        formatUserError(
+          err,
+          lang,
+          lang === 'vi'
+            ? 'Không thể gửi lại liên kết khôi phục. Vui lòng thử lại sau.'
+            : 'Failed to resend reset link. Please try again.',
+        ),
       );
     } finally {
       setLoading(false);
@@ -150,7 +163,7 @@ export function ForgotPasswordPage() {
             <Alert
               id="forgot-form-error"
               variant="destructive"
-              className="mb-4 rounded-[12px]"
+              className="mb-4 px-3.5 py-2.5 rounded-[12px] flex items-start gap-2.5 [&>svg]:static [&>svg]:mt-0.5 [&>svg]:shrink-0 [&>svg~*]:pl-0 [&>svg+div]:translate-y-0"
             >
               <AlertCircle className="h-4 w-4" />
               <AlertDescription className="text-xs sm:text-sm font-medium">
@@ -228,7 +241,7 @@ export function ForgotPasswordPage() {
                 <div className="relative">
                   <div
                     style={{ color: 'var(--solva-muted)' }}
-                    className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2"
+                    className="pointer-events-none z-10 absolute left-3.5 top-1/2 -translate-y-1/2"
                   >
                     <Mail className="h-4 w-4" />
                   </div>
@@ -249,7 +262,11 @@ export function ForgotPasswordPage() {
                       color: 'var(--solva-ink)',
                     }}
                     className={`t-input ${getSolvaInputBorderClasses(Boolean(error))} h-11 pl-10 rounded-[11px] font-solva-sans text-[14px]`}
-                    placeholder={t('auth.forgotEmailPlaceholder')}
+                    placeholder={
+                      lang === 'vi'
+                        ? 'ban@truongdaihoc.edu.vn'
+                        : 'you@university.edu'
+                    }
                   />
                 </div>
               </div>

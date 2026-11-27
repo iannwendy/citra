@@ -16,6 +16,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { formatLimit } from '@/lib/quotaDisplay';
+import { formatUserError, resolveAcademicLang } from '@/lib/academicTaxonomy';
 import {
   SCHOLARLY_APIS_LABEL,
   SYMBOLIC_RULES_COUNT,
@@ -31,13 +32,13 @@ export function BillingSuccessPage() {
   const { i18n } = useTranslation();
   const [searchParams] = useSearchParams();
   const { refreshUser } = useAuth();
-  const lang = i18n.language?.startsWith('vi') ? 'vi' : 'en';
+  const lang = resolveAcademicLang(i18n.language);
 
   const sessionId = searchParams.get('session_id') || '';
 
   const [loading, setLoading] = useState(true);
   const [verificationState, setVerificationState] = useState<
-    'verifying' | 'verified' | 'missing' | 'error'
+    'verifying' | 'verified' | 'cancelled' | 'missing' | 'error'
   >('verifying');
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [subscription, setSubscription] = useState<SubscriptionSummary | null>(null);
@@ -55,11 +56,28 @@ export function BillingSuccessPage() {
           }
         });
 
+        // Gracefully handle explicit user cancellations (VNPay code 24 or ?canceled=1)
+        if (
+          vnpParams.vnp_ResponseCode === '24' ||
+          searchParams.get('canceled') === '1'
+        ) {
+          if (active) {
+            setVerificationState('cancelled');
+          }
+          return;
+        }
+
         if (vnpParams.vnp_SecureHash && vnpParams.vnp_TxnRef) {
           const vnpRes = await api.verifyVNPayReturn({
             vnp_params: vnpParams,
             session_id: sessionId || null,
           });
+          if (vnpRes.vnp_response_code === '24') {
+            if (active) {
+              setVerificationState('cancelled');
+            }
+            return;
+          }
           if (!vnpRes.is_success || vnpRes.status !== 'succeeded') {
             throw new Error(
               (lang === 'vi' ? vnpRes.message_vi : vnpRes.message_en) ||
@@ -99,11 +117,13 @@ export function BillingSuccessPage() {
       } catch (err) {
         if (active) {
           setErrorMessage(
-            err instanceof Error
-              ? err.message
-              : lang === 'vi'
-                ? 'Không thể xác thực phiên thanh toán.'
-                : 'Unable to verify payment session.',
+            formatUserError(
+              err,
+              lang,
+              lang === 'vi'
+                ? 'Không thể xác thực phiên thanh toán. Vui lòng thử lại từ trang Bảng giá.'
+                : 'Unable to verify payment session. Please try again from Pricing.',
+            ),
           );
           setVerificationState('error');
         }
@@ -138,6 +158,48 @@ export function BillingSuccessPage() {
               : 'Confirming payment and unlocking Premium quotas...'}
           </p>
         </div>
+      </div>
+    );
+  }
+
+  if (verificationState === 'cancelled') {
+    return (
+      <div
+        className="max-w-xl mx-auto py-8 sm:py-12 px-4"
+        data-testid="billing-verification-cancelled"
+      >
+        <Card className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 sm:p-9 shadow-xl text-center space-y-5">
+          <div className="w-16 h-16 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-600 dark:text-amber-400 flex items-center justify-center mx-auto">
+            <AlertTriangle className="h-8 w-8" />
+          </div>
+          <div className="space-y-2">
+            <h1 className="font-display text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">
+              {lang === 'vi' ? 'Giao dịch đã được hủy' : 'Payment cancelled'}
+            </h1>
+            <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
+              {lang === 'vi'
+                ? 'Bạn đã hủy giao dịch thanh toán. Tài khoản của bạn chưa bị trừ phí — bạn có thể quay lại chọn gói nâng cấp bất cứ lúc nào.'
+                : 'You cancelled the payment transaction. No charge was made — you can return to Pricing to select a plan whenever you are ready.'}
+            </p>
+          </div>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-1">
+            <Button
+              asChild
+              className="w-full sm:w-auto rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white h-10 px-5 font-semibold"
+            >
+              <Link to="/pricing">
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                {lang === 'vi' ? 'Quay lại Bảng giá' : 'Back to Pricing'}
+              </Link>
+            </Button>
+            <Button asChild variant="outline" className="w-full sm:w-auto rounded-xl h-10 px-5">
+              <Link to="/settings">
+                <Settings className="h-4 w-4 mr-2" />
+                {lang === 'vi' ? 'Xem gói hiện tại' : 'Subscription Settings'}
+              </Link>
+            </Button>
+          </div>
+        </Card>
       </div>
     );
   }
@@ -264,8 +326,8 @@ export function BillingSuccessPage() {
             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#F4F2EC] dark:bg-slate-800 border border-[#E7E3D9] dark:border-slate-700 text-[11px] font-mono font-semibold text-slate-700 dark:text-slate-200">
               <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
               {lang === 'vi'
-                ? `${SYMBOLIC_RULES_COUNT} Luật Symbolic`
-                : `${SYMBOLIC_RULES_COUNT} Symbolic Rules`}
+                ? `${SYMBOLIC_RULES_COUNT}+ Tiêu chí đối chiếu`
+                : `${SYMBOLIC_RULES_COUNT}+ Verification Criteria`}
             </span>
           </div>
         </div>
@@ -280,13 +342,15 @@ export function BillingSuccessPage() {
               <span>
                 {isVNPay
                   ? lang === 'vi'
-                    ? 'BIÊN LAI THANH TOÁN VNPAY (HMAC-SHA512)'
-                    : 'VNPAY PAYMENT RECEIPT (HMAC-SHA512)'
+                    ? 'BIÊN LAI THANH TOÁN VNPAY'
+                    : 'VNPAY PAYMENT RECEIPT'
                   : lang === 'vi'
                     ? 'BIÊN LAI THANH TOÁN STRIPE'
                     : 'STRIPE PAYMENT RECEIPT'}
               </span>
-              <Badge className="bg-emerald-600 text-white text-[10px]">PAID</Badge>
+              <Badge className="bg-emerald-600 text-white text-[10px]">
+                {lang === 'vi' ? 'ĐÃ THANH TOÁN' : 'PAID'}
+              </Badge>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-slate-500">{lang === 'vi' ? 'Gói đăng ký:' : 'Plan:'}</span>
@@ -331,7 +395,7 @@ export function BillingSuccessPage() {
             </div>
             {isVNPay && transaction.vnp_txn_ref && (
               <div className="flex items-center justify-between text-[11px] font-mono text-slate-500 pt-1 border-t border-slate-200/70 dark:border-slate-700/70">
-                <span>vnp_TxnRef / vnp_TransactionNo:</span>
+                <span>{lang === 'vi' ? 'Mã tham chiếu giao dịch:' : 'Transaction reference:'}</span>
                 <span data-testid="receipt-vnp-txn-ref">
                   {transaction.vnp_txn_ref}
                   {transaction.vnp_transaction_no

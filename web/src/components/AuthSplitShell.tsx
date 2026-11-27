@@ -4,9 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { ThemeToggle } from '@/contexts/ThemeContext';
 import { APP_VERSION } from '@/version';
 import {
-  LOCAL_PAPERS_LABEL,
   SCHOLARLY_APIS_LABEL,
-  SYMBOLIC_RULES_RANGE,
 } from '@/lib/productFacts';
 import { SolvaLiveNumber } from '@/components/landing/SolvaMockupWidgets';
 import { ScholarlySourceLogo } from '@/components/landing/ScholarlySourceLogos';
@@ -50,7 +48,8 @@ interface LiveTraceSample {
   title: string;
   venue: string;
   doi: string;
-  ruleCode: string;
+  ruleLabelEn: string;
+  ruleLabelVi: string;
   ruleSummaryEn: string;
   ruleSummaryVi: string;
   checkSummaryEn: string;
@@ -75,7 +74,8 @@ const LIVE_TRACE_SAMPLES: LiveTraceSample[] = [
     title: 'Attention Is All You Need',
     venue: 'Advances in Neural Information Processing Systems (NeurIPS)',
     doi: '10.48550/arXiv.1706.03762',
-    ruleCode: 'R01_DOI_MATCH',
+    ruleLabelEn: 'Exact DOI Match',
+    ruleLabelVi: 'Khớp mã DOI gốc',
     ruleSummaryEn: 'Canonical DOI & Cross-Index Consensus',
     ruleSummaryVi: 'Đồng thuận mã DOI & 4 thư viện quốc tế',
     checkSummaryEn: 'Check: Exact match on canonical DOI and original paper title (2017).',
@@ -102,7 +102,8 @@ const LIVE_TRACE_SAMPLES: LiveTraceSample[] = [
     title: 'BERT: Pre-training of Deep Bidirectional Transformers',
     venue: 'Proceedings of NAACL-HLT (Cited as EMNLP)',
     doi: '10.18653/v1/N19-1423',
-    ruleCode: 'R05_YEAR_DRIFT',
+    ruleLabelEn: 'Year & Venue Mismatch',
+    ruleLabelVi: 'Lệch năm & hội nghị',
     ruleSummaryEn: 'Preprint-to-Proceedings Year & Venue Drift',
     ruleSummaryVi: 'Sai lệch năm bản nháp & hội nghị công bố',
     checkSummaryEn:
@@ -131,7 +132,8 @@ const LIVE_TRACE_SAMPLES: LiveTraceSample[] = [
     title: 'Zero-Shot Quantum Hyper-Graphs in Citation Verification',
     venue: 'Nature Machine Intelligence (Unresolved Volume)',
     doi: '10.1038/s42256-024-99812-x',
-    ruleCode: 'R12_GHOST_DOI',
+    ruleLabelEn: 'Unregistered DOI',
+    ruleLabelVi: 'Không tìm thấy mã DOI',
     ruleSummaryEn: 'Non-Existent DOI Handle across 15+ Registries',
     ruleSummaryVi: 'Mã DOI không tồn tại trên 15+ thư viện',
     checkSummaryEn:
@@ -217,8 +219,8 @@ export function AuthSplitShell({
       desc: t('auth.featureRetrievalDesc'),
       tag:
         lang === 'vi'
-          ? `${LOCAL_PAPERS_LABEL} bài · ${SCHOLARLY_APIS_LABEL} thư viện`
-          : `${LOCAL_PAPERS_LABEL} ACL · ${SCHOLARLY_APIS_LABEL} APIs`,
+          ? `${SCHOLARLY_APIS_LABEL} thư viện quốc tế`
+          : `${SCHOLARLY_APIS_LABEL} Academic Indexes`,
       accentClass:
         'bg-[#1C1A15]/[0.08] text-[#1C1A15] dark:bg-[#FBFAF6]/10 dark:text-[#FBFAF6] border-[#1C1A15]/15 dark:border-[#FBFAF6]/20',
     },
@@ -228,8 +230,8 @@ export function AuthSplitShell({
       desc: t('auth.featureVerificationDesc'),
       tag:
         lang === 'vi'
-          ? `Quy tắc ${SYMBOLIC_RULES_RANGE}`
-          : `Rules ${SYMBOLIC_RULES_RANGE} · CIS`,
+          ? 'Hơn 30 tiêu chí đối chiếu'
+          : '30+ Verification Criteria',
       accentClass:
         'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20',
     },
@@ -297,12 +299,12 @@ export function AuthSplitShell({
               }}
               title={
                 lang === 'vi'
-                  ? `Nhân suy diễn học thuật của CITRA (SourceLogic v${APP_VERSION})`
-                  : `CITRA verification engine (SourceLogic v${APP_VERSION})`
+                  ? `CITRA phiên bản v${APP_VERSION}`
+                  : `CITRA version v${APP_VERSION}`
               }
               className="ml-0.5 xl:ml-1 px-1.5 xl:px-2 py-0.5 rounded-[5px] border font-mono text-[9.5px] xl:text-[10px] font-medium whitespace-nowrap"
             >
-              <span className="sr-only xl:not-sr-only">Engine: </span>SourceLogic v{APP_VERSION}
+              CITRA · v{APP_VERSION}
             </span>
           </Link>
 
@@ -429,7 +431,7 @@ export function AuthSplitShell({
               }}
               className="relative z-10 solva-glass-ring rounded-[11px] border overflow-hidden select-none"
             >
-              {/* macOS Window Chrome + symbolic_verifier.py Title */}
+              {/* macOS Window Chrome + Sample Verification Report Title */}
               <div
                 style={{
                   backgroundColor: 'var(--solva-bg)',
@@ -445,10 +447,11 @@ export function AuthSplitShell({
                   </div>
                   <span
                     style={{ color: 'var(--solva-ink)' }}
-                    className="font-mono text-[11px] font-medium ml-1 whitespace-nowrap"
+                    className="font-solva-sans text-[11.5px] font-medium ml-1 whitespace-nowrap"
                   >
-                    symbolic_verifier.py ·{' '}
-                    {lang === 'vi' ? 'Ví dụ kiểm chứng' : 'Trace Preview'}
+                    {lang === 'vi'
+                      ? 'Ví dụ báo cáo kiểm tra'
+                      : 'Verification Report Sample'}
                   </span>
                 </div>
 
@@ -465,7 +468,7 @@ export function AuthSplitShell({
                     }}
                     className="px-2 py-0.5 rounded-[5px] border font-mono text-[10px] font-semibold whitespace-nowrap"
                   >
-                    CIS:{' '}
+                    {lang === 'vi' ? 'Điểm toàn vẹn:' : 'Integrity Score:'}{' '}
                     <SolvaLiveNumber
                       value={activeTrace.cisScore}
                       decimals={1}
@@ -554,9 +557,9 @@ export function AuthSplitShell({
                       </span>
                       <span
                         style={{ color: 'var(--solva-muted)' }}
-                        className="font-mono text-[10px]"
+                        className="font-solva-sans text-[10.5px] font-medium"
                       >
-                        · {activeTrace.ruleCode}
+                        · {lang === 'vi' ? activeTrace.ruleLabelVi : activeTrace.ruleLabelEn}
                       </span>
                     </div>
                     <p
@@ -847,9 +850,9 @@ export function AuthSplitShell({
           style={{ color: 'var(--solva-muted)' }}
           className={`relative z-10 order-3 w-full ${maxWidthClass} mx-auto ${
             compactRightPanel ? 'pt-1' : 'pt-2'
-          } flex items-center justify-between gap-2 text-[11px] font-mono`}
+          } flex flex-wrap items-center justify-center sm:justify-between gap-x-3 gap-y-1 text-center text-[11px] font-mono`}
         >
-          <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+          <span className="inline-flex items-center gap-1.5">
             <Sparkles className="h-3 w-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
             <span>
               {lang === 'vi'
@@ -857,7 +860,7 @@ export function AuthSplitShell({
                 : 'CITRA Editorial Workspace'}
             </span>
           </span>
-          <span className="whitespace-nowrap">
+          <span>
             {lang === 'vi'
               ? 'Mã hóa TLS 1.3 · Riêng tư'
               : 'TLS 1.3 Encrypted · Private'}
@@ -878,19 +881,26 @@ export function PasswordStrengthIndicator({
   const { t } = useTranslation();
 
   const hasMinLen = password.length >= 6;
-  const hasAlphaNum = /[a-zA-Z]/.test(password) && /\d/.test(password);
-  const hasStrongLenOrSpecial =
-    password.length >= 10 || /[^a-zA-Z0-9]/.test(password);
+  const hasLower = /[a-z]/.test(password);
+  const hasUpper = /[A-Z]/.test(password);
+  const hasDigit = /\d/.test(password);
+  const hasSymbol = /[^a-zA-Z0-9]/.test(password);
+  const hasAlphaNum = (hasLower || hasUpper) && hasDigit;
+  const diversityCount = [hasLower, hasUpper, hasDigit, hasSymbol].filter(Boolean).length;
   const matches =
     password.length > 0 &&
     confirmPassword.length > 0 &&
     password === confirmPassword;
 
+  // Score purely on password length + character diversity (decoupled from confirmPassword)
   let score = 0;
-  if (hasMinLen) score += 1;
-  if (hasAlphaNum) score += 1;
-  if (hasStrongLenOrSpecial) score += 1;
-  if (matches) score += 1;
+  if (password.length > 0) {
+    if (hasMinLen) score += 1;
+    if (hasMinLen && diversityCount >= 2) score += 1;
+    if (password.length >= 8 && diversityCount >= 3) score += 1;
+    if (password.length >= 10 && diversityCount >= 4) score += 1;
+    if (score === 3 && password.length >= 14 && diversityCount >= 3) score = 4;
+  }
 
   const strengthLabels = [
     t('auth.strengthWeak'),
