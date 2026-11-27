@@ -25,7 +25,7 @@ import {
   Database,
   Search,
 } from 'lucide-react';
-import type { MatchedSource, Verdict } from '@/api/client';
+import type { Citation, MatchedSource, Verdict } from '@/api/client';
 import { useTheme } from '@/contexts/ThemeContext';
 import { OverrideControls } from '../OverrideControls';
 import { toSafeDoiHref, toSafeExternalHref } from '../../lib/utils';
@@ -33,6 +33,8 @@ import { DirectionalStageSlide, useSlidingPill } from '@/components/ui/transitio
 import {
   formatAcademicAuthorShort,
   getVerdictDisplay,
+  looksLikeTitleSentence,
+  resolveDisplayAuthors,
   splitRawAuthorString,
 } from '@/lib/academicTaxonomy';
 import {
@@ -44,6 +46,7 @@ import {
 
 export interface InteractiveDecisionFlowBoardProps {
   verdict: Verdict;
+  citedRef?: Pick<Citation, 'authors' | 'year' | 'title' | 'raw_text'> | null;
   markerLabel?: string;
   onInspectDetails?: (verdict: Verdict) => void;
   onOverride?: (
@@ -197,6 +200,9 @@ function formatAuthorSummary(
   fallbackMatchedAuthors?: string[],
   fallbackTitle?: string | null,
 ): string {
+  if (looksLikeTitleSentence(rawAuthors)) {
+    return formatAcademicAuthorShort([], fallbackTitle || rawAuthors);
+  }
   const parsedList = splitRawAuthorString(rawAuthors);
   const hadEtAl = /\bet\s+al\.?/i.test(rawAuthors);
   if (parsedList.length > 0) {
@@ -212,9 +218,57 @@ function formatAuthorSummary(
   return fallbackTitle ? formatAcademicAuthorShort([], fallbackTitle) : '';
 }
 
+function resolveCitedYear(rawStripped: string, explicitYear?: string | null): string {
+  const trimmedExplicit = String(explicitYear ?? '').trim();
+  if (/^(?:19|20)\d{2}$/.test(trimmedExplicit)) {
+    return trimmedExplicit;
+  }
+  const parenMatch = rawStripped.match(/\(\s*((?:19|20)\d{2})[a-z]?\s*\)/);
+  if (parenMatch) return parenMatch[1];
+  const fullDateMatch = rawStripped.match(
+    /(?:ngày\s+)?\d{1,2}[/-]\d{1,2}[/-]((?:19|20)\d{2})\b/i,
+  );
+  if (fullDateMatch) return fullDateMatch[1];
+  const withoutRanges = rawStripped.replace(
+    /(?:giai\s+đoạn\s+)?(?:19|20)\d{2}\s*[-–—]\s*(?:19|20)\d{2}/gi,
+    '',
+  );
+  const cleanYearMatch = withoutRanges.match(/\b(19\d{2}|20\d{2})[a-z]?\b/);
+  if (cleanYearMatch) return cleanYearMatch[1];
+  const fallbackMatch = rawStripped.match(/\b(19\d{2}|20\d{2})[a-z]?\b/);
+  return fallbackMatch ? fallbackMatch[1] : '';
+}
+
+function scrubBoardExplanation(text: string, lang: 'vi' | 'en'): string {
+  if (!text) return text;
+  if (lang === 'vi') {
+    return text
+      .replace(
+        /Kiểm tra liên kết thành công\s*\(\s*HTTP\s+\d{3}\s+OK\s*\)\.?/gi,
+        'Liên kết đang hoạt động bình thường.',
+      )
+      .replace(/\(\s*HTTP\s+200\s+OK\s*\)/gi, '(liên kết hoạt động)')
+      .replace(/\bHTTP\s+200\s+OK\b/gi, 'Liên kết hoạt động');
+  }
+  return text
+    .replace(
+      /Link check (?:passed|succeeded)\s*\(\s*HTTP\s+\d{3}\s+OK\s*\)\.?/gi,
+      'Source link is active and reachable.',
+    )
+    .replace(/\(\s*HTTP\s+200\s+OK\s*\)/gi, '(link active)')
+    .replace(/\bHTTP\s+200\s+OK\b/gi, 'Link Active');
+}
+
+export interface CleanCitationIdentityOptions {
+  citedYear?: string | null;
+  citedAuthors?: string[] | null;
+  citedTitle?: string | null;
+}
+
 export function extractCleanCitationIdentity(
   raw: string,
   primaryMatched?: Pick<MatchedSource, 'authors' | 'title' | 'year'> | null,
+  options?: CleanCitationIdentityOptions,
 ): {
   shortHeader: string;
   authorOnly: string;
@@ -225,8 +279,8 @@ export function extractCleanCitationIdentity(
     .replace(/^\s*(?:\[\s*\d+[a-z]?\s*\]|\(\s*[a-z]\s*\)|\d+[a-z]?[.)])\s*/i, '')
     .replace(/^\s*(?:\[\s*\d+[a-z]?\s*\]|\(\s*[a-z]\s*\)|\d+[a-z]?[.)])\s*/i, '')
     .trim();
-  const yearMatch = stripped.match(/\b(19\d{2}|20\d{2})[a-z]?\b/);
-  const citedYear = yearMatch ? yearMatch[1] : '';
+  const citedYear = resolveCitedYear(stripped, options?.citedYear);
+  const cleanExplicitAuthors = resolveDisplayAuthors(options?.citedAuthors, raw);
 
   // 1. APA style: Authors (Year). Title...
   const apaMatch = stripped.match(/^(.+?)\s*\((?:19|20)\d{2}[a-z]?\)[.,:\s]+(.+)$/);
@@ -236,8 +290,11 @@ export function extractCleanCitationIdentity(
       '',
     );
     const authorOnly =
-      formatAuthorSummary(apaMatch[1], primaryMatched?.authors, restTitle) ||
-      formatAcademicAuthorShort([], restTitle);
+      formatAuthorSummary(
+        apaMatch[1],
+        cleanExplicitAuthors.length > 0 ? cleanExplicitAuthors : primaryMatched?.authors,
+        restTitle,
+      ) || formatAcademicAuthorShort([], restTitle);
     const shortHeader =
       citedYear && !authorOnly.includes(citedYear)
         ? `${authorOnly} (${citedYear})`
@@ -255,8 +312,11 @@ export function extractCleanCitationIdentity(
   if (ieeeQuotedMatch) {
     const cleanTitle = ieeeQuotedMatch[2].replace(/^[“"]|[”".,]+$/g, '').trim();
     const authorOnly =
-      formatAuthorSummary(ieeeQuotedMatch[1], primaryMatched?.authors, cleanTitle) ||
-      formatAcademicAuthorShort([], cleanTitle);
+      formatAuthorSummary(
+        ieeeQuotedMatch[1],
+        cleanExplicitAuthors.length > 0 ? cleanExplicitAuthors : primaryMatched?.authors,
+        cleanTitle,
+      ) || formatAcademicAuthorShort([], cleanTitle);
     const shortHeader =
       citedYear && !authorOnly.includes(citedYear)
         ? `${authorOnly} (${citedYear})`
@@ -276,10 +336,37 @@ export function extractCleanCitationIdentity(
     .filter(Boolean);
   if (sentenceParts.length >= 2) {
     const firstPart = sentenceParts[0];
-    const cleanTitle = sentenceParts[1].replace(/^[“"]|[”".,]+$/g, '').trim();
+    const secondPart = sentenceParts[1];
+    const secondIsUrlOrDate =
+      /^https?:\/\//i.test(secondPart) ||
+      /^(?:truy\s+cập|ngày|retrieved|accessed|available)\b/i.test(secondPart);
+    if (looksLikeTitleSentence(firstPart) || secondIsUrlOrDate) {
+      const cleanTitle = (options?.citedTitle?.trim() || firstPart).replace(
+        /^[“"]|[”".,]+$/g,
+        '',
+      );
+      const authorOnly =
+        cleanExplicitAuthors.length > 0
+          ? formatAcademicAuthorShort(cleanExplicitAuthors, cleanTitle)
+          : formatAcademicAuthorShort([], cleanTitle);
+      return {
+        shortHeader:
+          citedYear && !authorOnly.includes(citedYear)
+            ? `${authorOnly} (${citedYear})`
+            : authorOnly,
+        authorOnly,
+        citedYear,
+        cleanTitle,
+      };
+    }
+
+    const cleanTitle = secondPart.replace(/^[“"]|[”".,]+$/g, '').trim();
     const authorOnly =
-      formatAuthorSummary(firstPart, primaryMatched?.authors, cleanTitle) ||
-      formatAcademicAuthorShort([], cleanTitle || firstPart);
+      formatAuthorSummary(
+        firstPart,
+        cleanExplicitAuthors.length > 0 ? cleanExplicitAuthors : primaryMatched?.authors,
+        cleanTitle,
+      ) || formatAcademicAuthorShort([], cleanTitle || firstPart);
     return {
       shortHeader:
         citedYear && !authorOnly.includes(citedYear)
@@ -291,10 +378,31 @@ export function extractCleanCitationIdentity(
     };
   }
 
-  // 4. Fallback to primary matched author or clean title
+  // 4. Fallback: if raw text is a title sentence (no cited authors), keep short title without surname-splitting
+  const cleanedRawTitle = (options?.citedTitle?.trim() || stripped)
+    .replace(/\bhttps?:\/\/\S+/gi, '')
+    .replace(/,?\s*ngày\s+\d{1,2}[/-]\d{1,2}[/-](?:19|20)\d{2}\.?$/i, '')
+    .replace(/^[“"]|[”".,]+$/g, '')
+    .trim();
+  if (looksLikeTitleSentence(stripped)) {
+    const titleAuthor =
+      cleanExplicitAuthors.length > 0
+        ? formatAcademicAuthorShort(cleanExplicitAuthors, cleanedRawTitle)
+        : formatAcademicAuthorShort([], cleanedRawTitle);
+    return {
+      shortHeader:
+        citedYear && !titleAuthor.includes(citedYear)
+          ? `${titleAuthor} (${citedYear})`
+          : titleAuthor,
+      authorOnly: titleAuthor,
+      citedYear,
+      cleanTitle: cleanedRawTitle || stripped,
+    };
+  }
+
   const fallbackAuthor = formatAcademicAuthorShort(
-    primaryMatched?.authors,
-    primaryMatched?.title || stripped,
+    cleanExplicitAuthors.length > 0 ? cleanExplicitAuthors : primaryMatched?.authors,
+    primaryMatched?.title || cleanedRawTitle || stripped,
   );
   const fallbackHeader =
     citedYear && !fallbackAuthor.includes(citedYear)
@@ -304,7 +412,7 @@ export function extractCleanCitationIdentity(
     shortHeader: fallbackHeader,
     authorOnly: fallbackAuthor,
     citedYear,
-    cleanTitle: stripped,
+    cleanTitle: cleanedRawTitle || stripped,
   };
 }
 
@@ -336,6 +444,7 @@ function getToneHex(tone: Tone, dark: boolean): string {
 
 export function InteractiveDecisionFlowBoard({
   verdict,
+  citedRef,
   markerLabel,
   onInspectDetails,
   onOverride,
@@ -392,6 +501,13 @@ export function InteractiveDecisionFlowBoard({
     const parsed = extractCleanCitationIdentity(
       verdict.citation_raw,
       primaryMatched,
+      citedRef
+        ? {
+            citedYear: citedRef.year,
+            citedAuthors: citedRef.authors,
+            citedTitle: citedRef.title,
+          }
+        : undefined,
     );
     return {
       shortHeader: parsed.shortHeader,
@@ -404,7 +520,7 @@ export function InteractiveDecisionFlowBoard({
           ? primaryMatched.title.replace(/^[“"]|[”".,]+$/g, '').trim()
           : parsed.cleanTitle,
     };
-  }, [verdict.citation_raw, verdict.matched_sources, effectiveLabel]);
+  }, [verdict.citation_raw, verdict.matched_sources, citedRef, effectiveLabel]);
 
   // Evaluate each satellite cluster against live Verdict data
   const evaluatedSatellites = useMemo(() => {
@@ -824,7 +940,7 @@ export function InteractiveDecisionFlowBoard({
               ? isVi
                 ? 'Toàn bộ thông tin quan trọng (Tên bài báo, Nhóm tác giả, Năm xuất bản và Tạp chí/Hội nghị) đều khớp chính xác với bản gốc.'
                 : 'Every key detail — Title, Authors, Publication Year, and Journal/Venue — matches the official published record.'
-              : getVerdictExplanation(verdict, lang),
+              : scrubBoardExplanation(getVerdictExplanation(verdict, lang), lang),
       },
       {
         num: isVi ? 'BƯỚC 04' : 'STEP 04',
@@ -837,7 +953,7 @@ export function InteractiveDecisionFlowBoard({
         storyTitle: isVi
           ? `Bước 4 — Kết luận kiểm chứng cho ${marker}`
           : `Step 4 — Final Verification Decision for ${marker}`,
-        storyBody: getVerdictExplanation(verdict, lang),
+        storyBody: scrubBoardExplanation(getVerdictExplanation(verdict, lang), lang),
       },
     ];
   }, [
@@ -899,7 +1015,7 @@ export function InteractiveDecisionFlowBoard({
         ? [
             {
               field: isVi ? 'Loại nguồn' : 'Type',
-              value: isVi ? 'Văn bản Pháp luật ✓' : 'Legal Statute ✓',
+              value: isVi ? 'Văn bản pháp luật ✓' : 'Legal Statute ✓',
               ok: true,
             },
             {
@@ -1051,7 +1167,7 @@ export function InteractiveDecisionFlowBoard({
             : effectiveLabel === 'resource'
               ? isLegal
                 ? isVi
-                  ? `Kết luận cho ${marker}: Văn bản pháp quy được đối chứng hợp lệ`
+                  ? `Kết luận cho ${marker}: Văn bản pháp luật được đối chứng hợp lệ`
                   : `Decision for ${marker}: Verified legal statute / regulation`
                 : isVi
                   ? `Kết luận cho ${marker}: Nguồn trang web trực tuyến hoạt động bình thường`
@@ -1063,7 +1179,7 @@ export function InteractiveDecisionFlowBoard({
     return {
       key: `hub-${verdict.citation_id}`,
       title: defaultTitle,
-      body: getVerdictExplanation(verdict, lang),
+      body: scrubBoardExplanation(getVerdictExplanation(verdict, lang), lang),
       tone: primaryTone,
       url: primaryExternalUrl,
     };
@@ -1809,7 +1925,13 @@ export function InteractiveDecisionFlowBoard({
           }`}
         >
           {/* Top Status Pill inside Hub */}
-          <div className={boardPhase === 'step-2' ? 'flex items-center justify-between gap-2 mb-2' : 'mb-2'}>
+          <div
+            className={
+              boardPhase === 'step-2'
+                ? 'flex items-center justify-between gap-2 mb-2.5'
+                : 'flex items-center justify-center gap-2 mb-2.5'
+            }
+          >
             <span
               className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold tracking-wider uppercase ${
                 activeCanvasTone === 'emerald'
@@ -2193,11 +2315,13 @@ export function InteractiveDecisionFlowBoard({
             isDarkSurface ? 'bg-[#0D1820] text-white' : 'bg-white text-slate-900'
           }`}
         >
-          <div className="text-[10px] font-bold uppercase tracking-wider opacity-75 mb-1">
-            {hubBadgeLabel}
-          </div>
-          <div className="text-sm font-bold">
-            {marker} {identity.shortHeader}
+          <div className="flex flex-col gap-2">
+            <div className="text-[10px] font-bold uppercase tracking-wider opacity-75">
+              {hubBadgeLabel}
+            </div>
+            <div className="text-sm font-bold">
+              {marker} {identity.shortHeader}
+            </div>
           </div>
           {boardPhase === 'step-2' ? (
             <div className="mt-2 space-y-1 text-xs">

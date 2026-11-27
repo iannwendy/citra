@@ -883,13 +883,76 @@ const AUTHOR_SURNAME_PARTICLES = new Set([
 const INSTITUTIONAL_VI_PHRASE_RE =
   /(?:^|[\s,.;:()[\]"'/-])(?:ban\s+chấp\s+hành|đảng\s+cộng\s+sản|quốc\s+hội|chính\s+phủ|thủ\s+tướng|chủ\s+tịch\s+nước|ủy\s+ban|uỷ\s+ban|tòa\s+án|toà\s+án|viện\s+kiểm\s+sát|trường\s+đại\s+học|đại\s+học|học\s+viện|ngân\s+hàng|tổng\s+cục|hội\s+đồng|mặt\s+trận\s+tổ\s+quốc|nhà\s+xuất\s+bản|tổ\s+chức|liên\s+hợp\s+quốc|hiệp\s+hội|trung\s+tâm|tập\s+đoàn|bộ\s+chính\s+trị|ban\s+bí\s+thư)(?=$|[\s,.;:()[\]"'/-])/i;
 
-const INSTITUTIONAL_VI_PREFIX_RE = /^(?:bộ|viện|cục|sở|nxb|ubnd|hdnd|hđnd)\s+/i;
+const INSTITUTIONAL_VI_PREFIX_RE =
+  /^(?:bộ\s+(?!luật\b|dữ\s+liệu\b|tiêu\s+chuẩn\b|quy\s+tắc\b|câu\s+hỏi\b)|(?:viện|cục|sở|nxb|ubnd|hdnd|hđnd)\s+)/i;
 
 const INSTITUTIONAL_GLOBAL_ACRONYM_RE =
   /\b(?:WHO|UNESCO|OECD|UNICEF|UNDP|UNHCR|IMF|WTO|FAO|IEEE|ACM|ISO|IEC|IETF|W3C|NIST|OWASP|CDC|FDA|NASA|NIH)\b/;
 
 const INSTITUTIONAL_EN_PHRASE_RE =
   /\b(?:ministry|department|commission|association|organi[sz]ation|institute|university|committee|congress|parliament|world\s+bank|united\s+nations|world\s+health|european\s+union|european\s+commission|national\s+institute|government|council|bureau|agency|foundation|society|administration|authority|corporation|academy|board\s+of|center\s+for|centre\s+for|office\s+of)\b/i;
+
+const CANONICAL_VI_INSTITUTION_CASING: Record<string, string> = {
+  'ban chấp hành trung ương': 'Ban Chấp hành Trung ương',
+  'đảng cộng sản việt nam': 'Đảng Cộng sản Việt Nam',
+  'thủ tướng chính phủ': 'Thủ tướng Chính phủ',
+  'chính phủ': 'Chính phủ',
+  'quốc hội': 'Quốc hội',
+  'bộ chính trị': 'Bộ Chính trị',
+  'ban bí thư': 'Ban Bí thư',
+  'chủ tịch nước': 'Chủ tịch nước',
+  'ủy ban thường vụ quốc hội': 'Ủy ban Thường vụ Quốc hội',
+  'uỷ ban thường vụ quốc hội': 'Ủy ban Thường vụ Quốc hội',
+  'bộ giáo dục và đào tạo': 'Bộ Giáo dục và Đào tạo',
+  'bộ khoa học và công nghệ': 'Bộ Khoa học và Công nghệ',
+  'bộ thông tin và truyền thông': 'Bộ Thông tin và Truyền thông',
+  'bộ công thương': 'Bộ Công Thương',
+  'bộ tài chính': 'Bộ Tài chính',
+  'bộ y tế': 'Bộ Y tế',
+  'bộ tư pháp': 'Bộ Tư pháp',
+  'bộ nội vụ': 'Bộ Nội vụ',
+};
+
+const LEGAL_DOCUMENT_TOKEN_RE =
+  /^(?:nghị\s+quyết|nghị\s+định|quyết\s+định|thông\s+tư|chỉ\s+thị|luật|bộ\s+luật|pháp\s+lệnh|hiến\s+pháp|quy\s+định|công\s+văn|kế\s+hoạch)\b/i;
+
+const STATUTE_NUMBER_RE = /\b\d+(?:\/\d{4})?\/[a-zà-ỹ0-9-]+\b/i;
+
+const VI_TITLE_OPENER_RE =
+  /^(?:nghiên\s+cứu|đề\s+xuất|giải\s+pháp|phát\s+triển|đánh\s+giá|phân\s+tích|ứng\s+dụng|xây\s+dựng|hoàn\s+thiện|thực\s+trạng|tác\s+động|ảnh\s+hưởng|vai\s+trò|một\s+số|khảo\s+sát|tổng\s+quan|định\s+hướng|chuyển\s+đổi|tối\s+ưu|thiết\s+kế|mô\s+hình|hệ\s+thống|phương\s+pháp|cơ\s+sở|nâng\s+cao|thúc\s+đẩy|quản\s+lý|áp\s+dụng|tìm\s+hiểu|báo\s+cáo\s+về)\b/i;
+
+const EN_TITLE_OPENER_RE =
+  /^(?:a\s+study\s+of|an?\s+empirical|towards?\s+|on\s+the\s+|research\s+on|analysis\s+of|evaluation\s+of|survey\s+of|investigating|exploring|improving|learning\s+to|making\s+a|understanding|building|designing)\b/i;
+
+const DANGLING_TITLE_STOPWORDS = new Set([
+  'và',
+  'của',
+  'về',
+  'tại',
+  'ở',
+  'trong',
+  'cho',
+  'với',
+  'đến',
+  'từ',
+  'hoặc',
+  'hay',
+  'các',
+  'những',
+  'and',
+  'of',
+  'for',
+  'in',
+  'on',
+  'to',
+  'the',
+  'a',
+  'an',
+  'with',
+  '-',
+  '–',
+  '—',
+]);
 
 export function isInstitutionalAuthor(name: string | null | undefined): boolean {
   const cleaned = String(name ?? '')
@@ -902,6 +965,188 @@ export function isInstitutionalAuthor(name: string | null | undefined): boolean 
     INSTITUTIONAL_GLOBAL_ACRONYM_RE.test(cleaned) ||
     INSTITUTIONAL_EN_PHRASE_RE.test(cleaned)
   );
+}
+
+export function isLegalDocumentNoiseToken(name: string | null | undefined): boolean {
+  const cleaned = String(name ?? '').trim();
+  if (!cleaned) return false;
+  if (isInstitutionalAuthor(cleaned)) return false;
+  return LEGAL_DOCUMENT_TOKEN_RE.test(cleaned) || STATUTE_NUMBER_RE.test(cleaned);
+}
+
+export function looksLikeTitleSentence(raw: string | null | undefined): boolean {
+  const cleaned = String(raw ?? '')
+    .replace(/^\s*(?:\[\s*\d+[a-z]?\s*\]|\(\s*[a-z]\s*\)|\d+[a-z]?[.)])\s*/i, '')
+    .trim();
+  if (!cleaned) return false;
+  if (/\bhttps?:\/\//i.test(cleaned)) return true;
+
+  const words = cleaned
+    .split(/\s+/)
+    .map((w) => w.replace(/^[^A-Za-zÀ-ỹ0-9]+|[^A-Za-zÀ-ỹ0-9]+$/g, ''))
+    .filter(Boolean);
+  if (words.length < 4) return false;
+
+  if (VI_TITLE_OPENER_RE.test(cleaned)) return true;
+  if (words.length >= 5 && EN_TITLE_OPENER_RE.test(cleaned) && !/\b[A-ZÀ-Ỹ]\./.test(cleaned)) {
+    return true;
+  }
+
+  if (isInstitutionalAuthor(cleaned) && words.length <= 10) return false;
+
+  // Multi-author lists with explicit initials (e.g. "vaswani A., shazeer N.") are not titles
+  if (/\b[A-ZÀ-Ỹ]\./.test(cleaned)) return false;
+
+  const lowercaseSentenceWords = words.filter(
+    (w) =>
+      /^[a-zà-ỹ]{2,}$/.test(w) &&
+      !AUTHOR_SURNAME_PARTICLES.has(w) &&
+      !/^(?:et|al|and|va|và|of|for|in|the)$/i.test(w),
+  );
+  if (lowercaseSentenceWords.length >= 5) return true;
+  if (words.length >= 8 && lowercaseSentenceWords.length >= 4 && !cleaned.includes(',')) {
+    return true;
+  }
+  return false;
+}
+
+export function normalizeAcademicAuthorDisplay(name: string): string {
+  if (!name || name === '—') return name;
+  const cleaned = name.replace(/\.{2,}/g, '.').replace(/\s+/g, ' ').trim();
+  if (!cleaned) return cleaned;
+
+  const lowerKey = cleaned.toLowerCase();
+  if (Object.prototype.hasOwnProperty.call(CANONICAL_VI_INSTITUTION_CASING, lowerKey)) {
+    return CANONICAL_VI_INSTITUTION_CASING[lowerKey];
+  }
+
+  if (isInstitutionalAuthor(cleaned)) {
+    if (!/[A-ZÀ-Ỹ]/.test(cleaned)) {
+      return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+    }
+    return cleaned;
+  }
+
+  return cleaned
+    .split(/\s+/)
+    .map((word, idx) => {
+      if (!word) return word;
+      const low = word.toLowerCase();
+      if (
+        idx > 0 &&
+        (AUTHOR_SURNAME_PARTICLES.has(low) ||
+          /^(?:et|al|and|va|và|of|for|in|the)$/i.test(low))
+      ) {
+        return word;
+      }
+      if (/^[a-zà-ỹ]{2,}$/.test(word)) {
+        if (AUTHOR_SURNAME_PARTICLES.has(low) && idx === 0) {
+          return word;
+        }
+        return word.charAt(0).toUpperCase() + word.slice(1);
+      }
+      return word;
+    })
+    .join(' ');
+}
+
+function collapseSplitInstitutionalTokens(authors: string[]): string[] {
+  if (authors.length >= 2 && authors.every((a) => !/[\s,.]/.test(a.trim()))) {
+    const joined = authors.map((a) => a.trim()).join(' ');
+    if (isInstitutionalAuthor(joined)) {
+      return [normalizeAcademicAuthorDisplay(joined)];
+    }
+  }
+  return authors;
+}
+
+function extractLeadAuthorBeforeYear(rawText?: string | null): string {
+  if (!rawText) return '';
+  const stripped = rawText
+    .replace(/^\s*(?:\[\s*\d+[a-z]?\s*\]|\(\s*[a-z]\s*\)|\d+[a-z]?[.)])\s*/i, '')
+    .replace(/^\s*(?:\[\s*\d+[a-z]?\s*\]|\(\s*[a-z]\s*\)|\d+[a-z]?[.)])\s*/i, '')
+    .trim();
+  const apa = stripped.match(/^(.+?)\s*\(\s*(?:19|20)\d{2}[a-z]?\s*\)/);
+  if (apa) {
+    return apa[1].replace(/[.,;:]+$/, '').trim();
+  }
+  return '';
+}
+
+function looksLikeInvertedInstitutionalAuthor(
+  candidate: string,
+  institutionalRaw: string,
+): boolean {
+  if (!/\b[A-ZÀ-Ỹ]\./.test(candidate)) return false;
+  const instWords = institutionalRaw.split(/\s+/).filter(Boolean);
+  if (instWords.length < 2) return false;
+  const lastWord = instWords[instWords.length - 1].toLowerCase();
+  const candFirstWord = candidate.split(/[\s,]+/)[0]?.toLowerCase() ?? '';
+  return candFirstWord === lastWord;
+}
+
+export function resolveDisplayAuthors(
+  dbAuthors: string[] | null | undefined,
+  rawText?: string | null,
+  parsedFallbackAuthors?: string | null,
+): string[] {
+  const leadFromRaw = extractLeadAuthorBeforeYear(rawText);
+  const candidateInst =
+    (leadFromRaw && isInstitutionalAuthor(leadFromRaw) && !looksLikeTitleSentence(leadFromRaw)
+      ? leadFromRaw
+      : '') ||
+    (parsedFallbackAuthors &&
+    parsedFallbackAuthors !== '—' &&
+    isInstitutionalAuthor(parsedFallbackAuthors) &&
+    !looksLikeTitleSentence(parsedFallbackAuthors)
+      ? parsedFallbackAuthors
+      : '');
+
+  const rawDb = (dbAuthors ?? [])
+    .map((a) => String(a ?? '').trim())
+    .filter((a) => a.length > 0 && !isGarbageAuthorToken(a));
+
+  const collapsedDb = collapseSplitInstitutionalTokens(rawDb);
+
+  if (candidateInst) {
+    const normalizedInst = normalizeAcademicAuthorDisplay(candidateInst);
+    if (
+      collapsedDb.length === 0 ||
+      collapsedDb.some((a) => looksLikeInvertedInstitutionalAuthor(a, candidateInst)) ||
+      collapsedDb.some((a) => isLegalDocumentNoiseToken(a)) ||
+      collapsedDb.every((a) => isInstitutionalAuthor(a) || isLegalDocumentNoiseToken(a))
+    ) {
+      return [normalizedInst];
+    }
+  }
+
+  const cleanedDb = collapsedDb
+    .filter((a) => !isLegalDocumentNoiseToken(a) && !looksLikeTitleSentence(a))
+    .map(normalizeAcademicAuthorDisplay);
+
+  if (cleanedDb.length > 0) {
+    if (
+      cleanedDb.length > 1 &&
+      isInstitutionalAuthor(cleanedDb[0]) &&
+      VI_DIACRITIC_CHAR_RE.test(cleanedDb[0]) &&
+      cleanedDb.slice(1).every((a) => isInstitutionalAuthor(a) && VI_DIACRITIC_CHAR_RE.test(a))
+    ) {
+      return [cleanedDb[0]];
+    }
+    return cleanedDb;
+  }
+
+  if (
+    parsedFallbackAuthors &&
+    parsedFallbackAuthors !== '—' &&
+    !looksLikeTitleSentence(parsedFallbackAuthors)
+  ) {
+    return splitRawAuthorString(parsedFallbackAuthors)
+      .filter((a) => !isLegalDocumentNoiseToken(a) && !looksLikeTitleSentence(a))
+      .map(normalizeAcademicAuthorDisplay);
+  }
+
+  return [];
 }
 
 function isGarbageAuthorToken(raw: string): boolean {
@@ -931,10 +1176,24 @@ function cleanFallbackTitle(fallbackTitle?: string | null): string {
   let cleaned = fallbackTitle
     .replace(/^\s*(?:\[\s*\d+[a-z]?\s*\]|\(\s*[a-z]\s*\)|\d+[a-z]?[.)])\s*/i, '')
     .replace(/^\s*\d+\s+(?=[A-Za-zÀ-ỹ])/, '')
+    .replace(/\bhttps?:\/\/\S+/gi, '')
+    .replace(/,?\s*ngày\s+\d{1,2}[/-]\d{1,2}[/-](?:19|20)\d{2}\.?/gi, '')
     .replace(/^[“"]|[”".,]+$/g, '')
     .trim();
   if (!cleaned || isGarbageAuthorToken(cleaned)) return '';
   cleaned = cleaned.replace(/\s+/g, ' ');
+  const words = cleaned.split(' ');
+  if (words.length > 6) {
+    const picked = words.slice(0, 6);
+    while (
+      picked.length > 4 &&
+      DANGLING_TITLE_STOPWORDS.has(picked[picked.length - 1].toLowerCase())
+    ) {
+      picked.pop();
+    }
+    const base = picked.join(' ').replace(/[,.;:\s-]+$/, '');
+    return base.length <= 37 ? `${base}…` : truncateClean(base, 38);
+  }
   return truncateClean(cleaned, 38);
 }
 
@@ -944,7 +1203,7 @@ export function splitRawAuthorString(rawAuthors: string | null | undefined): str
     .replace(/\s*\(\s*(?:19|20)\d{2}[a-z]?\s*\)\s*$/g, '')
     .replace(/[.,;:]+$/, '')
     .trim();
-  if (!trimmed || isGarbageAuthorToken(trimmed)) return [];
+  if (!trimmed || isGarbageAuthorToken(trimmed) || looksLikeTitleSentence(trimmed)) return [];
 
   // Preserve intact institutional names that may contain commas or "và" / "and"
   // e.g. "Bộ Giáo dục và Đào tạo", "Bộ Văn hóa, Thể thao và Du lịch",
@@ -954,7 +1213,7 @@ export function splitRawAuthorString(rawAuthors: string | null | undefined): str
     !trimmed.includes(';') &&
     !/\bet\s+al\.?/i.test(trimmed)
   ) {
-    return [trimmed];
+    return [normalizeAcademicAuthorDisplay(trimmed)];
   }
 
   return trimmed
@@ -963,7 +1222,7 @@ export function splitRawAuthorString(rawAuthors: string | null | undefined): str
     .flatMap((chunk) => {
       const cleanChunk = chunk.trim();
       if (!cleanChunk) return [];
-      if (isInstitutionalAuthor(cleanChunk)) return [cleanChunk];
+      if (isInstitutionalAuthor(cleanChunk)) return [normalizeAcademicAuthorDisplay(cleanChunk)];
       const commaParts = cleanChunk.split(/,\s*/).filter(Boolean);
       if (commaParts.length <= 1) return [cleanChunk];
       // Pair "Surname, F. M." without splitting the initials into a separate author
@@ -981,7 +1240,7 @@ export function splitRawAuthorString(rawAuthors: string | null | undefined): str
       return grouped;
     })
     .map((s) => s.replace(/^[\s,;:.&]+|[\s,;:.&]+$/g, '').trim())
-    .filter((s) => s.length > 0 && !isGarbageAuthorToken(s));
+    .filter((s) => s.length > 0 && !isGarbageAuthorToken(s) && !isLegalDocumentNoiseToken(s));
 }
 
 function extractShortSingleAuthor(rawAuthor: string): string {
@@ -990,18 +1249,25 @@ function extractShortSingleAuthor(rawAuthor: string): string {
     .replace(/\bet\s+al\.?/gi, '')
     .replace(/^[\s,;:.&]+|[\s,;:.&]+$/g, '')
     .trim();
-  if (!cleaned || isGarbageAuthorToken(cleaned)) return '';
+  if (
+    !cleaned ||
+    isGarbageAuthorToken(cleaned) ||
+    isLegalDocumentNoiseToken(cleaned) ||
+    looksLikeTitleSentence(cleaned)
+  ) {
+    return '';
+  }
 
   // Keep institutional/corporate authors completely intact (NEVER split or invert)
   if (isInstitutionalAuthor(cleaned)) {
-    return truncateClean(cleaned, 48);
+    return truncateClean(normalizeAcademicAuthorDisplay(cleaned), 48);
   }
 
   // APA / "Last, F. M." format (e.g. "De Choudhury, M." or "Vaswani, A.")
   if (cleaned.includes(',')) {
     const beforeComma = cleaned.split(',')[0].trim();
     if (beforeComma.length >= 2 && !isGarbageAuthorToken(beforeComma)) {
-      return truncateClean(beforeComma, 32);
+      return truncateClean(normalizeAcademicAuthorDisplay(beforeComma), 32);
     }
   }
 
@@ -1017,7 +1283,7 @@ function extractShortSingleAuthor(rawAuthor: string): string {
 
   if (words.length === 0) return '';
   if (words.length === 1) {
-    return isGarbageAuthorToken(words[0]) ? '' : words[0];
+    return isGarbageAuthorToken(words[0]) ? '' : normalizeAcademicAuthorDisplay(words[0]);
   }
 
   // Keep Vietnamese personal names intact (e.g. "Nguyễn Văn An", "Trần Thị Minh Thư")
@@ -1026,7 +1292,7 @@ function extractShortSingleAuthor(rawAuthor: string): string {
     words.length <= 4 &&
     VI_DIACRITIC_CHAR_RE.test(cleaned)
   ) {
-    return truncateClean(cleaned, 34);
+    return truncateClean(normalizeAcademicAuthorDisplay(cleaned), 34);
   }
 
   // Preserve compound Western surname particles ("De Choudhury", "van der Maaten")
@@ -1038,13 +1304,13 @@ function extractShortSingleAuthor(rawAuthor: string): string {
       words.length >= 3 &&
       AUTHOR_SURNAME_PARTICLES.has(words[words.length - 3].toLowerCase())
     ) {
-      return `${words[words.length - 3]} ${words[words.length - 2]} ${words[words.length - 1]}`;
+      return `${words[words.length - 3]} ${words[words.length - 2]} ${normalizeAcademicAuthorDisplay(words[words.length - 1])}`;
     }
-    return `${words[words.length - 2]} ${words[words.length - 1]}`;
+    return `${words[words.length - 2]} ${normalizeAcademicAuthorDisplay(words[words.length - 1])}`;
   }
 
   const surname = words[words.length - 1];
-  return isGarbageAuthorToken(surname) ? '' : surname;
+  return isGarbageAuthorToken(surname) ? '' : normalizeAcademicAuthorDisplay(surname);
 }
 
 export function formatAcademicAuthorShort(
@@ -1052,20 +1318,28 @@ export function formatAcademicAuthorShort(
   fallbackTitle?: string | null,
   lang: AcademicLang = 'vi',
 ): string {
-  const rawList = (authors ?? []).map((a) => String(a ?? '').trim()).filter(Boolean);
-  const hadExplicitEtAl = rawList.some((a) => /\bet\s+al\.?/i.test(a));
+  const initialList = (authors ?? []).map((a) => String(a ?? '').trim()).filter(Boolean);
+  const rawList = collapseSplitInstitutionalTokens(initialList);
+  const hadExplicitEtAl = initialList.some((a) => /\bet\s+al\.?/i.test(a));
 
-  // Normalize entries while respecting institutional authors
+  // Normalize entries while respecting institutional authors & rejecting title/statute noise
   const normalizedList: string[] = [];
+  let inferredTitleFallback: string | null = null;
   for (const entry of rawList) {
     const cleaned = entry
       .replace(/^\s*(?:\[\s*\d+[a-z]?\s*\]|\(\s*[a-z]\s*\)|\d+[a-z]?[.)])\s*/i, '')
       .replace(/\bet\s+al\.?/gi, '')
       .replace(/[.,;:]+$/, '')
       .trim();
-    if (!cleaned || isGarbageAuthorToken(cleaned)) continue;
+    if (!cleaned || isGarbageAuthorToken(cleaned) || isLegalDocumentNoiseToken(cleaned)) {
+      continue;
+    }
+    if (looksLikeTitleSentence(cleaned)) {
+      if (!inferredTitleFallback) inferredTitleFallback = cleaned;
+      continue;
+    }
     if (isInstitutionalAuthor(cleaned)) {
-      normalizedList.push(cleaned);
+      normalizedList.push(normalizeAcademicAuthorDisplay(cleaned));
     } else if (rawList.length === 1 && /(?:;|\s+&\s+|\s+and\s+|\s+và\s+)/i.test(cleaned)) {
       normalizedList.push(...splitRawAuthorString(cleaned));
     } else {
@@ -1074,7 +1348,7 @@ export function formatAcademicAuthorShort(
   }
 
   if (normalizedList.length === 0) {
-    const titleFallback = cleanFallbackTitle(fallbackTitle);
+    const titleFallback = cleanFallbackTitle(fallbackTitle || inferredTitleFallback);
     if (titleFallback) return titleFallback;
     return lang === 'vi' ? 'Tài liệu tham khảo' : 'Reference';
   }
@@ -1084,13 +1358,19 @@ export function formatAcademicAuthorShort(
   const firstShort = extractShortSingleAuthor(firstRaw);
 
   if (!firstShort) {
-    const titleFallback = cleanFallbackTitle(fallbackTitle);
+    const titleFallback = cleanFallbackTitle(fallbackTitle || inferredTitleFallback);
     if (titleFallback) return titleFallback;
     return lang === 'vi' ? 'Tài liệu tham khảo' : 'Reference';
   }
 
-  // Single institutional author: ALWAYS keep intact, NEVER append "et al."
-  if (firstIsInstitutional && normalizedList.length === 1) {
+  // Single institutional author (or Vietnamese institutional body with subordinate/duplicate organs):
+  // ALWAYS keep intact, NEVER append "et al."
+  if (
+    firstIsInstitutional &&
+    (normalizedList.length === 1 ||
+      (VI_DIACRITIC_CHAR_RE.test(firstRaw) &&
+        normalizedList.slice(1).every((a) => isInstitutionalAuthor(a))))
+  ) {
     return firstShort;
   }
 
@@ -1177,9 +1457,15 @@ export function sanitizeReasoningForDisplay(
         'Mã DOI sử dụng tiền tố không hợp lệ hoặc chưa được đăng ký chính thức.',
       )
       .replace(
-        /URL\s+domain\s+['"]([^'"]+)['"]\s+is\s+(?:a\s+)?(?:placeholder\/fake|fake\/placeholder|fake|placeholder)\s+domain\.?/gi,
-        (_m, domain: string) =>
-          `Tên miền URL '${domain}' là tên miền mẫu hoặc không tồn tại thực tế.`,
+        /URL\s+domain\s+['"]([^'"]+)['"]\s+is\s+(?:a\s+)?(?:placeholder\/fake|fake\/placeholder|fake|placeholder)\s+domain(?:\s*\(\s*example\.com,\s*test\.com,\s*localhost,\s*etc\.?\s*\)\s*and\s+does\s+not\s+belong\s+to\s+a\s+scholarly\s+registry)?\.?/gi,
+        (fullMatch: string, domain: string) =>
+          /does\s+not\s+belong\s+to\s+a\s+scholarly\s+registry/i.test(fullMatch)
+            ? `Tên miền URL '${domain}' là tên miền mẫu hoặc không tồn tại thực tế (như example.com, test.com, localhost...) và không thuộc cơ sở dữ liệu học thuật.`
+            : `Tên miền URL '${domain}' là tên miền mẫu hoặc không tồn tại thực tế.`,
+      )
+      .replace(
+        /\(\s*example\.com,\s*test\.com,\s*localhost,\s*etc\.?\s*\)\s*and\s+does\s+not\s+belong\s+to\s+a\s+scholarly\s+registry\.?/gi,
+        '(như example.com, test.com, localhost...) và không thuộc cơ sở dữ liệu học thuật.',
       )
       .replace(
         /URL\s+domain\s+(?:is\s+)?(?:clearly\s+)?(?:fake|placeholder|non-academic)\.?/gi,
@@ -1208,9 +1494,11 @@ export function sanitizeReasoningForDisplay(
           `DOI (${doi}) matches an invalid/unregistered test prefix.`,
       )
       .replace(
-        /URL\s+domain\s+['"]([^'"]+)['"]\s+is\s+(?:a\s+)?(?:placeholder\/fake|fake\/placeholder|fake)\s+domain\.?/gi,
-        (_m, domain: string) =>
-          `URL domain '${domain}' is a placeholder or non-existent domain.`,
+        /URL\s+domain\s+['"]([^'"]+)['"]\s+is\s+(?:a\s+)?(?:placeholder\/fake|fake\/placeholder|fake)\s+domain(?:\s*\(\s*example\.com,\s*test\.com,\s*localhost,\s*etc\.?\s*\)\s*and\s+does\s+not\s+belong\s+to\s+a\s+scholarly\s+registry)?\.?/gi,
+        (fullMatch: string, domain: string) =>
+          /does\s+not\s+belong\s+to\s+a\s+scholarly\s+registry/i.test(fullMatch)
+            ? `URL domain '${domain}' is a placeholder or non-existent domain (example.com, test.com, localhost, etc.) and does not belong to a scholarly registry.`
+            : `URL domain '${domain}' is a placeholder or non-existent domain.`,
       )
       .replace(/\bknown\s+fabricated\s+DOI\s+pattern\b/gi, 'invalid/unregistered DOI test prefix')
       .replace(/\(\s*HTTP\s+200\s+OK\s*\)/gi, '(link active)')
@@ -1221,7 +1509,7 @@ export function sanitizeReasoningForDisplay(
 
   out = out
     .replace(/\)\)+/g, ')')
-    .replace(/\.\.(?!\.)/g, '.')
+    .replace(/(?<!\.)\.\.(?!\.)/g, '.')
     .replace(/\s{2,}/g, ' ')
     .replace(/([A-Za-zÀ-ỹ]):(?=[A-Za-zÀ-ỹ])/g, '$1: ')
     .trim();

@@ -1438,5 +1438,259 @@ describe('Report Page UI/UX Redesign (Non-Tech Clarity & Progressive Disclosure)
       expect(document.body.textContent).not.toContain('[Neural:');
       unmountModal();
     });
+
+    it('Round 3 [P2-R2-2/3 & P3-R2-2/4/5]: preserves Vietnamese institutional authors in EssayPage L1 & table, fixes R44 [4] title-sentence/year in Network, scrubs HTTP 200 OK, and unifies Revision Diff VI labels', async () => {
+      // 1. [P2-R2-3] R44 ref [4] must NEVER become "mới et al. (2021)"
+      const r44Ref4Raw =
+        '4. Nghiên cứu đề xuất đổi mới và hoàn thiện thể chế phát triển khoa học - công nghệ và đổi mới sáng tạo ở Việt Nam giai đoạn 2021 - 2030. https://vista.gov.vn, ngày 25/12/2025.';
+      const r44Identity = extractCleanCitationIdentity(
+        r44Ref4Raw,
+        {
+          authors: ['Phạm Thị Thúy Vân'],
+          title: 'Unrelated Crossref Candidate',
+          year: '2025',
+        },
+        { citedYear: '2025', citedAuthors: [] },
+      );
+      expect(r44Identity.citedYear).toBe('2025');
+      expect(r44Identity.authorOnly).toBe('Nghiên cứu đề xuất đổi mới…');
+      expect(r44Identity.shortHeader).toBe('Nghiên cứu đề xuất đổi mới… (2025)');
+      expect(r44Identity.shortHeader).not.toContain('mới et al.');
+      expect(r44Identity.shortHeader).not.toContain('2021');
+
+      // Also without explicit options (pure raw-text parse)
+      const r44IdentityRawOnly = extractCleanCitationIdentity(r44Ref4Raw, null);
+      expect(r44IdentityRawOnly.citedYear).toBe('2025');
+      expect(r44IdentityRawOnly.authorOnly).toBe('Nghiên cứu đề xuất đổi mới…');
+
+      // 2. [P3-R2-2 & P3-R2-5] InteractiveDecisionFlowBoard scrubs (HTTP 200 OK) & uses Văn bản pháp luật in VI
+      const liveLegalVerdict = makeVerdict({
+        citation_id: 'r44-v1',
+        numeric_index: 1,
+        citation_raw:
+          '1. Ban Chấp hành Trung ương (2024). Nghị quyết số 57-NQ/TƯ ngày 22/12/2024. https://chinhphu.vn/nq57',
+        label: 'resource',
+        confidence: 0.98,
+        url_status: 'alive',
+        url_status_code: 200,
+        triggered_rules: ['R-LEGAL-DOCUMENT'],
+      });
+      await i18n.changeLanguage('vi');
+      const { unmount: unmountFlowVi } = renderWithProviders(
+        <InteractiveDecisionFlowBoard verdict={liveLegalVerdict} />,
+      );
+      const storyVi = screen.getByTestId('flow-story-card').textContent ?? '';
+      expect(storyVi).toContain('Liên kết đang hoạt động bình thường.');
+      expect(storyVi).not.toContain('HTTP 200 OK');
+      expect(storyVi).toContain('Văn bản pháp luật');
+      unmountFlowVi();
+
+      await i18n.changeLanguage('en');
+      const { unmount: unmountFlowEn } = renderWithProviders(
+        <InteractiveDecisionFlowBoard verdict={liveLegalVerdict} />,
+      );
+      const storyEn = screen.getByTestId('flow-story-card').textContent ?? '';
+      expect(storyEn).toContain('Source link is active and reachable.');
+      expect(storyEn).not.toContain('HTTP 200 OK');
+      unmountFlowEn();
+
+      // 3. [P2-R2-2 & P3-R2-4] EssayPage R44 + R25 real DB shapes + VI Revision Diff labels + OpenAlex candidate card
+      const r44R25Report = makeReport({
+        essay_id: 544,
+        filename: 'R44_R25_Institutional_Audit.pdf',
+        references: [
+          {
+            id: 1,
+            reference_id: 'ref-0001',
+            numeric_index: 1,
+            raw_text:
+              '1. Ban Chấp hành Trung ương (2024). Nghị quyết số 57-NQ/TƯ về đột phá khoa học công nghệ.',
+            citation_type: 'reference_list',
+            authors: [
+              'Ban Chấp Hành Trung Ương',
+              'Bộ Chính Trị',
+              'Nghị Quyết Số 57-nq/tư',
+              'Nghị Quyết 57-nq/tư',
+            ],
+            year: '2024',
+            title: 'Nghị quyết số 57-NQ/TƯ về đột phá khoa học công nghệ',
+            venue: null,
+            doi: null,
+            url: null,
+            confidence: 1,
+          },
+          {
+            id: 2,
+            reference_id: 'ref-0002',
+            numeric_index: 2,
+            raw_text:
+              '2. Đảng Cộng sản Việt Nam (2021). Văn kiện Đại hội đại biểu toàn quốc lần thứ XIII.',
+            citation_type: 'reference_list',
+            authors: ['Nam Đ. C. V.'],
+            year: '2021',
+            title: 'Văn kiện Đại hội đại biểu toàn quốc lần thứ XIII',
+            venue: 'NXB Chính trị quốc gia Sự thật',
+            doi: null,
+            url: null,
+            confidence: 1,
+          },
+          {
+            id: 3,
+            reference_id: 'ref-0003',
+            numeric_index: 3,
+            raw_text:
+              '3. Chính phủ. (2023). Nghị định số 13/2023/NĐ-CP ngày 17/04/2023 về bảo vệ dữ liệu cá nhân.',
+            citation_type: 'reference_list',
+            authors: ['chính phủ', 'nghị định số 13/2023/nđ-cp', 'nghị định 13/2023/nđ-cp'],
+            year: '2023',
+            title: 'Nghị định số 13/2023/NĐ-CP ngày 17/04/2023 về bảo vệ dữ liệu cá nhân',
+            venue: null,
+            doi: null,
+            url: null,
+            confidence: 1,
+          },
+          {
+            id: 4,
+            reference_id: 'ref-0004',
+            numeric_index: 4,
+            raw_text:
+              '4. Vaswani, A., Shazeer, N., Parmar, N. (2017). Attention Is All You Need. NeurIPS.',
+            citation_type: 'reference_list',
+            authors: ['vaswani A.', 'shazeer N.', 'parmar N.'],
+            year: '2017',
+            title: 'Attention Is All You Need',
+            venue: 'NeurIPS',
+            doi: null,
+            url: null,
+            confidence: 1,
+          },
+        ] as never,
+        verdicts: [
+          makeVerdict({
+            citation_id: 'r44-1',
+            numeric_index: 1,
+            citation_raw:
+              '1. Ban Chấp hành Trung ương (2024). Nghị quyết số 57-NQ/TƯ về đột phá khoa học công nghệ.',
+            label: 'resource',
+            triggered_rules: ['R-LEGAL-DOCUMENT'],
+            citation_link: { occurrence_id: 'r44-1', reference_id: 'ref-0001', method: 'exact', confidence: 1 },
+          }),
+          makeVerdict({
+            citation_id: 'r44-2',
+            numeric_index: 2,
+            citation_raw:
+              '2. Đảng Cộng sản Việt Nam (2021). Văn kiện Đại hội đại biểu toàn quốc lần thứ XIII.',
+            label: 'verified',
+            citation_link: { occurrence_id: 'r44-2', reference_id: 'ref-0002', method: 'exact', confidence: 1 },
+          }),
+          makeVerdict({
+            citation_id: 'r25-3',
+            numeric_index: 3,
+            citation_raw:
+              '3. Chính phủ. (2023). Nghị định số 13/2023/NĐ-CP ngày 17/04/2023 về bảo vệ dữ liệu cá nhân.',
+            label: 'resource',
+            triggered_rules: ['R-LEGAL-DOCUMENT'],
+            citation_link: { occurrence_id: 'r25-3', reference_id: 'ref-0003', method: 'exact', confidence: 1 },
+          }),
+          makeVerdict({
+            citation_id: 'r25-4',
+            numeric_index: 4,
+            citation_raw:
+              '4. Vaswani, A., Shazeer, N., Parmar, N. (2017). Attention Is All You Need. NeurIPS.',
+            label: 'suspected_hallucination',
+            citation_link: { occurrence_id: 'r25-4', reference_id: 'ref-0004', method: 'exact', confidence: 1 },
+            matched_sources: [
+              {
+                source: 'openalex',
+                title: 'Attention Is All You Need',
+                authors: ['Ashish Vaswani'],
+                year: '2017',
+                confidence: 0.45,
+                matched_fields: ['title'],
+                checked_at: '2026-11-27T00:00:00Z',
+              },
+            ],
+          }),
+        ],
+        revision_diff: {
+          has_previous_revision: true,
+          is_same_manuscript_family: true,
+          previous_essay_id: 543,
+          current_essay_id: 544,
+          previous_filename: 'R44_v1.pdf',
+          current_filename: 'R44_R25_Institutional_Audit.pdf',
+          cis_before: 70.0,
+          cis_after: 82.0,
+          cis_delta: 12.0,
+          resolved_issues_count: 2,
+          new_issues_count: 0,
+          counts_before: {
+            total: 4,
+            verified: 1,
+            metadata_error: 2,
+            suspected_hallucination: 1,
+            unresolved: 1,
+          },
+          counts_after: {
+            total: 4,
+            verified: 2,
+            metadata_error: 1,
+            suspected_hallucination: 1,
+            unresolved: 0,
+          },
+          citation_changes: [],
+        },
+      });
+      vi.spyOn(api, 'getEssay').mockResolvedValueOnce(r44R25Report);
+
+      await i18n.changeLanguage('vi');
+      const { container } = renderWithProviders(
+        <Routes>
+          <Route path="/verification/report/:id" element={<EssayPage />} />
+        </Routes>,
+        { user: makeUser('teacher', 'ultra'), initialRoute: '/verification/report/544?citation=r44-2' },
+      );
+
+      await waitFor(() =>
+        expect(screen.getByTestId('revision-diff-banner')).toBeDefined(),
+      );
+
+      // Unified VI Revision Diff labels
+      const revBannerText = screen.getByTestId('revision-diff-banner').textContent ?? '';
+      expect(revBannerText).toContain('Sai lệch thông tin:');
+      expect(revBannerText).toContain('Chưa đủ dữ liệu:');
+      expect(revBannerText).not.toContain('Sai thông tin:');
+      expect(revBannerText).not.toContain('Chưa rõ:');
+
+      // L1 queue cards & Field Comparison Table preserve Vietnamese institutional authors cleanly
+      const listboxText = container.querySelector('[role="listbox"]')?.textContent ?? '';
+      expect(listboxText).toContain('Ban Chấp hành Trung ương (2024)');
+      expect(listboxText).not.toContain('Ban Chấp Hành Trung Ương et al.');
+      expect(listboxText).toContain('Đảng Cộng sản Việt Nam (2021)');
+      expect(listboxText).not.toContain('[2]Nam (2021)');
+      expect(listboxText).toContain('Chính phủ (2023)');
+      expect(listboxText).not.toContain('chính phủ et al.');
+      expect(listboxText).toContain('Vaswani et al. (2017)');
+      expect(listboxText).not.toContain('vaswani et al.');
+
+      // Active citation r44-2 Field Comparison Table Tác giả cell must NOT show "Nam Đ. C. V."
+      const tableText = container.querySelector('table')?.textContent ?? '';
+      expect(tableText).toContain('Đảng Cộng sản Việt Nam');
+      expect(tableText).not.toContain('Nam Đ. C. V.');
+
+      // Open candidate card in 1. Nguồn đối chiếu for r25-4 -> OpenAlex must NOT carry truncate
+      const r25Card = container.querySelector('[data-citation-id="r25-4"]');
+      fireEvent.click(r25Card!);
+      fireEvent.click(screen.getByTestId('deep-verification-drawer-toggle'));
+      const openAlexCard = await waitFor(() => {
+        const cards = screen.getAllByTestId('deep-source-card');
+        const found = cards.find((c) => c.textContent?.includes('OpenAlex'));
+        expect(found).toBeDefined();
+        return found!;
+      });
+      expect(openAlexCard.className).toContain('sm:col-span-2');
+      const titleP = openAlexCard.querySelector('p');
+      expect(titleP?.className).not.toContain('truncate');
+    });
   });
 });

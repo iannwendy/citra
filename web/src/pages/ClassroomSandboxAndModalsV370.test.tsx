@@ -1149,4 +1149,69 @@ describe('v3.70.0 Classroom, Pending Reviews, Sandbox, Modals & RuleInspector', 
     );
     expect(await screen.findByTestId('pending-review-row-701')).toBeTruthy();
   });
+
+  it('Round 3 [P3-R2-3 & P3-03/04]: PendingReviewsPage uses Invalid Domain in EN, ClassDetailPage uses Điểm CIS TB in VI, and LiveCitationSandbox uses bài báo học thuật', async () => {
+    // 1. PendingReviewsPage EN fake_domain -> "✕ Invalid Domain" (never "✕ Fake Domain")
+    await i18n.changeLanguage('en');
+    vi.spyOn(api, 'listMyClasses').mockResolvedValue([makeClass({ id: 20, name: 'AI Research' })]);
+    vi.spyOn(api, 'listPendingReviews').mockResolvedValue([
+      {
+        verdict_id: 801,
+        essay_id: 91,
+        filename: 'FakeDomainCheck.pdf',
+        student_username: 'sv_test',
+        citation_raw: 'Fake (2025). https://example.com/nonexistent',
+        label: 'suspected_hallucination',
+        confidence: 0.95,
+        reasoning: 'Placeholder domain.',
+        validated_at: '2026-11-27T08:00:00Z',
+        url_status: 'fake_domain',
+      },
+    ]);
+    const { unmount: unmountPending } = renderWithAuth(<PendingReviewsPage />, {
+      route: '/teacher/reviews',
+    });
+    const urlPill = await screen.findByTestId('pending-url-status-801');
+    expect(urlPill.textContent).toContain('✕ Invalid Domain');
+    expect(urlPill.textContent).not.toContain('Fake Domain');
+    unmountPending();
+
+    // 2. ClassDetailPage VI KPI label -> "Điểm CIS TB" (matching /dashboard)
+    await i18n.changeLanguage('vi');
+    vi.spyOn(api, 'listMyClasses').mockResolvedValue([makeClass({ id: 21, name: 'Lớp KLTN' })]);
+    vi.spyOn(api, 'listClassStudents').mockResolvedValue([]);
+    vi.spyOn(api, 'listClassEssays').mockResolvedValue([]);
+    vi.spyOn(api, 'getClassAnalytics').mockResolvedValue({
+      class_id: 21,
+      class_name: 'Lớp KLTN',
+      total_students: 0,
+      total_essays: 0,
+      queued_essays: 0,
+      failed_essays: 0,
+      avg_cis: 0,
+      recency_5yr_ratio: 0,
+      cis_distribution: { excellent: 0, good: 0, fair: 0, poor: 0 },
+      verdict_breakdown: {},
+      top_triggered_rules: [],
+      shared_hallucinations: [],
+    });
+    const { container: clsContainer, unmount: unmountCls } = renderWithAuth(
+      <Routes>
+        <Route path="/teacher/classes/:classId" element={<ClassDetailPage />} />
+      </Routes>,
+      { route: '/teacher/classes/21' },
+    );
+    await screen.findByTestId('cohort-avg-cis-value');
+    expect(clsContainer.textContent).toContain('Điểm CIS TB');
+    expect(clsContainer.textContent).not.toContain('Điểm tin cậy TB');
+    unmountCls();
+
+    // 3. LiveCitationSandbox VI uses "12 bài báo học thuật" & "kho bài báo học thuật"
+    const { container: sbContainer } = renderWithAuth(<LiveCitationSandbox lang="vi" />);
+    const countSelect = screen.getByTestId('sandbox-acl-count-select');
+    expect(countSelect.textContent).toContain('12 bài báo học thuật');
+    expect(countSelect.textContent).not.toContain('12 bài báo ACL');
+    expect(sbContainer.textContent).toContain('kho bài báo học thuật');
+    expect(sbContainer.textContent).not.toContain('kho ACL');
+  });
 });

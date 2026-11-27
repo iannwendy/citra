@@ -40,6 +40,9 @@ import {
   formatCitationStyleLabel,
   formatAcademicAuthorShort,
   isInstitutionalAuthor,
+  looksLikeTitleSentence,
+  normalizeAcademicAuthorDisplay,
+  resolveDisplayAuthors,
   splitRawAuthorString,
   sanitizeReasoningForDisplay,
   formatUserError,
@@ -1268,7 +1271,7 @@ function parseRawCitationMeta(
   options?: { missingAuthors?: boolean },
 ): MetadataFields {
   const cleaned = rawText
-    .replace(/^\s*(?:\[\s*\d+[a-z]?\s*\]|\(\s*[a-z]\s*\)|\d+[a-z]\.)\s*/i, '')
+    .replace(/^\s*(?:\[\s*\d+[a-z]?\s*\]|\(\s*[a-z]\s*\)|\d+[a-z]?[.)])\s*/i, '')
     .replace(/^\s*\(\s*[a-z]\s*\)\s*/i, '')
     .trim();
 
@@ -1296,9 +1299,24 @@ function parseRawCitationMeta(
 
   const withoutUrls = stripUrlAccessBoilerplate(cleaned);
 
-  // Extract Year
-  const yearMatch = (withoutUrls || cleaned).match(/\b(19\d{2}|20\d{2})[a-z]?\b/);
-  const year = yearMatch ? yearMatch[1] : '—';
+  // Extract Year (prefer parenthesized year or explicit access/publication date over period ranges like "2021 - 2030")
+  const yearSource = withoutUrls || cleaned;
+  const parenYearMatch = yearSource.match(/\(\s*((?:19|20)\d{2})[a-z]?\s*\)/);
+  const fullDateYearMatch = cleaned.match(
+    /(?:ngày\s+)?\d{1,2}[/-]\d{1,2}[/-]((?:19|20)\d{2})\b/i,
+  );
+  const withoutYearRanges = yearSource.replace(
+    /(?:giai\s+đoạn\s+)?(?:19|20)\d{2}\s*[-–—]\s*(?:19|20)\d{2}/gi,
+    '',
+  );
+  const fallbackYearMatch =
+    withoutYearRanges.match(/\b(19\d{2}|20\d{2})[a-z]?\b/) ||
+    yearSource.match(/\b(19\d{2}|20\d{2})[a-z]?\b/);
+  const year =
+    parenYearMatch?.[1] ||
+    fullDateYearMatch?.[1] ||
+    fallbackYearMatch?.[1] ||
+    '—';
 
   // Try quotes for title: "Title" or “Title”
   const quoteMatch = (withoutUrls || cleaned).match(/[“"]([^”"]{8,220})[”"]/);
@@ -1343,20 +1361,26 @@ function parseRawCitationMeta(
         .map((s) => s.trim())
         .filter(Boolean);
       if (segments.length >= 2) {
-        authors = segments[0]
-          .replace(/^(?:\[\s*\d+[a-z]?\s*\]|\(\s*[a-z]\s*\))\s*/i, '')
+        const firstSeg = segments[0]
+          .replace(/^(?:\[\s*\d+[a-z]?\s*\]|\(\s*[a-z]\s*\)|\d+[a-z]?[.)])\s*/i, '')
           .trim();
-        if (!title) {
-          title = stripUrlAccessBoilerplate(segments[1])
-            .replace(/^[“"]|[”".,]+$/g, '')
-            .trim();
-        }
-        if (segments.length >= 3) {
-          venue = stripUrlAccessBoilerplate(segments.slice(2).join('. ')).trim();
+        if (looksLikeTitleSentence(firstSeg)) {
+          if (!title) title = firstSeg.replace(/^[“"]|[”".,]+$/g, '').trim();
+          venue = stripUrlAccessBoilerplate(segments.slice(1).join('. ')).trim();
+        } else {
+          authors = firstSeg;
+          if (!title) {
+            title = stripUrlAccessBoilerplate(segments[1])
+              .replace(/^[“"]|[”".,]+$/g, '')
+              .trim();
+          }
+          if (segments.length >= 3) {
+            venue = stripUrlAccessBoilerplate(segments.slice(2).join('. ')).trim();
+          }
         }
       } else {
         const commaParts = (withoutUrls || cleaned).split(/,\s+/);
-        if (commaParts.length >= 2) {
+        if (commaParts.length >= 2 && !looksLikeTitleSentence(commaParts[0])) {
           authors = commaParts[0].trim();
           if (!title) {
             title = stripUrlAccessBoilerplate(commaParts.slice(1).join(', '))
@@ -1364,7 +1388,10 @@ function parseRawCitationMeta(
               .slice(0, 140);
           }
         } else {
-          title = (withoutUrls || cleaned).replace(/[.,]+$/, '').slice(0, 140);
+          title = (withoutUrls || cleaned)
+            .replace(/,?\s*ngày\s+\d{1,2}[/-]\d{1,2}[/-](?:19|20)\d{2}\.?$/i, '')
+            .replace(/[.,]+$/, '')
+            .slice(0, 180);
         }
       }
     }
@@ -1565,22 +1592,7 @@ function computeAcademicVenueSim(v1: string, v2: string): number {
 }
 
 function normalizeAuthorDisplay(name: string): string {
-  if (!name || name === '—') return name;
-  const cleaned = name.replace(/\.{2,}/g, '.').trim();
-  // Preserve authentic casing of Vietnamese/global institutional authors
-  if (isInstitutionalAuthor(cleaned)) {
-    return cleaned;
-  }
-  return cleaned
-    .split(/\s+/)
-    .map((word) => {
-      if (!word) return word;
-      if (/^[a-zà-ỹ]{2,}$/.test(word) && !/^(?:et|al|and|va|và|of|for|in|the)$/i.test(word)) {
-        return word.charAt(0).toUpperCase() + word.slice(1);
-      }
-      return word;
-    })
-    .join(' ');
+  return normalizeAcademicAuthorDisplay(name);
 }
 
 function formatShortInText(
@@ -1654,7 +1666,7 @@ export function getVerdictBadgeVisuals(
       return {
         text: isLegal
           ? lang === 'vi'
-            ? '⚖ Văn bản pháp quy'
+            ? '⚖ Văn bản pháp luật'
             : '⚖ Legal Statute'
           : `↗ ${display.label}`,
         badgeClass:
@@ -2327,14 +2339,18 @@ function enrichVerdictItem(
     ? stripUrlAccessBoilerplate(matchedRef.venue) || matchedRef.venue
     : '';
 
+  const resolvedCitedAuthors =
+    missingAuthorsFlag && (!matchedRef?.authors || matchedRef.authors.length === 0)
+      ? []
+      : resolveDisplayAuthors(
+          matchedRef?.authors,
+          matchedRef?.raw_text || verdict.citation_raw,
+          parsedFallback.authors,
+        );
+
   const citedMeta: MetadataFields = {
     title: matchedRef?.title || parsedFallback.title || verdict.citation_raw,
-    authors:
-      missingAuthorsFlag && (!matchedRef?.authors || matchedRef.authors.length === 0)
-        ? '—'
-        : (matchedRef?.authors && matchedRef.authors.length > 0
-            ? matchedRef.authors.map(normalizeAuthorDisplay).join(', ')
-            : normalizeAuthorDisplay(parsedFallback.authors)) || '—',
+    authors: resolvedCitedAuthors.length > 0 ? resolvedCitedAuthors.join(', ') : '—',
     year:
       (matchedRef?.year ? String(matchedRef.year) : parsedFallback.year) || '—',
     venue: cleanedMatchedVenue || parsedFallback.venue || '—',
@@ -2346,7 +2362,7 @@ function enrichVerdictItem(
     citedMeta.authors,
     citedMeta.year,
     matchedRef?.raw_text || verdict.citation_raw,
-    matchedRef?.authors,
+    resolvedCitedAuthors,
     citedMeta.title,
     lang,
   );
@@ -2438,7 +2454,7 @@ function enrichVerdictItem(
           : '—'),
       authors:
         bestSource.authors && bestSource.authors.length > 0
-          ? bestSource.authors.join(', ')
+          ? bestSource.authors.map(normalizeAuthorDisplay).join(', ')
           : matchedFieldsSet.has('authors') && !mismatchedFieldsSet.has('authors')
             ? citedMeta.authors
             : mismatchedFieldsSet.has('authors') || mismatchedFieldsSet.has('author')
@@ -4055,7 +4071,7 @@ export function EssayPage() {
                       )}
                       {deltaMeta !== 0 && (
                         <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-300">
-                          <span>{lang === 'vi' ? 'Sai thông tin:' : 'Details Mismatch:'}</span>
+                          <span>{lang === 'vi' ? 'Sai lệch thông tin:' : 'Details Mismatch:'}</span>
                           <strong>{afterMeta}</strong>
                           <span
                             data-testid="revision-delta-metadata_error"
@@ -4079,7 +4095,7 @@ export function EssayPage() {
                       )}
                       {deltaUnres !== 0 && (
                         <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-300">
-                          <span>{lang === 'vi' ? 'Chưa rõ:' : 'Unresolved:'}</span>
+                          <span>{lang === 'vi' ? 'Chưa đủ dữ liệu:' : 'Unresolved:'}</span>
                           <strong>{afterUnres}</strong>
                           <span
                             data-testid="revision-delta-unresolved"
@@ -4330,6 +4346,7 @@ export function EssayPage() {
               ) : workspaceMode === 'graph' && canViewDeepTrace ? (
                 <CitationGraphView
                   verdicts={report.verdicts}
+                  references={report.references}
                   linkingSummary={report.linking_summary}
                   selectedCitationId={selectedCitationId}
                   onSelect={(v) => {
@@ -5355,12 +5372,18 @@ export function EssayPage() {
                                                 : lang === 'vi'
                                                   ? `Đã truy vấn · Không có bản ghi trùng`
                                                   : `Queried · No matching record`;
+                                      const isFullWidthCandidate =
+                                        src.status !== 'not_found' &&
+                                        (matchedOrPartialSources.length === 1 ||
+                                          src.status === 'candidate_insufficient');
                                       return (
                                         <div
                                           key={src.name}
                                           data-testid="deep-source-card"
                                           data-source-status={src.status}
-                                          className={`p-3 rounded-xl border flex items-center justify-between gap-2 min-w-0 ${
+                                          className={`p-3 rounded-xl border flex flex-col gap-1.5 min-w-0 ${
+                                            isFullWidthCandidate ? 'sm:col-span-2 ' : ''
+                                          }${
                                             src.status === 'matched'
                                               ? 'bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/70'
                                               : src.status === 'partial' ||
@@ -5369,65 +5392,65 @@ export function EssayPage() {
                                                 : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800'
                                           }`}
                                         >
-                                          <div className="min-w-0">
-                                            <p className="text-xs font-semibold text-slate-900 dark:text-white truncate">
+                                          <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 min-w-0">
+                                            <p className="text-xs font-semibold text-slate-900 dark:text-white break-words min-w-0">
                                               {src.name}
                                             </p>
-                                            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                                              {subtitleText}
-                                            </p>
-                                            {(() => {
-                                              const safeUrl =
-                                                toSafeExternalHref(src.url) ??
-                                                toSafeDoiHref(src.doi);
-                                              if (!safeUrl) return null;
-                                              return (
-                                                <a
-                                                  href={safeUrl}
-                                                  target="_blank"
-                                                  rel="noopener noreferrer"
-                                                  className="inline-flex items-center gap-1 text-[11px] font-medium text-indigo-600 dark:text-indigo-400 hover:underline mt-1"
-                                                >
-                                                  <span>
-                                                    {lang === 'vi'
-                                                      ? 'Mở bản ghi nguồn'
-                                                      : 'Open Source Record'}
-                                                  </span>
-                                                  <ExternalLink className="h-3 w-3" />
-                                                </a>
-                                              );
-                                            })()}
-                                          </div>
-                                          <span
-                                            className={`text-[10.5px] font-semibold px-2 py-0.5 rounded shrink-0 ${
-                                              src.status === 'matched'
-                                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200'
-                                                : src.status === 'candidate_insufficient' ||
-                                                    src.status === 'partial'
-                                                  ? 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200'
-                                                  : 'bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
-                                            }`}
-                                          >
-                                            {src.status === 'matched'
-                                              ? lang === 'vi'
-                                                ? 'Khớp nguồn'
-                                                : 'Matched'
-                                              : src.status === 'candidate_insufficient'
+                                            <span
+                                              className={`text-[10.5px] font-semibold px-2 py-0.5 rounded max-w-full whitespace-normal sm:whitespace-nowrap shrink-0 ${
+                                                src.status === 'matched'
+                                                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200'
+                                                  : src.status === 'candidate_insufficient' ||
+                                                      src.status === 'partial'
+                                                    ? 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200'
+                                                    : 'bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+                                              }`}
+                                            >
+                                              {src.status === 'matched'
                                                 ? lang === 'vi'
-                                                  ? 'Ứng viên tham khảo (chưa đủ khớp)'
-                                                  : 'Candidate (insufficient match)'
-                                                : src.status === 'partial'
+                                                  ? 'Khớp nguồn'
+                                                  : 'Matched'
+                                                : src.status === 'candidate_insufficient'
                                                   ? lang === 'vi'
-                                                    ? 'Ứng viên'
-                                                    : 'Candidate'
-                                                  : src.notRouted
+                                                    ? 'Ứng viên tham khảo (chưa đủ khớp)'
+                                                    : 'Candidate (insufficient match)'
+                                                  : src.status === 'partial'
                                                     ? lang === 'vi'
-                                                      ? 'Không định tuyến'
-                                                      : 'Not Routed'
-                                                    : lang === 'vi'
-                                                      ? 'Không khớp'
-                                                      : 'No Hit'}
-                                          </span>
+                                                      ? 'Ứng viên'
+                                                      : 'Candidate'
+                                                    : src.notRouted
+                                                      ? lang === 'vi'
+                                                        ? 'Không định tuyến'
+                                                        : 'Not Routed'
+                                                      : lang === 'vi'
+                                                        ? 'Không khớp'
+                                                        : 'No Hit'}
+                                            </span>
+                                          </div>
+                                          <p className="text-[11px] text-slate-500 dark:text-slate-400 break-words">
+                                            {subtitleText}
+                                          </p>
+                                          {(() => {
+                                            const safeUrl =
+                                              toSafeExternalHref(src.url) ??
+                                              toSafeDoiHref(src.doi);
+                                            if (!safeUrl) return null;
+                                            return (
+                                              <a
+                                                href={safeUrl}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="inline-flex items-center gap-1 text-[11px] font-medium text-indigo-600 dark:text-indigo-400 hover:underline w-fit"
+                                              >
+                                                <span>
+                                                  {lang === 'vi'
+                                                    ? 'Mở bản ghi nguồn'
+                                                    : 'Open Source Record'}
+                                                </span>
+                                                <ExternalLink className="h-3 w-3" />
+                                              </a>
+                                            );
+                                          })()}
                                         </div>
                                       );
                                     };

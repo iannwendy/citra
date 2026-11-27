@@ -16,6 +16,9 @@ import {
   getScannedPdfNotice,
   formatCitationStyleLabel,
   isInstitutionalAuthor,
+  looksLikeTitleSentence,
+  normalizeAcademicAuthorDisplay,
+  resolveDisplayAuthors,
   splitRawAuthorString,
   formatAcademicAuthorShort,
   sanitizeReasoningForDisplay,
@@ -325,6 +328,78 @@ describe('academicTaxonomy — unified verdict, mapping, CIS, dates, errors & no
       ).toBe('De Choudhury et al.');
       expect(formatAcademicAuthorShort(['Nguyễn Văn An'], null, 'vi')).toBe('Nguyễn Văn An');
     });
+
+    it('Round 3 [P2-R2-2/3]: collapses split/polluted/inverted Vietnamese institutional authors, capitalizes lowercase authors, and rejects title sentences', () => {
+      // Split single-word institutional tokens
+      expect(
+        formatAcademicAuthorShort(['Ban', 'Chấp', 'hành', 'Trung', 'ương'], null, 'vi'),
+      ).toBe('Ban Chấp hành Trung ương');
+      expect(formatAcademicAuthorShort(['Chính', 'phủ'], null, 'vi')).toBe('Chính phủ');
+      expect(formatAcademicAuthorShort(['Quốc', 'hội'], null, 'vi')).toBe('Quốc hội');
+
+      // Institutional authors polluted with legal statute noise (R44 & R25 real DB shapes)
+      expect(
+        formatAcademicAuthorShort(
+          ['Ban Chấp Hành Trung Ương', 'Bộ Chính Trị', 'Nghị Quyết Số 57-nq/tư', 'Nghị Quyết 57-nq/tư'],
+          null,
+          'vi',
+        ),
+      ).toBe('Ban Chấp hành Trung ương');
+      expect(
+        formatAcademicAuthorShort(
+          ['Thủ Tướng Chính Phủ', 'Quyết Định Số 569/qđ-ttg', 'Quyết Định 569/qđ-ttg'],
+          null,
+          'vi',
+        ),
+      ).toBe('Thủ tướng Chính phủ');
+      expect(
+        formatAcademicAuthorShort(
+          ['chính phủ', 'nghị định số 13/2023/nđ-cp', 'nghị định 13/2023/nđ-cp'],
+          null,
+          'vi',
+        ),
+      ).toBe('Chính phủ');
+      expect(
+        formatAcademicAuthorShort(['quốc hội', 'luật sở hữu trí tuệ'], null, 'vi'),
+      ).toBe('Quốc hội');
+      expect(
+        formatAcademicAuthorShort(['quốc hội', 'bộ luật dân sự'], null, 'vi'),
+      ).toBe('Quốc hội');
+      expect(isInstitutionalAuthor('bộ luật dân sự')).toBe(false);
+
+      // Inverted institutional DB record ("Nam Đ. C. V.") recovered from raw text
+      expect(
+        resolveDisplayAuthors(
+          ['Nam Đ. C. V.'],
+          '2. Đảng Cộng sản Việt Nam (2021). Văn kiện Đại hội đại biểu toàn quốc lần thứ XIII.',
+        ),
+      ).toEqual(['Đảng Cộng sản Việt Nam']);
+
+      // Lowercase Western author names capitalized properly
+      expect(
+        formatAcademicAuthorShort(
+          ['vaswani A.', 'shazeer N.', 'parmar N.'],
+          null,
+          'en',
+        ),
+      ).toBe('Vaswani et al.');
+      expect(
+        formatAcademicAuthorShort(
+          ['devlin J.', 'chang M. W.', 'lee K.', 'toutanova K.'],
+          null,
+          'en',
+        ),
+      ).toBe('Devlin et al.');
+      expect(normalizeAcademicAuthorDisplay('vaswani A.')).toBe('Vaswani A.');
+
+      // Title sentence never surname-split into "mới et al."
+      const r44Ref4Title =
+        'Nghiên cứu đề xuất đổi mới và hoàn thiện thể chế phát triển khoa học - công nghệ và đổi mới sáng tạo ở Việt Nam giai đoạn 2021 - 2030';
+      expect(looksLikeTitleSentence(r44Ref4Title)).toBe(true);
+      const formattedRef4 = formatAcademicAuthorShort([r44Ref4Title], r44Ref4Title, 'vi');
+      expect(formattedRef4).toBe('Nghiên cứu đề xuất đổi mới…');
+      expect(formattedRef4).not.toContain('et al.');
+    });
   });
 
   describe('sanitizeReasoningForDisplay', () => {
@@ -350,6 +425,16 @@ describe('academicTaxonomy — unified verdict, mapping, CIS, dates, errors & no
       expect(sanitizeReasoningForDisplay(rawDomain, 'en')).toBe(
         "URL domain 'fake-journal.example.com' is a placeholder or non-existent domain.",
       );
+
+      // Round 3 [P3-R2-1]: Full fake-domain sentence including scholarly registry tail translated 100% into VI
+      const rawDomainFull =
+        "URL domain 'example.com' is a placeholder/fake domain (example.com, test.com, localhost, etc.) and does not belong to a scholarly registry.";
+      const viDomainFull = sanitizeReasoningForDisplay(rawDomainFull, 'vi');
+      expect(viDomainFull).toBe(
+        "Tên miền URL 'example.com' là tên miền mẫu hoặc không tồn tại thực tế (như example.com, test.com, localhost...) và không thuộc cơ sở dữ liệu học thuật.",
+      );
+      expect(viDomainFull).not.toContain('does not belong');
+      expect(viDomainFull).not.toContain('scholarly registry');
 
       expect(
         sanitizeReasoningForDisplay('Year mismatch (2021 vs 2017) and Title mismatch', 'vi'),

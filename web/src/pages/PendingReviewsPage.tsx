@@ -679,7 +679,7 @@ export function PendingReviewsPage() {
                         : r.url_status === 'fake_domain'
                           ? lang === 'vi'
                             ? '✕ Tên miền không tồn tại'
-                            : '✕ Fake Domain'
+                            : '✕ Invalid Domain'
                           : lang === 'vi'
                             ? '✕ Liên kết hỏng'
                             : '✕ Dead Link'}

@@ -10,6 +10,7 @@ import {
   GripVertical,
 } from 'lucide-react';
 import type {
+  Citation,
   Verdict,
   CitationMappingStatus,
   ValidationLabel,
@@ -36,6 +37,7 @@ import {
 
 interface CitationGraphViewProps {
   verdicts: Verdict[];
+  references?: Citation[];
   linkingSummary?: MappingStatusSummary;
   selectedCitationId?: string | null;
   onSelect: (v: Verdict) => void;
@@ -44,6 +46,33 @@ interface CitationGraphViewProps {
     verdict: Verdict,
     req: Parameters<typeof import('@/api/client').api.overrideVerdict>[1]
   ) => Promise<void>;
+}
+
+function findMatchedReferenceForVerdict(
+  verdict: Verdict,
+  references: Citation[] | undefined,
+): Citation | null {
+  if (!references || references.length === 0) return null;
+  const refId = verdict.citation_link?.reference_id;
+  if (refId) {
+    const exact = references.find((r) => r.reference_id === refId);
+    if (exact) return exact;
+    if (/^ref-0*\d+$/.test(refId)) {
+      const idxNum = parseInt(refId.replace(/^ref-/, ''), 10);
+      if (!Number.isNaN(idxNum) && idxNum >= 1 && idxNum <= references.length) {
+        return references[idxNum - 1];
+      }
+    }
+  }
+  const rawTrimmed = (verdict.citation_raw ?? '').trim();
+  const rawLower = rawTrimmed.toLowerCase();
+  return (
+    references.find(
+      (r) =>
+        (r.raw_text ?? '').trim() === rawTrimmed ||
+        (r.title && rawLower.includes(r.title.toLowerCase().slice(0, 35))),
+    ) ?? null
+  );
 }
 
 function SortIcon({
@@ -63,6 +92,7 @@ function SortIcon({
 
 export function CitationGraphView({
   verdicts,
+  references,
   linkingSummary: _linkingSummary,
   selectedCitationId,
   onSelect,
@@ -189,13 +219,14 @@ export function CitationGraphView({
   const indexedVerdicts = useMemo(() => {
     return verdicts.map((v, idx) => ({
       verdict: v,
+      citedRef: findMatchedReferenceForVerdict(v, references),
       originalIndex: idx,
       marker: getCitationMarkerLabel(v, idx),
       effectiveLabel: (isUrlResource(v)
         ? 'resource'
         : normalizeVerdictKey(v.label)) as ValidationLabel,
     }));
-  }, [verdicts]);
+  }, [verdicts, references]);
 
   const filtered = useMemo(() => {
     return indexedVerdicts.filter(({ verdict: v, marker, effectiveLabel }) => {
@@ -516,7 +547,7 @@ export function CitationGraphView({
                   : 'No citations match your filters.'}
               </div>
             ) : (
-              filtered.map(({ verdict: v, marker, effectiveLabel }, i) => {
+              filtered.map(({ verdict: v, citedRef, marker, effectiveLabel }, i) => {
                 const isSelected = activeVerdict?.citation_id === v.citation_id;
                 const isIncompleteRef = (v.triggered_rules ?? []).includes(
                   'R-INCOMPLETE-METADATA',
@@ -528,6 +559,13 @@ export function CitationGraphView({
                 const parsedIdentity = extractCleanCitationIdentity(
                   v.citation_raw,
                   v.matched_sources?.[0],
+                  citedRef
+                    ? {
+                        citedYear: citedRef.year,
+                        citedAuthors: citedRef.authors,
+                        citedTitle: citedRef.title,
+                      }
+                    : undefined,
                 );
                 const shortAuthorLabel =
                   parsedIdentity.shortHeader ||
@@ -551,8 +589,8 @@ export function CitationGraphView({
                           : 'border-slate-200/80 dark:border-slate-800/90 bg-white/85 dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-white dark:hover:bg-slate-800/50'
                       }`}
                     >
-                      <div className="flex items-center justify-between gap-2 mb-1.5">
-                        <div className="flex items-center gap-1.5 min-w-0">
+                      <div className="flex items-center justify-between gap-2 mb-1.5 min-w-0">
+                        <div className="flex items-center gap-2 flex-1 min-w-0">
                           <span
                             data-testid="graph-sidebar-marker"
                             className={`font-mono text-[11px] font-bold px-1.5 py-0.5 rounded-md shrink-0 transition-colors ${
@@ -573,7 +611,7 @@ export function CitationGraphView({
                           )}
                         </div>
 
-                        <div className="flex items-center gap-1.5 flex-wrap justify-end min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap justify-end shrink-0">
                           {!isCleanEmbeddedMode && viewMode !== 'source' && (
                             <MappingStatusBadge status={v.mapping_status} size="sm" />
                           )}
@@ -681,6 +719,7 @@ export function CitationGraphView({
             >
               <InteractiveDecisionFlowBoard
                 verdict={activeVerdict}
+                citedRef={activeEntry?.citedRef}
                 markerLabel={activeEntry?.marker}
                 onInspectDetails={onInspectDetails}
                 onOverride={onOverride}

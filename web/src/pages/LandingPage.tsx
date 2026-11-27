@@ -1248,21 +1248,27 @@ function SolvaHeroSection({
               </SolvaScrollReveal>
 
               {/* H1 Two-Tone Editorial Split */}
-              <SolvaTwoToneHeading
-                as="h1"
-                size="h1"
-                delayMs={85}
-                primary={
-                  lang === 'vi'
-                    ? 'Kiểm chứng mọi trích dẫn'
-                    : 'Submit your thesis or paper'
-                }
-                secondary={
-                  lang === 'vi'
-                    ? 'trước khi nộp khóa luận & bài báo.'
-                    : 'with every citation verified.'
-                }
-              />
+              {lang === 'vi' ? (
+                <SolvaScrollReveal delayMs={85} yOffset={24} blurPx={3.5}>
+                  <h1 className="font-solva-serif font-light text-[36px] sm:text-[44px] lg:text-[44px] xl:text-[56px] leading-[1.15] tracking-[-0.03em] text-balance">
+                    <span className="block" style={{ color: 'var(--solva-ink)' }}>
+                      Kiểm chứng mọi{' '}
+                      <span className="whitespace-nowrap">trích dẫn</span>
+                    </span>{' '}
+                    <span className="block" style={{ color: 'var(--solva-muted)' }}>
+                      trước khi nộp khóa luận &amp; bài báo.
+                    </span>
+                  </h1>
+                </SolvaScrollReveal>
+              ) : (
+                <SolvaTwoToneHeading
+                  as="h1"
+                  size="h1"
+                  delayMs={85}
+                  primary="Submit your thesis or paper"
+                  secondary="with every citation verified."
+                />
+              )}
 
               {/* Subtitle (400px–450px max-width, Onest 18px Regular) */}
               <SolvaScrollReveal delayMs={190} yOffset={24} blurPx={3.5}>

@@ -363,6 +363,18 @@ function formatPromoError(
   );
 }
 
+function renderPromoErrorText(msg: string) {
+  const match = msg.match(/^(.*?)(\(A[–-]Z,\s*0[–-]9\))(.*)$/);
+  if (!match) return msg;
+  return (
+    <>
+      {match[1]}
+      <span className="whitespace-nowrap">{match[2]}</span>
+      {match[3]}
+    </>
+  );
+}
+
 const BILLING_COUNTRIES = [
   { code: 'VN', name_vi: 'Việt Nam (VN)', name_en: 'Vietnam (VN)' },
   { code: 'US', name_vi: 'Hoa Kỳ (US)', name_en: 'United States (US)' },
@@ -1017,7 +1029,7 @@ export function StripeDemoCheckoutPage() {
                   ? `ĐĂNG KÝ GÓI ${details.billing_cycle === 'annual' ? 'THEO NĂM (-20%)' : 'THEO THÁNG'}`
                   : `SUBSCRIBE TO ${details.billing_cycle.toUpperCase()} PLAN`}
               </p>
-              <h1 className="font-display text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white">
+              <h1 className="font-solva-serif font-normal text-2xl sm:text-3xl tracking-tight text-slate-900 dark:text-white">
                 {displayPlanName}
               </h1>
               {lang === 'vi' ? (
@@ -1221,7 +1233,7 @@ export function StripeDemoCheckoutPage() {
                   data-testid="checkout-promo-error"
                 >
                   <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-                  <span>{promoError}</span>
+                  <span>{renderPromoErrorText(promoError)}</span>
                 </p>
               )}
 

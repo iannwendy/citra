@@ -680,7 +680,7 @@ export function ClassDetailPage() {
         <Card className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm flex items-center justify-between gap-3">
           <div className="min-w-0">
             <span className="text-xs font-medium text-slate-500 dark:text-slate-400 block">
-              {lang === 'vi' ? 'Điểm tin cậy TB' : 'Average CIS'}
+              {lang === 'vi' ? 'Điểm CIS TB' : 'Average CIS'}
             </span>
             <p
               data-testid="cohort-avg-cis-value"

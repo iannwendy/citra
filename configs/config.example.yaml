@@ -1,6 +1,6 @@
 # =====================================================================
 # config.example.yaml — runtime configuration
-# Copy to `configs/config.yaml` to override defaults (v3.90.23).
+# Copy to `configs/config.yaml` to override defaults (v3.90.24).
 # =====================================================================
 
 app:

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import i18nInstance from '@/i18n';
@@ -114,6 +114,17 @@ function VerificationQrMatrixSvg({
       )}
     </svg>
   );
+}
+
+function renderWrappableFilename(filename: string) {
+  const parts = filename.split(/(?<=[_-])|(?=\.[A-Za-z0-9]{1,8}$)/);
+  if (parts.length <= 1) return filename;
+  return parts.map((part, idx) => (
+    <Fragment key={idx}>
+      {idx > 0 && <wbr />}
+      {part}
+    </Fragment>
+  ));
 }
 
 /**
@@ -492,7 +503,7 @@ export function SharedReportPage() {
             )}
             {isLegal
               ? lang === 'vi'
-                ? 'Văn bản Pháp luật'
+                ? 'Văn bản pháp luật'
                 : 'Legal Statute'
               : display.label}
           </span>
@@ -692,7 +703,7 @@ export function SharedReportPage() {
                     className="font-display text-xl sm:text-2xl font-bold text-slate-900 dark:text-white break-words [overflow-wrap:anywhere] min-w-0 flex-1"
                     data-testid="shared-report-filename"
                   >
-                    {report.filename}
+                    {renderWrappableFilename(report.filename)}
                   </h1>
                 </div>
               </div>
@@ -1175,17 +1186,28 @@ export function SharedReportPage() {
                             ))}
                           </div>
                         )}
-                        {matched && (
-                          <div className="p-3 rounded-lg bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 space-y-1">
+                        {matched && (() => {
+                          const isUnconfirmedCandidate =
+                            normalizedLabel === 'suspected_hallucination' ||
+                            normalizedLabel === 'unresolved';
+                          return (
+                          <div
+                            className={`p-3 rounded-lg bg-white dark:bg-slate-800 border space-y-1 ${
+                              isUnconfirmedCandidate
+                                ? 'border-amber-200 dark:border-amber-800/80'
+                                : 'border-slate-200/80 dark:border-slate-700'
+                            }`}
+                          >
                             <div
+                              data-testid={`shared-matched-source-header-${idx}`}
                               className={`font-mono font-semibold flex items-center justify-between gap-2 flex-wrap ${
-                                normalizedLabel === 'suspected_hallucination'
+                                isUnconfirmedCandidate
                                   ? 'text-amber-700 dark:text-amber-300'
                                   : 'text-emerald-700 dark:text-emerald-300'
                               }`}
                             >
                               <span>
-                                {normalizedLabel === 'suspected_hallucination'
+                                {isUnconfirmedCandidate
                                   ? lang === 'vi'
                                     ? 'Ứng viên tham khảo (chưa đủ khớp)'
                                     : 'Candidate (insufficient match)'
@@ -1226,7 +1248,8 @@ export function SharedReportPage() {
                                 .join(' · ')}
                             </div>
                           </div>
-                        )}
+                          );
+                        })()}
                         {!matched && observedWeb && (
                           <div
                             data-testid={`shared-observed-web-meta-${idx}`}

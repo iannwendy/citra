@@ -138,8 +138,8 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
           e,
           lang,
           isVi
-            ? 'Không thể lấy mẫu từ kho bài báo ACL. Vui lòng thử lại.'
-            : 'Failed to sample papers from the ACL corpus. Please try again.',
+            ? 'Không thể lấy mẫu từ kho bài báo học thuật. Vui lòng thử lại.'
+            : 'Failed to sample papers from the scholarly corpus. Please try again.',
         ),
       );
     } finally {
@@ -682,17 +682,17 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
                     data-testid="sandbox-acl-count-select"
                     aria-label={
                       isVi
-                        ? 'Số lượng bài báo ACL lấy mẫu'
-                        : 'Number of ACL papers to sample'
+                        ? 'Số lượng bài báo học thuật lấy mẫu'
+                        : 'Number of scholarly papers to sample'
                     }
                     value={sampleCount}
                     onChange={(e) => setSampleCount(Number(e.target.value))}
                     className="h-9 pl-2.5 pr-8 rounded-xl text-xs font-mono font-semibold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 flex-1 sm:flex-initial min-w-0 max-w-full"
                   >
-                    <option value={10}>{isVi ? '10 bài báo ACL' : '10 ACL Papers'}</option>
-                    <option value={12}>{isVi ? '12 bài báo ACL' : '12 ACL Papers'}</option>
-                    <option value={15}>{isVi ? '15 bài báo ACL' : '15 ACL Papers'}</option>
-                    <option value={20}>{isVi ? '20 bài báo ACL' : '20 ACL Papers'}</option>
+                    <option value={10}>{isVi ? '10 bài báo học thuật' : '10 Scholarly Papers'}</option>
+                    <option value={12}>{isVi ? '12 bài báo học thuật' : '12 Scholarly Papers'}</option>
+                    <option value={15}>{isVi ? '15 bài báo học thuật' : '15 Scholarly Papers'}</option>
+                    <option value={20}>{isVi ? '20 bài báo học thuật' : '20 Scholarly Papers'}</option>
                   </select>
                 </div>
 
@@ -763,11 +763,11 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
                 <p className="text-sm font-display font-bold text-slate-800 dark:text-slate-200 leading-snug">
                   {isVi
                     ? `Nhấn "Lấy ngẫu nhiên ${sampleCount} bài báo" ở trên để tải danh sách bài báo mẫu`
-                    : `Click "Sample ${sampleCount} Random Papers" above to load real papers from the ACL corpus`}
+                    : `Click "Sample ${sampleCount} Random Papers" above to load real papers from the scholarly corpus`}
                 </p>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5 max-w-xl mx-auto leading-relaxed">
                   {isVi
-                    ? 'Sau khi tải 10–20 bài báo thật từ kho ACL, bạn có thể chỉnh sửa năm, tác giả, tiêu đề, mã DOI hoặc bật/tắt liên kết trích dẫn rồi tạo tệp PDF mẫu để thử nghiệm toàn bộ quy trình kiểm chứng.'
+                    ? 'Sau khi tải 10–20 bài báo thật từ kho bài báo học thuật, bạn có thể chỉnh sửa năm, tác giả, tiêu đề, mã DOI hoặc bật/tắt liên kết trích dẫn rồi tạo tệp PDF mẫu để thử nghiệm toàn bộ quy trình kiểm chứng.'
                     : 'Once loaded, you can edit any metadata field or toggle in-text ↔ bibliography links, then build a sample PDF manuscript to run through the full verification workflow.'}
                 </p>
               </div>
@@ -825,8 +825,8 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
                             className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-slate-100 hover:bg-emerald-100 text-slate-700 hover:text-emerald-800 dark:bg-slate-800 dark:text-slate-300 transition-colors cursor-pointer"
                             title={
                               isVi
-                                ? 'Khôi phục dữ liệu gốc từ kho ACL'
-                                : 'Restore canonical ACL record'
+                                ? 'Khôi phục dữ liệu gốc từ kho bài báo học thuật'
+                                : 'Restore canonical scholarly record'
                             }
                           >
                             <RotateCcw className="h-2.5 w-2.5 inline mr-0.5" />

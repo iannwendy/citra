@@ -566,4 +566,94 @@ describe('Task 6.1: SharedReportPage & EssayHeader Share Receipt', () => {
     );
     expect(screen.getByTestId('shared-report-page').textContent).toContain('Link Active');
   });
+
+  it('Round 3 [P2-R2-1 & P3-R2-5]: renders amber non-confirmed candidate badge on unresolved verdict with matched_source and wraps underscore filenames cleanly', async () => {
+    vi.spyOn(api, 'getSharedEssayReport').mockResolvedValue({
+      essay_id: 105,
+      receipt_id: 'CITRA-00105-R3UNRES',
+      filename: 'essay_03_comprehensive.pdf',
+      num_pages: 10,
+      num_citations: 1,
+      created_at: '2026-11-27T02:00:00Z',
+      verified_at: '2026-11-27T02:00:00Z',
+      disclaimer: '',
+      style_profile: {
+        style: 'APA_LIKE',
+        confidence: 0.95,
+        apa_count: 1,
+        ieee_count: 0,
+        mixed_count: 0,
+        features: {},
+        ratios: {},
+        explanation: '',
+      },
+      cis: {
+        score: 78.0,
+        components: { verified_ratio: 0.5 },
+        weights_used: {},
+        num_citations: 1,
+        num_unresolved: 1,
+        disclaimer: '',
+      },
+      verdict_counts: {
+        verified: 0,
+        metadata_error: 0,
+        suspected_hallucination: 0,
+        unresolved: 1,
+        resource: 0,
+      },
+      verdicts: [
+        {
+          reference_id: 'ref-0004',
+          numeric_index: 4,
+          raw_text: '[4] Local Monograph (2022). Unindexed Study.',
+          label: 'unresolved',
+          confidence: 0.42,
+          explanation: 'Weak candidate match on Crossref.',
+          triggered_rules: ['R-WEAK-EVIDENCE'],
+          matched_source: {
+            source: 'crossref',
+            title: 'Partially Similar Paper',
+            authors: ['Some Author'],
+            year: '2022',
+            doi: '10.1000/partial',
+            url: null,
+            matched_fields: ['year'],
+            checked_at: '2026-11-27T02:00:00Z',
+          },
+        },
+      ],
+    });
+
+    await i18n.changeLanguage('vi');
+    renderWithProviders(
+      <Routes>
+        <Route path="/verify/share/:token" element={<SharedReportPage />} />
+      </Routes>,
+      { initialRoute: '/verify/share/sh_105_r3', user: null },
+    );
+
+    await waitFor(() => expect(screen.getByTestId('shared-report-page')).toBeDefined());
+
+    // Filename preserves exact textContent while inserting <wbr> break points and keeping .pdf unbroken
+    const filenameEl = screen.getByTestId('shared-report-filename');
+    expect(filenameEl.textContent).toBe('essay_03_comprehensive.pdf');
+    expect(filenameEl.className).not.toContain('break-all');
+    expect(filenameEl.querySelectorAll('wbr').length).toBeGreaterThan(0);
+
+    // Unresolved verdict [4] with matched_source renders AMBER candidate header, NEVER bright green Nguồn Khớp
+    const matchedHeader = screen.getByTestId('shared-matched-source-header-0');
+    expect(matchedHeader.className).toContain('text-amber-700');
+    expect(matchedHeader.className).not.toContain('text-emerald-700');
+    expect(matchedHeader.textContent).toContain('Ứng viên tham khảo (chưa đủ khớp): Crossref');
+    expect(matchedHeader.textContent).not.toContain('Nguồn Khớp');
+
+    // Switch to EN -> Candidate (insufficient match): Crossref
+    fireEvent.click(screen.getByTestId('shared-lang-toggle'));
+    await waitFor(() =>
+      expect(screen.getByTestId('shared-matched-source-header-0').textContent).toContain(
+        'Candidate (insufficient match): Crossref',
+      ),
+    );
+  });
 });
