@@ -12,7 +12,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import { useVerificationProgress } from '@/contexts/VerificationProgressContext';
 import { UpgradeModal } from '@/components/UpgradeModal';
-import { VerdictBadge } from '@/components/VerdictBadge';
+import { DecisionSupportBanner } from '@/components/DecisionSupportBanner';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -24,8 +24,17 @@ import {
   TRANSITION_EXIT,
 } from '@/components/ui/motion-primitives';
 import {
+  formatUserError,
+  getMappingStatusDisplay,
+  getVerdictDisplay,
+  normalizeMappingStatusKey,
+  normalizeVerdictKey,
+  resolveAcademicLang,
+} from '@/lib/academicTaxonomy';
+import {
   extractObservedWebMeta,
   getCitationMarkerLabel,
+  getRuleDisplayName,
   getSourceDisplayName,
   getVerdictExplanation,
   isLegalStatuteVerdict,
@@ -39,6 +48,7 @@ import {
   CheckCircle2,
   AlertTriangle,
   XCircle,
+  HelpCircle,
   RotateCcw,
   Wand2,
   Loader2,
@@ -47,15 +57,19 @@ import {
   BookOpen,
   Copy,
   Check,
+  ChevronDown,
+  Clock,
 } from 'lucide-react';
 
 interface LiveCitationSandboxProps {
   lang?: 'vi' | 'en';
 }
 
+const DEFAULT_RAW_REFS_SAMPLE = `Vaswani, A., Shazeer, N., & Parmar, N. (2017). Attention Is All You Need. Advances in Neural Information Processing Systems (NeurIPS). https://doi.org/10.48550/arXiv.1706.03762\nDevlin, J., Chang, M., Lee, K., & Toutanova, K. (2022). BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding. NAACL-HLT. https://doi.org/10.18653/v1/N19-1423\nSmith, J., & Nguyen, T. (2024). Autonomous Quantum Hyper-Graph Transformers for Zero-Shot Reasoning. Journal of Imaginary AI Research. https://doi.org/10.9999/fake.hallucination.2024`;
+
 export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps) {
   const { i18n } = useTranslation();
-  const i18nLang: 'vi' | 'en' = i18n.language?.startsWith('vi') ? 'vi' : 'en';
+  const i18nLang = resolveAcademicLang(i18n.resolvedLanguage || i18n.language);
   const lang: 'vi' | 'en' = langProp ?? i18nLang;
   const isVi = lang === 'vi';
   const { user, refreshUser } = useAuth();
@@ -78,33 +92,62 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [verifyingInstant, setVerifyingInstant] = useState(false);
   const [instantResult, setInstantResult] = useState<SandboxInstantVerifyResponse | null>(null);
-  const [rawRefsText, setRawRefsText] = useState<string>(
-    `Vaswani, A., Shazeer, N., & Parmar, N. (2017). Attention Is All You Need. Advances in Neural Information Processing Systems (NeurIPS). https://doi.org/10.48550/arXiv.1706.03762\nDevlin, J., Chang, M., Lee, K., & Toutanova, K. (2022). BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding. NAACL-HLT. https://doi.org/10.18653/v1/N19-1423\nSmith, J., & Nguyen, T. (2024). Autonomous Quantum Hyper-Graph Transformers for Zero-Shot Reasoning. Journal of Imaginary AI Research. https://doi.org/10.9999/fake.hallucination.2024`,
-  );
+  const [rawRefsText, setRawRefsText] = useState<string>(DEFAULT_RAW_REFS_SAMPLE);
+  const [lastVerifiedText, setLastVerifiedText] = useState<string | null>(null);
+  const [isResultStale, setIsResultStale] = useState(false);
+  const [expandedTechCards, setExpandedTechCards] = useState<Record<string, boolean>>({});
   const [copiedBibtex, setCopiedBibtex] = useState(false);
+
+  const handleModeSwitch = (nextMode: 'acl_studio' | 'raw_paste') => {
+    if (nextMode === mode) return;
+    setMode(nextMode);
+    setInstantResult(null);
+    setIsResultStale(false);
+    setExpandedTechCards({});
+  };
+
+  const handleRawTextChange = (nextText: string) => {
+    setRawRefsText(nextText);
+    if (!nextText.trim()) {
+      setInstantResult(null);
+      setIsResultStale(false);
+      setExpandedTechCards({});
+      return;
+    }
+    if (instantResult) {
+      setIsResultStale(nextText !== lastVerifiedText);
+    }
+  };
 
   const handleSampleRandomAcl = async (customCount?: number) => {
     const targetCount = customCount ?? sampleCount;
     setLoadingSample(true);
     setInstantResult(null);
+    setIsResultStale(false);
+    setExpandedTechCards({});
     try {
       const res = await api.sampleSandboxAclPapers(targetCount, style);
       setItems(res.items || []);
       if (res.database_total_papers) {
         setDbTotalPapers(res.database_total_papers);
       }
+      const totalFormatted = (res.database_total_papers || 128626).toLocaleString(
+        isVi ? 'vi-VN' : 'en-US',
+      );
       toast.success(
-        lang === 'vi'
-          ? `Đã lấy ngẫu nhiên ${res.items.length} bài báo thực tế từ CSDL ACL (${(res.database_total_papers || 128626).toLocaleString()} bài)!`
-          : `Sampled ${res.items.length} real papers from the local ACL database!`,
+        isVi
+          ? `Đã lấy ngẫu nhiên ${res.items.length} bài báo thật từ kho học thuật ACL (${totalFormatted} bài).`
+          : `Sampled ${res.items.length} real papers from the ACL scholarly corpus (${totalFormatted} papers).`,
       );
     } catch (e) {
       toast.error(
-        e instanceof Error
-          ? e.message
-          : lang === 'vi'
-            ? 'Không thể lấy mẫu từ CSDL ACL'
-            : 'Failed to sample papers from ACL database',
+        formatUserError(
+          e,
+          lang,
+          isVi
+            ? 'Không thể lấy mẫu từ kho bài báo ACL. Vui lòng thử lại.'
+            : 'Failed to sample papers from the ACL corpus. Please try again.',
+        ),
       );
     } finally {
       setLoadingSample(false);
@@ -116,6 +159,9 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
     field: K,
     value: SandboxAclPaperItem[K],
   ) => {
+    if (instantResult) {
+      setIsResultStale(true);
+    }
     setItems((prev) =>
       prev.map((it, i) => {
         if (i !== idx) return it;
@@ -145,6 +191,9 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
       | 'uncited_ref'
       | 'orphan_intext',
   ) => {
+    if (instantResult) {
+      setIsResultStale(true);
+    }
     setItems((prev) =>
       prev.map((it, i) => {
         if (i !== idx) return it;
@@ -189,8 +238,8 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
           base.authors_text = 'Jonathan Sterling; Victoria Vance';
           base.authors = ['Jonathan Sterling', 'Victoria Vance'];
           base.year = '2025';
-          base.venue = 'International Journal of Synthetic Hallucinated AI Systems';
-          base.doi = `10.9999/hallucinated.acl.2025.${idx + 101}`;
+          base.venue = 'International Journal of Synthetic Computational Systems';
+          base.doi = `10.9999/unverified.acl.2025.${idx + 101}`;
         } else if (preset === 'year_mismatch_intext') {
           base.in_text_year_override = String(Math.max(1995, origYr - 12));
         } else if (preset === 'uncited_ref') {
@@ -205,8 +254,11 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
     );
   };
 
-  const handleAutoInjectDefenseSuite = () => {
+  const handleAddCommonMistakes = () => {
     if (items.length === 0) return;
+    if (instantResult) {
+      setIsResultStale(true);
+    }
     setItems((prev) =>
       prev.map((it, idx) => {
         const orig = it.original || {
@@ -252,12 +304,12 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
           return {
             ...cleanItem,
             title:
-              'Autonomous Quantum Hyper-Graph Transformers for Hallucination-Free Symbolic Reasoning',
+              'Autonomous Quantum Hyper-Graph Transformers for Symbolic Reasoning',
             authors_text: 'Jonathan Sterling; Victoria Vance',
             authors: ['Jonathan Sterling', 'Victoria Vance'],
             year: '2025',
             venue: 'Journal of Non-Existent Computational Intelligence',
-            doi: '10.9999/fake.hallucination.2025.404',
+            doi: '10.9999/fake.sample.2025.404',
             mutation_preset: 'hallucinated',
           };
         }
@@ -288,9 +340,9 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
       }),
     );
     toast.success(
-      lang === 'vi'
-        ? 'Đã tự động gài Bộ Kịch bản Test Hội đồng (Sai năm, Sai tác giả, Nguồn bịa đặt AI, Lệch năm In-text ↔ Ref, Uncited Ref & Orphan In-text)!'
-        : 'Injected full Defense Test Suite (Wrong Year, Wrong Author, Hallucination, In-text Mismatch, Uncited Ref & Orphan Citation)!',
+      isVi
+        ? 'Đã thêm bộ lỗi trích dẫn phổ biến vào bài mẫu (sai năm, sai tác giả, không tìm thấy nguồn, lệch năm trong bài, chưa trích dẫn và thiếu ở danh mục).'
+        : 'Added common citation mistakes to the sample paper (wrong year, wrong author, source not found, in-text year mismatch, uncited reference, and missing reference).',
     );
   };
 
@@ -319,10 +371,9 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
           step: 'parsing',
           step_index: 0,
           total_steps: 8,
-          message:
-            lang === 'vi'
-              ? 'Đang tổng hợp & kiểm chứng bản thảo PDF Sandbox...'
-              : 'Synthesizing & verifying sandbox PDF manuscript...',
+          message: isVi
+            ? 'Đang tạo và kiểm chứng bản thảo PDF mẫu...'
+            : 'Building & verifying sample PDF manuscript...',
           citations_found: res.in_text_count ?? 0,
           references_found: res.references_count ?? 0,
           linked: 0,
@@ -335,9 +386,9 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
       );
       void refreshUser();
       toast.success(
-        lang === 'vi'
-          ? `Đã tổng hợp bản thảo PDF (${res.num_pages} trang · ${res.in_text_count} trích dẫn trong bài · ${res.references_count} tài liệu tham khảo) và kích hoạt Pipeline kiểm chứng!`
-          : `Synthesized ${res.num_pages}-page PDF manuscript and started full verification pipeline!`,
+        isVi
+          ? `Đã tạo bản thảo PDF mẫu (${res.num_pages} trang · ${res.in_text_count} trích dẫn trong bài · ${res.references_count} mục tham khảo) và bắt đầu kiểm chứng.`
+          : `Built ${res.num_pages}-page sample PDF manuscript and started full verification.`,
       );
       navigate(`/verification/processing/${res.essay_id}`);
     } catch (e) {
@@ -348,11 +399,13 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
         return;
       }
       toast.error(
-        e instanceof Error
-          ? e.message
-          : lang === 'vi'
-            ? 'Lỗi khi tạo file PDF hoàn chỉnh'
-            : 'Failed to synthesize PDF manuscript',
+        formatUserError(
+          e,
+          lang,
+          isVi
+            ? 'Không thể tạo tệp PDF mẫu. Vui lòng thử lại.'
+            : 'Failed to generate sample PDF manuscript.',
+        ),
       );
       setGeneratingPdf(false);
     }
@@ -368,17 +421,19 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
         items,
       });
       toast.success(
-        lang === 'vi'
-          ? 'Đã tải xuống file PDF bản thảo học thuật hoàn chỉnh (gồm In-text Citations + References)!'
-          : 'Downloaded synthesized academic PDF manuscript!',
+        isVi
+          ? 'Đã tải xuống tệp PDF bài mẫu học thuật (gồm trích dẫn trong bài và danh mục tham khảo).'
+          : 'Downloaded sample academic PDF manuscript.',
       );
     } catch (e) {
       toast.error(
-        e instanceof Error
-          ? e.message
-          : lang === 'vi'
-            ? 'Không thể tải xuống file PDF bản thảo'
-            : 'Failed to download PDF manuscript',
+        formatUserError(
+          e,
+          lang,
+          isVi
+            ? 'Không thể tải xuống tệp PDF mẫu.'
+            : 'Failed to download sample PDF manuscript.',
+        ),
       );
     } finally {
       setDownloadingPdf(false);
@@ -386,73 +441,158 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
   };
 
   const handleInstantVerify = async () => {
+    if (mode === 'raw_paste' && !rawRefsText.trim()) return;
     setVerifyingInstant(true);
+    setInstantResult(null);
+    setIsResultStale(false);
+    setExpandedTechCards({});
+    const submittedText = rawRefsText;
     try {
       const payload =
         mode === 'acl_studio' && items.length > 0
           ? { style, items, lang }
-          : { style, references_text: rawRefsText, lang };
+          : { style, references_text: submittedText, lang };
       const res = await api.verifySandboxCitationsInstant(payload);
       setInstantResult(res);
+      if (mode === 'raw_paste') {
+        setLastVerifiedText(submittedText);
+      }
     } catch (e) {
       toast.error(
-        e instanceof Error
-          ? e.message
-          : lang === 'vi'
-            ? 'Không thể kiểm tra nhanh'
-            : 'Instant verification failed',
+        formatUserError(
+          e,
+          lang,
+          isVi
+            ? 'Không thể kiểm tra nhanh trích dẫn. Vui lòng thử lại.'
+            : 'Quick verification failed. Please try again.',
+        ),
       );
     } finally {
       setVerifyingInstant(false);
     }
   };
 
+  const toggleTechCard = (key: string) => {
+    setExpandedTechCards((prev) => ({
+      ...prev,
+      [key]: !prev[key],
+    }));
+  };
+
   const presetBadge = (preset?: string) => {
     switch (preset) {
       case 'wrong_year':
         return (
-          <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300">
-            {lang === 'vi' ? '⚡ LỖI NĂM (METADATA_ERROR)' : '⚡ WRONG YEAR (METADATA_ERROR)'}
+          <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300 dark:border-amber-800">
+            {isVi ? 'Sai năm xuất bản' : 'Wrong Year'}
           </span>
         );
       case 'wrong_author':
         return (
-          <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300">
-            {lang === 'vi' ? '⚡ LỖI TÁC GIẢ (METADATA_ERROR)' : '⚡ WRONG AUTHOR (METADATA_ERROR)'}
+          <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300 dark:border-amber-800">
+            {isVi ? 'Sai tác giả' : 'Wrong Author'}
           </span>
         );
       case 'hallucinated':
         return (
-          <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300 border border-red-300">
-            {lang === 'vi' ? '🚨 NGUỒN BỊA ĐẶT (HALLUCINATION)' : '🚨 HALLUCINATED SOURCE'}
+          <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300 border border-red-300 dark:border-red-800">
+            {isVi ? 'Không tìm thấy nguồn' : 'Source Not Found'}
           </span>
         );
       case 'year_mismatch_intext':
         return (
-          <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-300 border border-violet-300">
-            {lang === 'vi' ? '🔗 LỆCH NĂM IN-TEXT ↔ REF' : '🔗 IN-TEXT ↔ REF YEAR MISMATCH'}
+          <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-300 border border-violet-300 dark:border-violet-800">
+            {isVi ? 'Lệch năm trong bài' : 'In-text Year Mismatch'}
           </span>
         );
       case 'uncited_ref':
         return (
-          <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300 border border-orange-300">
-            {lang === 'vi' ? '👻 UNCITED REFERENCE (KHÔNG TRÍCH TRONG BÀI)' : '👻 UNCITED REFERENCE'}
+          <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300 border border-orange-300 dark:border-orange-800">
+            {isVi ? 'Chưa trích dẫn trong bài' : 'Uncited Reference'}
           </span>
         );
       case 'orphan_intext':
         return (
-          <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border border-rose-300">
-            {lang === 'vi' ? '❓ MISSING REFERENCE (TRÍCH DẪN MỒ CÔI)' : '❓ ORPHAN IN-TEXT CITATION'}
+          <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border border-rose-300 dark:border-rose-800">
+            {isVi ? 'Thiếu ở danh mục tham khảo' : 'Missing Reference'}
           </span>
         );
       default:
         return (
-          <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300">
-            {lang === 'vi' ? '✓ CHUẨN GỐC CSDL ACL' : '✓ CANONICAL ACL RECORD'}
+          <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+            {isVi ? 'Bản gốc ACL' : 'Canonical ACL'}
           </span>
         );
     }
   };
+
+  const renderVerdictPill = (
+    label: string,
+    triggeredRules: string[] | undefined,
+    isInvalidInput?: boolean,
+  ) => {
+    if (isInvalidInput) {
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-semibold border bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/70 dark:text-amber-200 dark:border-amber-800 whitespace-nowrap">
+          <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden="true" />
+          <span>
+            {isVi
+              ? 'Đầu vào chưa phải định dạng trích dẫn'
+              : 'Input does not look like a citation'}
+          </span>
+        </span>
+      );
+    }
+
+    const canonical = normalizeVerdictKey(label);
+    const display = getVerdictDisplay(label, lang);
+    const isIncomplete =
+      canonical === 'metadata_error' &&
+      Boolean(triggeredRules?.includes('R-INCOMPLETE-METADATA'));
+    const isLegal =
+      canonical === 'resource' &&
+      isLegalStatuteVerdict({ label, triggered_rules: triggeredRules });
+
+    if (isLegal) {
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-semibold border bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/70 dark:text-indigo-300 dark:border-indigo-800 whitespace-nowrap">
+          <Scale className="h-3 w-3 shrink-0" aria-hidden="true" />
+          <span>{isVi ? 'Văn bản Pháp luật' : 'Legal Statute'}</span>
+        </span>
+      );
+    }
+
+    if (isIncomplete) {
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-semibold border bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/70 dark:text-amber-300 dark:border-amber-800 whitespace-nowrap">
+          <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden="true" />
+          <span>{isVi ? 'Thiếu quy cách trích dẫn' : 'Incomplete Reference'}</span>
+        </span>
+      );
+    }
+
+    const Icon =
+      canonical === 'verified'
+        ? CheckCircle2
+        : canonical === 'metadata_error'
+          ? AlertTriangle
+          : canonical === 'suspected_hallucination'
+            ? XCircle
+            : canonical === 'resource'
+              ? Link2
+              : HelpCircle;
+
+    return (
+      <span
+        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-semibold border whitespace-nowrap ${display.pillClass}`}
+      >
+        <Icon className="h-3 w-3 shrink-0" aria-hidden="true" />
+        <span>{display.label}</span>
+      </span>
+    );
+  };
+
+  const formattedCorpusCount = dbTotalPapers.toLocaleString(isVi ? 'vi-VN' : 'en-US');
 
   return (
     <Card
@@ -471,18 +611,29 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-base sm:text-lg font-display font-bold tracking-tight leading-snug text-slate-900 dark:text-slate-50">
-                {lang === 'vi'
-                  ? 'Live Citation Sandbox & Trình Tạo Bản Thảo PDF Học Thuật Tự Động (CSDL ACL)'
-                  : 'Live Citation Sandbox & Synthetic Academic PDF Generator (ACL Database)'}
+                {isVi
+                  ? 'Kiểm tra nhanh & Tạo bài mẫu thử nghiệm'
+                  : 'Quick Citation Check & Sample Paper Builder'}
               </h1>
               <Badge className="bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/80 dark:text-emerald-300 dark:border-emerald-800 font-mono text-[10px]">
-                {dbTotalPapers.toLocaleString()} {lang === 'vi' ? 'BÀI BÁO ACL' : 'ACL PAPERS'}
+                {mode === 'acl_studio'
+                  ? `${formattedCorpusCount} ${isVi ? 'BÀI BÁO KHO ACL' : 'ACL CORPUS'}`
+                  : isVi
+                    ? '15+ THƯ VIỆN HỌC THUẬT'
+                    : '15+ ACADEMIC LIBRARIES'}
               </Badge>
             </div>
-            <p className="text-[11px] sm:text-xs text-slate-600 dark:text-slate-300 mt-0.5 leading-relaxed">
-              {lang === 'vi'
-                ? 'Lấy ngẫu nhiên 10–20 bài báo thật từ CSDL ACL, tùy chỉnh Metadata / In-text ↔ Refs và xuất File PDF hoàn chỉnh để kiểm chứng!'
-                : 'Sample 10–20 real ACL papers, tweak metadata or in-text linking live, and synthesize a complete academic PDF manuscript to verify In-Text ↔ Refs!'}
+            <p
+              data-testid="sandbox-studio-subtitle"
+              className="text-[11px] sm:text-xs text-slate-600 dark:text-slate-300 mt-0.5 leading-relaxed"
+            >
+              {mode === 'acl_studio'
+                ? isVi
+                  ? 'Lấy ngẫu nhiên 10–20 bài báo thật từ kho học thuật ACL (128K+), tùy chỉnh thông tin hoặc liên kết trích dẫn và xuất tệp PDF mẫu để chạy thử kiểm chứng.'
+                  : 'Sample 10–20 real papers from the 128K+ ACL scholarly corpus, edit citation details or linking live, and build a sample academic PDF to test verification.'
+                : isVi
+                  ? 'Dán trực tiếp danh sách tài liệu tham khảo (APA, IEEE, Vancouver hoặc BibTeX) để đối chiếu nhanh trên hơn 15 thư viện học thuật chỉ trong vài giây.'
+                  : 'Paste your reference list (APA, IEEE, Vancouver, or BibTeX) to cross-check citations across 15+ academic libraries in seconds.'}
             </p>
           </div>
         </div>
@@ -495,26 +646,28 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
           <button
             type="button"
             data-testid="sandbox-mode-acl-btn"
-            onClick={() => setMode('acl_studio')}
-            className={`w-full sm:w-auto justify-center text-center whitespace-nowrap px-2.5 sm:px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-mono font-semibold transition-all ${
+            aria-pressed={mode === 'acl_studio'}
+            onClick={() => handleModeSwitch('acl_studio')}
+            className={`w-full sm:w-auto justify-center text-center whitespace-nowrap px-2.5 sm:px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-mono font-semibold transition-all cursor-pointer ${
               mode === 'acl_studio'
                 ? 'bg-indigo-600 text-white shadow-sm'
                 : 'text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white'
             }`}
           >
-            {lang === 'vi' ? '🎲 CSDL ACL → PDF' : '🎲 ACL DB → Full PDF'}
+            {isVi ? 'Tạo bài mẫu (ACL → PDF)' : 'Sample Paper (ACL → PDF)'}
           </button>
           <button
             type="button"
             data-testid="sandbox-mode-raw-btn"
-            onClick={() => setMode('raw_paste')}
-            className={`w-full sm:w-auto justify-center text-center whitespace-nowrap px-2.5 sm:px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-mono font-semibold transition-all ${
+            aria-pressed={mode === 'raw_paste'}
+            onClick={() => handleModeSwitch('raw_paste')}
+            className={`w-full sm:w-auto justify-center text-center whitespace-nowrap px-2.5 sm:px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-mono font-semibold transition-all cursor-pointer ${
               mode === 'raw_paste'
                 ? 'bg-indigo-600 text-white shadow-sm'
                 : 'text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white'
             }`}
           >
-            {lang === 'vi' ? '⚡ Dán Nhanh (3s)' : '⚡ Quick Paste (3s)'}
+            {isVi ? 'Dán kiểm tra nhanh' : 'Quick Paste'}
           </button>
         </div>
       </div>
@@ -522,45 +675,45 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
       <div className="p-3.5 sm:p-6 space-y-4 sm:space-y-5">
         {mode === 'acl_studio' ? (
           <>
-            {/* Control Bar: Count, Style, Random Sample Button & Defense Suite Injector */}
+            {/* Control Bar: Count, Style, Random Sample Button & Common Mistakes Injector */}
             <div className="p-3.5 sm:p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/70 border border-slate-200/90 dark:border-slate-800 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex lg:flex-wrap items-stretch sm:items-center gap-2.5 w-full lg:w-auto min-w-0 max-w-full">
                 <div className="flex items-center justify-between sm:justify-start gap-2 w-full sm:w-auto min-w-0 max-w-full">
                   <label className="w-[68px] sm:w-auto whitespace-nowrap text-xs font-mono font-semibold text-slate-600 dark:text-slate-300 shrink-0">
-                    {lang === 'vi' ? 'Số lượng:' : 'Papers:'}
+                    {isVi ? 'Số lượng:' : 'Papers:'}
                   </label>
                   <select
                     data-testid="sandbox-acl-count-select"
                     aria-label={
-                      lang === 'vi'
+                      isVi
                         ? 'Số lượng bài báo ACL lấy mẫu'
                         : 'Number of ACL papers to sample'
                     }
                     value={sampleCount}
                     onChange={(e) => setSampleCount(Number(e.target.value))}
-                    className="h-9 px-2.5 rounded-xl text-xs font-mono font-semibold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 flex-1 sm:flex-initial min-w-0 max-w-full"
+                    className="h-9 pl-2.5 pr-8 rounded-xl text-xs font-mono font-semibold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 flex-1 sm:flex-initial min-w-0 max-w-full"
                   >
-                    <option value={10}>{lang === 'vi' ? '10 bài báo ACL' : '10 ACL Papers'}</option>
-                    <option value={12}>{lang === 'vi' ? '12 bài báo ACL' : '12 ACL Papers'}</option>
-                    <option value={15}>{lang === 'vi' ? '15 bài báo ACL' : '15 ACL Papers'}</option>
-                    <option value={20}>{lang === 'vi' ? '20 bài báo ACL' : '20 ACL Papers'}</option>
+                    <option value={10}>{isVi ? '10 bài báo ACL' : '10 ACL Papers'}</option>
+                    <option value={12}>{isVi ? '12 bài báo ACL' : '12 ACL Papers'}</option>
+                    <option value={15}>{isVi ? '15 bài báo ACL' : '15 ACL Papers'}</option>
+                    <option value={20}>{isVi ? '20 bài báo ACL' : '20 ACL Papers'}</option>
                   </select>
                 </div>
 
                 <div className="flex items-center justify-between sm:justify-start gap-2 w-full sm:w-auto min-w-0 max-w-full">
                   <label className="w-[68px] sm:w-auto whitespace-nowrap text-xs font-mono font-semibold text-slate-600 dark:text-slate-300 shrink-0">
-                    {lang === 'vi' ? 'Chuẩn:' : 'Style:'}
+                    {isVi ? 'Chuẩn:' : 'Style:'}
                   </label>
                   <select
                     data-testid="sandbox-acl-style-select"
                     aria-label={
-                      lang === 'vi'
-                        ? 'Chuẩn trích dẫn cho file PDF'
+                      isVi
+                        ? 'Chuẩn trích dẫn cho tệp PDF'
                         : 'Target citation style for generated PDF'
                     }
                     value={style}
                     onChange={(e) => setStyle(e.target.value as 'apa' | 'ieee')}
-                    className="h-9 px-2.5 rounded-xl text-xs font-mono font-semibold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 flex-1 sm:flex-initial min-w-0 max-w-full"
+                    className="h-9 pl-2.5 pr-8 rounded-xl text-xs font-mono font-semibold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 flex-1 sm:flex-initial min-w-0 max-w-full"
                   >
                     <option value="apa">APA 7th (Author-Year)</option>
                     <option value="ieee">IEEE Numeric [1]..[N]</option>
@@ -580,9 +733,9 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
                     <Shuffle className="h-4 w-4 shrink-0" />
                   )}
                   <span>
-                    {lang === 'vi'
-                      ? `Random ${sampleCount} Bài báo từ CSDL ACL`
-                      : `Sample ${sampleCount} Random ACL Papers`}
+                    {isVi
+                      ? `Lấy ngẫu nhiên ${sampleCount} bài báo`
+                      : `Sample ${sampleCount} Random Papers`}
                   </span>
                 </Button>
               </div>
@@ -594,14 +747,14 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
                     variant="outline"
                     size="sm"
                     data-testid="sandbox-auto-inject-suite-btn"
-                    onClick={handleAutoInjectDefenseSuite}
-                    className="w-full sm:w-auto h-auto min-h-9 py-2 rounded-xl text-xs font-mono font-semibold border-amber-300 dark:border-amber-700 bg-amber-50/80 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300 hover:bg-amber-100 whitespace-normal text-left leading-snug max-w-full"
+                    onClick={handleAddCommonMistakes}
+                    className="w-full sm:w-auto h-auto min-h-9 py-2 rounded-xl text-xs font-mono font-semibold border-amber-300 dark:border-amber-700 bg-amber-50/80 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-950 whitespace-normal text-left leading-snug max-w-full"
                   >
-                    <Wand2 className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                    <Wand2 className="h-3.5 w-3.5 text-amber-600 dark:text-amber-300 shrink-0" />
                     <span>
-                      {lang === 'vi'
-                        ? 'Gài Tự động Bộ Lỗi Mẫu Hội Đồng (Layer 1 + Layer 2)'
-                        : 'Auto-Inject Defense Error Suite (Layer 1 + 2)'}
+                      {isVi
+                        ? 'Tạo nhanh bài mẫu có lỗi phổ biến'
+                        : 'Add Common Citation Mistakes'}
                     </span>
                   </Button>
                 </div>
@@ -612,14 +765,14 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
               <div className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 p-5 sm:p-8 text-center bg-slate-50/50 dark:bg-slate-950/30">
                 <BookOpen className="h-8 w-8 sm:h-9 sm:w-9 text-indigo-500 mx-auto mb-2 opacity-85" />
                 <p className="text-sm font-display font-bold text-slate-800 dark:text-slate-200 leading-snug">
-                  {lang === 'vi'
-                    ? `Bấm nút "Random ${sampleCount} Bài báo từ CSDL ACL" ở trên để khởi tạo danh sách bài báo thực tế`
-                    : `Click "Sample ${sampleCount} Random ACL Papers" above to load real papers from the ACL Anthology database`}
+                  {isVi
+                    ? `Nhấn "Lấy ngẫu nhiên ${sampleCount} bài báo" ở trên để tải danh sách bài báo mẫu`
+                    : `Click "Sample ${sampleCount} Random Papers" above to load real papers from the ACL corpus`}
                 </p>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5 max-w-xl mx-auto leading-relaxed">
-                  {lang === 'vi'
-                    ? 'Sau khi lấy ngẫu nhiên 10–20 bài báo, bạn có thể sửa Năm, Tác giả, Tiêu đề, DOI hoặc bật/tắt liên kết In-text ↔ References rồi nhấn "Tạo File PDF Hoàn chỉnh & Chạy Kiểm chứng" ngay trước mặt thầy cô!'
-                    : 'Once loaded, you can edit any metadata field or toggle In-text ↔ Reference linking, then synthesize a full PDF manuscript to run through the verification pipeline.'}
+                  {isVi
+                    ? 'Sau khi tải 10–20 bài báo thật từ kho ACL, bạn có thể chỉnh sửa năm, tác giả, tiêu đề, mã DOI hoặc bật/tắt liên kết trích dẫn rồi tạo tệp PDF mẫu để thử nghiệm toàn bộ quy trình kiểm chứng.'
+                    : 'Once loaded, you can edit any metadata field or toggle in-text ↔ bibliography links, then build a sample PDF manuscript to run through the full verification workflow.'}
                 </p>
               </div>
             ) : (
@@ -627,7 +780,7 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
                 {/* Manuscript Title Bar */}
                 <div className="flex flex-col sm:flex-row sm:items-center gap-2 bg-slate-50/70 dark:bg-slate-900/60 p-3 rounded-xl border border-slate-200 dark:border-slate-800">
                   <span className="text-xs font-mono font-semibold text-slate-600 dark:text-slate-400 shrink-0">
-                    {lang === 'vi' ? 'Tiêu đề Bản thảo PDF:' : 'PDF Manuscript Title:'}
+                    {isVi ? 'Tiêu đề bài mẫu PDF:' : 'Sample PDF Title:'}
                   </span>
                   <input
                     type="text"
@@ -653,7 +806,7 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
                           : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800'
                       }`}
                     >
-                      {/* Row Top: Index + Preset Status Badge + Quick Corrupt Buttons */}
+                      {/* Row Top: Index + Preset Status Badge + Quick Edit Presets */}
                       <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="px-2 py-0.5 rounded-md text-xs font-mono font-bold bg-indigo-600 text-white">
@@ -662,70 +815,74 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
                           {presetBadge(it.mutation_preset)}
                           {it.paper_id && (
                             <span className="text-[10px] font-mono text-slate-400">
-                              ACL ID #{it.paper_id}
+                              ACL #{it.paper_id}
                             </span>
                           )}
                         </div>
 
-                        {/* Quick 1-Click Mutation Presets for Live Defense Demo */}
+                        {/* Quick 1-Click Scenario Presets */}
                         <div className="flex flex-wrap items-center gap-1">
                           <button
                             type="button"
                             data-testid={`sandbox-preset-clean-${idx}`}
                             onClick={() => applyItemPreset(idx, 'clean')}
-                            className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-slate-100 hover:bg-emerald-100 text-slate-700 hover:text-emerald-800 dark:bg-slate-800 dark:text-slate-300 transition-colors"
-                            title={lang === 'vi' ? 'Khôi phục dữ liệu chuẩn gốc từ CSDL ACL' : 'Restore canonical ACL record'}
+                            className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-slate-100 hover:bg-emerald-100 text-slate-700 hover:text-emerald-800 dark:bg-slate-800 dark:text-slate-300 transition-colors cursor-pointer"
+                            title={
+                              isVi
+                                ? 'Khôi phục dữ liệu gốc từ kho ACL'
+                                : 'Restore canonical ACL record'
+                            }
                           >
                             <RotateCcw className="h-2.5 w-2.5 inline mr-0.5" />
-                            {lang === 'vi' ? 'Gốc ACL' : 'Canonical ACL'}
+                            {isVi ? 'Bản gốc ACL' : 'Canonical ACL'}
                           </button>
                           <button
                             type="button"
                             data-testid={`sandbox-preset-wrong-year-${idx}`}
                             onClick={() => applyItemPreset(idx, 'wrong_year')}
-                            className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-amber-100/80 hover:bg-amber-200 text-amber-900 dark:bg-amber-950 dark:text-amber-300 transition-colors"
+                            className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-amber-100/80 hover:bg-amber-200 text-amber-900 dark:bg-amber-950 dark:text-amber-300 transition-colors cursor-pointer"
                           >
-                            {lang === 'vi' ? 'Sửa sai Năm' : 'Wrong Year'}
+                            {isVi ? 'Sai năm' : 'Wrong Year'}
                           </button>
                           <button
                             type="button"
                             data-testid={`sandbox-preset-wrong-author-${idx}`}
                             onClick={() => applyItemPreset(idx, 'wrong_author')}
-                            className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-amber-100/80 hover:bg-amber-200 text-amber-900 dark:bg-amber-950 dark:text-amber-300 transition-colors"
+                            className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-amber-100/80 hover:bg-amber-200 text-amber-900 dark:bg-amber-950 dark:text-amber-300 transition-colors cursor-pointer"
                           >
-                            {lang === 'vi' ? 'Sửa sai Tác giả' : 'Wrong Author'}
+                            {isVi ? 'Sai tác giả' : 'Wrong Author'}
                           </button>
                           <button
                             type="button"
                             data-testid={`sandbox-preset-hallucinated-${idx}`}
                             onClick={() => applyItemPreset(idx, 'hallucinated')}
-                            className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-red-100/90 hover:bg-red-200 text-red-900 dark:bg-red-950 dark:text-red-300 transition-colors"
+                            className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-red-100/90 hover:bg-red-200 text-red-900 dark:bg-red-950 dark:text-red-300 transition-colors cursor-pointer"
                           >
-                            {lang === 'vi' ? 'Bịa nguồn giả (Hallucination)' : 'Hallucinate'}
+                            {isVi ? 'Nguồn không có thật' : 'Unfound Source'}
                           </button>
                           <button
                             type="button"
                             data-testid={`sandbox-preset-intext-mismatch-${idx}`}
                             onClick={() => applyItemPreset(idx, 'year_mismatch_intext')}
-                            className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-violet-100/90 hover:bg-violet-200 text-violet-900 dark:bg-violet-950 dark:text-violet-300 transition-colors"
+                            className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-violet-100/90 hover:bg-violet-200 text-violet-900 dark:bg-violet-950 dark:text-violet-300 transition-colors cursor-pointer"
                           >
-                            {lang === 'vi' ? 'Lệch năm In-text ↔ Ref' : 'In-text ↔ Ref Year Drift'}
+                            {isVi ? 'Lệch năm trong bài' : 'In-text Year Drift'}
                           </button>
                           <button
                             type="button"
                             data-testid={`sandbox-preset-uncited-${idx}`}
                             onClick={() => applyItemPreset(idx, 'uncited_ref')}
-                            className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-orange-100/90 hover:bg-orange-200 text-orange-900 dark:bg-orange-950 dark:text-orange-300 transition-colors"
+                            className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-orange-100/90 hover:bg-orange-200 text-orange-900 dark:bg-orange-950 dark:text-orange-300 transition-colors cursor-pointer"
                           >
-                            {lang === 'vi' ? 'Ref không trích (Uncited)' : 'Uncited Ref'}
+                            {isVi ? 'Chưa trích dẫn' : 'Uncited Ref'}
                           </button>
                           <button
                             type="button"
                             data-testid={`sandbox-preset-orphan-${idx}`}
                             onClick={() => applyItemPreset(idx, 'orphan_intext')}
-                            className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-rose-100/90 hover:bg-rose-200 text-rose-900 dark:bg-rose-950 dark:text-rose-300 transition-colors"
+                            className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-rose-100/90 hover:bg-rose-200 text-rose-900 dark:bg-rose-950 dark:text-rose-300 transition-colors cursor-pointer"
                           >
-                            {lang === 'vi' ? 'Trích dẫn mồ côi (Orphan)' : 'Orphan In-text'}
+                            {isVi ? 'Thiếu ở danh mục' : 'Missing Ref'}
                           </button>
                         </div>
                       </div>
@@ -734,7 +891,7 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
                       <div className="grid grid-cols-1 md:grid-cols-12 gap-2">
                         <div className="md:col-span-5">
                           <label className="block text-[10px] font-mono uppercase text-slate-500 mb-0.5">
-                            {lang === 'vi' ? 'Title (Tiêu đề bài báo)' : 'Title'}
+                            {isVi ? 'Tiêu đề bài báo' : 'Title'}
                           </label>
                           <input
                             type="text"
@@ -746,7 +903,7 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
                         </div>
                         <div className="md:col-span-3">
                           <label className="block text-[10px] font-mono uppercase text-slate-500 mb-0.5">
-                            {lang === 'vi' ? 'Authors (Tác giả, cách bởi ;)' : 'Authors (; separated)'}
+                            {isVi ? 'Tác giả (cách nhau bởi ;)' : 'Authors (; separated)'}
                           </label>
                           <input
                             type="text"
@@ -758,7 +915,7 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
                         </div>
                         <div className="md:col-span-1">
                           <label className="block text-[10px] font-mono uppercase text-slate-500 mb-0.5">
-                            {lang === 'vi' ? 'Year (Năm)' : 'Year'}
+                            {isVi ? 'Năm' : 'Year'}
                           </label>
                           <input
                             type="text"
@@ -770,7 +927,7 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
                         </div>
                         <div className="md:col-span-3">
                           <label className="block text-[10px] font-mono uppercase text-slate-500 mb-0.5">
-                            {lang === 'vi' ? 'DOI / Mã định danh' : 'DOI / Identifier'}
+                            {isVi ? 'DOI / Mã định danh' : 'DOI / Identifier'}
                           </label>
                           <input
                             type="text"
@@ -782,7 +939,7 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
                         </div>
                       </div>
 
-                      {/* Layer-1 In-Text <-> References Controls */}
+                      {/* In-Text <-> References Controls */}
                       <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800/80 flex flex-wrap items-center justify-between gap-3 text-xs">
                         <div className="flex flex-wrap items-center gap-4">
                           <label className="inline-flex items-center gap-1.5 cursor-pointer font-mono text-[11px] text-slate-700 dark:text-slate-300">
@@ -797,9 +954,7 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
                             />
                             <Link2 className="h-3 w-3 text-indigo-500" />
                             <span>
-                              {lang === 'vi'
-                                ? 'Trích dẫn trong bài (Body In-Text)'
-                                : 'Cited in Body Text (In-Text)'}
+                              {isVi ? 'Có trích dẫn trong bài viết' : 'Cited in Body Text'}
                             </span>
                           </label>
 
@@ -815,18 +970,16 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
                             />
                             <BookOpen className="h-3 w-3 text-emerald-500" />
                             <span>
-                              {lang === 'vi'
-                                ? 'Có trong mục References cuối bài'
-                                : 'Included in Bibliography (References)'}
+                              {isVi ? 'Có trong Danh mục tham khảo' : 'Included in Bibliography'}
                             </span>
                           </label>
                         </div>
 
                         <div className="flex flex-wrap items-center justify-between gap-2 w-full sm:w-auto">
-                          <span className="text-[11px] font-mono text-slate-500">
-                            {lang === 'vi'
-                              ? 'Năm In-text ghi đè (nếu muốn test lệch năm):'
-                              : 'In-text year override (test year drift):'}
+                          <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
+                            {isVi
+                              ? 'Năm ghi trong đoạn văn (tùy chọn):'
+                              : 'In-text year override (optional):'}
                           </span>
                           <input
                             type="text"
@@ -849,18 +1002,18 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
                   <div className="text-xs font-mono text-slate-700 dark:text-slate-300 space-y-0.5">
                     <div>
                       <strong>{items.filter((i) => i.cite_in_text).length}</strong>{' '}
-                      {lang === 'vi'
-                        ? 'trích dẫn In-text trong thân bài ↔'
+                      {isVi
+                        ? 'trích dẫn trong bài ↔'
                         : 'in-text citations in body ↔'}{' '}
                       <strong>{items.filter((i) => i.include_in_references).length}</strong>{' '}
-                      {lang === 'vi'
-                        ? 'mục trong References cuối bài'
-                        : 'entries in References'}
+                      {isVi
+                        ? 'mục trong danh mục tham khảo'
+                        : 'entries in bibliography'}
                     </div>
                     <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                      {lang === 'vi'
-                        ? 'Hệ thống sẽ tự động sinh file PDF học thuật hoàn chỉnh (3 chương + References) để kiểm tra cả Layer 1 (In-text ↔ Refs) và Layer 2 (15+ CSDL).'
-                        : 'Synthesizes a complete 3-section academic PDF manuscript + Bibliography to verify both Layer 1 (In-text ↔ Refs) and Layer 2 (15+ Scholarly DBs).'}
+                      {isVi
+                        ? 'Hệ thống tạo tệp PDF học thuật mẫu (3 phần + danh mục cuối bài) để kiểm tra cả liên kết trong bài và đối chiếu 15+ thư viện.'
+                        : 'Builds a complete 3-section academic PDF sample + reference list to verify both in-text linking and 15+ academic libraries.'}
                     </div>
                   </div>
 
@@ -879,9 +1032,7 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
                         <Download className="h-4 w-4 text-slate-700 dark:text-slate-200 shrink-0" />
                       )}
                       <span>
-                        {lang === 'vi'
-                          ? 'Tải File PDF Hoàn chỉnh (.PDF)'
-                          : 'Download Generated .PDF'}
+                        {isVi ? 'Tải tệp PDF mẫu (.PDF)' : 'Download Sample .PDF'}
                       </span>
                     </Button>
 
@@ -899,7 +1050,13 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
                         <Zap className="h-4 w-4 text-amber-500 shrink-0" />
                       )}
                       <span>
-                        {lang === 'vi' ? 'Kiểm tra Nhanh 3 Giây' : 'Instant 3s Check'}
+                        {verifyingInstant
+                          ? isVi
+                            ? 'Đang kiểm tra...'
+                            : 'Checking...'
+                          : isVi
+                            ? 'Kiểm tra nhanh'
+                            : 'Quick Check'}
                       </span>
                     </Button>
 
@@ -916,9 +1073,9 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
                         <FileText className="h-4 w-4 shrink-0" />
                       )}
                       <span>
-                        {lang === 'vi'
-                          ? 'Tạo File PDF Hoàn chỉnh & Chạy Full Pipeline (In-Text ↔ Refs)'
-                          : 'Generate Full PDF & Run End-to-End Verification'}
+                        {isVi
+                          ? 'Tạo PDF mẫu & Chạy kiểm chứng đầy đủ'
+                          : 'Generate Sample PDF & Run Full Check'}
                       </span>
                     </Button>
                   </div>
@@ -927,21 +1084,51 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
             )}
           </>
         ) : (
-          /* Mode B: Raw Text / BibTeX Instant 3-Second Sandbox */
+          /* Mode B: Raw Text / BibTeX Quick Paste Check */
           <div className="space-y-3">
-            <label className="block text-xs font-mono font-semibold text-slate-700 dark:text-slate-300">
-              {lang === 'vi'
-                ? 'Dán danh sách Tài liệu tham khảo (APA, IEEE, Vancouver) hoặc BibTeX để kiểm tra tức thì:'
-                : 'Paste reference entries (APA, IEEE, Vancouver) or BibTeX for instant 3-second verification:'}
+            <label
+              htmlFor="sandbox-raw-textarea-input"
+              className="block text-xs font-mono font-semibold text-slate-700 dark:text-slate-300"
+            >
+              {isVi
+                ? 'Dán danh sách Tài liệu tham khảo (APA, IEEE, Vancouver) hoặc BibTeX để kiểm tra nhanh:'
+                : 'Paste reference entries (APA, IEEE, Vancouver) or BibTeX for quick verification:'}
             </label>
             <textarea
+              id="sandbox-raw-textarea-input"
               data-testid="sandbox-raw-textarea"
               rows={5}
               value={rawRefsText}
-              onChange={(e) => setRawRefsText(e.target.value)}
-              className="w-full p-3.5 rounded-xl font-mono text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100"
+              onChange={(e) => handleRawTextChange(e.target.value)}
+              placeholder={
+                isVi
+                  ? 'Ví dụ: Vaswani, A., et al. (2017). Attention Is All You Need. NeurIPS. https://doi.org/10.48550/arXiv.1706.03762'
+                  : 'Example: Vaswani, A., et al. (2017). Attention Is All You Need. NeurIPS. https://doi.org/10.48550/arXiv.1706.03762'
+              }
+              className="w-full p-3.5 rounded-xl font-mono text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
             />
-            <div className="flex justify-end">
+            {!rawRefsText.trim() && (
+              <p
+                data-testid="sandbox-raw-empty-hint"
+                className="text-xs text-slate-500 dark:text-slate-400"
+              >
+                {isVi
+                  ? 'Hãy dán ít nhất một trích dẫn học thuật (APA, IEEE, Vancouver hoặc BibTeX) để bắt đầu kiểm tra.'
+                  : 'Paste at least one academic citation (APA, IEEE, Vancouver, or BibTeX) to start checking.'}
+              </p>
+            )}
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              {rawRefsText !== DEFAULT_RAW_REFS_SAMPLE ? (
+                <button
+                  type="button"
+                  onClick={() => handleRawTextChange(DEFAULT_RAW_REFS_SAMPLE)}
+                  className="text-xs font-mono text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 underline underline-offset-4 cursor-pointer"
+                >
+                  {isVi ? 'Dùng lại 3 trích dẫn mẫu' : 'Restore 3 sample citations'}
+                </button>
+              ) : (
+                <span />
+              )}
               <Button
                 type="button"
                 data-testid="sandbox-verify-submit-btn"
@@ -952,49 +1139,114 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
                 {verifyingInstant ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
-                  <Zap className="h-4 w-4 text-amber-400 dark:text-amber-600" />
+                  <Zap className="h-4 w-4 text-amber-300" />
                 )}
                 <span>
-                  {lang === 'vi'
-                    ? 'Kiểm tra Trực tiếp trong 3 Giây'
-                    : 'Run Instant 3s Verification'}
+                  {verifyingInstant
+                    ? isVi
+                      ? 'Đang kiểm tra...'
+                      : 'Checking...'
+                    : isVi
+                      ? 'Kiểm tra trích dẫn ngay'
+                      : 'Check Citations Now'}
                 </span>
               </Button>
             </div>
           </div>
         )}
 
-        {/* Instant Verification Results Panel */}
+        {/* Instant Verification Loading Skeleton & Results Panel */}
         <CardResize>
           <AnimatePresence mode="wait">
-          {instantResult && (
-            <m.div
-              key="sandbox-instant-results"
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0, transition: TRANSITION_ENTER }}
-              exit={{ opacity: 0, y: -4, transition: TRANSITION_EXIT }}
-              data-testid="sandbox-instant-results"
-              className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-800 space-y-3"
-            >
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
-                  <Badge className="bg-indigo-600 text-white">
-                    ⚡ {instantResult.elapsed_seconds}s
-                  </Badge>
+            {verifyingInstant && (
+              <m.div
+                key="sandbox-verifying-skeleton"
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0, transition: TRANSITION_ENTER }}
+                exit={{ opacity: 0, y: -4, transition: TRANSITION_EXIT }}
+                data-testid="sandbox-verifying-skeleton"
+                role="status"
+                aria-live="polite"
+                className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-800 space-y-3"
+              >
+                <div className="flex items-center gap-2 text-xs font-mono text-slate-600 dark:text-slate-300">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-indigo-600 dark:text-indigo-400" />
+                  <span>
+                    {isVi
+                      ? 'Đang đối chiếu trích dẫn trên 15+ thư viện học thuật...'
+                      : 'Cross-checking citations across 15+ academic libraries...'}
+                  </span>
+                </div>
+                <div className="space-y-2 animate-pulse">
+                  {[0, 1].map((idx) => (
+                    <div
+                      key={idx}
+                      className="p-3.5 rounded-xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950/50 space-y-2"
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className="h-4 w-10 rounded bg-slate-200 dark:bg-slate-800" />
+                        <div className="h-4 w-28 rounded-full bg-slate-200 dark:bg-slate-800" />
+                      </div>
+                      <div className="h-3 w-4/5 rounded bg-slate-200/80 dark:bg-slate-800/80" />
+                      <div className="h-3 w-2/3 rounded bg-slate-200/60 dark:bg-slate-800/60" />
+                    </div>
+                  ))}
+                </div>
+              </m.div>
+            )}
+
+            {!verifyingInstant && instantResult && (
+              <m.div
+                key="sandbox-instant-results"
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0, transition: TRANSITION_ENTER }}
+                exit={{ opacity: 0, y: -4, transition: TRANSITION_EXIT }}
+                data-testid="sandbox-instant-results"
+                data-stale={isResultStale ? 'true' : 'false'}
+                className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-800 space-y-3"
+              >
+                {isResultStale && (
+                  <div
+                    role="status"
+                    data-testid="sandbox-stale-banner"
+                    className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50/90 dark:bg-amber-950/60 text-xs text-amber-900 dark:text-amber-200"
+                  >
+                    <span className="inline-flex items-center gap-1.5">
+                      <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                      <span>
+                        {isVi
+                          ? 'Nội dung đã thay đổi — kết quả bên dưới thuộc lần kiểm tra trước. Nhấn "Kiểm tra" để cập nhật.'
+                          : 'Input has changed — the results below are from a previous check. Run verification again to refresh.'}
+                      </span>
+                    </span>
+                  </div>
+                )}
+
+                <div
+                  className={
+                    isResultStale
+                      ? 'space-y-3 opacity-50 pointer-events-none select-none transition-opacity'
+                      : 'space-y-3 transition-opacity'
+                  }
+                >
                   {(() => {
                     const resultsList = instantResult.results ?? [];
                     const summaryMap = (instantResult.summary ?? {}) as Record<
                       string,
                       number | undefined
                     >;
+                    const invalidInputCount = resultsList.filter((item) =>
+                      Boolean(item.is_invalid_input),
+                    ).length;
+                    const allInvalidInput =
+                      resultsList.length > 0 && invalidInputCount === resultsList.length;
                     const verifiedCount = summaryMap.verified ?? 0;
                     const hallucCount = summaryMap.suspected_hallucination ?? 0;
-                    const unresolvedCount =
+                    const rawUnresolved =
                       summaryMap.unresolved ??
                       resultsList.filter((item) => item.label === 'unresolved').length;
-                    const resItems = resultsList.filter(
-                      (item) => item.label === 'resource',
-                    );
+                    const unresolvedCount = Math.max(0, rawUnresolved - invalidInputCount);
+                    const resItems = resultsList.filter((item) => item.label === 'resource');
                     const resourceTotal = summaryMap.resource ?? resItems.length;
                     const legalCount = resItems.filter((item) =>
                       isLegalStatuteVerdict(item),
@@ -1014,7 +1266,7 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
                       rawMetaErr +
                       incompleteCount +
                       hallucCount +
-                      unresolvedCount +
+                      rawUnresolved +
                       resourceTotal;
                     const metadataErrorCount =
                       incompleteCount > 0 &&
@@ -1023,394 +1275,473 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
                         ? Math.max(0, rawMetaErr - incompleteCount)
                         : rawMetaErr;
 
+                    const hasApplicableLayer1 = resultsList.some(
+                      (item) =>
+                        normalizeMappingStatusKey(item.mapping_status) !== 'not_applicable',
+                    );
+
+                    const elapsedDisplay =
+                      typeof instantResult.elapsed_seconds === 'number' &&
+                      instantResult.elapsed_seconds < 0.1
+                        ? '< 0.1s'
+                        : `${Number(instantResult.elapsed_seconds ?? 0).toFixed(1)}s`;
+
+                    const verifiedDisplay = getVerdictDisplay('verified', lang);
+                    const mismatchDisplay = getVerdictDisplay('metadata_error', lang);
+                    const notFoundDisplay = getVerdictDisplay('suspected_hallucination', lang);
+                    const unresolvedDisplay = getVerdictDisplay('unresolved', lang);
+
                     return (
                       <>
-                        <span className="px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-semibold">
-                          ✓ {lang === 'vi' ? 'Hợp lệ' : 'Verified'}: {verifiedCount}
-                        </span>
-                        <span className="px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300 font-semibold">
-                          ⚠ {lang === 'vi' ? 'Sai lệch Metadata' : 'Metadata Error'}:{' '}
-                          {metadataErrorCount}
-                        </span>
-                        {incompleteCount > 0 && (
-                          <span
-                            data-testid="sandbox-summary-incomplete"
-                            className="px-2.5 py-1 rounded-lg bg-amber-100/80 dark:bg-amber-950/80 text-amber-800 dark:text-amber-200 font-semibold"
-                          >
-                            📝 {lang === 'vi' ? 'Thiếu quy cách' : 'Incomplete Ref'}:{' '}
-                            {incompleteCount}
-                          </span>
-                        )}
-                        <span className="px-2.5 py-1 rounded-lg bg-red-50 dark:bg-red-950 text-red-700 dark:text-red-300 font-semibold">
-                          🚨 {lang === 'vi' ? 'Nghi bịa đặt' : 'Hallucination'}:{' '}
-                          {hallucCount}
-                        </span>
-                        {unresolvedCount > 0 && (
-                          <span
-                            data-testid="sandbox-summary-unresolved"
-                            className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold"
-                          >
-                            ? {lang === 'vi' ? 'Chờ rà soát' : 'Unresolved'}:{' '}
-                            {unresolvedCount}
-                          </span>
-                        )}
-                        {webCount > 0 && (
-                          <span
-                            data-testid="sandbox-summary-resource"
-                            className="px-2.5 py-1 rounded-lg bg-sky-50 dark:bg-sky-950 text-sky-700 dark:text-sky-300 font-semibold"
-                          >
-                            ↗ {lang === 'vi' ? 'Tài nguyên Web' : 'URL Resource'}: {webCount}
-                          </span>
-                        )}
-                        {legalCount > 0 && (
-                          <span
-                            data-testid="sandbox-summary-legal"
-                            className="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-semibold"
-                          >
-                            ⚖ {lang === 'vi' ? 'Văn bản Pháp luật' : 'Legal Statute'}:{' '}
-                            {legalCount}
-                          </span>
-                        )}
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
+                            <Badge
+                              data-testid="sandbox-elapsed-badge"
+                              className="inline-flex items-center gap-1 bg-indigo-600 text-white"
+                            >
+                              <Clock className="h-3 w-3 shrink-0" aria-hidden="true" />
+                              <span>{elapsedDisplay}</span>
+                            </Badge>
+
+                            {!allInvalidInput && (
+                              <>
+                                <span className="px-2.5 py-1 rounded-lg border bg-emerald-50 border-emerald-200 dark:bg-emerald-950 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 font-semibold">
+                                  {verifiedDisplay.label}: {verifiedCount}
+                                </span>
+                                <span className="px-2.5 py-1 rounded-lg border bg-amber-50 border-amber-200 dark:bg-amber-950 dark:border-amber-800 text-amber-800 dark:text-amber-300 font-semibold">
+                                  {mismatchDisplay.label}: {metadataErrorCount}
+                                </span>
+                                {incompleteCount > 0 && (
+                                  <span
+                                    data-testid="sandbox-summary-incomplete"
+                                    className="px-2.5 py-1 rounded-lg border bg-amber-100/80 border-amber-200 dark:bg-amber-950/80 dark:border-amber-800 text-amber-800 dark:text-amber-200 font-semibold"
+                                  >
+                                    {isVi ? 'Thiếu quy cách' : 'Incomplete Ref'}: {incompleteCount}
+                                  </span>
+                                )}
+                                <span className="px-2.5 py-1 rounded-lg border bg-red-50 border-red-200 dark:bg-red-950 dark:border-red-800 text-red-700 dark:text-red-300 font-semibold">
+                                  {notFoundDisplay.label}: {hallucCount}
+                                </span>
+                                {unresolvedCount > 0 && (
+                                  <span
+                                    data-testid="sandbox-summary-unresolved"
+                                    className="px-2.5 py-1 rounded-lg border bg-slate-100 border-slate-200 dark:bg-slate-800 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-semibold"
+                                  >
+                                    {unresolvedDisplay.label}: {unresolvedCount}
+                                  </span>
+                                )}
+                                {webCount > 0 && (
+                                  <span
+                                    data-testid="sandbox-summary-resource"
+                                    className="px-2.5 py-1 rounded-lg border bg-violet-50 border-violet-200 dark:bg-violet-950 dark:border-violet-800 text-violet-700 dark:text-violet-300 font-semibold"
+                                  >
+                                    {isVi ? 'Nguồn Web' : 'Web Source'}: {webCount}
+                                  </span>
+                                )}
+                                {legalCount > 0 && (
+                                  <span
+                                    data-testid="sandbox-summary-legal"
+                                    className="px-2.5 py-1 rounded-lg border bg-indigo-50 border-indigo-200 dark:bg-indigo-950 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 font-semibold"
+                                  >
+                                    {isVi ? 'Văn bản Pháp luật' : 'Legal Statute'}: {legalCount}
+                                  </span>
+                                )}
+                              </>
+                            )}
+
+                            {invalidInputCount > 0 && (
+                              <span
+                                data-testid="sandbox-summary-invalid"
+                                className="px-2.5 py-1 rounded-lg border bg-amber-50 border-amber-200 dark:bg-amber-950 dark:border-amber-800 text-amber-800 dark:text-amber-200 font-semibold"
+                              >
+                                {isVi ? 'Đầu vào chưa hợp lệ' : 'Invalid Input'}:{' '}
+                                {invalidInputCount}
+                              </span>
+                            )}
+
+                            {hasApplicableLayer1 && (
+                              <span
+                                data-testid="sandbox-summary-layer1"
+                                className="px-2.5 py-1 rounded-lg border bg-violet-50 border-violet-200 dark:bg-violet-950 dark:border-violet-800 text-violet-700 dark:text-violet-300 font-semibold"
+                              >
+                                {isVi
+                                  ? 'Lỗi liên kết trong bài ↔ danh mục'
+                                  : 'In-text ↔ Ref Linking Issues'}
+                                : {instantResult.summary.layer1_linking_issues}
+                              </span>
+                            )}
+                          </div>
+
+                          {!allInvalidInput && instantResult.remediation?.combined_bibtex && (
+                            <button
+                              type="button"
+                              data-testid="sandbox-copy-bibtex-btn"
+                              onClick={() => {
+                                void navigator.clipboard.writeText(
+                                  instantResult.remediation?.combined_bibtex || '',
+                                );
+                                setCopiedBibtex(true);
+                                setTimeout(() => setCopiedBibtex(false), 2000);
+                              }}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono font-semibold border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-[#FBFAF6] hover:bg-indigo-50 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                            >
+                              <IconSwap
+                                active={copiedBibtex}
+                                iconA={
+                                  <Copy className="h-3.5 w-3.5 text-indigo-600 dark:text-[#FBFAF6]" />
+                                }
+                                iconB={
+                                  <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-300" />
+                                }
+                              />
+                              <TextMorph
+                                text={
+                                  copiedBibtex
+                                    ? isVi
+                                      ? 'Đã sao chép BibTeX!'
+                                      : 'Copied BibTeX!'
+                                    : isVi
+                                      ? 'Sao chép BibTeX chuẩn hóa'
+                                      : 'Copy Standardized BibTeX'
+                                }
+                              />
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-2 max-h-96 overflow-y-auto pr-1">
+                          {resultsList.map((r, rIdx) => {
+                            const cardKey = `${r.index}-${rIdx}`;
+                            const isInvalid = Boolean(r.is_invalid_input);
+                            const isVer = !isInvalid && r.label === 'verified';
+                            const isRes = !isInvalid && r.label === 'resource';
+                            const isHalluc = !isInvalid && r.label === 'suspected_hallucination';
+                            const isRetracted =
+                              !isInvalid &&
+                              (Boolean(r.is_retracted || r.features?.is_retracted) ||
+                                (r.triggered_rules ?? []).includes('R-RETRACTED-PAPER'));
+                            const isUrlMismatch =
+                              !isInvalid &&
+                              (r.triggered_rules ?? []).includes('R-URL-CONTENT-MISMATCH');
+
+                            const mappingKey = normalizeMappingStatusKey(r.mapping_status);
+                            const isLayer1Applicable =
+                              !isInvalid && mappingKey !== 'not_applicable';
+                            const hasL1Issue = isLayer1Applicable && mappingKey !== 'matched';
+                            const mappingDisplay = getMappingStatusDisplay(r.mapping_status, lang);
+
+                            const rawHtmlMeta = (r.html_meta ?? r.features?.html_meta ?? null) as
+                              | Record<string, unknown>
+                              | null;
+                            const fallbackHtmlTitle =
+                              [
+                                rawHtmlMeta?.page_title,
+                                rawHtmlMeta?.citation_title,
+                                rawHtmlMeta?.og_title,
+                                rawHtmlMeta?.dc_title,
+                                rawHtmlMeta?.title,
+                                rawHtmlMeta?.observed_title,
+                              ]
+                                .find(
+                                  (val): val is string =>
+                                    typeof val === 'string' && val.trim().length > 0,
+                                )
+                                ?.trim() ?? null;
+                            const extractedWeb = extractObservedWebMeta(r);
+                            const observedWeb = extractedWeb?.title
+                              ? extractedWeb
+                              : fallbackHtmlTitle
+                                ? {
+                                    title: fallbackHtmlTitle,
+                                    venue:
+                                      extractedWeb?.venue ??
+                                      (typeof rawHtmlMeta?.site_name === 'string'
+                                        ? rawHtmlMeta.site_name
+                                        : null),
+                                    authors: extractedWeb?.authors ?? [],
+                                    year: extractedWeb?.year ?? null,
+                                    isArchived:
+                                      extractedWeb?.isArchived ??
+                                      r.url_status === 'archived_alive',
+                                  }
+                                : extractedWeb;
+                            const nonWebSources = (r.matched_sources ?? []).filter(
+                              (s) =>
+                                s.source !== 'web_html_meta' && s.source !== 'wayback_html_meta',
+                            );
+                            const primarySource =
+                              (r.matched_source &&
+                              r.matched_source.source !== 'web_html_meta' &&
+                              r.matched_source.source !== 'wayback_html_meta'
+                                ? r.matched_source
+                                : null) ??
+                              (nonWebSources.length > 0 ? nonWebSources[0] : null);
+                            const rawUrlStatus = r.url_status ?? r.features?.url_status;
+                            const hasArchiveFallback =
+                              Boolean(r.archive_url || r.features?.archive_url) ||
+                              (r.triggered_rules ?? []).includes('R-WAYBACK-ARCHIVED');
+                            const urlStatus =
+                              rawUrlStatus === 'archived_alive' ||
+                              (hasArchiveFallback &&
+                                rawUrlStatus !== 'alive' &&
+                                rawUrlStatus !== 'restricted_alive')
+                                ? 'archived_alive'
+                                : rawUrlStatus === 'alive' ||
+                                    rawUrlStatus === 'restricted_alive' ||
+                                    rawUrlStatus === 'dead_link' ||
+                                    rawUrlStatus === 'fake_domain' ||
+                                    rawUrlStatus === 'unchecked'
+                                  ? rawUrlStatus
+                                  : null;
+                            const urlCode = r.url_status_code ?? r.features?.url_status_code;
+                            const markerDisplay =
+                              r.composite_label || r.sub_index || r.numeric_index != null
+                                ? getCitationMarkerLabel(r, r.index ? r.index - 1 : rIdx)
+                                : `#${r.index}`;
+
+                            const verdictForExplain: Verdict = {
+                              citation_id: `sandbox-${r.index}`,
+                              citation_raw: r.citation_raw,
+                              mapping_status: (r.mapping_status ||
+                                'matched') as Verdict['mapping_status'],
+                              mapping_confidence: 1,
+                              label: r.label as ValidationLabel,
+                              confidence: r.confidence ?? 1,
+                              reasoning: r.reasoning || '',
+                              triggered_rules: r.triggered_rules ?? [],
+                              mismatched_fields: r.mismatched_fields ?? [],
+                              matched_sources:
+                                r.matched_sources ?? (r.matched_source ? [r.matched_source] : []),
+                              url_status: r.url_status ?? r.features?.url_status ?? null,
+                              url_status_code:
+                                r.url_status_code ?? r.features?.url_status_code ?? null,
+                              archive_url: r.archive_url ?? r.features?.archive_url ?? null,
+                              cited_url: r.cited_url ?? null,
+                              html_meta: r.html_meta ?? r.features?.html_meta ?? null,
+                              is_retracted: isRetracted,
+                              composite_label: r.composite_label ?? null,
+                              numeric_index: r.numeric_index ?? null,
+                              sub_index: r.sub_index ?? null,
+                              features: r.features,
+                              is_overridden: false,
+                            };
+
+                            const explanationText = isVi
+                              ? r.reasoning_vi ||
+                                r.reasoning ||
+                                getVerdictExplanation(verdictForExplain, 'vi')
+                              : r.reasoning_en ||
+                                r.reasoning ||
+                                getVerdictExplanation(verdictForExplain, 'en');
+
+                            const rulesList = r.triggered_rules ?? [];
+                            const isTechExpanded = Boolean(expandedTechCards[cardKey]);
+
+                            return (
+                              <div
+                                key={cardKey}
+                                data-testid={`sandbox-result-card-${r.index}`}
+                                data-verdict-label={isInvalid ? 'invalid_input' : r.label}
+                                className={`p-3 rounded-xl border text-xs space-y-1.5 ${
+                                  isInvalid
+                                    ? 'bg-amber-50/70 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800'
+                                    : isHalluc || isRetracted
+                                      ? 'bg-red-50/70 dark:bg-red-950/30 border-red-200 dark:border-red-800'
+                                      : isRes && !hasL1Issue
+                                        ? 'bg-sky-50/60 dark:bg-sky-950/25 border-sky-200 dark:border-sky-800'
+                                        : !isVer || hasL1Issue
+                                          ? 'bg-amber-50/70 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800'
+                                          : 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800'
+                                }`}
+                              >
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <div className="flex flex-wrap items-center gap-2 font-mono font-bold">
+                                    <span>{markerDisplay}</span>
+                                    {renderVerdictPill(r.label, r.triggered_rules, isInvalid)}
+                                    {isRetracted && (
+                                      <span
+                                        data-testid={`sandbox-retracted-pill-${r.index}`}
+                                        className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-600 text-white border border-red-700"
+                                      >
+                                        {isVi ? 'ĐÃ RÚT BÀI' : 'RETRACTED'}
+                                      </span>
+                                    )}
+                                    {!isInvalid && urlStatus && (
+                                      <span
+                                        data-testid={`sandbox-url-status-${r.index}`}
+                                        className={`px-2 py-0.5 rounded text-[10px] border ${
+                                          isUrlMismatch
+                                            ? 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800'
+                                            : urlStatus === 'unchecked'
+                                              ? 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
+                                              : urlStatus === 'alive' ||
+                                                  urlStatus === 'restricted_alive'
+                                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800'
+                                                : urlStatus === 'archived_alive'
+                                                  ? 'bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800'
+                                                  : 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-300 dark:border-red-800'
+                                        }`}
+                                      >
+                                        {isUrlMismatch
+                                          ? isVi
+                                            ? `HTTP ${urlCode || 200} · Sai nội dung trang`
+                                            : `HTTP ${urlCode || 200} · Wrong Page`
+                                          : urlStatus === 'unchecked'
+                                            ? isVi
+                                              ? 'Đã khớp học thuật'
+                                              : 'Scholarly Match'
+                                            : urlStatus === 'alive'
+                                              ? `HTTP ${urlCode || 200} OK`
+                                              : urlStatus === 'restricted_alive'
+                                                ? `HTTP ${urlCode || 403} OK`
+                                                : urlStatus === 'archived_alive'
+                                                  ? isVi
+                                                    ? 'Bản lưu Wayback'
+                                                    : 'Wayback Archived'
+                                                  : urlStatus === 'dead_link'
+                                                    ? `HTTP ${urlCode || 404} · ${isVi ? 'Liên kết hỏng' : 'Dead Link'}`
+                                                    : isVi
+                                                      ? 'URL không hợp lệ'
+                                                      : 'Invalid URL'}
+                                      </span>
+                                    )}
+                                    {isLayer1Applicable && (
+                                      <span
+                                        data-testid={`sandbox-layer1-badge-${r.index}`}
+                                        className={`px-2 py-0.5 rounded text-[10px] font-medium ${
+                                          hasL1Issue
+                                            ? 'bg-violet-600 text-white'
+                                            : 'bg-slate-200/80 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                                        }`}
+                                      >
+                                        {isVi ? 'Liên kết' : 'Link'}: {mappingDisplay.label}
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {!isInvalid && rulesList.length > 0 && (
+                                    <button
+                                      type="button"
+                                      data-testid={`sandbox-tech-toggle-${r.index}`}
+                                      aria-expanded={isTechExpanded}
+                                      onClick={() => toggleTechCard(cardKey)}
+                                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-mono text-[11px] text-slate-600 dark:text-slate-300 hover:bg-slate-200/70 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                                    >
+                                      <span>
+                                        {isVi ? 'Chi tiết kỹ thuật' : 'Technical details'}
+                                      </span>
+                                      <ChevronDown
+                                        className={`h-3 w-3 transition-transform duration-200 ${
+                                          isTechExpanded ? 'rotate-180' : ''
+                                        }`}
+                                        aria-hidden="true"
+                                      />
+                                    </button>
+                                  )}
+                                </div>
+
+                                <p className="font-mono text-[11px] text-slate-800 dark:text-slate-200 break-words [overflow-wrap:anywhere]">
+                                  {r.citation_raw}
+                                </p>
+
+                                {!isInvalid && (observedWeb || primarySource) && (
+                                  <div
+                                    data-testid={`sandbox-observed-meta-${r.index}`}
+                                    className={`px-2.5 py-1.5 rounded-lg border font-mono text-[11px] space-y-0.5 ${
+                                      isUrlMismatch
+                                        ? 'bg-amber-100/70 dark:bg-amber-950/50 border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200'
+                                        : 'bg-white/80 dark:bg-slate-900/70 border-sky-200/80 dark:border-sky-800/70 text-slate-700 dark:text-slate-200'
+                                    }`}
+                                  >
+                                    {isUrlMismatch && observedWeb?.title ? (
+                                      <div className="font-semibold">
+                                        {isVi
+                                          ? `Tiêu đề trang đích thực tế: "${observedWeb.title}"`
+                                          : `Observed web page title: "${observedWeb.title}"`}
+                                      </div>
+                                    ) : observedWeb?.title || primarySource?.title ? (
+                                      <div className="font-semibold">
+                                        {observedWeb?.title
+                                          ? isVi
+                                            ? 'Thông tin trang web: '
+                                            : 'Observed web metadata: '
+                                          : isVi
+                                            ? 'Bản ghi chuẩn đối chiếu: '
+                                            : 'Canonical match: '}
+                                        {observedWeb?.title || primarySource?.title}
+                                      </div>
+                                    ) : null}
+                                    <div className="text-[10px] text-slate-500 dark:text-slate-400">
+                                      {[
+                                        (observedWeb?.authors?.length
+                                          ? observedWeb.authors.join(', ')
+                                          : primarySource?.authors?.join(', ')) || null,
+                                        observedWeb?.year || primarySource?.year || null,
+                                        observedWeb?.venue || primarySource?.venue || null,
+                                        primarySource?.source
+                                          ? getSourceDisplayName(primarySource.source, lang, {
+                                              triggered_rules: r.triggered_rules,
+                                              external_ids: primarySource.external_ids,
+                                              venue: primarySource.venue,
+                                              title: primarySource.title,
+                                            })
+                                          : observedWeb
+                                            ? getSourceDisplayName(
+                                                observedWeb.isArchived
+                                                  ? 'wayback_html_meta'
+                                                  : 'web_html_meta',
+                                                lang,
+                                              )
+                                            : null,
+                                      ]
+                                        .filter(Boolean)
+                                        .join(' · ')}
+                                    </div>
+                                  </div>
+                                )}
+
+                                <p className="text-[11px] text-slate-600 dark:text-slate-300 break-words [overflow-wrap:anywhere] leading-relaxed">
+                                  {explanationText}
+                                  {isLayer1Applicable && r.mapping_note
+                                    ? ` · ${r.mapping_note}`
+                                    : ''}
+                                </p>
+
+                                {!isInvalid && isTechExpanded && rulesList.length > 0 && (
+                                  <div
+                                    data-testid={`sandbox-tech-panel-${r.index}`}
+                                    className="mt-1.5 pt-2 border-t border-slate-200/80 dark:border-slate-800 space-y-1 text-[11px]"
+                                  >
+                                    <div className="font-mono text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                                      {isVi ? 'Quy tắc đối chiếu đã kích hoạt' : 'Triggered Verification Rules'}
+                                    </div>
+                                    <ul className="space-y-1">
+                                      {rulesList.map((rule) => (
+                                        <li
+                                          key={rule}
+                                          className="flex flex-wrap items-baseline gap-1.5 text-slate-600 dark:text-slate-300"
+                                        >
+                                          <code className="px-1.5 py-0.5 rounded bg-slate-200/80 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-mono text-[10px]">
+                                            {rule}
+                                          </code>
+                                          <span>{getRuleDisplayName(rule, lang)}</span>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        <DecisionSupportBanner variant="compact" lang={lang} />
                       </>
                     );
                   })()}
-                  <span className="px-2.5 py-1 rounded-lg bg-violet-50 dark:bg-violet-950 text-violet-700 dark:text-violet-300 font-semibold">
-                    🔗 {lang === 'vi' ? 'Lỗi liên kết Layer-1 In-text ↔ Ref' : 'Layer-1 In-text ↔ Ref Issues'}: {instantResult.summary.layer1_linking_issues}
-                  </span>
                 </div>
-
-                {instantResult.remediation?.combined_bibtex && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void navigator.clipboard.writeText(
-                        instantResult.remediation?.combined_bibtex || '',
-                      );
-                      setCopiedBibtex(true);
-                      setTimeout(() => setCopiedBibtex(false), 2000);
-                    }}
-                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-mono font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-indigo-50"
-                  >
-                    <IconSwap
-                      active={copiedBibtex}
-                      iconA={<Copy className="h-3.5 w-3.5 text-indigo-600" />}
-                      iconB={<Check className="h-3.5 w-3.5 text-emerald-600" />}
-                    />
-                    <TextMorph
-                      text={
-                        copiedBibtex
-                          ? lang === 'vi'
-                            ? 'Đã sao chép BibTeX!'
-                            : 'Copied BibTeX!'
-                          : lang === 'vi'
-                            ? 'Sao chép BibTeX chuẩn hóa'
-                            : 'Copy Standardized BibTeX'
-                      }
-                    />
-                  </button>
-                )}
-              </div>
-
-              <div className="grid grid-cols-1 gap-2 max-h-80 overflow-y-auto pr-1">
-                {(instantResult.results ?? []).map((r, rIdx) => {
-                  const isVer = r.label === 'verified';
-                  const isRes = r.label === 'resource';
-                  const isLegalRes = isRes && isLegalStatuteVerdict(r);
-                  const isHalluc = r.label === 'suspected_hallucination';
-                  const isIncomplete =
-                    r.label === 'metadata_error' &&
-                    (r.triggered_rules ?? []).includes('R-INCOMPLETE-METADATA');
-                  const isRetracted =
-                    Boolean(r.is_retracted || r.features?.is_retracted) ||
-                    (r.triggered_rules ?? []).includes('R-RETRACTED-PAPER');
-                  const isUrlMismatch = (r.triggered_rules ?? []).includes(
-                    'R-URL-CONTENT-MISMATCH',
-                  );
-                  const hasL1Issue = Boolean(
-                    r.mapping_status && r.mapping_status !== 'matched',
-                  );
-                  const rawHtmlMeta = (r.html_meta ?? r.features?.html_meta ?? null) as
-                    | Record<string, unknown>
-                    | null;
-                  const fallbackHtmlTitle =
-                    [
-                      rawHtmlMeta?.page_title,
-                      rawHtmlMeta?.citation_title,
-                      rawHtmlMeta?.og_title,
-                      rawHtmlMeta?.dc_title,
-                      rawHtmlMeta?.title,
-                      rawHtmlMeta?.observed_title,
-                    ]
-                      .find((val): val is string => typeof val === 'string' && val.trim().length > 0)
-                      ?.trim() ?? null;
-                  const extractedWeb = extractObservedWebMeta(r);
-                  const observedWeb =
-                    extractedWeb?.title
-                      ? extractedWeb
-                      : fallbackHtmlTitle
-                        ? {
-                            title: fallbackHtmlTitle,
-                            venue:
-                              extractedWeb?.venue ??
-                              (typeof rawHtmlMeta?.site_name === 'string'
-                                ? rawHtmlMeta.site_name
-                                : null),
-                            authors: extractedWeb?.authors ?? [],
-                            year: extractedWeb?.year ?? null,
-                            isArchived:
-                              extractedWeb?.isArchived ??
-                              r.url_status === 'archived_alive',
-                          }
-                        : extractedWeb;
-                  const nonWebSources = (r.matched_sources ?? []).filter(
-                    (s) => s.source !== 'web_html_meta' && s.source !== 'wayback_html_meta',
-                  );
-                  const primarySource =
-                    (r.matched_source &&
-                    r.matched_source.source !== 'web_html_meta' &&
-                    r.matched_source.source !== 'wayback_html_meta'
-                      ? r.matched_source
-                      : null) ??
-                    (nonWebSources.length > 0 ? nonWebSources[0] : null);
-                  const rawUrlStatus = r.url_status ?? r.features?.url_status;
-                  const hasArchiveFallback =
-                    Boolean(r.archive_url || r.features?.archive_url) ||
-                    (r.triggered_rules ?? []).includes('R-WAYBACK-ARCHIVED');
-                  const urlStatus =
-                    rawUrlStatus === 'archived_alive' ||
-                    (hasArchiveFallback &&
-                      rawUrlStatus !== 'alive' &&
-                      rawUrlStatus !== 'restricted_alive')
-                      ? 'archived_alive'
-                      : rawUrlStatus === 'alive' ||
-                          rawUrlStatus === 'restricted_alive' ||
-                          rawUrlStatus === 'dead_link' ||
-                          rawUrlStatus === 'fake_domain' ||
-                          rawUrlStatus === 'unchecked'
-                        ? rawUrlStatus
-                        : null;
-                  const urlCode = r.url_status_code ?? r.features?.url_status_code;
-                  const markerDisplay =
-                    r.composite_label || r.sub_index || r.numeric_index != null
-                      ? getCitationMarkerLabel(r, r.index ? r.index - 1 : rIdx)
-                      : `#${r.index}`;
-
-                  const verdictForExplain: Verdict = {
-                    citation_id: `sandbox-${r.index}`,
-                    citation_raw: r.citation_raw,
-                    mapping_status: (r.mapping_status ||
-                      'matched') as Verdict['mapping_status'],
-                    mapping_confidence: 1,
-                    label: r.label as ValidationLabel,
-                    confidence: r.confidence ?? 1,
-                    reasoning: r.reasoning || '',
-                    triggered_rules: r.triggered_rules ?? [],
-                    mismatched_fields: r.mismatched_fields ?? [],
-                    matched_sources:
-                      r.matched_sources ?? (r.matched_source ? [r.matched_source] : []),
-                    url_status: r.url_status ?? r.features?.url_status ?? null,
-                    url_status_code:
-                      r.url_status_code ?? r.features?.url_status_code ?? null,
-                    archive_url: r.archive_url ?? r.features?.archive_url ?? null,
-                    cited_url: r.cited_url ?? null,
-                    html_meta: r.html_meta ?? r.features?.html_meta ?? null,
-                    is_retracted: isRetracted,
-                    composite_label: r.composite_label ?? null,
-                    numeric_index: r.numeric_index ?? null,
-                    sub_index: r.sub_index ?? null,
-                    features: r.features,
-                    is_overridden: false,
-                  };
-                  const explanationText = isVi
-                    ? getVerdictExplanation(verdictForExplain, 'vi') || r.reasoning
-                    : r.reasoning || getVerdictExplanation(verdictForExplain, 'en');
-
-                  return (
-                    <div
-                      key={`${r.index}-${rIdx}`}
-                      data-testid={`sandbox-result-card-${r.index}`}
-                      data-verdict-label={r.label}
-                      className={`p-3 rounded-xl border text-xs space-y-1.5 ${
-                        isHalluc || isRetracted
-                          ? 'bg-red-50/70 dark:bg-red-950/30 border-red-200 dark:border-red-800'
-                          : isRes && !hasL1Issue
-                            ? 'bg-sky-50/60 dark:bg-sky-950/25 border-sky-200 dark:border-sky-800'
-                            : !isVer || hasL1Issue
-                              ? 'bg-amber-50/70 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800'
-                              : 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800'
-                      }`}
-                    >
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div className="flex flex-wrap items-center gap-2 font-mono font-bold">
-                          <span>{markerDisplay}</span>
-                          {i18nLang === lang && !isRes ? (
-                            <VerdictBadge
-                              verdict={r.label as ValidationLabel}
-                              triggeredRules={r.triggered_rules}
-                              size="sm"
-                            />
-                          ) : isVer ? (
-                            <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-300">
-                              <CheckCircle2 className="h-3.5 w-3.5" />{' '}
-                              {isVi ? 'Đã xác minh' : 'VERIFIED'}
-                            </span>
-                          ) : isRes ? (
-                            isLegalRes ? (
-                              <span className="inline-flex items-center gap-1 text-indigo-700 dark:text-indigo-300">
-                                <Scale className="h-3.5 w-3.5" />{' '}
-                                {isVi ? 'Văn bản Pháp luật' : 'VN Legal Statute'}
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 text-sky-700 dark:text-sky-300">
-                                <Link2 className="h-3.5 w-3.5" />{' '}
-                                {isVi ? 'Tài nguyên Web' : 'URL RESOURCE'}
-                              </span>
-                            )
-                          ) : isIncomplete ? (
-                            <span className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-300">
-                              <AlertTriangle className="h-3.5 w-3.5" />{' '}
-                              {isVi ? 'Thiếu quy cách trích dẫn' : 'Incomplete Reference'}
-                            </span>
-                          ) : isHalluc ? (
-                            <span className="inline-flex items-center gap-1 text-red-700 dark:text-red-300">
-                              <XCircle className="h-3.5 w-3.5" />{' '}
-                              {isVi ? 'Nghi vấn Ảo giác AI' : 'SUSPECTED HALLUCINATION'}
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-300">
-                              <AlertTriangle className="h-3.5 w-3.5" />{' '}
-                              {isVi && r.label === 'unresolved'
-                                ? 'Chờ rà soát'
-                                : isVi && r.label === 'metadata_error'
-                                  ? 'Sai lệch Metadata'
-                                  : r.label.toUpperCase()}
-                            </span>
-                          )}
-                          {isRetracted && (
-                            <span
-                              data-testid={`sandbox-retracted-pill-${r.index}`}
-                              className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-600 text-white border border-red-700"
-                            >
-                              {isVi ? '🚨 ĐÃ RÚT BÀI' : '🚨 RETRACTED'}
-                            </span>
-                          )}
-                          {urlStatus && (
-                            <span
-                              data-testid={`sandbox-url-status-${r.index}`}
-                              className={`px-2 py-0.5 rounded text-[10px] border ${
-                                isUrlMismatch
-                                  ? 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800'
-                                  : urlStatus === 'unchecked'
-                                    ? 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
-                                    : urlStatus === 'alive' || urlStatus === 'restricted_alive'
-                                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800'
-                                      : urlStatus === 'archived_alive'
-                                        ? 'bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800'
-                                        : 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-300 dark:border-red-800'
-                              }`}
-                            >
-                              {isUrlMismatch
-                                ? lang === 'vi'
-                                  ? `⚠ HTTP ${urlCode || 200} · Sai nội dung trang`
-                                  : `⚠ HTTP ${urlCode || 200} · Wrong Page`
-                                : urlStatus === 'unchecked'
-                                  ? lang === 'vi'
-                                    ? 'Chưa cần mở URL (Đã khớp học thuật)'
-                                    : 'URL Unchecked (Scholarly Match)'
-                                  : urlStatus === 'alive'
-                                    ? `✓ HTTP ${urlCode || 200} OK`
-                                    : urlStatus === 'restricted_alive'
-                                      ? `🔒 HTTP ${urlCode || 403} OK`
-                                      : urlStatus === 'archived_alive'
-                                        ? lang === 'vi'
-                                          ? '🏛️ BẢN LƯU WAYBACK'
-                                          : '🏛️ WAYBACK ARCHIVED'
-                                        : urlStatus === 'dead_link'
-                                          ? `✕ HTTP ${urlCode || 404} DEAD`
-                                          : '✕ FAKE URL'}
-                            </span>
-                          )}
-                          <span
-                            className={`px-2 py-0.5 rounded text-[10px] ${
-                              hasL1Issue
-                                ? 'bg-violet-600 text-white'
-                                : 'bg-slate-200/80 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
-                            }`}
-                          >
-                            Layer 1: {(r.mapping_status || 'matched').toUpperCase()}
-                          </span>
-                        </div>
-                        <span className="font-mono text-[11px] text-slate-500">
-                          {lang === 'vi' ? 'Luật' : 'Rules'}:{' '}
-                          {(r.triggered_rules || []).join(', ') ||
-                            (r.label === 'verified' ? 'R01' : '—')}
-                        </span>
-                      </div>
-                      <p className="font-mono text-[11px] text-slate-800 dark:text-slate-200 break-words [overflow-wrap:anywhere]">
-                        {r.citation_raw}
-                      </p>
-                      {(observedWeb || primarySource) && (
-                        <div
-                          data-testid={`sandbox-observed-meta-${r.index}`}
-                          className={`px-2.5 py-1.5 rounded-lg border font-mono text-[11px] space-y-0.5 ${
-                            isUrlMismatch
-                              ? 'bg-amber-100/70 dark:bg-amber-950/50 border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200'
-                              : 'bg-white/80 dark:bg-slate-900/70 border-sky-200/80 dark:border-sky-800/70 text-slate-700 dark:text-slate-200'
-                          }`}
-                        >
-                          {isUrlMismatch && observedWeb?.title ? (
-                            <div className="font-semibold">
-                              {lang === 'vi'
-                                ? `⚠ Tiêu đề trang đích thực tế: "${observedWeb.title}"`
-                                : `⚠ Observed web page title: "${observedWeb.title}"`}
-                            </div>
-                          ) : (observedWeb?.title || primarySource?.title) ? (
-                            <div className="font-semibold">
-                              {observedWeb?.title
-                                ? lang === 'vi'
-                                  ? 'Metadata trích xuất: '
-                                  : 'Extracted metadata: '
-                                : lang === 'vi'
-                                  ? 'Bản ghi chuẩn đối chiếu: '
-                                  : 'Canonical match: '}
-                              {observedWeb?.title || primarySource?.title}
-                            </div>
-                          ) : null}
-                          <div className="text-[10px] text-slate-500 dark:text-slate-400">
-                            {[
-                              (observedWeb?.authors?.length
-                                ? observedWeb.authors.join(', ')
-                                : primarySource?.authors?.join(', ')) || null,
-                              observedWeb?.year || primarySource?.year || null,
-                              observedWeb?.venue || primarySource?.venue || null,
-                              primarySource?.source
-                                ? getSourceDisplayName(primarySource.source, lang, {
-                                    triggered_rules: r.triggered_rules,
-                                    external_ids: primarySource.external_ids,
-                                    venue: primarySource.venue,
-                                    title: primarySource.title,
-                                  })
-                                : observedWeb
-                                  ? getSourceDisplayName(
-                                      observedWeb.isArchived ? 'wayback_html_meta' : 'web_html_meta',
-                                      lang,
-                                    )
-                                  : null,
-                            ]
-                              .filter(Boolean)
-                              .join(' · ')}
-                          </div>
-                        </div>
-                      )}
-                      <p className="text-[11px] text-slate-600 dark:text-slate-400 break-words [overflow-wrap:anywhere]">
-                        {explanationText} {r.mapping_note ? ` • ${r.mapping_note}` : ''}
-                      </p>
-                    </div>
-                  );
-                })}
-              </div>
-            </m.div>
-          )}
+              </m.div>
+            )}
           </AnimatePresence>
         </CardResize>
       </div>
@@ -1420,8 +1751,8 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
         onOpenChange={setUpgradeOpen}
         featureName={
           isVi
-            ? 'Tổng hợp & Kiểm chứng Bản thảo PDF Sandbox'
-            : 'Sandbox Full PDF Verification'
+            ? 'Tạo & Kiểm chứng Bản thảo PDF mẫu'
+            : 'Sample PDF Verification'
         }
       />
     </Card>

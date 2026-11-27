@@ -627,7 +627,7 @@ export function SolvaTwoToneHeading({
 
   const sizeClass =
     size === 'h1'
-      ? `text-[40px] sm:text-[48px] xl:text-[56px] ${leadingTrackingClass}`
+      ? `text-[36px] sm:text-[44px] lg:text-[44px] xl:text-[56px] ${leadingTrackingClass}`
       : `text-[34px] sm:text-[40px] xl:text-[48px] ${leadingTrackingClass}`;
 
   const primaryWords = normalizedPrimary.trim().split(/\s+/);
@@ -709,6 +709,7 @@ export function SolvaButton({
   href,
   variant = 'primary',
   fullWidth = false,
+  allowWrap = false,
   onClick,
   className = '',
   testId,
@@ -718,11 +719,15 @@ export function SolvaButton({
   href?: string;
   variant?: 'primary' | 'outline' | 'ghost';
   fullWidth?: boolean;
+  allowWrap?: boolean;
   onClick?: () => void;
   className?: string;
   testId?: string;
 }) {
-  const baseClasses = `group relative inline-flex items-center justify-center max-w-full h-[44px] px-[16px] pt-[1px] rounded-[10px] font-solva-sans text-[14px] font-medium leading-[21px] transition-[background-color,border-color,color,opacity,box-shadow] duration-200 cursor-pointer select-none ${
+  const sizePadding = allowWrap
+    ? 'min-h-[44px] h-auto px-4 py-2.5'
+    : 'h-[44px] px-[16px] pt-[1px]';
+  const baseClasses = `group relative inline-flex items-center justify-center max-w-full ${sizePadding} rounded-[10px] font-solva-sans text-[14px] font-medium leading-[21px] transition-[background-color,border-color,color,opacity,box-shadow] duration-200 cursor-pointer select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1C1A15] dark:focus-visible:ring-[#FBFAF6] focus-visible:ring-offset-2 ${
     fullWidth ? 'w-full' : ''
   } ${className}`;
 
@@ -743,7 +748,11 @@ export function SolvaButton({
             color: 'var(--solva-muted)',
           };
 
-  const innerContent = (
+  const innerContent = allowWrap ? (
+    <span className="inline-flex items-center justify-center whitespace-normal text-center leading-[1.35] gap-1.5">
+      {children}
+    </span>
+  ) : (
     <span className="relative h-[21px] overflow-hidden flex flex-col items-center">
       <span className="flex flex-col transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:-translate-y-[21px]">
         <span className="h-[21px] flex items-center justify-center whitespace-nowrap gap-1.5">
@@ -880,7 +889,7 @@ export function SolvaPainterlyFrame({
           willChange: 'transform',
           backfaceVisibility: 'hidden',
         }}
-        className="relative z-10 w-full h-full min-w-0"
+        className="relative z-10 w-full min-w-0"
       >
         {children}
       </div>

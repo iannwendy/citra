@@ -37,6 +37,10 @@ import {
   Sparkles,
   Lock,
   Eye,
+  Sun,
+  Moon,
+  Monitor,
+  ArrowDown,
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
@@ -52,7 +56,7 @@ import {
   useExitPresence,
 } from '@/components/ui/transitions';
 import { SolvaFilmSection } from '@/components/landing/CitraFilm';
-import { ThemeToggle } from '@/contexts/ThemeContext';
+import { useTheme, type Theme } from '@/contexts/ThemeContext';
 import {
   type Lang,
   clearAnchorHashJump,
@@ -112,11 +116,11 @@ interface DemoCitation {
     doi: string;
   } | null;
   fieldStatus: {
-    title: 'match' | 'partial' | 'mismatch' | 'missing';
-    authors: 'match' | 'partial' | 'mismatch' | 'missing';
-    year: 'match' | 'partial' | 'mismatch' | 'missing';
-    venue: 'match' | 'partial' | 'mismatch' | 'missing';
-    doi: 'match' | 'partial' | 'mismatch' | 'missing';
+    title: 'match' | 'partial' | 'mismatch' | 'missing' | 'unmatched' | 'not_found';
+    authors: 'match' | 'partial' | 'mismatch' | 'missing' | 'unmatched' | 'not_found';
+    year: 'match' | 'partial' | 'mismatch' | 'missing' | 'unmatched' | 'not_found';
+    venue: 'match' | 'partial' | 'mismatch' | 'missing' | 'unmatched' | 'not_found';
+    doi: 'match' | 'partial' | 'mismatch' | 'missing' | 'unmatched' | 'not_found';
   };
   sources: Array<{
     name: string;
@@ -338,11 +342,11 @@ const DEMO_CITATIONS: DemoCitation[] = [
     },
     retrievedMeta: null,
     fieldStatus: {
-      title: 'missing',
-      authors: 'mismatch',
-      year: 'mismatch',
-      venue: 'partial',
-      doi: 'mismatch',
+      title: 'not_found',
+      authors: 'not_found',
+      year: 'not_found',
+      venue: 'not_found',
+      doi: 'not_found',
     },
     sources: [
       { name: 'Crossref', status: 'none', latency: '51ms', score: '0%' },
@@ -419,8 +423,8 @@ const DEMO_CITATIONS: DemoCitation[] = [
     retrievedMeta: null,
     fieldStatus: {
       title: 'missing',
-      authors: 'partial',
-      year: 'partial',
+      authors: 'unmatched',
+      year: 'unmatched',
       venue: 'missing',
       doi: 'missing',
     },
@@ -588,17 +592,24 @@ export function LandingPage() {
       data-lang={lang}
       className="solva-editorial-root min-h-screen overflow-x-clip selection:bg-[#1C1A15] selection:text-[#FBFAF6]"
     >
+      <a
+        href="#main-content"
+        data-testid="landing-skip-to-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[100] focus:px-4 focus:py-2.5 focus:rounded-[10px] focus:bg-[#1C1A15] focus:text-[#FBFAF6] dark:focus:bg-[#FBFAF6] dark:focus:text-[#1C1A15] focus:shadow-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 font-solva-sans text-sm font-medium"
+      >
+        {lang === 'vi' ? 'Chuyển tới nội dung chính' : 'Skip to main content'}
+      </a>
       <SolvaHeader
         lang={lang}
         onToggleLanguage={toggleLanguage}
         isAuthenticated={isAuthenticated}
       />
-      <main id="main-content">
+      <main id="main-content" tabIndex={-1} className="focus:outline-none">
         <SolvaHeroSection lang={lang} isAuthenticated={isAuthenticated} />
         <SolvaFilmSection lang={lang} />
         <SolvaFeaturesSection lang={lang} />
         <SolvaStickySection lang={lang} isAuthenticated={isAuthenticated} />
-        <SolvaInteractiveDebuggerSection lang={lang} />
+        <SolvaInteractiveDebuggerSection lang={lang} isAuthenticated={isAuthenticated} />
         <SolvaUseCasesSection lang={lang} isAuthenticated={isAuthenticated} />
         <SolvaBenchmark120KSection lang={lang} />
         <SolvaClientResultsSection lang={lang} />
@@ -615,6 +626,69 @@ export function LandingPage() {
       </main>
       <SolvaFooter lang={lang} onSelectWorkspaceRole={selectAndFocusWorkspaceRole} />
     </div>
+  );
+}
+
+function SolvaThemeToggle({ lang }: { lang: Lang }) {
+  const { theme, setTheme } = useTheme();
+
+  const themeLabels: Record<Theme, { en: string; vi: string }> = {
+    light: { en: 'Light', vi: 'Sáng' },
+    dark: { en: 'Dark', vi: 'Tối' },
+    system: { en: 'System', vi: 'Theo hệ thống' },
+  };
+
+  const currentLabel = lang === 'vi' ? themeLabels[theme].vi : themeLabels[theme].en;
+  const titleText = lang === 'vi' ? `Giao diện: ${currentLabel}` : `Theme: ${currentLabel}`;
+  const ariaLabelText =
+    lang === 'vi'
+      ? `Giao diện hiện tại: ${currentLabel}. Nhấn để chuyển đổi.`
+      : `Current theme: ${currentLabel}. Click to change.`;
+
+  const themeIcons: Record<Theme, React.ReactNode> = {
+    light: <Sun className="w-4 h-4 text-amber-500" />,
+    dark: <Moon className="w-4 h-4 text-indigo-400" />,
+    system: <Monitor className="w-4 h-4 text-slate-500 dark:text-slate-300" />,
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        const nextTheme: Record<Theme, Theme> = {
+          light: 'dark',
+          dark: 'system',
+          system: 'light',
+        };
+        setTheme(nextTheme[theme]);
+      }}
+      className="inline-flex items-center justify-center p-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100 transition-colors duration-200 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1C1A15] dark:focus-visible:ring-[#FBFAF6]"
+      title={titleText}
+      aria-label={ariaLabelText}
+    >
+      <span className="inline-grid place-items-center">
+        {(['light', 'dark', 'system'] as const).map((mode) => {
+          const isCurrent = theme === mode;
+          return (
+            <span
+              key={mode}
+              aria-hidden={!isCurrent}
+              style={{
+                gridArea: '1 / 1',
+                opacity: isCurrent ? 1 : 0,
+                filter: isCurrent ? 'blur(0px)' : 'blur(var(--icon-swap-blur, 2px))',
+                transform: isCurrent ? 'scale(1)' : 'scale(var(--icon-swap-start-scale, 0.25))',
+                transition:
+                  'opacity var(--icon-swap-dur, 250ms) var(--icon-swap-ease, ease-in-out), filter var(--icon-swap-dur, 250ms) var(--icon-swap-ease, ease-in-out), transform var(--icon-swap-dur, 250ms) var(--icon-swap-ease, ease-in-out)',
+              }}
+              className="inline-flex items-center justify-center"
+            >
+              {themeIcons[mode]}
+            </span>
+          );
+        })}
+      </span>
+    </button>
   );
 }
 
@@ -779,13 +853,13 @@ function SolvaHeader({
       }}
       className="fixed top-0 left-0 right-0 z-50"
     >
-      <div className="max-w-[1280px] mx-auto px-5 sm:px-6 lg:px-6 xl:px-[40px] h-[64px] lg:h-[76px] flex items-center justify-between flex-nowrap gap-2 xl:gap-4">
+      <div className="max-w-[1280px] mx-auto px-5 sm:px-6 lg:px-5 xl:px-[40px] h-[64px] lg:h-[76px] flex items-center justify-between flex-nowrap gap-2 xl:gap-4">
         {/* Left: Brand Logo */}
         <div className="flex items-center shrink-0">
           <Link
             to="/"
             onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-            className="inline-flex items-center gap-[8px] rounded-[6px] focus:outline-none"
+            className="inline-flex items-center gap-[8px] rounded-[6px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1C1A15] dark:focus-visible:ring-[#FBFAF6] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--solva-bg)]"
           >
             <span className="w-[28px] h-[28px] rounded-[7px] bg-white dark:bg-[#1E1C17] border border-[#E7E3D9] dark:border-[#332F26] shadow-sm flex items-center justify-center p-1 shrink-0 transition-colors">
               <SourceLogicLogo size={18} />
@@ -799,10 +873,10 @@ function SolvaHeader({
           </Link>
         </div>
 
-        {/* Center: Solva Navigation Links + Dropdown */}
+        {/* Center: Solva Navigation Links + Dropdown (Single-row from lg:1024px upward, matching /pricing) */}
         <nav
           aria-label="Primary Navigation"
-          className="hidden xl:flex items-center justify-center flex-1 min-w-0 flex-nowrap gap-0.5 xl:gap-1"
+          className="hidden lg:flex items-center justify-center flex-1 min-w-0 flex-nowrap gap-0.5 xl:gap-1"
         >
           {/* Dropdown Trigger (`Platform v` / `Nền tảng v`) */}
           <div
@@ -817,7 +891,7 @@ function SolvaHeader({
               aria-expanded={dropdownOpen}
               aria-haspopup="true"
               style={{ color: 'var(--solva-muted)' }}
-              className="inline-flex items-center gap-[4px] h-[44px] px-1.5 xl:px-[10px] rounded-[8px] font-solva-sans text-[13.5px] xl:text-[15px] font-normal whitespace-nowrap hover:opacity-80 transition-opacity cursor-pointer"
+              className="inline-flex items-center gap-[4px] h-[44px] px-1.5 xl:px-[10px] rounded-[8px] font-solva-sans text-[12.5px] xl:text-[15px] font-normal whitespace-nowrap hover:opacity-80 transition-opacity cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1C1A15] dark:focus-visible:ring-[#FBFAF6]"
             >
               <span>{lang === 'vi' ? 'Nền tảng' : 'Platform'}</span>
               <SymmetricChevron open={dropdownOpen} size={14} />
@@ -874,7 +948,7 @@ function SolvaHeader({
           <a
             href="#how-it-works"
             style={{ color: 'var(--solva-muted)' }}
-            className="inline-flex items-center h-[44px] px-1.5 xl:px-[10px] rounded-[8px] font-solva-sans text-[13.5px] xl:text-[15px] font-normal whitespace-nowrap shrink-0 hover:opacity-80 transition-opacity"
+            className="inline-flex items-center h-[44px] px-1.5 xl:px-[10px] rounded-[8px] font-solva-sans text-[12.5px] xl:text-[15px] font-normal whitespace-nowrap shrink-0 hover:opacity-80 transition-opacity"
           >
             {lang === 'vi' ? 'Cách hoạt động' : 'How It Works'}
           </a>
@@ -882,7 +956,7 @@ function SolvaHeader({
           <a
             href="#interactive-demo"
             style={{ color: 'var(--solva-muted)' }}
-            className="inline-flex items-center h-[44px] px-1.5 xl:px-[10px] rounded-[8px] font-solva-sans text-[13.5px] xl:text-[15px] font-normal whitespace-nowrap shrink-0 hover:opacity-80 transition-opacity"
+            className="inline-flex items-center h-[44px] px-1.5 xl:px-[10px] rounded-[8px] font-solva-sans text-[12.5px] xl:text-[15px] font-normal whitespace-nowrap shrink-0 hover:opacity-80 transition-opacity"
           >
             {lang === 'vi' ? 'Kiểm tra thử' : 'Live Check'}
           </a>
@@ -890,7 +964,7 @@ function SolvaHeader({
           <a
             href="#workspaces"
             style={{ color: 'var(--solva-muted)' }}
-            className="inline-flex items-center h-[44px] px-1.5 xl:px-[10px] rounded-[8px] font-solva-sans text-[13.5px] xl:text-[15px] font-normal whitespace-nowrap shrink-0 hover:opacity-80 transition-opacity"
+            className="inline-flex items-center h-[44px] px-1.5 xl:px-[10px] rounded-[8px] font-solva-sans text-[12.5px] xl:text-[15px] font-normal whitespace-nowrap shrink-0 hover:opacity-80 transition-opacity"
           >
             {lang === 'vi' ? 'Dành cho ai' : 'For Whom'}
           </a>
@@ -898,7 +972,7 @@ function SolvaHeader({
           <a
             href="#benchmark-120k"
             style={{ color: 'var(--solva-muted)' }}
-            className="inline-flex items-center gap-1.5 h-[44px] px-1.5 xl:px-[10px] rounded-[8px] font-solva-sans text-[13.5px] xl:text-[15px] font-normal whitespace-nowrap shrink-0 hover:opacity-80 transition-opacity"
+            className="inline-flex items-center gap-1.5 h-[44px] px-1.5 xl:px-[10px] rounded-[8px] font-solva-sans text-[12.5px] xl:text-[15px] font-normal whitespace-nowrap shrink-0 hover:opacity-80 transition-opacity"
           >
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
             <span>{lang === 'vi' ? 'Độ tin cậy' : 'Accuracy'}</span>
@@ -908,7 +982,7 @@ function SolvaHeader({
             to="/pricing"
             data-testid="landing-pricing-link"
             style={{ color: 'var(--solva-muted)' }}
-            className="inline-flex items-center h-[44px] px-1.5 xl:px-[10px] rounded-[8px] font-solva-sans text-[13.5px] xl:text-[15px] font-normal whitespace-nowrap shrink-0 hover:opacity-80 transition-opacity"
+            className="inline-flex items-center h-[44px] px-1.5 xl:px-[10px] rounded-[8px] font-solva-sans text-[12.5px] xl:text-[15px] font-normal whitespace-nowrap shrink-0 hover:opacity-80 transition-opacity"
           >
             {lang === 'vi' ? 'Bảng giá' : 'Pricing'}
           </Link>
@@ -923,19 +997,19 @@ function SolvaHeader({
               backgroundColor: 'var(--solva-surface)',
               color: 'var(--solva-ink)',
             }}
-            className="inline-flex items-center gap-1 h-[36px] px-2.5 rounded-[8px] font-mono text-[12px] font-medium hover:opacity-85 transition-opacity cursor-pointer"
+            className="inline-flex items-center gap-1 h-[36px] px-2.5 rounded-[8px] font-mono text-[12px] font-medium hover:opacity-85 transition-opacity cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1C1A15] dark:focus-visible:ring-[#FBFAF6]"
             title={lang === 'vi' ? 'Switch to English' : 'Chuyển sang Tiếng Việt'}
           >
             <Globe className="w-3.5 h-3.5" />
             <span>{lang === 'vi' ? 'VI' : 'EN'}</span>
           </button>
 
-          <ThemeToggle size="sm" />
+          <SolvaThemeToggle lang={lang} />
 
           <Link
             to={isAuthenticated ? '/dashboard' : '/login'}
             style={{ color: 'var(--solva-muted)' }}
-            className="hidden sm:inline-flex items-center h-[44px] px-[10px] xl:px-[12px] rounded-[8px] font-solva-sans text-[15px] font-normal whitespace-nowrap hover:opacity-80 transition-opacity"
+            className="hidden sm:inline-flex items-center h-[44px] px-2 xl:px-[12px] rounded-[8px] font-solva-sans text-[13px] xl:text-[15px] font-normal whitespace-nowrap hover:opacity-80 transition-opacity"
           >
             {lang === 'vi' ? 'Đăng nhập' : 'Sign in'}
           </Link>
@@ -943,7 +1017,7 @@ function SolvaHeader({
           <SolvaButton
             to={isAuthenticated ? '/dashboard' : '/register'}
             variant="primary"
-            className="hidden sm:inline-flex"
+            className="hidden sm:inline-flex lg:px-3 xl:px-[16px] lg:text-[13px] xl:text-[14px]"
           >
             {isAuthenticated
               ? lang === 'vi'
@@ -965,7 +1039,7 @@ function SolvaHeader({
               backgroundColor: 'var(--solva-surface)',
               color: 'var(--solva-ink)',
             }}
-            className="xl:hidden inline-flex items-center justify-center w-[40px] h-[40px] rounded-[8px] cursor-pointer"
+            className="lg:hidden inline-flex items-center justify-center w-[40px] h-[40px] rounded-[8px] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1C1A15] dark:focus-visible:ring-[#FBFAF6]"
           >
             <IconSwap
               active={mobileMenuOpen}
@@ -984,7 +1058,7 @@ function SolvaHeader({
             backgroundColor: 'var(--solva-bg)',
             borderColor: 'var(--solva-border)',
           }}
-          className={`xl:hidden border-t border-b px-5 py-4 space-y-2 shadow-lg t-mobile-drawer ${
+          className={`lg:hidden border-t border-b px-5 py-4 space-y-2 shadow-lg t-mobile-drawer ${
             mobileDrawerPresence.phase === 'open' ? 'is-open' : 'is-closing'
           }`}
         >
@@ -1052,7 +1126,7 @@ function SolvaHeader({
             </Link>
           </div>
 
-          <div className="pt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <div className="pt-2 grid grid-cols-1 gap-2 sm:hidden">
             <SolvaButton
               to={isAuthenticated ? '/dashboard' : '/login'}
               variant="outline"
@@ -1114,13 +1188,13 @@ function SolvaHeroSection({
   return (
     <section
       id="hero"
-      className="pt-[76px] sm:pt-[88px] lg:pt-[136px] pb-[24px] sm:pb-[36px] lg:pb-[64px] px-5 sm:px-6 lg:px-[40px]"
+      className="pt-[76px] sm:pt-[88px] lg:pt-[136px] pb-[24px] sm:pb-[36px] lg:pb-[64px] px-5 sm:px-6 lg:px-6 xl:px-[40px]"
     >
       <div className="max-w-[1200px] mx-auto flex flex-col gap-[28px] sm:gap-[36px] lg:gap-[56px]">
         {/* Top 2-Column Content */}
         <div className="flex flex-col lg:flex-row items-center justify-between gap-[28px] sm:gap-[32px] lg:gap-[24px] pt-0 lg:pt-[12px]">
-          {/* Left Column (520px on Desktop) */}
-          <div className="w-full lg:w-[45%] xl:w-[520px] min-w-0 flex flex-col items-start gap-[22px] sm:gap-[28px] lg:gap-[32px] lg:pb-[24px]">
+          {/* Left Column (520px on XL Desktop, wider 48% at 1024px so H1 never squeezes 1-word-per-line) */}
+          <div className="w-full lg:w-[48%] xl:w-[520px] min-w-0 flex flex-col items-start gap-[22px] sm:gap-[28px] lg:gap-[32px] lg:pb-[24px]">
             <div className="flex flex-col items-start gap-[16px] sm:gap-[20px] lg:gap-[24px]">
               {/* Announcement Badge (`PROVEN ACCURACY | Tested on 120,000 academic papers ->`) */}
               <SolvaScrollReveal delayMs={40} yOffset={20} blurPx={3}>
@@ -1321,13 +1395,13 @@ function SolvaHeroSection({
             </SolvaScrollReveal>
           </div>
 
-          {/* Right Column: Painterly Mockup Frame (`656px` on XL Desktop, fully framed with zero overhang) */}
-          <div className="w-full lg:w-[55%] xl:w-[656px] min-w-0">
+          {/* Right Column: Painterly Mockup Frame (`656px` on XL Desktop, fully framed with zero overhang or bottom clipping) */}
+          <div className="w-full lg:w-[52%] xl:w-[656px] min-w-0">
             <SolvaPainterlyFrame
               paintingSrc="/solva/hero-bg.webp"
               priority
               alt="Impressionist wildflower meadow oil painting backdrop"
-              className="w-full min-h-[420px] sm:min-h-[480px] lg:min-h-[521px] p-3.5 sm:p-6 lg:p-4 xl:p-7 flex items-center justify-center"
+              className="w-full min-h-[440px] sm:min-h-[520px] lg:min-h-[540px] py-5 px-3.5 sm:py-7 sm:px-6 lg:p-5 xl:p-7 flex items-center justify-center"
             >
               <div className="w-full my-auto">
                 <UIGenerationReveal
@@ -1410,11 +1484,12 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
   const { containerRef: benchTabsRef, pillStyle: benchPill } = useSlidingPill<HTMLDivElement>(
     `${activeView}-${showTechnicalDetails}`,
   );
-  const { containerRef: benchRef, replaySeed: benchSeed } = useFloralCardAnimation(5600);
+  const { containerRef: benchRef, replaySeed: benchSeed } = useFloralCardAnimation(0);
   const sep = lang === 'vi' ? '.' : ',';
   const decSep = lang === 'vi' ? ',' : '.';
   const fmtPct = (pct: number) =>
     lang === 'vi' ? `${pct.toFixed(2).replace('.', ',')}%` : `${pct.toFixed(2)}%`;
+  const fmtDec = (raw: string) => (lang === 'vi' ? raw.replace('.', ',') : raw);
 
   const plainPillars = [
     {
@@ -1474,15 +1549,15 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
       formatThousands: true,
       title:
         lang === 'vi'
-          ? 'Công trình khoa học độc lập'
-          : 'Distinct scholarly papers',
+          ? 'Mẫu kiểm định độc lập (từ kho 128K+ bài báo)'
+          : 'Benchmark papers (from 128K+ scholarly corpus)',
       desc:
         lang === 'vi'
-          ? 'Phân tách độc lập tuyệt đối theo bài báo và tiêu đề chuẩn hóa giữa 84.000 bài huấn luyện, 18.000 bài thẩm định và 18.000 bài kiểm thử độc lập (|Train ∩ Val ∩ Test| = 0). Mã hóa 419.109 chuỗi văn bản thực bằng Sentence-BERT, 0% np.clip.'
-          : 'Strict paper- & title-disjoint 84,000 Train · 18,000 Val · 18,000 Held-Out Test split (|Train ∩ Val ∩ Test| = 0) prior to perturbation. 419,109 unique texts encoded via Sentence-BERT with zero clamping.',
+          ? 'Trích xuất từ kho học thuật cục bộ 128K+ công trình, phân tách độc lập tuyệt đối theo bài báo và tiêu đề chuẩn hóa giữa 84.000 mẫu huấn luyện, 18.000 mẫu thẩm định và 18.000 mẫu kiểm thử (|Train ∩ Val ∩ Test| = 0). Mã hóa 419.109 chuỗi văn bản thực bằng Sentence-BERT, không cắt ép điểm nhân tạo.'
+          : 'Drawn from our 128K+ local scholarly corpus with strict paper- & title-disjoint splits: 84,000 Train · 18,000 Val · 18,000 Held-Out Test (|Train ∩ Val ∩ Test| = 0) prior to perturbation. 419,109 unique texts encoded via Sentence-BERT with zero artificial score clamping.',
     },
     {
-      badge: lang === 'vi' ? 'MACRO-F1: 0.9965 · HẠNG #1 ID & OOD' : 'MACRO-F1: 0.9965 · #1 ON ID & OOD',
+      badge: lang === 'vi' ? 'MACRO-F1: 0,9965 · HẠNG #1 ID & OOD' : 'MACRO-F1: 0.9965 · #1 ON ID & OOD',
       badgeTone: 'emerald' as const,
       value: 99.67,
       decimals: 2,
@@ -1494,8 +1569,8 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
           : 'Neuro-Symbolic Accuracy (99.96% on 2,400-Sample OOD)',
       desc:
         lang === 'vi'
-          ? 'Kiến trúc Neuro-Symbolic đề xuất đạt 99,67% Accuracy (17.941/18.000, Macro-F1 0.9965), vượt qua cả mô hình học máy thuần túy B5 (97,70%, McNemar p = 1.66e-73) trên ID và bỏ xa B5 trên bộ 2.400 mẫu OOD (99,96% vs. 57,33%).'
-          : 'Proposed Neuro-Symbolic engine achieves 99.67% Accuracy (17,941/18,000, 0.9965 Macro-F1), statistically outperforming Pure ML B5 on ID (97.70%, p = 1.66e-73) and OOD (99.96% vs. 57.33%).',
+          ? 'Kiến trúc Neuro-Symbolic đề xuất đạt độ chính xác 99,67% (17.941/18.000, Macro-F1 0,9965), vượt trội mô hình học máy thuần túy B5 (97,70%, kiểm định McNemar p = 1,66e-73) trên ID và bỏ xa B5 trên bộ 2.400 mẫu OOD (99,96% so với 57,33%).'
+          : 'Proposed Neuro-Symbolic engine achieves 99.67% Accuracy (17,941/18,000, 0.9965 Macro-F1), statistically outperforming Pure ML B5 on ID (97.70%, McNemar p = 1.66e-73) and OOD (99.96% vs. 57.33%).',
     },
     {
       badge: lang === 'vi' ? '0% KẾT LUẬN OAN CHO BÀI THẬT' : '0% FALSE ACCUSATIONS',
@@ -1506,7 +1581,7 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
       formatThousands: false,
       title:
         lang === 'vi'
-          ? 'Precision nhận diện trích dẫn ngụy tạo (F1 = 0.9994)'
+          ? 'Precision nhận diện trích dẫn ngụy tạo (F1 = 0,9994)'
           : 'Hallucination Detection Precision (F1 = 0.9994)',
       desc:
         lang === 'vi'
@@ -1514,7 +1589,7 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
           : 'Catches 5,398 / 5,400 plausible same-domain spliced hallucinations (99.96% recall, 99.93% precision) with 0 / 6,480 legitimate works falsely accused and 0 / 5,400 fabrications leaked into VERIFIED.',
     },
     {
-      badge: '↓ 6.12× ECE · ↓ 12.58× BRIER',
+      badge: lang === 'vi' ? '↓ 6,12× ECE · ↓ 12,58× BRIER' : '↓ 6.12× ECE · ↓ 12.58× BRIER',
       badgeTone: 'amber' as const,
       value: 0.0405,
       decimals: 4,
@@ -1522,11 +1597,11 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
       formatThousands: false,
       title:
         lang === 'vi'
-          ? 'Sai số hiệu chỉnh xác suất ECE (Brier = 0.0067)'
+          ? 'Sai số hiệu chỉnh xác suất ECE (Brier = 0,0067)'
           : 'Expected Calibration Error ECE (Brier = 0.0067)',
       desc:
         lang === 'vi'
-          ? 'Hiệu chỉnh hậu nghiệm Logit-Space Platt Scaling (a = 1.8913, b = 1.1386) kéo giảm 6,12 lần sai số ECE (0.2477 → 0.0405) và 12,58 lần Brier (0.0843 → 0.0067), đạt 99,73% chính xác ở độ phủ 90% và 100% (120/120) E2E Gold.'
+          ? 'Hiệu chỉnh hậu nghiệm Logit-Space Platt Scaling (a = 1,8913; b = 1,1386) kéo giảm 6,12 lần sai số ECE (0,2477 → 0,0405) và 12,58 lần Brier (0,0843 → 0,0067), đạt 99,73% chính xác ở độ phủ 90% và 100% (120/120) E2E Gold.'
           : 'Post-hoc Logit-Space Platt Scaling (a = 1.8913, b = 1.1386) cuts ECE by 6.12× (0.2477 → 0.0405) and Brier by 12.58× (0.0843 → 0.0067), with 99.73% accuracy @ 90% coverage and 100% (120/120) E2E Gold.',
     },
   ];
@@ -1588,7 +1663,7 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
           : 'Linear multi-feature scorer without abstention band',
       note:
         lang === 'vi'
-          ? 'Cưỡng ép ra phán quyết cứng ở vùng ranh giới nhạy cảm [0.40, 0.60), dẫn tới sụp đổ 4,17% trên OOD'
+          ? 'Cưỡng ép ra phán quyết cứng ở vùng ranh giới nhạy cảm [0,40; 0,60), dẫn tới sụp đổ 4,17% trên OOD'
           : 'Forces hard verdicts in borderline [0.40, 0.60) cases (4.17% on OOD)',
       acc: 80.53,
       prec: '0.6242',
@@ -1613,10 +1688,10 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
       highlight: false,
     },
     {
-      code: 'B5 · HybridMLScorer (16D, C = 0.25)',
+      code: lang === 'vi' ? 'B5 · HybridMLScorer (16D, C = 0,25)' : 'B5 · HybridMLScorer (16D, C = 0.25)',
       name:
         lang === 'vi'
-          ? 'HybridMLScorer 16 chiều thuần học máy (C = 0.25 — sụp đổ còn 57,33% trên 2.400 mẫu OOD!)'
+          ? 'HybridMLScorer 16 chiều thuần học máy (C = 0,25 — sụp đổ còn 57,33% trên 2.400 mẫu OOD!)'
           : 'Pure 16D HybridMLScorer (C = 0.25 — collapses to 57.33% on 2,400-sample OOD!)',
       note:
         lang === 'vi'
@@ -1636,7 +1711,7 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
           : `CITRA Unified Neuro-Symbolic (Multi-Source + Verb-Agnostic Specificity + ${SYMBOLIC_RULES_COUNT}+ Rules + Platt)`,
       note:
         lang === 'vi'
-          ? 'Hạng #1 trên cả ID (p = 1.66e-73 vs. B5) & OOD (99,96% vs. 57,33%) · 100% (120/120) E2E Gold'
+          ? 'Hạng #1 trên cả ID (p = 1,66e-73 so với B5) & OOD (99,96% so với 57,33%) · 100% (120/120) E2E Gold'
           : '#1 on both ID (p = 1.66e-73 vs. B5) & OOD (99.96% vs. 57.33%) · 100% (120/120) E2E Gold',
       acc: 99.67,
       prec: '0.9965',
@@ -1652,9 +1727,9 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
       subtypes: 'V1 – V4',
       totalSamples: lang === 'vi' ? '43.200 (36%)' : '43,200 (36%)',
       testSupport: lang === 'vi' ? '6.480' : '6,480',
-      precision: lang === 'vi' ? '0.9943 (99,4%)' : '0.9943 (99.4%)',
-      recall: lang === 'vi' ? '0.9994 (99,9%)' : '0.9994 (99.9%)',
-      f1: '0.9968',
+      precision: lang === 'vi' ? '0,9943 (99,4%)' : '0.9943 (99.4%)',
+      recall: lang === 'vi' ? '0,9994 (99,9%)' : '0.9994 (99.9%)',
+      f1: lang === 'vi' ? '0,9968' : '0.9968',
       tone: 'emerald' as const,
       desc:
         lang === 'vi'
@@ -1666,9 +1741,9 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
       subtypes: 'H1 – H4',
       totalSamples: lang === 'vi' ? '36.000 (30%)' : '36,000 (30%)',
       testSupport: lang === 'vi' ? '5.400' : '5,400',
-      precision: lang === 'vi' ? '0.9993 (99,9%)' : '0.9993 (99.9%)',
-      recall: lang === 'vi' ? '0.9996 (100,0%)' : '0.9996 (100.0%)',
-      f1: '0.9994',
+      precision: lang === 'vi' ? '0,9993 (99,9%)' : '0.9993 (99.9%)',
+      recall: lang === 'vi' ? '0,9996 (100,0%)' : '0.9996 (100.0%)',
+      f1: lang === 'vi' ? '0,9994' : '0.9994',
       tone: 'red' as const,
       desc:
         lang === 'vi'
@@ -1680,9 +1755,9 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
       subtypes: 'M1 – M5',
       totalSamples: lang === 'vi' ? '26.400 (22%)' : '26,400 (22%)',
       testSupport: lang === 'vi' ? '3.960' : '3,960',
-      precision: lang === 'vi' ? '0.9990 (99,9%)' : '0.9990 (99.9%)',
-      recall: lang === 'vi' ? '0.9866 (98,7%)' : '0.9866 (98.7%)',
-      f1: '0.9928',
+      precision: lang === 'vi' ? '0,9990 (99,9%)' : '0.9990 (99.9%)',
+      recall: lang === 'vi' ? '0,9866 (98,7%)' : '0.9866 (98.7%)',
+      f1: lang === 'vi' ? '0,9928' : '0.9928',
       tone: 'amber' as const,
       desc:
         lang === 'vi'
@@ -1694,13 +1769,13 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
       subtypes: 'U1 – U2',
       totalSamples: lang === 'vi' ? '14.400 (12%)' : '14,400 (12%)',
       testSupport: lang === 'vi' ? '2.160' : '2,160',
-      precision: lang === 'vi' ? '0.9936 (99,4%)' : '0.9936 (99.4%)',
-      recall: lang === 'vi' ? '1.0000 (100,0%)' : '1.0000 (100.0%)',
-      f1: '0.9968',
+      precision: lang === 'vi' ? '0,9936 (99,4%)' : '0.9936 (99.4%)',
+      recall: lang === 'vi' ? '1,0000 (100,0%)' : '1.0000 (100.0%)',
+      f1: lang === 'vi' ? '0,9968' : '0.9968',
       tone: 'slate' as const,
       desc:
         lang === 'vi'
-          ? 'Các tài liệu nằm trong vùng ranh giới mờ [0.40, 0.60) thiếu DOI (U1) hoặc gặp giới hạn băng thông HTTP 429 / DOI khu vực thiếu CSL (U2). Hệ thống chủ động kiềm chế không kết luận võ đoán để giảng viên thẩm định.'
+          ? 'Các tài liệu nằm trong vùng ranh giới mờ [0,40; 0,60) thiếu DOI (U1) hoặc gặp giới hạn băng thông HTTP 429 / DOI khu vực thiếu CSL (U2). Hệ thống chủ động kiềm chế không kết luận võ đoán để giảng viên thẩm định.'
           : 'Borderline candidates in the [0.40, 0.60) gray zone without DOIs (U1) or HTTP 429 / regional no-CSL DOIs (U2). Safely abstains from hard judgment and routes to faculty review.',
     },
   ];
@@ -1896,7 +1971,7 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
                         suffix={item.suffix}
                         formatThousands={item.formatThousands}
                         thousandSeparator={sep}
-                        decimalSeparator={item.suffix === '%' ? decSep : '.'}
+                        decimalSeparator={decSep}
                         replaySeed={benchSeed}
                         durationMs={1400 + idx * 120}
                       />
@@ -1947,7 +2022,7 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
                       transform: `translate3d(${benchPill.left}px, ${benchPill.top}px, 0)`,
                       transition: benchPill.animate ? undefined : 'none',
                     }}
-                    className="t-tabs-pill rounded-[10px] shadow-sm"
+                    className="t-tabs-pill rounded-[10px] border border-[#E7E3D9] dark:border-[#3F3A2F] shadow-sm"
                   />
                 )}
                 {[
@@ -2060,8 +2135,8 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
                       className="self-start sm:self-center px-3 py-1 rounded-[8px] font-mono text-[11px] font-semibold shrink-0"
                     >
                       {lang === 'vi'
-                        ? '+32,16% hơn SBERT · Thắng B5 (p = 6.17e-23)'
-                        : '+32.16% vs. SBERT · Beats B5 (p = 6.17e-23)'}
+                        ? '+32,74% hơn SBERT · Thắng B5 (p = 1,66e-73)'
+                        : '+32.74% vs. SBERT · Beats B5 (p = 1.66e-73)'}
                     </span>
                   </div>
 
@@ -2110,10 +2185,10 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
 
                           <div className="flex flex-wrap items-center gap-3 sm:gap-4 font-mono text-[11px] sm:text-[12px] shrink-0">
                             <span style={{ color: 'var(--solva-muted)' }}>
-                              Prec: <strong style={{ color: 'var(--solva-ink)' }}>{row.prec}</strong>
+                              Prec: <strong style={{ color: 'var(--solva-ink)' }}>{fmtDec(row.prec)}</strong>
                             </span>
                             <span style={{ color: 'var(--solva-muted)' }}>
-                              Rec: <strong style={{ color: 'var(--solva-ink)' }}>{row.rec}</strong>
+                              Rec: <strong style={{ color: 'var(--solva-ink)' }}>{fmtDec(row.rec)}</strong>
                             </span>
                             <span
                               className={
@@ -2123,7 +2198,7 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
                               }
                               style={!row.highlight ? { color: 'var(--solva-ink)' } : undefined}
                             >
-                              Macro-F1: {row.f1}
+                              Macro-F1: {fmtDec(row.f1)}
                             </span>
                             <span
                               className={`px-2 py-0.5 rounded font-bold ${
@@ -2275,7 +2350,7 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
                         className="font-solva-sans text-[13px] sm:text-[14px] mt-1"
                       >
                         {lang === 'vi'
-                          ? 'Ước lượng tham số Platt (a = 1.8913, b = 1.1386) hoàn toàn độc lập trên tập Thẩm định (18.000 mẫu), đảm bảo điểm độ tin cậy phản ánh trung thực xác suất đúng thực nghiệm.'
+                          ? 'Ước lượng tham số Platt (a = 1,8913; b = 1,1386) hoàn toàn độc lập trên tập Thẩm định (18.000 mẫu), đảm bảo điểm độ tin cậy phản ánh trung thực xác suất đúng thực nghiệm.'
                           : 'Platt parameters (a = 1.8913, b = 1.1386) fitted strictly on the 18,000-sample Validation split align confidence scores with true empirical accuracy.'}
                       </p>
                     </div>
@@ -2323,13 +2398,17 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
                               <span style={{ color: 'var(--solva-muted)' }}>
                                 {lang === 'vi' ? 'Sai số ECE:' : 'ECE Error:'}
                               </span>
-                              <strong style={{ color: 'var(--solva-ink)' }}>0.2477</strong>
+                              <strong style={{ color: 'var(--solva-ink)' }}>
+                                {lang === 'vi' ? '0,2477' : '0.2477'}
+                              </strong>
                             </div>
                             <div className="flex justify-between">
                               <span style={{ color: 'var(--solva-muted)' }}>
                                 {lang === 'vi' ? 'Điểm Brier:' : 'Brier Score:'}
                               </span>
-                              <strong style={{ color: 'var(--solva-ink)' }}>0.0843</strong>
+                              <strong style={{ color: 'var(--solva-ink)' }}>
+                                {lang === 'vi' ? '0,0843' : '0.0843'}
+                              </strong>
                             </div>
                             <div className="flex justify-between">
                               <span style={{ color: 'var(--solva-muted)' }}>
@@ -2368,7 +2447,7 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
                                 {lang === 'vi' ? 'Sai số ECE:' : 'ECE Error:'}
                               </span>
                               <strong className="text-emerald-700 dark:text-emerald-300">
-                                {lang === 'vi' ? '0.0405 (↓ 6,12×)' : '0.0405 (↓ 6.12×)'}
+                                {lang === 'vi' ? '0,0405 (↓ 6,12×)' : '0.0405 (↓ 6.12×)'}
                               </strong>
                             </div>
                             <div className="flex justify-between">
@@ -2376,7 +2455,7 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
                                 {lang === 'vi' ? 'Điểm Brier:' : 'Brier Score:'}
                               </span>
                               <strong className="text-emerald-700 dark:text-emerald-300">
-                                {lang === 'vi' ? '0.0067 (↓ 12,58×)' : '0.0067 (↓ 12.58×)'}
+                                {lang === 'vi' ? '0,0067 (↓ 12,58×)' : '0.0067 (↓ 12.58×)'}
                               </strong>
                             </div>
                             <div className="flex justify-between">
@@ -2427,21 +2506,21 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
                           },
                           {
                             metric: lang === 'vi' ? 'Điểm Macro-F1' : 'Macro-F1 Score',
-                            est: '0.9965',
-                            ci: '[0.9955, 0.9974]',
-                            se: '±0.0005',
+                            est: lang === 'vi' ? '0,9965' : '0.9965',
+                            ci: lang === 'vi' ? '[0,9955; 0,9974]' : '[0.9955, 0.9974]',
+                            se: lang === 'vi' ? '±0,0005' : '±0.0005',
                           },
                           {
                             metric: lang === 'vi' ? 'Sai số ECE đã hiệu chỉnh' : 'Calibrated ECE',
-                            est: '0.0405',
-                            ci: '[0.0394, 0.0415]',
-                            se: '±0.0005',
+                            est: lang === 'vi' ? '0,0405' : '0.0405',
+                            ci: lang === 'vi' ? '[0,0394; 0,0415]' : '[0.0394, 0.0415]',
+                            se: lang === 'vi' ? '±0,0005' : '±0.0005',
                           },
                           {
                             metric: lang === 'vi' ? 'Điểm Brier (Brier Score)' : 'Brier Score',
-                            est: '0.0067',
-                            ci: '[0.0060, 0.0076]',
-                            se: '±0.0004',
+                            est: lang === 'vi' ? '0,0067' : '0.0067',
+                            ci: lang === 'vi' ? '[0,0060; 0,0076]' : '[0.0060, 0.0076]',
+                            se: lang === 'vi' ? '±0,0004' : '±0.0004',
                           },
                         ].map((item) => (
                           <div
@@ -2596,7 +2675,14 @@ function SolvaStickySection({
   lang: Lang;
   isAuthenticated: boolean;
 }) {
-  const stickyBlocks = [
+  const stickyBlocks: Array<{
+    painting: string;
+    title: string;
+    desc: string;
+    cta: string;
+    to?: string;
+    href?: string;
+  }> = [
     {
       painting: '/solva/sticky-1-bg.webp',
       title:
@@ -2608,6 +2694,7 @@ function SolvaStickySection({
           ? 'Tải lên bài viết PDF hoặc Word trình bày theo chuẩn APA 7th, IEEE, Vancouver, Harvard hay ACM. CITRA tự động nhận diện phần Tài liệu tham khảo cuối bài và tách rời từng cụm trích dẫn gộp dạng [1]–[5].'
           : 'Upload a PDF or Word manuscript in APA 7th, IEEE, Vancouver, Harvard, or ACM style. CITRA cleanly separates body text from your bibliography and expands grouped citations like [1]–[5] automatically.',
       cta: lang === 'vi' ? 'Kiểm tra miễn phí' : 'Get started',
+      to: isAuthenticated ? '/upload' : '/register',
     },
     {
       painting: '/solva/sticky-2-bg.webp',
@@ -2620,6 +2707,7 @@ function SolvaStickySection({
           ? 'Mỗi trích dẫn cần xem lại đều đặt song song thông tin bạn ghi trong bài và bản ghi gốc trên thư viện. Giảng viên hướng dẫn có thể xác nhận hợp lệ ngay cho giáo trình in hoặc luận văn nội bộ kèm ghi chú.'
           : 'Every flagged citation shows side-by-side what you wrote versus the official library record. Advisors can approve print textbooks or regional theses in one click with a review note.',
       cta: lang === 'vi' ? 'Xem cách đối chiếu' : 'See how it works',
+      href: '#how-it-works',
     },
     {
       painting: '/solva/sticky-3-bg.webp',
@@ -2632,6 +2720,7 @@ function SolvaStickySection({
           ? 'Các công cụ viết bằng AI thường ghép tên tác giả và tạp chí có thật với bài báo không hề tồn tại. CITRA giúp bạn lọc sạch nguồn ảo và theo dõi Điểm Toàn vẹn Trích dẫn tăng lên qua từng bản sửa.'
           : 'AI writing tools often combine real journal titles and author names with articles that do not exist. CITRA catches unverified sources early and tracks your Citation Integrity Score across drafts.',
       cta: lang === 'vi' ? 'Rà soát bài viết' : 'Check manuscript',
+      to: isAuthenticated ? '/upload' : '/register',
     },
   ];
 
@@ -2697,7 +2786,15 @@ function SolvaStickySection({
                   </div>
 
                   <SolvaButton
-                    to={isAuthenticated ? '/upload' : '/register'}
+                    to={block.to}
+                    href={block.href}
+                    onClick={
+                      block.href
+                        ? () => {
+                            notifyAnchorHashJump(block.href);
+                          }
+                        : undefined
+                    }
                     variant="primary"
                   >
                     {block.cta}
@@ -2721,11 +2818,18 @@ function SolvaStickySection({
    Wrapped in Solva's Nested Bezel (`#F4F2EC` -> `#FBFAF6`)
    Preserves all E2E test selectors & accessible tab roles!
    ============================================================ */
-function SolvaInteractiveDebuggerSection({ lang }: { lang: Lang }) {
+function SolvaInteractiveDebuggerSection({
+  lang,
+  isAuthenticated,
+}: {
+  lang: Lang;
+  isAuthenticated: boolean;
+}) {
   const [selectedId, setSelectedId] = useState<string>(DEMO_CITATIONS[1].id);
   const [isAutoPlaying, setIsAutoPlaying] = useState<boolean>(true);
   const [isHoverPaused, setIsHoverPaused] = useState<boolean>(false);
   const [showTechnicalTrace, setShowTechnicalTrace] = useState<boolean>(false);
+  const detailPaneRef = useRef<HTMLDivElement>(null);
   const remainingTourMsRef = useRef<number>(4200);
   const tourStartedAtRef = useRef<number>(0);
   const {
@@ -2742,6 +2846,9 @@ function SolvaInteractiveDebuggerSection({ lang }: { lang: Lang }) {
     activeCitation.mappingStatus === 'MISSING_REFERENCE'
       ? activePlainMapping.actionHint
       : activePlainVerdict.actionHint;
+
+  const formatDemoPage = (page: string) =>
+    lang === 'vi' ? page.replace(/^p\.\s*/, 'tr. ') : page;
 
   useEffect(() => {
     remainingTourMsRef.current = 4200;
@@ -2770,10 +2877,41 @@ function SolvaInteractiveDebuggerSection({ lang }: { lang: Lang }) {
     remainingTourMsRef.current = 4200;
     setSelectedId(id);
     setIsAutoPlaying(false);
+    if (
+      typeof window !== 'undefined' &&
+      window.innerWidth < 1024 &&
+      typeof detailPaneRef.current?.scrollIntoView === 'function'
+    ) {
+      detailPaneRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+
+  const handleCitationKeyDown = (
+    e: React.KeyboardEvent<HTMLButtonElement>,
+    idx: number,
+  ) => {
+    let nextIdx: number | null = null;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
+      nextIdx = (idx + 1) % DEMO_CITATIONS.length;
+    } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+      nextIdx = (idx - 1 + DEMO_CITATIONS.length) % DEMO_CITATIONS.length;
+    } else if (e.key === 'Home') {
+      nextIdx = 0;
+    } else if (e.key === 'End') {
+      nextIdx = DEMO_CITATIONS.length - 1;
+    }
+    if (nextIdx !== null) {
+      e.preventDefault();
+      const target = DEMO_CITATIONS[nextIdx];
+      remainingTourMsRef.current = 4200;
+      setSelectedId(target.id);
+      setIsAutoPlaying(false);
+      document.getElementById(`demo-citation-option-${target.id}`)?.focus();
+    }
   };
 
   const renderFieldStatusBadge = (
-    status: 'match' | 'partial' | 'mismatch' | 'missing'
+    status: 'match' | 'partial' | 'mismatch' | 'missing' | 'unmatched' | 'not_found'
   ) => {
     switch (status) {
       case 'match':
@@ -2794,6 +2932,24 @@ function SolvaInteractiveDebuggerSection({ lang }: { lang: Lang }) {
             <XCircle className="h-3 w-3" /> {lang === 'vi' ? 'Chưa khớp' : 'Different'}
           </span>
         );
+      case 'not_found':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[6px] text-[11px] font-mono font-semibold bg-red-500/[0.12] text-red-700 dark:text-red-300 whitespace-nowrap">
+            <XCircle className="h-3 w-3" /> {lang === 'vi' ? 'Chưa tìm thấy' : 'Not found'}
+          </span>
+        );
+      case 'unmatched':
+        return (
+          <span
+            style={{
+              backgroundColor: 'var(--solva-surface)',
+              color: 'var(--solva-muted)',
+            }}
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[6px] text-[11px] font-mono font-semibold whitespace-nowrap"
+          >
+            {lang === 'vi' ? '— Chưa đối chiếu được' : '— Not matched'}
+          </span>
+        );
       case 'missing':
         return (
           <span
@@ -2801,7 +2957,7 @@ function SolvaInteractiveDebuggerSection({ lang }: { lang: Lang }) {
               backgroundColor: 'var(--solva-surface)',
               color: 'var(--solva-muted)',
             }}
-            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[6px] text-[11px] font-mono font-semibold"
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[6px] text-[11px] font-mono font-semibold whitespace-nowrap"
           >
             {lang === 'vi' ? '— Còn thiếu' : '— Missing'}
           </span>
@@ -2872,6 +3028,11 @@ function SolvaInteractiveDebuggerSection({ lang }: { lang: Lang }) {
             data-testid="debugger-bezel"
             onMouseEnter={() => setIsHoverPaused(true)}
             onMouseLeave={() => setIsHoverPaused(false)}
+            onPointerDown={(e) => {
+              if (e.pointerType === 'touch') {
+                setIsAutoPlaying(false);
+              }
+            }}
             style={{ backgroundColor: 'var(--solva-surface)' }}
             className="rounded-[16px] p-[8px] sm:p-[12px]"
           >
@@ -2983,17 +3144,19 @@ function SolvaInteractiveDebuggerSection({ lang }: { lang: Lang }) {
                     </div>
 
                     <div className="space-y-2.5" role="listbox" aria-label="Sample Citations">
-                      {DEMO_CITATIONS.map((cit) => {
+                      {DEMO_CITATIONS.map((cit, idx) => {
                         const isSelected = cit.id === activeCitation.id;
                         const plainV = getPlainVerdictLabel(cit.verdict, lang);
                         const plainM = getPlainMappingLabel(cit.mappingStatus, lang);
                         return (
                           <button
                             key={cit.id}
+                            id={`demo-citation-option-${cit.id}`}
                             type="button"
                             role="option"
                             aria-selected={isSelected}
                             onClick={() => handleSelectCitation(cit.id)}
+                            onKeyDown={(e) => handleCitationKeyDown(e, idx)}
                             style={{
                               backgroundColor: isSelected
                                 ? 'var(--solva-card-elevated)'
@@ -3002,7 +3165,7 @@ function SolvaInteractiveDebuggerSection({ lang }: { lang: Lang }) {
                                 ? 'var(--solva-ink)'
                                 : 'var(--solva-border)',
                             }}
-                            className="relative overflow-hidden w-full text-left p-3.5 rounded-[10px] border transition-[background-color,border-color,color,box-shadow] duration-200 cursor-pointer"
+                            className="relative overflow-hidden w-full text-left p-3.5 rounded-[10px] border transition-[background-color,border-color,color,box-shadow] duration-200 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1C1A15] dark:focus-visible:ring-[#FBFAF6] focus-visible:ring-offset-2"
                           >
                             <div className="flex items-center justify-between gap-2 mb-1.5">
                               <div className="flex items-center gap-2 min-w-0">
@@ -3030,7 +3193,7 @@ function SolvaInteractiveDebuggerSection({ lang }: { lang: Lang }) {
                                 style={{ color: 'var(--solva-muted)' }}
                                 className="font-mono text-[11px] shrink-0"
                               >
-                                {cit.page}
+                                {formatDemoPage(cit.page)}
                               </span>
                             </div>
 
@@ -3065,6 +3228,18 @@ function SolvaInteractiveDebuggerSection({ lang }: { lang: Lang }) {
                               </span>
                             </div>
 
+                            {isSelected && (
+                              <div
+                                style={{ color: 'var(--solva-muted)' }}
+                                className="mt-2 pt-1.5 border-t border-[#E7E3D9] dark:border-[#332F26] flex items-center justify-end gap-1 text-[10.5px] font-mono lg:hidden"
+                              >
+                                <span>
+                                  {lang === 'vi' ? 'Xem chi tiết bên dưới' : 'View details below'}
+                                </span>
+                                <ArrowDown className="h-3 w-3 shrink-0" aria-hidden="true" />
+                              </div>
+                            )}
+
                             {isSelected && isAutoPlaying && (
                               <span
                                 key={`tour-progress-${cit.id}`}
@@ -3095,8 +3270,8 @@ function SolvaInteractiveDebuggerSection({ lang }: { lang: Lang }) {
                     >
                       <span>
                         {lang === 'vi'
-                          ? `CÂU VĂN TRONG BÀI (${activeCitation.page})`
-                          : `SENTENCE IN YOUR PAPER (${activeCitation.page})`}
+                          ? `CÂU VĂN TRONG BÀI (${formatDemoPage(activeCitation.page)})`
+                          : `SENTENCE IN YOUR PAPER (${formatDemoPage(activeCitation.page)})`}
                       </span>
                       <span>
                         {lang === 'vi' ? 'Đoạn trích gốc' : 'In-text excerpt'}
@@ -3123,8 +3298,9 @@ function SolvaInteractiveDebuggerSection({ lang }: { lang: Lang }) {
 
                 {/* Right Pane: Plain-Language Verdict & Optional Technical Trace (7 cols) */}
                 <div
+                  ref={detailPaneRef}
                   style={{ backgroundColor: 'var(--solva-card-elevated)' }}
-                  className="lg:col-span-7 min-w-0 p-4 sm:p-6 flex flex-col justify-between"
+                  className="lg:col-span-7 min-w-0 scroll-mt-[84px] p-4 sm:p-6 flex flex-col justify-between"
                 >
                   <div>
                     <div
@@ -3218,17 +3394,17 @@ function SolvaInteractiveDebuggerSection({ lang }: { lang: Lang }) {
                     <Tabs defaultValue="diff" className="w-full">
                       <TabsList
                         style={{ backgroundColor: 'var(--solva-surface)' }}
-                        className="grid grid-cols-1 sm:grid-cols-3 w-full p-1 rounded-[10px] h-auto gap-1"
+                        className="grid grid-cols-1 sm:grid-cols-3 w-full p-1 rounded-[10px] h-auto gap-1 border border-[#E7E3D9] dark:border-[#3A352B] [&_.t-tabs-pill]:bg-white dark:[&_.t-tabs-pill]:bg-[#FBFAF6] [&_.t-tabs-pill]:ring-1 [&_.t-tabs-pill]:ring-[#1C1A15]/10 dark:[&_.t-tabs-pill]:ring-white/20"
                       >
                         <TabsTrigger
                           value="diff"
-                          className="w-full text-xs font-solva-sans font-medium py-2 sm:py-1.5 px-2.5 rounded-[8px]"
+                          className="w-full text-xs font-solva-sans font-medium py-2 sm:py-1.5 px-2.5 rounded-[8px] data-[state=active]:text-[#1C1A15] dark:data-[state=active]:text-[#1C1A15] dark:data-[state=active]:bg-[#FBFAF6] data-[state=inactive]:text-[#56524A] dark:data-[state=inactive]:text-[#C5BFB2] dark:data-[state=inactive]:hover:text-[#FBFAF6]"
                         >
                           {lang === 'vi' ? '1. So sánh thông tin' : '1. Side-by-Side Details'}
                         </TabsTrigger>
                         <TabsTrigger
                           value="rules"
-                          className="w-full text-xs font-solva-sans font-medium py-2 sm:py-1.5 px-2.5 rounded-[8px]"
+                          className="w-full text-xs font-solva-sans font-medium py-2 sm:py-1.5 px-2.5 rounded-[8px] data-[state=active]:text-[#1C1A15] dark:data-[state=active]:text-[#1C1A15] dark:data-[state=active]:bg-[#FBFAF6] data-[state=inactive]:text-[#56524A] dark:data-[state=inactive]:text-[#C5BFB2] dark:data-[state=inactive]:hover:text-[#FBFAF6]"
                         >
                           {lang === 'vi'
                             ? `2. Lý do kết luận (${activeCitation.rules.length})`
@@ -3236,7 +3412,7 @@ function SolvaInteractiveDebuggerSection({ lang }: { lang: Lang }) {
                         </TabsTrigger>
                         <TabsTrigger
                           value="sources"
-                          className="w-full text-xs font-solva-sans font-medium py-2 sm:py-1.5 px-2.5 rounded-[8px]"
+                          className="w-full text-xs font-solva-sans font-medium py-2 sm:py-1.5 px-2.5 rounded-[8px] data-[state=active]:text-[#1C1A15] dark:data-[state=active]:text-[#1C1A15] dark:data-[state=active]:bg-[#FBFAF6] data-[state=inactive]:text-[#56524A] dark:data-[state=inactive]:text-[#C5BFB2] dark:data-[state=inactive]:hover:text-[#FBFAF6]"
                         >
                           {lang === 'vi' ? '3. Thư viện đã tra cứu' : '3. Libraries Checked'}
                         </TabsTrigger>
@@ -3564,6 +3740,38 @@ function SolvaInteractiveDebuggerSection({ lang }: { lang: Lang }) {
                   </div>
                 </div>
               </div>
+
+              {/* Guest / Signed-in Quick Paste Sandbox Bridge */}
+              <div
+                style={{
+                  backgroundColor: 'var(--solva-surface)',
+                  borderColor: 'var(--solva-border)',
+                }}
+                className="px-4 sm:px-6 py-3 border-t flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs"
+              >
+                <p style={{ color: 'var(--solva-muted)' }} className="font-solva-sans leading-relaxed">
+                  {lang === 'vi'
+                    ? 'Bạn có thể khám phá ngay 4 thẻ trích dẫn mẫu tương tác ở trên mà không cần đăng nhập — hoặc đăng nhập để dán trực tiếp danh mục trích dẫn của riêng bạn.'
+                    : 'Explore all 4 interactive sample cards right here without signing in — or sign in to paste and check your own custom reference list.'}
+                </p>
+                <Link
+                  to={isAuthenticated ? '/sandbox' : '/login'}
+                  data-testid="interactive-demo-sandbox-link"
+                  style={{ color: 'var(--solva-ink)' }}
+                  className="inline-flex items-center gap-1.5 font-solva-sans font-medium whitespace-nowrap shrink-0 underline underline-offset-4 hover:opacity-80 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1C1A15] dark:focus-visible:ring-[#FBFAF6] rounded"
+                >
+                  <span>
+                    {isAuthenticated
+                      ? lang === 'vi'
+                        ? 'Mở Kiểm tra nhanh (/sandbox)'
+                        : 'Open Quick Paste Sandbox'
+                      : lang === 'vi'
+                        ? 'Đăng nhập để kiểm tra trích dẫn riêng'
+                        : 'Sign in for Custom Quick Paste'}
+                  </span>
+                  <ArrowRight className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                </Link>
+              </div>
             </div>
           </div>
         </SolvaScrollReveal>
@@ -3843,7 +4051,7 @@ function SolvaUseCasesSection({
                   opacity: pipelinePill.ready ? 1 : 0,
                   transition: pipelinePill.animate ? undefined : 'none',
                 }}
-                className="t-tabs-pill rounded-[10px]"
+                className="t-tabs-pill rounded-[10px] border border-[#E7E3D9] dark:border-[#3F3A2F] shadow-sm"
               />
               {tabs.map((tab, idx) => {
                 const Icon = tab.icon;
@@ -3935,6 +4143,7 @@ function SolvaUseCasesSection({
                       to={isAuthenticated ? '/upload' : '/register'}
                       variant="primary"
                       fullWidth
+                      allowWrap
                     >
                       {lang === 'vi' ? 'Trải nghiệm quy trình thẩm định này' : 'Try CITRA Free'}
                     </SolvaButton>
@@ -4668,10 +4877,10 @@ function SolvaClientResultsSection({ lang }: { lang: Lang }) {
 
                   <div
                     style={{ color: 'var(--solva-ink)' }}
-                    className="font-solva-sans text-[16px] font-medium tracking-tight shrink-0 flex items-center gap-1.5"
+                    className="font-solva-sans text-[15px] font-medium tracking-tight shrink-0 flex items-center gap-1.5"
                   >
                     <GraduationCap className="w-5 h-5" />
-                    <span>CITRA Lab</span>
+                    <span>{lang === 'vi' ? 'Nghiên cứu tình huống' : 'Academic Case Study'}</span>
                   </div>
                 </div>
 
@@ -5721,7 +5930,10 @@ function SolvaFooter({
         <div className="flex flex-col lg:flex-row items-start justify-between gap-[28px] sm:gap-[36px] lg:gap-[32px]">
           {/* Left Brand Info */}
           <div className="w-full lg:w-[389px] flex flex-col items-start gap-[16px]">
-            <Link to="/" className="inline-flex items-center gap-[10px]">
+            <Link
+              to="/"
+              className="inline-flex items-center gap-[10px] rounded-[6px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1C1A15] dark:focus-visible:ring-[#FBFAF6] focus-visible:ring-offset-2"
+            >
               <span className="w-[32px] h-[32px] rounded-[8px] bg-white dark:bg-[#1E1C17] border border-[#E7E3D9] dark:border-[#332F26] shadow-sm flex items-center justify-center p-1 shrink-0 transition-colors">
                 <SourceLogicLogo size={20} />
               </span>

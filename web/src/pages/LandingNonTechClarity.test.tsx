@@ -328,7 +328,7 @@ describe('Task 2.1 — Human-First Copywriting & Collapsible Progressive Disclos
         name: /platt calibration & 95% ci|hiệu chỉnh platt & bootstrap 95% ci/i,
       });
       fireEvent.click(calibrationTab);
-      expect(bench.textContent).toContain('0.0405');
+      expect(bench.textContent).toContain(lang === 'vi' ? '0,0405' : '0.0405');
 
       if (lang === 'vi') {
         // Even with technical drawers expanded in VI, thousand separators strictly use dots
@@ -395,18 +395,18 @@ describe('Task 2.1 — Human-First Copywriting & Collapsible Progressive Disclos
       await i18n.changeLanguage(lang);
       const { container, unmount } = renderLanding();
 
-      // Ensure desktop navbar uses xl:flex (1280px+) and hamburger/drawer use xl:hidden so 1024px VI never collides
+      // Ensure desktop navbar shows single-row links from lg:1024px upward (matching /pricing) and hamburger/drawer hide at lg:
       const desktopNav = container.querySelector(
         'header nav[aria-label="Primary Navigation"]',
       ) as HTMLElement;
-      expect(desktopNav.className).toContain('xl:flex');
-      expect(desktopNav.className).not.toContain('lg:flex');
+      expect(desktopNav.className).toContain('lg:flex');
+      expect(desktopNav.className).not.toContain('xl:flex');
 
       const hamburgerBtn = screen.getByRole('button', {
         name: /toggle navigation menu/i,
       });
-      expect(hamburgerBtn.className).toContain('xl:hidden');
-      expect(hamburgerBtn.className).not.toContain('lg:hidden');
+      expect(hamburgerBtn.className).toContain('lg:hidden');
+      expect(hamburgerBtn.className).not.toContain('xl:hidden');
 
       // Zero .citra-nowrap-tail paired with inline-flex anywhere on LandingPage
       container.querySelectorAll('.citra-nowrap-tail').forEach((el) => {
@@ -450,6 +450,90 @@ describe('Task 2.1 — Human-First Copywriting & Collapsible Progressive Disclos
       expect(variantClass).toBeDefined();
       expect(cssSource).toMatch(new RegExp(`\\.${variantClass}\\b`));
       expect(cssSource).toMatch(new RegExp(`\\.dark\\s+[^{]*\\.${variantClass}\\b`));
+
+      unmount();
+    }
+  });
+
+  it('7. verifies Phase 2A bug fixes: BUG-20 sample [3]/[4] & Hero [2], BUG-17 benchmark hygiene & VI localization, BUG-26 Why CITRA card 2 anchor, BUG-38 dark-mode tab pill contrast, and BUG-52/55/58 a11y & responsive polish', async () => {
+    for (const lang of ['en', 'vi'] as const) {
+      await i18n.changeLanguage(lang);
+      const { container, unmount } = renderLanding();
+
+      // BUG-55: Skip-to-content link & focus-visible ring on brand logo
+      const skipLink = screen.getByTestId('landing-skip-to-content');
+      expect(skipLink.getAttribute('href')).toBe('#main-content');
+      const brandLink = container.querySelector('header a[href="/"]') as HTMLElement;
+      expect(brandLink.className).toContain('focus-visible:ring-2');
+
+      // BUG-58: Theme toggle aria-label & title localized in VI
+      const themeBtn = container.querySelector(
+        lang === 'vi'
+          ? 'header button[title^="Giao diện:"]'
+          : 'header button[title^="Theme:"]',
+      );
+      expect(themeBtn).not.toBeNull();
+
+      // BUG-20: Hero preview card [1] clean title (no dangling ·) & [2] consistent 2018 year
+      const hero = container.querySelector('#hero') as HTMLElement;
+      expect(hero.textContent).toContain('Devlin et al. (2018)');
+      expect(hero.textContent).not.toContain('Devlin et al. (2019)');
+      expect(hero.textContent).not.toContain('Attention Is All You Need ·');
+
+      // BUG-20: #interactive-demo Sample [4] & [3] never show Close Match / Gần khớp against null library record
+      const demo = container.querySelector('#interactive-demo') as HTMLElement;
+      const options = within(demo).getAllByRole('option');
+
+      fireEvent.click(options[3]); // Sample [4] Smith et al. (2021)
+      expect(demo.textContent).not.toContain(lang === 'vi' ? 'Gần khớp' : 'Close Match');
+      expect(demo.textContent).toContain(
+        lang === 'vi' ? '— Chưa đối chiếu được' : '— Not matched',
+      );
+      if (lang === 'vi') {
+        expect(demo.textContent).toContain('tr. 14');
+        expect(demo.textContent).not.toContain('(p. 14)');
+      }
+
+      fireEvent.click(options[2]); // Sample [3] Robertson & Walker (2024)
+      expect(demo.textContent).not.toContain(lang === 'vi' ? 'Gần khớp' : 'Close Match');
+      expect(demo.textContent).toContain(lang === 'vi' ? 'Chưa tìm thấy' : 'Not found');
+
+      // BUG-38: Dark mode active tab pill contrast in #interactive-demo
+      const diffTab = within(demo).getAllByRole('tab')[0];
+      expect(diffTab.className).toContain('dark:data-[state=active]:bg-[#FBFAF6]');
+      expect(diffTab.className).toContain('dark:data-[state=active]:text-[#1C1A15]');
+
+      // BUG-26: #interactive-demo guest/sandbox bridge link + Why CITRA card 2 points to #how-it-works
+      expect(within(demo).getByTestId('interactive-demo-sandbox-link')).toBeDefined();
+      const stickyDeck = screen.getByTestId('solva-sticky-cards-deck');
+      const card2Cta = within(stickyDeck).getByRole('link', {
+        name: lang === 'vi' ? /Xem cách đối chiếu/i : /See how it works/i,
+      });
+      expect(card2Cta.getAttribute('href')).toBe('#how-it-works');
+
+      // BUG-17 / BUG-39: Expanded #benchmark-120k has zero np.clip, zero 6.17e-23, consistent p-value & 128K+ distinction
+      const bench = container.querySelector('#benchmark-120k') as HTMLElement;
+      fireEvent.click(within(bench).getByTestId('benchmark-technical-details-toggle'));
+      const expandedBenchText = bench.textContent ?? '';
+      expect(expandedBenchText).not.toContain('np.clip');
+      expect(expandedBenchText).not.toContain('6.17e-23');
+      expect(expandedBenchText).toContain(lang === 'vi' ? '1,66e-73' : '1.66e-73');
+      expect(expandedBenchText).toContain('128K+');
+
+      // BUG-17 / BUG-39: Zero self-quoting "CITRA Lab" testimonial attribution & localized 48 phút 12 giây in VI
+      expect(container.textContent).not.toContain('CITRA Lab');
+      if (lang === 'vi') {
+        expect(container.textContent).toContain('48 phút 12 giây');
+        expect(container.textContent).not.toContain('48m 12s');
+      } else {
+        expect(container.textContent).toContain('48m 12s');
+      }
+
+      // BUG-52: Mobile drawer hides duplicate auth CTAs on sm+ (tablet 768px)
+      fireEvent.click(screen.getByRole('button', { name: /toggle navigation menu/i }));
+      const mobileDrawer = screen.getByRole('navigation', { name: /mobile navigation/i });
+      const drawerAuthRow = mobileDrawer.querySelector('.sm\\:hidden');
+      expect(drawerAuthRow).not.toBeNull();
 
       unmount();
     }

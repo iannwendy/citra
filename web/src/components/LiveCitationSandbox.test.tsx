@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { api } from '@/api/client';
+import { api, type SandboxInstantVerifyResponse } from '@/api/client';
 import i18n from '@/i18n';
 import { renderWithProviders, screen, fireEvent, waitFor } from '@/test-utils';
 import { LiveCitationSandbox } from './LiveCitationSandbox';
@@ -56,77 +56,76 @@ const sampleResponse = {
   ],
 };
 
-describe('LiveCitationSandbox i18n', () => {
+describe('LiveCitationSandbox i18n, Academic Taxonomy & Quick Paste UX', () => {
   beforeEach(async () => {
     vi.restoreAllMocks();
     await i18n.changeLanguage('en');
   });
 
-  it('renders English preset badges, buttons, and checkboxes with no Vietnamese strings', async () => {
+  it('renders clean English preset badges, buttons, selects with pr-8, and zero thesis-defense or Vietnamese copy', async () => {
     vi.spyOn(api, 'sampleSandboxAclPapers').mockResolvedValue(sampleResponse);
 
     renderWithProviders(<LiveCitationSandbox lang="en" />);
+
+    expect(screen.getByTestId('sandbox-acl-count-select').className).toContain('pr-8');
+    expect(screen.getByTestId('sandbox-acl-style-select').className).toContain('pr-8');
 
     fireEvent.click(screen.getByTestId('sandbox-random-acl-btn'));
     await waitFor(() => {
       expect(screen.getByTestId('sandbox-paper-card-0')).toBeDefined();
     });
 
-    // Cycle presets on card 0 and verify English badges
-    expect(screen.getAllByText('✓ CANONICAL ACL RECORD').length).toBeGreaterThan(0);
+    // Cycle presets on card 0 and verify non-accusatory English labels
+    expect(screen.getAllByText('Canonical ACL').length).toBeGreaterThan(0);
     fireEvent.click(screen.getByTestId('sandbox-preset-wrong-year-0'));
-    expect(screen.getByText('⚡ WRONG YEAR (METADATA_ERROR)')).toBeDefined();
+    expect(screen.getAllByText('Wrong Year').length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByTestId('sandbox-preset-wrong-author-0'));
-    expect(screen.getByText('⚡ WRONG AUTHOR (METADATA_ERROR)')).toBeDefined();
+    expect(screen.getAllByText('Wrong Author').length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByTestId('sandbox-preset-hallucinated-0'));
-    expect(screen.getByText('🚨 HALLUCINATED SOURCE')).toBeDefined();
+    expect(screen.getByText('Source Not Found')).toBeDefined();
 
     fireEvent.click(screen.getByTestId('sandbox-preset-intext-mismatch-0'));
-    expect(screen.getByText('🔗 IN-TEXT ↔ REF YEAR MISMATCH')).toBeDefined();
+    expect(screen.getByText('In-text Year Mismatch')).toBeDefined();
 
     const text = document.body.textContent ?? '';
-    expect(text).toContain('Canonical ACL');
-    expect(text).toContain('Wrong Year');
-    expect(text).toContain('Wrong Author');
-    expect(text).toContain('Hallucinate');
-    expect(text).toContain('In-text ↔ Ref Year Drift');
-    expect(text).toContain('Cited in Body Text (In-Text)');
-    expect(text).toContain('Included in Bibliography (References)');
+    expect(text).toContain('Add Common Citation Mistakes');
+    expect(text).toContain('Cited in Body Text');
+    expect(text).toContain('Included in Bibliography');
 
-    // Ensure no Vietnamese strings leaked into English mode
-    expect(text).not.toContain('CHUẨN GỐC CSDL ACL');
-    expect(text).not.toContain('LỖI NĂM');
-    expect(text).not.toContain('LỖI TÁC GIẢ');
-    expect(text).not.toContain('NGUỒN BỊA ĐẶT');
-    expect(text).not.toContain('Gốc ACL');
-    expect(text).not.toContain('Sửa sai Năm');
-    expect(text).not.toContain('Sửa sai Tác giả');
-    expect(text).not.toContain('Bịa nguồn giả');
-    expect(text).not.toContain('Trích dẫn trong bài');
-    expect(text).not.toContain('Có trong mục References cuối bài');
+    // Scrubbed defense-demo copy & zero Vietnamese leaks
+    expect(text).not.toContain('Defense Error Suite');
+    expect(text).not.toContain('🚨');
+    expect(text).not.toContain('Bản gốc ACL');
+    expect(text).not.toContain('Sai năm xuất bản');
+    expect(text).not.toContain('Có trích dẫn trong bài viết');
   });
 
-  it('renders Vietnamese preset badges, buttons, and checkboxes when lang="vi"', async () => {
+  it('renders clean Vietnamese student/teacher copy with zero thesis-defense jargon when lang="vi"', async () => {
     await i18n.changeLanguage('vi');
     vi.spyOn(api, 'sampleSandboxAclPapers').mockResolvedValue(sampleResponse);
 
     renderWithProviders(<LiveCitationSandbox lang="vi" />);
 
+    const initialText = document.body.textContent ?? '';
+    expect(initialText).toContain('Lấy ngẫu nhiên 12 bài báo');
+    expect(initialText).not.toContain('Random 12 Bài báo');
+    expect(initialText).not.toContain('ngay trước mặt thầy cô');
+
     fireEvent.click(screen.getByTestId('sandbox-random-acl-btn'));
     await waitFor(() => {
       expect(screen.getByTestId('sandbox-paper-card-0')).toBeDefined();
     });
 
     const text = document.body.textContent ?? '';
-    expect(text).toContain('✓ CHUẨN GỐC CSDL ACL');
-    expect(text).toContain('Gốc ACL');
-    expect(text).toContain('Sửa sai Năm');
-    expect(text).toContain('Sửa sai Tác giả');
-    expect(text).toContain('Bịa nguồn giả (Hallucination)');
-    expect(text).toContain('Trích dẫn trong bài (Body In-Text)');
-    expect(text).toContain('Có trong mục References cuối bài');
+    expect(text).toContain('Tạo nhanh bài mẫu có lỗi phổ biến');
+    expect(text).toContain('Bản gốc ACL');
+    expect(text).toContain('Có trích dẫn trong bài viết');
+    expect(text).toContain('Có trong Danh mục tham khảo');
+    expect(text).not.toContain('Hội Đồng');
+    expect(text).not.toContain('nếu muốn test lệch năm');
+    expect(text).not.toContain('🚨');
   });
 
   it('uses explicit light and dark theme classes on the studio header and mode switcher instead of dark-only styling', () => {
@@ -142,5 +141,264 @@ describe('LiveCitationSandbox i18n', () => {
     const rawBtn = screen.getByTestId('sandbox-mode-raw-btn');
     expect(rawBtn.className).toContain('text-slate-600');
     expect(rawBtn.className).toContain('dark:text-slate-300');
+  });
+
+  it('Quick Paste updates subtitle, hides raw rule IDs behind collapsible toggle, uses Unified Taxonomy + DecisionSupportBanner, formats < 0.1s, suppresses not_applicable Layer-1, fixes dark BibTeX icon, and marks/clears stale results on edit/empty', async () => {
+    const verifyResponse: SandboxInstantVerifyResponse = {
+      elapsed_seconds: 0.04,
+      total: 2,
+      summary: {
+        verified: 1,
+        metadata_error: 0,
+        suspected_hallucination: 1,
+        layer1_linking_issues: 0,
+      },
+      results: [
+        {
+          index: 1,
+          citation_raw: 'Vaswani et al. (2017). Attention Is All You Need.',
+          label: 'verified',
+          confidence: 0.99,
+          mapping_status: 'not_applicable',
+          mapping_note: '',
+          reasoning: 'Matched in Crossref.',
+          reasoning_en: 'Exact match confirmed in Crossref.',
+          reasoning_vi: 'Khớp chính xác với bản ghi trên Crossref.',
+          triggered_rules: ['R-DOI-TITLE-AUTHOR'],
+          mismatched_fields: [],
+        },
+        {
+          index: 2,
+          citation_raw: 'Smith (2024). Imaginary Paper. https://doi.org/10.9999/fake',
+          label: 'suspected_hallucination',
+          confidence: 0.12,
+          mapping_status: 'not_applicable',
+          mapping_note: '',
+          reasoning: 'Fallback reasoning',
+          reasoning_en: 'DOI prefix 10.9999 is reserved/invalid and no scholarly record was found.',
+          reasoning_vi: 'Tiền tố DOI 10.9999 không hợp lệ và không tìm thấy công trình trên 15+ thư viện.',
+          triggered_rules: ['R-FABRICATED-DOI', 'R-NO-CANDIDATE'],
+          mismatched_fields: [],
+        },
+      ],
+      remediation: {
+        essay_id: 0,
+        style: 'apa',
+        total_entries: 1,
+        remediated_count: 1,
+        entries: [],
+        combined_text: '',
+        combined_bibtex: '@inproceedings{vaswani2017attention, title={Attention Is All You Need}}',
+        combined_ris: '',
+      },
+    };
+
+    vi.spyOn(api, 'verifySandboxCitationsInstant').mockResolvedValue(verifyResponse);
+
+    const { unmount } = renderWithProviders(<LiveCitationSandbox lang="vi" />);
+    fireEvent.click(screen.getByTestId('sandbox-mode-raw-btn'));
+
+    // Subtitle switches to Quick Paste description
+    expect(screen.getByTestId('sandbox-studio-subtitle').textContent).toContain(
+      'Dán trực tiếp danh sách tài liệu tham khảo',
+    );
+
+    fireEvent.click(screen.getByTestId('sandbox-verify-submit-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('sandbox-instant-results')).toBeDefined();
+    });
+
+    const resultsEl = screen.getByTestId('sandbox-instant-results');
+    // Elapsed < 0.1s instead of ⚡ 0s
+    expect(screen.getByTestId('sandbox-elapsed-badge').textContent).toBe('< 0.1s');
+    // Unified Academic Taxonomy pills (no 🚨 Hallucination / Nghi bịa đặt)
+    expect(resultsEl.textContent).toContain('Đã xác minh');
+    expect(resultsEl.textContent).toContain('Không tìm thấy nguồn');
+    expect(resultsEl.textContent).not.toContain('Nghi bịa đặt');
+    expect(resultsEl.textContent).not.toContain('🚨');
+    // DecisionSupportBanner present
+    expect(screen.getByTestId('decision-support-banner')).toBeDefined();
+    // Layer-1 not_applicable hidden cleanly
+    expect(screen.queryByTestId('sandbox-summary-layer1')).toBeNull();
+    expect(screen.queryByTestId('sandbox-layer1-badge-1')).toBeNull();
+    // Preserves backend reasoning_vi
+    expect(resultsEl.textContent).toContain('Tiền tố DOI 10.9999 không hợp lệ');
+    // Raw rule IDs hidden behind collapsible "Chi tiết kỹ thuật"
+    expect(resultsEl.textContent).not.toContain('R-FABRICATED-DOI');
+    fireEvent.click(screen.getByTestId('sandbox-tech-toggle-2'));
+    expect(screen.getByTestId('sandbox-tech-panel-2').textContent).toContain('R-FABRICATED-DOI');
+    // Dark mode contrast on Copy BibTeX button & icon
+    const copyBtn = screen.getByTestId('sandbox-copy-bibtex-btn');
+    expect(copyBtn.className).toContain('dark:text-[#FBFAF6]');
+    expect(copyBtn.innerHTML).toContain('dark:text-[#FBFAF6]');
+
+    // Editing textarea marks results stale (dimmed + banner)
+    const textarea = screen.getByTestId('sandbox-raw-textarea');
+    fireEvent.change(textarea, { target: { value: 'Another reference (2025).' } });
+    expect(screen.getByTestId('sandbox-stale-banner')).toBeDefined();
+    expect(screen.getByTestId('sandbox-instant-results').getAttribute('data-stale')).toBe('true');
+
+    // Emptying textarea immediately clears stale results & displays inline hint
+    fireEvent.change(textarea, { target: { value: '   ' } });
+    expect(screen.queryByTestId('sandbox-instant-results')).toBeNull();
+    expect(screen.getByTestId('sandbox-raw-empty-hint')).toBeDefined();
+
+    unmount();
+
+    // EN mode uses reasoning_en (no VI leak)
+    renderWithProviders(<LiveCitationSandbox lang="en" />);
+    fireEvent.click(screen.getByTestId('sandbox-mode-raw-btn'));
+    fireEvent.click(screen.getByTestId('sandbox-verify-submit-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('sandbox-instant-results')).toBeDefined();
+    });
+    expect(screen.getByTestId('sandbox-instant-results').textContent).toContain(
+      'DOI prefix 10.9999 is reserved/invalid',
+    );
+    expect(screen.getByTestId('sandbox-instant-results').textContent).not.toContain(
+      'Tiền tố DOI 10.9999',
+    );
+  });
+
+  it('handles is_invalid_input cleanly by showing invalid-citation card and hiding Copy BibTeX', async () => {
+    vi.spyOn(api, 'verifySandboxCitationsInstant').mockResolvedValue({
+      elapsed_seconds: 0.02,
+      total: 1,
+      summary: {
+        verified: 0,
+        metadata_error: 0,
+        suspected_hallucination: 0,
+        unresolved: 1,
+        layer1_linking_issues: 0,
+      },
+      results: [
+        {
+          index: 1,
+          citation_raw: 'hello world random text',
+          label: 'unresolved',
+          confidence: 0,
+          mapping_status: 'not_applicable',
+          mapping_note: '',
+          reasoning: 'Input does not appear to be a valid bibliographic citation.',
+          reasoning_en: 'Input does not appear to be a valid bibliographic citation.',
+          reasoning_vi: 'Văn bản nhập vào không giống một trích dẫn học thuật hợp lệ.',
+          is_invalid_input: true,
+          triggered_rules: ['R-INCOMPLETE-METADATA'],
+          mismatched_fields: [],
+        },
+      ],
+      remediation: {
+        essay_id: 0,
+        style: 'apa',
+        total_entries: 0,
+        remediated_count: 0,
+        entries: [],
+        combined_text: '',
+        combined_bibtex: '@misc{invalid}',
+        combined_ris: '',
+      },
+    });
+
+    renderWithProviders(<LiveCitationSandbox lang="en" />);
+    fireEvent.click(screen.getByTestId('sandbox-mode-raw-btn'));
+    fireEvent.change(screen.getByTestId('sandbox-raw-textarea'), {
+      target: { value: 'hello world random text' },
+    });
+    fireEvent.click(screen.getByTestId('sandbox-verify-submit-btn'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('sandbox-instant-results')).toBeDefined();
+    });
+
+    expect(screen.getByTestId('sandbox-result-card-1').textContent).toContain(
+      'Input does not look like a citation',
+    );
+    expect(screen.queryByTestId('sandbox-copy-bibtex-btn')).toBeNull();
+    expect(screen.queryByTestId('sandbox-summary-layer1')).toBeNull();
+  });
+
+  it('shows explicit Checking... button state and loading skeleton while clearing prior results on resubmit', async () => {
+    let resolveSecond!: (value: SandboxInstantVerifyResponse) => void;
+    const secondPromise = new Promise<SandboxInstantVerifyResponse>((resolve) => {
+      resolveSecond = resolve;
+    });
+
+    const spy = vi
+      .spyOn(api, 'verifySandboxCitationsInstant')
+      .mockResolvedValueOnce({
+        elapsed_seconds: 0.2,
+        total: 1,
+        summary: {
+          verified: 1,
+          metadata_error: 0,
+          suspected_hallucination: 0,
+          layer1_linking_issues: 0,
+        },
+        results: [
+          {
+            index: 1,
+            citation_raw: 'Vaswani et al. (2017). Attention Is All You Need.',
+            label: 'verified',
+            confidence: 0.99,
+            mapping_status: 'not_applicable',
+            mapping_note: '',
+            reasoning: 'Matched.',
+            reasoning_en: 'Matched.',
+            triggered_rules: [],
+            mismatched_fields: [],
+          },
+        ],
+      })
+      .mockReturnValueOnce(secondPromise);
+
+    renderWithProviders(<LiveCitationSandbox lang="en" />);
+    fireEvent.click(screen.getByTestId('sandbox-mode-raw-btn'));
+    fireEvent.click(screen.getByTestId('sandbox-verify-submit-btn'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('sandbox-instant-results').textContent).toContain('Verified: 1');
+    });
+
+    // Replace text and submit again -> old Verified: 1 immediately clears while skeleton & Checking... render
+    fireEvent.change(screen.getByTestId('sandbox-raw-textarea'), {
+      target: { value: 'Fake Author (2025). Non-Existent Study.' },
+    });
+    fireEvent.click(screen.getByTestId('sandbox-verify-submit-btn'));
+
+    expect(screen.getByTestId('sandbox-verify-submit-btn').textContent).toContain('Checking...');
+    expect(screen.getByTestId('sandbox-verifying-skeleton')).toBeDefined();
+    expect(screen.queryByTestId('sandbox-instant-results')).toBeNull();
+
+    resolveSecond({
+      elapsed_seconds: 0.3,
+      total: 1,
+      summary: {
+        verified: 0,
+        metadata_error: 0,
+        suspected_hallucination: 1,
+        layer1_linking_issues: 0,
+      },
+      results: [
+        {
+          index: 1,
+          citation_raw: 'Fake Author (2025). Non-Existent Study.',
+          label: 'suspected_hallucination',
+          confidence: 0.1,
+          mapping_status: 'not_applicable',
+          mapping_note: '',
+          reasoning: 'No match found.',
+          reasoning_en: 'No matching publication found across libraries.',
+          triggered_rules: ['R-NO-CANDIDATE'],
+          mismatched_fields: [],
+        },
+      ],
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('sandbox-instant-results').textContent).toContain(
+        'Source Not Found: 1',
+      );
+    });
+    expect(spy).toHaveBeenCalledTimes(2);
   });
 });

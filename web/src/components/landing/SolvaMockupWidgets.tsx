@@ -311,7 +311,7 @@ export function HeroVerificationMockup({
     {
       marker: '[1]',
       ref: 'Vaswani et al. (2017)',
-      title: 'Attention Is All You Need · NeurIPS',
+      title: 'Attention Is All You Need',
       doi: '10.48550/arXiv.1706.03762',
       l1: 'MATCHED',
       l2: 'VERIFIED',
@@ -323,7 +323,7 @@ export function HeroVerificationMockup({
     },
     {
       marker: '[2]',
-      ref: 'Devlin et al. (2019)',
+      ref: 'Devlin et al. (2018)',
       title: 'BERT: Pre-training of Deep Bidirectional Transformers',
       doi: '10.18653/v1/N19-1423',
       l1: 'MATCHED',
@@ -362,12 +362,12 @@ export function HeroVerificationMockup({
       style={{
         backgroundColor: 'var(--solva-card-elevated)',
       }}
-      className="solva-glass-ring rounded-[10px] w-full max-w-full border border-[#E7E3D9]/80 dark:border-[#332F26] overflow-hidden text-left select-none"
+      className="solva-glass-ring rounded-[10px] w-full max-w-full border border-[#E7E3D9]/80 dark:border-[#332F26] overflow-visible text-left select-none"
     >
       {/* Top Window Chrome */}
       <div
         style={{ borderColor: 'var(--solva-border)' }}
-        className="px-2.5 sm:px-3.5 py-2.5 border-b flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5 bg-[#FBFAF6]/90 dark:bg-[#1E1C17] min-w-0"
+        className="px-2.5 sm:px-3.5 py-2.5 border-b rounded-t-[10px] flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5 bg-[#FBFAF6]/90 dark:bg-[#1E1C17] min-w-0"
       >
         <div className="flex items-center gap-2 min-w-0">
           <div className="flex items-center gap-1.5 shrink-0" aria-label="macOS window controls">
@@ -434,12 +434,21 @@ export function HeroVerificationMockup({
             return (
               <div
                 key={item.marker}
+                role="button"
+                tabIndex={0}
+                aria-pressed={isActive}
                 onClick={() => onSelectStep?.(idx)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onSelectStep?.(idx);
+                  }
+                }}
                 style={{
                   backgroundColor: isActive ? 'var(--solva-surface)' : 'transparent',
                   borderColor: isActive ? 'var(--solva-ink)' : 'var(--solva-border)',
                 }}
-                className="p-2 sm:p-2.5 rounded-[8px] border transition-[background-color,border-color,opacity] duration-300 cursor-pointer hover:opacity-90"
+                className="p-2 sm:p-2.5 rounded-[8px] border transition-[background-color,border-color,opacity,box-shadow] duration-300 cursor-pointer hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1C1A15] dark:focus-visible:ring-[#FBFAF6]"
               >
                 <div className="flex items-start justify-between gap-1.5 mb-1">
                   <span
@@ -567,12 +576,12 @@ export function HeroVerificationMockup({
                   lang === 'vi' ? (
                     <>
                       Lệch năm xuất bản{' '}
-                      <span className="citra-nowrap-tail whitespace-nowrap">(2018 và 2019)</span>
+                      <span className="citra-nowrap-tail whitespace-nowrap">(ghi 2018 · gốc 2019)</span>
                     </>
                   ) : (
                     <>
                       Year differs{' '}
-                      <span className="citra-nowrap-tail whitespace-nowrap">(2018 vs 2019)</span>
+                      <span className="citra-nowrap-tail whitespace-nowrap">(cited 2018 vs. 2019)</span>
                     </>
                   )
                 ) : lang === 'vi' ? (
@@ -1095,15 +1104,15 @@ export function StickyCardWidget({
         }}
         className="solva-glass-ring w-full max-w-[348px] rounded-[12px] p-4 sm:p-5 space-y-3.5 text-left border border-[#E7E3D9]/80 dark:border-[#332F26]"
       >
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2 min-w-0">
+        <div className="flex flex-nowrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
             <FileText className="w-4 h-4 shrink-0 text-[#1C1A15] dark:text-[#FBFAF6]" />
             <span
               style={{ color: 'var(--solva-ink)' }}
               className="text-[12.5px] sm:text-[13px] font-medium leading-snug"
             >
               {lang === 'vi'
-                ? 'Thẻ tài liệu bóc tách tự động'
+                ? 'Thẻ tài liệu bóc tách'
                 : 'Extracted Reference Preview'}
             </span>
           </div>
@@ -1118,15 +1127,17 @@ export function StickyCardWidget({
               borderColor: showXmlSchema ? 'var(--solva-ink)' : 'var(--solva-border)',
               color: showXmlSchema ? 'var(--solva-ink)' : 'var(--solva-muted)',
             }}
-            className="inline-flex items-center gap-1 min-h-[36px] sm:min-h-[32px] px-2.5 py-1 text-[11px] font-mono whitespace-nowrap shrink-0 rounded-[6px] border hover:opacity-85 transition-all cursor-pointer"
+            className="inline-flex items-center justify-center gap-1 min-h-[36px] sm:min-h-[32px] px-2.5 py-1 text-[11px] font-mono whitespace-nowrap shrink-0 rounded-[6px] border hover:opacity-85 transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1C1A15] dark:focus-visible:ring-[#FBFAF6]"
           >
-            {showXmlSchema
-              ? lang === 'vi'
-                ? 'Xem dạng thẻ'
-                : 'Card view'
-              : lang === 'vi'
-                ? 'Mã XML'
-                : 'Raw XML'}
+            <span className="whitespace-nowrap">
+              {showXmlSchema
+                ? lang === 'vi'
+                  ? 'Xem dạng thẻ'
+                  : 'Card view'
+                : lang === 'vi'
+                  ? 'Mã XML'
+                  : 'Raw XML'}
+            </span>
           </button>
         </div>
 
@@ -2023,8 +2034,10 @@ export function CohortBatchAuditWidget({ lang }: { lang: Lang }) {
           </div>
         </div>
         <span className="citra-nowrap-tail whitespace-nowrap px-2 py-0.5 rounded-[6px] bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300 font-mono text-[10px] font-semibold shrink-0">
-          <SolvaLiveNumber value={48} replaySeed={replaySeed} durationMs={1200} />m{' '}
-          <SolvaLiveNumber value={12} replaySeed={replaySeed} durationMs={1350} />s
+          <SolvaLiveNumber value={48} replaySeed={replaySeed} durationMs={1200} />
+          {lang === 'vi' ? ' phút ' : 'm '}
+          <SolvaLiveNumber value={12} replaySeed={replaySeed} durationMs={1350} />
+          {lang === 'vi' ? ' giây' : 's'}
         </span>
       </div>
 
