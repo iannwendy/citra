@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { api, type BillingCycle } from '@/api/client';
 import { SCHOLARLY_APIS_LABEL } from '@/lib/productFacts';
+import { formatUserError } from '@/lib/academicTaxonomy';
 import { toSafeExternalHref } from '@/lib/utils';
 import { useRole } from '@/hooks/useRole';
 import {
@@ -27,6 +28,31 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+
+const FEATURE_LABEL_MAP: Record<string, { vi: string; en: string }> = {
+  batch_upload: { vi: 'Tải lên nhiều bài cùng lúc', en: 'Batch Upload' },
+  'batch upload': { vi: 'Tải lên nhiều bài cùng lúc', en: 'Batch Upload' },
+  pdf_reader: { vi: 'Trình đọc đối chiếu trang PDF', en: 'PDF Page Reader' },
+  'pdf reader': { vi: 'Trình đọc đối chiếu trang PDF', en: 'PDF Page Reader' },
+  citation_graph: { vi: 'Sơ đồ mạng lưới trích dẫn', en: 'Citation Map' },
+  'citation graph': { vi: 'Sơ đồ mạng lưới trích dẫn', en: 'Citation Map' },
+  export: { vi: 'Xuất báo cáo Word / PDF', en: 'Word & PDF Export' },
+  'export report': { vi: 'Xuất báo cáo Word / PDF', en: 'Word & PDF Export' },
+  'pdf/docx export': { vi: 'Xuất báo cáo Word / PDF', en: 'Word & PDF Export' },
+  autofix: { vi: 'Tự động định dạng trích dẫn', en: '1-Click Formatting Fixes' },
+  'auto-fix': { vi: 'Tự động định dạng trích dẫn', en: '1-Click Formatting Fixes' },
+  google_scholar: { vi: 'Tra cứu mở rộng Google Scholar', en: 'Google Scholar Discovery' },
+  'google scholar': { vi: 'Tra cứu mở rộng Google Scholar', en: 'Google Scholar Discovery' },
+  classroom: { vi: 'Quản lý lớp học & Hội đồng', en: 'Classroom Cohorts' },
+  quota: { vi: 'Mở rộng hạn mức kiểm tra', en: 'Higher Check Limit' },
+};
+
+function localizeFeatureName(featureName: string, lang: 'vi' | 'en'): string {
+  const key = featureName.trim().toLowerCase();
+  const mapped = FEATURE_LABEL_MAP[key];
+  if (mapped) return mapped[lang];
+  return featureName.trim();
+}
 
 export interface UpgradeModalProps {
   open: boolean;
@@ -56,6 +82,12 @@ export function UpgradeModal({
   const handleCheckout = async (tier: 'pro' | 'ultra') => {
     setLoadingTier(tier);
     setError(null);
+    const defaultCheckoutErr = t(
+      'upgradeModal.checkoutInitError',
+      lang === 'vi'
+        ? 'Không thể mở trang thanh toán. Vui lòng thử lại sau giây lát.'
+        : 'Could not open the checkout page. Please try again in a moment.',
+    );
     try {
       const session = await api.createCheckoutSession({
         plan_tier: tier,
@@ -72,19 +104,10 @@ export function UpgradeModal({
         onOpenChange(false);
         navigate(session.checkout_url);
       } else {
-        throw new Error('Invalid checkout redirect URL');
+        setError(defaultCheckoutErr);
       }
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : t(
-              'upgradeModal.checkoutInitError',
-              lang === 'vi'
-                ? 'Không thể khởi tạo phiên thanh toán. Vui lòng thử lại sau giây lát.'
-                : 'Could not start the checkout session. Please try again in a moment.',
-            ),
-      );
+      setError(formatUserError(err, lang, defaultCheckoutErr));
     } finally {
       setLoadingTier(null);
     }
@@ -109,8 +132,8 @@ export function UpgradeModal({
                 <span className="min-w-0 break-words">
                   {featureName
                     ? lang === 'vi'
-                      ? `TÍNH NĂNG PREMIUM · ${featureName.toUpperCase()}`
-                      : `PREMIUM FEATURE · ${featureName.toUpperCase()}`
+                      ? `TÍNH NĂNG PREMIUM · ${localizeFeatureName(featureName, lang).toUpperCase()}`
+                      : `PREMIUM FEATURE · ${localizeFeatureName(featureName, lang).toUpperCase()}`
                     : t(
                         'upgradeModal.badgeDefault',
                         lang === 'vi'
@@ -126,8 +149,8 @@ export function UpgradeModal({
                       ? t(
                           'upgradeModal.titleUltra',
                           lang === 'vi'
-                            ? 'Nâng cấp lên CITRA Ultra cho Phòng Lab & Bộ môn'
-                            : 'Upgrade to CITRA Ultra for Labs & Departments',
+                            ? 'Nâng cấp lên CITRA Ultra cho Nhóm nghiên cứu & Khoa'
+                            : 'Upgrade to CITRA Ultra for Research Groups & Departments',
                         )
                       : t(
                           'upgradeModal.titlePro',
@@ -142,14 +165,14 @@ export function UpgradeModal({
                       ? t(
                           'upgradeModal.descUltra',
                           lang === 'vi'
-                            ? 'Bạn đang sử dụng gói CITRA Pro. Nâng cấp lên Ultra để kiểm tra tới 1.000 bản thảo/tháng (tối đa 100MB, 500 trang), tra cứu mở rộng trên Google Scholar, không giới hạn lớp học và tải trọn bộ báo cáo cả lớp (.ZIP).'
-                            : 'You are currently on CITRA Pro. Upgrade to Ultra for up to 1,000 manuscript checks/month (up to 100MB, 500 pages), extended Google Scholar discovery, unlimited classrooms, and full-cohort ZIP export.',
+                            ? 'Bạn đang sử dụng gói CITRA Pro. Nâng cấp lên Ultra để kiểm tra tới 1.000 bài viết/tháng (tối đa 100MB, 500 trang), tra cứu mở rộng trên Google Scholar, không giới hạn lớp học và tải trọn bộ báo cáo cả lớp (.ZIP).'
+                            : 'You are currently on CITRA Pro. Upgrade to Ultra for up to 1,000 paper checks/month (up to 100MB, 500 pages), extended Google Scholar discovery, unlimited classrooms, and full-cohort ZIP export.',
                         )
                       : t(
                           'upgradeModal.descPro',
                           lang === 'vi'
-                            ? 'Gói Basic miễn phí hỗ trợ 3 tài liệu/tháng (tối đa 5MB, 15 trang). Nâng cấp để kiểm tra trọn vẹn khóa luận, đối chiếu trang PDF trực quan và xuất báo cáo chuẩn học thuật Word/PDF.'
-                            : 'The free Basic plan includes 3 documents/month (up to 5MB, 15 pages). Upgrade to verify full-length theses, inspect citations directly on PDF pages, and export polished Word & PDF reports.',
+                            ? 'Gói Basic miễn phí hỗ trợ 3 bài viết/tháng (tối đa 5MB, 15 trang). Nâng cấp để kiểm tra trọn vẹn khóa luận, đối chiếu trang PDF trực quan và xuất báo cáo chuẩn học thuật Word/PDF.'
+                            : 'The free Basic plan includes 3 papers/month (up to 5MB, 15 pages). Upgrade to verify full-length theses, inspect citations directly on PDF pages, and export polished Word & PDF reports.',
                         ))}
                 </DialogDescription>
               </DialogHeader>
@@ -277,64 +300,69 @@ export function UpgradeModal({
                 </div>
 
                 <div className="pt-1">
-                  <div className="flex items-baseline gap-1.5">
-                    <span className="font-display text-3xl font-bold text-slate-900 dark:text-white">
-                      ${proMonthlyDisplay}
-                    </span>
-                    <span className="text-xs text-slate-600 dark:text-slate-400">
-                      / {lang === 'vi' ? 'tháng' : 'month'}
-                    </span>
-                    {billingCycle === 'annual' && (
-                      <span className="text-xs line-through text-slate-500 dark:text-slate-400 ml-1">
-                        $20
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-[11px] font-mono text-emerald-700 dark:text-emerald-300 mt-0.5">
-                    {billingCycle === 'annual'
-                      ? lang === 'vi'
-                        ? 'Thanh toán $192/năm (Tiết kiệm $48/năm)'
-                        : 'Billed $192/year (Save $48/year)'
-                      : lang === 'vi'
-                        ? 'Thanh toán $20 định kỳ hàng tháng'
-                        : 'Billed $20 monthly'}
-                  </p>
-                  {lang === 'vi' && (
-                    <p
-                      data-testid="modal-pro-vnd-equivalent"
-                      className="text-[11px] font-mono font-medium text-slate-700 dark:text-slate-300 mt-0.5"
-                    >
-                      {billingCycle === 'annual' ? (
-                        <>
-                          <span className="whitespace-nowrap">≈ 400.000 ₫/tháng</span> ·{' '}
-                          <span className="whitespace-nowrap">4.800.000 ₫/năm</span>{' '}
-                          <span className="whitespace-nowrap">qua VNPay</span>
-                        </>
-                      ) : (
-                        <>
-                          <span className="whitespace-nowrap">≈ 500.000 ₫/tháng</span>{' '}
-                          <span className="whitespace-nowrap">qua VNPay &amp; thẻ quốc tế</span>
-                        </>
-                      )}
-                    </p>
+                  {lang === 'vi' ? (
+                    <>
+                      <div className="flex items-baseline gap-1.5 flex-wrap">
+                        <span className="font-display text-3xl font-bold text-slate-900 dark:text-white whitespace-nowrap">
+                          {billingCycle === 'annual' ? '400.000 ₫' : '500.000 ₫'}
+                        </span>
+                        <span className="text-xs text-slate-600 dark:text-slate-400">
+                          / tháng
+                        </span>
+                        {billingCycle === 'annual' && (
+                          <span className="text-xs line-through text-slate-500 dark:text-slate-400 ml-1 whitespace-nowrap">
+                            500.000 ₫
+                          </span>
+                        )}
+                      </div>
+                      <p
+                        data-testid="modal-pro-vnd-equivalent"
+                        className="text-[11px] font-mono text-emerald-700 dark:text-emerald-300 mt-1"
+                      >
+                        {billingCycle === 'annual'
+                          ? 'Thanh toán 4.800.000 ₫/năm (~$192/năm) qua VNPay hoặc thẻ quốc tế'
+                          : 'Thanh toán hàng tháng (~$20/tháng) qua VNPay hoặc thẻ quốc tế'}
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="font-display text-3xl font-bold text-slate-900 dark:text-white">
+                          ${proMonthlyDisplay}
+                        </span>
+                        <span className="text-xs text-slate-600 dark:text-slate-400">
+                          / month
+                        </span>
+                        {billingCycle === 'annual' && (
+                          <span className="text-xs line-through text-slate-500 dark:text-slate-400 ml-1">
+                            $20
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] font-mono text-emerald-700 dark:text-emerald-300 mt-0.5">
+                        {billingCycle === 'annual'
+                          ? 'Billed $192/year (Save $48/year)'
+                          : 'Billed $20 monthly'}
+                      </p>
+                    </>
                   )}
                 </div>
 
                 <ul className="space-y-2 text-xs text-slate-700 dark:text-slate-300 pt-2 border-t border-slate-200/80 dark:border-slate-800">
                   {(lang === 'vi'
                     ? [
-                        '50 bản thảo (.PDF, .DOCX, .BIB, .RIS) / tháng (tối đa 25MB, 100 trang)',
+                        '50 bài viết (PDF, Word, file Zotero/Mendeley) / tháng (tối đa 25MB, 100 trang)',
                         'Kiểm chứng tới 200 trích dẫn / bài & tải lên đồng thời 10 tệp',
                         'Mở khóa trình đọc đối chiếu trang PDF, giải thích chi tiết & sơ đồ nguồn',
-                        'Tự động chuẩn hóa danh mục (APA, IEEE, BibTeX) & xuất báo cáo Word, PDF, CSV',
-                        `Đối chiếu sâu trên ${SCHOLARLY_APIS_LABEL} thư viện học thuật quốc tế & hiểu ngữ cảnh Việt – Anh`,
+                        'Tự động định dạng danh mục (APA, IEEE, Harvard) & xuất báo cáo Word, PDF, CSV',
+                        `Đối chiếu trên ${SCHOLARLY_APIS_LABEL} thư viện học thuật & kiểm tra khớp ý trích dẫn Việt – Anh`,
                       ]
                     : [
-                        '50 manuscript checks (.PDF, .DOCX, .BIB, .RIS) / month (up to 25MB, 100 pages)',
+                        '50 paper checks (PDF, Word, Zotero/Mendeley) / month (up to 25MB, 100 pages)',
                         'Up to 200 citations / document + 10-file simultaneous upload',
-                        'Interactive PDF page-to-source reader, step-by-step reasoning & source map',
-                        'Clean bibliography formatting (APA, IEEE, BibTeX) & Word, PDF, CSV reports',
-                        `Deep cross-checking across ${SCHOLARLY_APIS_LABEL} scholarly libraries with semantic context matching`,
+                        'Interactive PDF page-to-source reader, clear explanations & source map',
+                        'Clean reference formatting (APA, IEEE, Harvard) & Word, PDF, CSV reports',
+                        `Cross-checks across ${SCHOLARLY_APIS_LABEL} academic libraries & confirms sources match your claims`,
                       ]
                   ).map((item) => (
                     <li key={item} className="flex items-start gap-2">
@@ -371,7 +399,7 @@ export function UpgradeModal({
                       ? 'Đã mở khóa trong CITRA Ultra'
                       : 'Included in CITRA Ultra'
                     : lang === 'vi'
-                      ? `Nâng cấp Pro · $${billingCycle === 'annual' ? '192/năm' : '20/tháng'}`
+                      ? `Nâng cấp Pro · ${billingCycle === 'annual' ? '4.800.000 ₫/năm' : '500.000 ₫/tháng'}`
                       : `Upgrade to Pro · $${billingCycle === 'annual' ? '192/yr' : '20/mo'}`}
               </Button>
             </div>
@@ -412,78 +440,83 @@ export function UpgradeModal({
                             ? 'KHUYÊN DÙNG NÂNG CẤP'
                             : 'RECOMMENDED UPGRADE'
                           : lang === 'vi'
-                            ? 'PHÒNG LAB'
-                            : 'LABS & INSTITUTION'}
+                            ? 'KHOA & NHÓM NC'
+                            : 'DEPARTMENTS'}
                     </Badge>
                   </div>
                   <p className="text-xs text-slate-600 dark:text-slate-400">
                     {t(
                       'upgradeModal.ultraAudience',
                       lang === 'vi'
-                        ? 'Phòng Lab, Bộ môn & Hội đồng luận án'
-                        : 'Research Labs, Departments & Review Boards',
+                        ? 'Nhóm nghiên cứu, Khoa & Hội đồng luận án'
+                        : 'Research Groups, Departments & Review Boards',
                     )}
                   </p>
                 </div>
 
                 <div className="pt-1">
-                  <div className="flex items-baseline gap-1.5">
-                    <span className="font-display text-3xl font-bold text-slate-900 dark:text-white">
-                      ${ultraMonthlyDisplay}
-                    </span>
-                    <span className="text-xs text-slate-600 dark:text-slate-400">
-                      / {lang === 'vi' ? 'tháng' : 'month'}
-                    </span>
-                    {billingCycle === 'annual' && (
-                      <span className="text-xs line-through text-slate-500 dark:text-slate-400 ml-1">
-                        $200
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-[11px] font-mono text-emerald-700 dark:text-emerald-300 mt-0.5">
-                    {billingCycle === 'annual'
-                      ? lang === 'vi'
-                        ? 'Thanh toán $1.920/năm (Tiết kiệm $480/năm)'
-                        : 'Billed $1,920/year (Save $480/year)'
-                      : lang === 'vi'
-                        ? 'Thanh toán $200 định kỳ hàng tháng'
-                        : 'Billed $200 monthly'}
-                  </p>
-                  {lang === 'vi' && (
-                    <p
-                      data-testid="modal-ultra-vnd-equivalent"
-                      className="text-[11px] font-mono font-medium text-slate-700 dark:text-slate-300 mt-0.5"
-                    >
-                      {billingCycle === 'annual' ? (
-                        <>
-                          <span className="whitespace-nowrap">≈ 4.000.000 ₫/tháng</span> ·{' '}
-                          <span className="whitespace-nowrap">48.000.000 ₫/năm</span>{' '}
-                          <span className="whitespace-nowrap">qua VNPay</span>
-                        </>
-                      ) : (
-                        <>
-                          <span className="whitespace-nowrap">≈ 5.000.000 ₫/tháng</span>{' '}
-                          <span className="whitespace-nowrap">qua VNPay &amp; thẻ quốc tế</span>
-                        </>
-                      )}
-                    </p>
+                  {lang === 'vi' ? (
+                    <>
+                      <div className="flex items-baseline gap-1.5 flex-wrap">
+                        <span className="font-display text-3xl font-bold text-slate-900 dark:text-white whitespace-nowrap">
+                          {billingCycle === 'annual' ? '4.000.000 ₫' : '5.000.000 ₫'}
+                        </span>
+                        <span className="text-xs text-slate-600 dark:text-slate-400">
+                          / tháng
+                        </span>
+                        {billingCycle === 'annual' && (
+                          <span className="text-xs line-through text-slate-500 dark:text-slate-400 ml-1 whitespace-nowrap">
+                            5.000.000 ₫
+                          </span>
+                        )}
+                      </div>
+                      <p
+                        data-testid="modal-ultra-vnd-equivalent"
+                        className="text-[11px] font-mono text-emerald-700 dark:text-emerald-300 mt-1"
+                      >
+                        {billingCycle === 'annual'
+                          ? 'Thanh toán 48.000.000 ₫/năm (~$1.920/năm) qua VNPay hoặc thẻ quốc tế'
+                          : 'Thanh toán hàng tháng (~$200/tháng) qua VNPay hoặc thẻ quốc tế'}
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="font-display text-3xl font-bold text-slate-900 dark:text-white">
+                          ${ultraMonthlyDisplay}
+                        </span>
+                        <span className="text-xs text-slate-600 dark:text-slate-400">
+                          / month
+                        </span>
+                        {billingCycle === 'annual' && (
+                          <span className="text-xs line-through text-slate-500 dark:text-slate-400 ml-1">
+                            $200
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] font-mono text-emerald-700 dark:text-emerald-300 mt-0.5">
+                        {billingCycle === 'annual'
+                          ? 'Billed $1,920/year (Save $480/year)'
+                          : 'Billed $200 monthly'}
+                      </p>
+                    </>
                   )}
                 </div>
 
                 <ul className="space-y-2 text-xs text-slate-700 dark:text-slate-300 pt-2 border-t border-slate-200/80 dark:border-slate-800">
                   {(lang === 'vi'
                     ? [
-                        'Hạn mức quy mô bộ môn lên tới 1.000 bản thảo / tháng',
+                        'Hạn mức quy mô Khoa / Nhóm nghiên cứu lên tới 1.000 bài viết / tháng',
                         'Tối đa 100MB & 500 trang / bài (Luận án Tiến sĩ & Sách chuyên khảo)',
                         'Rà soát hàng loạt công suất lớn tới 50 tài liệu cùng lúc',
-                        'Tra cứu mở rộng trên Google Scholar cho sách hiếm & kiểm tra DOI/liên kết sống',
+                        'Tra cứu mở rộng trên Google Scholar cho sách hiếm & kiểm tra đường dẫn và mã DOI còn mở được không',
                         'Không giới hạn lớp học, sinh viên & tải trọn bộ báo cáo cả lớp (.ZIP)',
                       ]
                     : [
-                        'Department-scale volume up to 1,000 manuscripts / month',
+                        'Department-scale volume up to 1,000 papers / month',
                         'Up to 100MB & 500 pages / file (Doctoral Dissertations & Monographs)',
                         'High-volume batch verification up to 50 files at once',
-                        'Extended Google Scholar discovery for rare books & live DOI/link checks',
+                        'Extended Google Scholar discovery for rare books & live link/DOI checks',
                         'Unlimited classrooms, students & full-cohort archive export (.ZIP)',
                       ]
                   ).map((item) => (
@@ -519,7 +552,7 @@ export function UpgradeModal({
                     ? 'Đang sử dụng gói CITRA Ultra'
                     : 'Current Plan · CITRA Ultra'
                   : lang === 'vi'
-                    ? `Nâng cấp Ultra · $${billingCycle === 'annual' ? '1.920/năm' : '200/tháng'}`
+                    ? `Nâng cấp Ultra · ${billingCycle === 'annual' ? '48.000.000 ₫/năm' : '5.000.000 ₫/tháng'}`
                     : `Upgrade to Ultra · $${billingCycle === 'annual' ? '1,920/yr' : '200/mo'}`}
               </Button>
             </div>

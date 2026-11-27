@@ -67,13 +67,13 @@ function getTermsSections(lang: Lang): TermsSectionItem[] {
       {
         id: 'decision-support',
         num: '01',
-        shortNav: '01 · Hỗ trợ Quyết định',
+        shortNav: '01 · Hỗ trợ kiểm tra',
         badge: 'NGUYÊN TẮC CỐT LÕI',
-        title: 'Nguyên tắc Hỗ trợ Ra Quyết định Học thuật',
+        title: 'Nguyên tắc hỗ trợ kiểm tra học thuật',
         lead:
-          'CITRA được xây dựng nhất quán như một Hệ thống Hỗ trợ Ra Quyết định Học thuật (Academic Decision-Support System), không phải công cụ chấm điểm tự động hay phán quyết kỷ luật tự động.',
+          'CITRA là công cụ trợ lý giúp sinh viên và giảng viên kiểm tra nguồn trích dẫn nhanh hơn — tuyệt đối không phải công cụ chấm điểm hay kết luận vi phạm tự động.',
         bullets: [
-          'Mọi nhãn thẩm định (Đã xác thực, Sai lệch thông tin thư mục, Nghi vấn trích dẫn không có thật, Cần kiểm tra thủ công, Nguồn trực tuyến) chỉ phản ánh bằng chứng đối chiếu khách quan trên hơn 15 cơ sở dữ liệu khoa học quốc tế.',
+          'Mọi nhãn kiểm tra (Đã xác minh, Sai lệch thông tin, Không tìm thấy nguồn, Chưa đủ dữ liệu và Nguồn Web / Văn bản) chỉ phản ánh bằng chứng đối chiếu khách quan trên hơn 15 thư viện học thuật quốc tế.',
           'Tác giả, giảng viên hướng dẫn và hội đồng chấm khóa luận luôn giữ toàn quyền đánh giá học thuật cuối cùng đối với từng tài liệu tham khảo.',
           'Giảng viên và người phản biện có thể chủ động xác nhận hợp lệ cho sách chuyên khảo in trong nước, kỷ yếu nội bộ hoặc tài liệu lưu trữ chưa có mã DOI kèm ghi chú chuyên môn minh bạch.',
         ],
@@ -139,8 +139,8 @@ function getTermsSections(lang: Lang): TermsSectionItem[] {
           </>
         ),
         bullets: [
-          'Hạn mức số lượt kiểm tra bản thảo mỗi tháng được làm mới tự động theo chu kỳ gói cước; các lượt chưa sử dụng không cộng dồn sang kỳ tiếp theo.',
-          'Giao dịch nâng cấp được mã hóa qua giao thức TLS 1.3 thông qua cổng thanh toán quốc tế Stripe (thẻ Visa, Mastercard, Apple Pay, Google Pay) và cổng thanh toán nội địa VNPay (VNPAY-QR, thẻ ATM/NAPAS ngân hàng Việt Nam).',
+          'Hạn mức số lượt kiểm tra bài viết mỗi tháng được làm mới tự động theo chu kỳ gói cước; các lượt chưa sử dụng không cộng dồn sang kỳ tiếp theo.',
+          'Giao dịch nâng cấp được mã hóa bảo mật chuẩn quốc tế qua cổng thanh toán Stripe (thẻ Visa, Mastercard, Apple Pay, Google Pay) và cổng thanh toán nội địa VNPay (VNPAY-QR, thẻ ATM/NAPAS ngân hàng Việt Nam).',
           'CITRA không bao giờ lưu trữ số thẻ đầy đủ hay mã bảo mật CVV; hệ thống chỉ ghi nhận 4 chữ số cuối và trạng thái biên lai để đối soát gói cước.',
           'Người dùng có thể hủy gia hạn tự động bất cứ lúc nào với một thao tác tại trang Cài đặt tài khoản và vẫn giữ trọn quyền lợi Pro hoặc Ultra đến hết chu kỳ đã thanh toán.',
         ],
@@ -198,11 +198,11 @@ function getTermsSections(lang: Lang): TermsSectionItem[] {
       num: '01',
       shortNav: '01 · Decision-Support',
       badge: 'CORE PRINCIPLE',
-      title: 'Academic Decision-Support Principle',
+      title: 'Verification Assistant Principle',
       lead:
-        'CITRA operates strictly as an Academic Decision-Support System — never as an automated grading authority or autonomous misconduct tribunal.',
+        'CITRA is a citation-checking assistant that surfaces evidence for students and advisors — never an automated grading authority or misconduct tribunal.',
       bullets: [
-        'Every verification status (Verified, Metadata Error, Suspected Hallucination, Unverifiable, and Web Resource) presents objective bibliographic evidence cross-checked across 15+ international scholarly catalogs.',
+        'Every verification status (Verified, Details Mismatch, Source Not Found, Unverified, and Web / Legal Source) presents objective bibliographic evidence cross-checked across 15+ international academic libraries.',
         'Authors, thesis advisors, journal editors, and academic review committees always retain final scholarly judgment over every reference in a submission.',
         'Instructors and reviewers can approve regional print monographs, domestic university press volumes, or archival works without international DOIs in one click with a transparent review note.',
       ],
@@ -268,8 +268,8 @@ function getTermsSections(lang: Lang): TermsSectionItem[] {
         </>
       ),
       bullets: [
-        'Monthly manuscript verification quotas renew automatically at the start of each billing cycle; unused monthly checks do not roll over.',
-        'Paid upgrades are processed over TLS 1.3 via PCI-DSS compliant Stripe (Visa, Mastercard, Apple Pay, Google Pay) and VNPay (VNPAY-QR and domestic Vietnamese ATM/NAPAS bank cards).',
+        'Monthly paper verification quotas renew automatically at the start of each billing cycle; unused monthly checks do not roll over.',
+        'Paid upgrades are processed securely over encrypted checkout via Stripe (Visa, Mastercard, Apple Pay, Google Pay) and VNPay (VNPAY-QR and domestic Vietnamese ATM/NAPAS bank cards).',
         'CITRA never stores raw card numbers or CVV security codes; only non-reversible payment references and the last 4 digits are retained for billing receipts.',
         'You may cancel or reactivate auto-renewal at any time with one click in account Settings, keeping full Pro or Ultra access through the end of your paid billing period.',
       ],
@@ -352,7 +352,7 @@ function TermsSolvaHeader({
     lang === 'vi'
       ? [
           { label: 'Trang chủ', to: '/' },
-          { label: 'Quy trình hoạt động', to: '/#how-it-works' },
+          { label: 'Cách hoạt động', to: '/#how-it-works' },
           { label: 'Bảng giá', to: '/pricing' },
           { label: 'Bảo vệ dữ liệu', to: '/privacy' },
           { label: 'Điều khoản', to: '/terms', active: true },
@@ -616,11 +616,11 @@ function TermsSolvaFooter({ lang }: { lang: Lang }) {
       links: [
         { label: lang === 'vi' ? 'Trang chủ CITRA' : 'CITRA Home', to: '/' },
         {
-          label: lang === 'vi' ? 'Thực nghiệm 120K bài báo' : '120K-Paper Benchmark',
+          label: lang === 'vi' ? 'Độ tin cậy' : 'Accuracy',
           to: '/#benchmark-120k',
         },
         {
-          label: lang === 'vi' ? 'Trình thẩm định trích dẫn' : 'Citation Inspector',
+          label: lang === 'vi' ? 'Kiểm tra trích dẫn mẫu' : 'Interactive Demo',
           to: '/#interactive-demo',
         },
         { label: lang === 'vi' ? 'Bảng giá dịch vụ' : 'Pricing Plans', to: '/pricing' },
@@ -647,7 +647,7 @@ function TermsSolvaFooter({ lang }: { lang: Lang }) {
       header: lang === 'vi' ? 'Mục lục điều khoản' : 'Terms Sections',
       links: [
         {
-          label: lang === 'vi' ? '01. Hỗ trợ Quyết định' : '01. Decision-Support',
+          label: lang === 'vi' ? '01. Hỗ trợ kiểm tra' : '01. Verification Assistant',
           href: '#decision-support',
         },
         {
@@ -763,8 +763,8 @@ function TermsSolvaFooter({ lang }: { lang: Lang }) {
           </p>
           <p style={{ color: 'var(--solva-muted)' }}>
             {lang === 'vi'
-              ? 'Hệ thống hỗ trợ quyết định học thuật — đồng hành cùng giảng viên & tác giả.'
-              : 'Decision-Support System — assists scholarly review, never replaces human judgment.'}
+              ? 'Công cụ hỗ trợ kiểm tra trích dẫn — đồng hành cùng giảng viên & tác giả.'
+              : 'Citation verification assistant — supports academic review, never replaces human judgment.'}
           </p>
         </div>
       </div>
@@ -817,7 +817,7 @@ export function TermsOfServicePage(): JSX.Element {
         {
           badge: 'THANH TOÁN & DỮ LIỆU MINH BẠCH',
           title: 'Stripe, VNPay & Luật 91/2025/QH15',
-          desc: 'Mã hóa TLS 1.3 không lưu số thẻ gốc, hủy gia hạn 1 nhấp chuột và tự xóa dữ liệu tại trang Cài đặt.',
+          desc: 'Thanh toán mã hóa không lưu số thẻ gốc, hủy gia hạn 1 nhấp chuột và tự xóa dữ liệu trong Cài đặt.',
           icon: FileCheck2,
         },
       ]
@@ -837,7 +837,7 @@ export function TermsOfServicePage(): JSX.Element {
         {
           badge: 'ENCRYPTED BILLING & PRIVACY',
           title: 'Stripe, VNPay & Law 91/2025/QH15',
-          desc: 'TLS 1.3 checkout without raw card storage, 1-click renewal control, and full self-service deletion.',
+          desc: 'Encrypted checkout without raw card storage, 1-click renewal control, and full self-service deletion.',
           icon: FileCheck2,
         },
       ];

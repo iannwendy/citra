@@ -3,8 +3,8 @@ import { LiveCitationSandbox } from '@/components/LiveCitationSandbox';
 import { resolveAcademicLang } from '@/lib/academicTaxonomy';
 
 /* ============================================================
-   CITRA — Live Citation Sandbox Page (Scholarly Precision v2.0)
-   Dedicated Interactive ACL Anthology & Instant Verification Studio
+   CITRA — Live Citation Sandbox Page
+   Dedicated Instant Citation Verification & Sample Paper Builder
    ============================================================ */
 
 export function SandboxPage() {
@@ -13,7 +13,7 @@ export function SandboxPage() {
 
   return (
     <div className="citra-cq-page-narrow w-full max-w-4xl mx-auto pb-6 transition-[max-width] duration-300" data-testid="sandbox-page">
-      <LiveCitationSandbox lang={lang} />
+      <LiveCitationSandbox lang={lang} defaultMode="raw_paste" />
     </div>
   );
 }

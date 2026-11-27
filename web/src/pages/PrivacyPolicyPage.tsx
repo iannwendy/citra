@@ -310,8 +310,8 @@ function buildDataMappingRows(demoEvaluatorMode: boolean): DataMappingRow[] {
         'avatar_path',
         'privacy_consented_at',
       ],
-      sourceVi: 'Biểu mẫu đăng ký (/register), Hồ sơ (/profile) hoặc Google OAuth 2.0.',
-      sourceEn: 'Registration (/register), Profile (/profile), or Google OAuth 2.0.',
+      sourceVi: 'Biểu mẫu đăng ký, trang Hồ sơ hoặc Đăng nhập với Google.',
+      sourceEn: 'Registration form, Profile page, or Google Sign-In.',
       purposeVi:
         'Tạo lập và xác thực tài khoản, gửi email kích hoạt/đặt lại mật khẩu, hiển thị hồ sơ học thuật và quản lý phân quyền lớp học.',
       purposeEn:
@@ -348,8 +348,8 @@ function buildDataMappingRows(demoEvaluatorMode: boolean): DataMappingRow[] {
         'cis_score',
         'verdict',
       ],
-      sourceVi: 'Trang Tải lên (/upload), Kiểm tra hàng loạt (/batch-upload) và Lớp học (/teacher/classes).',
-      sourceEn: 'Upload (/upload), Batch Check (/batch-upload), and Classes (/teacher/classes).',
+      sourceVi: 'Trang Tải bài lên, Kiểm tra hàng loạt và Quản lý lớp học.',
+      sourceEn: 'Upload, Batch Check, and Classroom pages.',
       purposeVi:
         'Phân tích tính toàn vẹn trích dẫn hai tầng, hiển thị Trình kiểm tra tài liệu (Document Inspector), xuất báo cáo PDF/DOCX/CSV/JSON và tạo liên kết chia sẻ có chữ ký số khi người dùng yêu cầu.',
       purposeEn:
@@ -410,23 +410,45 @@ function buildDataMappingRows(demoEvaluatorMode: boolean): DataMappingRow[] {
   ];
 }
 
-const SCHOLARLY_APIS = [
-  'Crossref (api.crossref.org)',
-  'OpenAlex (api.openalex.org)',
-  'PubMed / NCBI Entrez & Europe PMC',
-  'arXiv (export.arxiv.org)',
-  'DBLP Computer Science Bibliography',
-  'DOAJ (Directory of Open Access Journals)',
-  'ORCID Public API',
-  'Wikidata & OpenCitations',
-  'DataCite & Global DOI RA',
-  'OpenAIRE Research Graph',
-  'HAL Open Archive (api.archives-ouvertes.fr)',
-  'Hugging Face Hub & Technical Registries (RFC / PyPI / NPM)',
-  'OpenLibrary & Google Books API',
-  'Internet Archive Wayback Machine',
-  'Serper.dev & SerpAPI — Google Scholar fallback',
-];
+function getScholarlyLibraries(lang: Lang): Array<{ iconKey: string; label: string }> {
+  const isVi = lang === 'vi';
+  return [
+    { iconKey: 'Crossref', label: 'Crossref' },
+    { iconKey: 'OpenAlex', label: 'OpenAlex' },
+    { iconKey: 'PubMed', label: 'PubMed & Europe PMC' },
+    { iconKey: 'arXiv', label: 'arXiv' },
+    {
+      iconKey: 'DBLP',
+      label: isVi ? 'DBLP (Khoa học máy tính)' : 'DBLP Computer Science Bibliography',
+    },
+    {
+      iconKey: 'DOAJ',
+      label: isVi ? 'DOAJ (Tạp chí truy cập mở)' : 'DOAJ Open Access Journals',
+    },
+    { iconKey: 'ORCID', label: 'ORCID' },
+    { iconKey: 'Wikidata', label: 'Wikidata & OpenCitations' },
+    { iconKey: 'DataCite', label: 'DataCite & DOI' },
+    { iconKey: 'OpenAIRE', label: 'OpenAIRE' },
+    { iconKey: 'HAL', label: isVi ? 'Kho lưu trữ mở HAL' : 'HAL Open Archive' },
+    {
+      iconKey: 'Hugging Face',
+      label: isVi
+        ? 'Kho tài nguyên kỹ thuật & mã nguồn mở'
+        : 'Open Technical & Software Registries',
+    },
+    { iconKey: 'OpenLibrary', label: 'OpenLibrary & Google Books' },
+    {
+      iconKey: 'Internet Archive',
+      label: isVi ? 'Kho lưu trữ web Internet Archive' : 'Internet Archive Web Preservation',
+    },
+    {
+      iconKey: 'Semantic Scholar',
+      label: isVi
+        ? 'Các công cụ tìm kiếm học thuật hỗ trợ'
+        : 'Supported academic search engines',
+    },
+  ];
+}
 
 const TICKER_SCHOLARLY_SOURCES = [
   'Crossref',
@@ -452,8 +474,8 @@ function getPolicySectionLinks(lang: Lang) {
           icon: FileText,
         },
         {
-          shortLabel: '02 · Ánh xạ dữ liệu',
-          title: '2. Bảng ánh xạ dữ liệu',
+          shortLabel: '02 · Dữ liệu chúng tôi xử lý',
+          title: '2. Dữ liệu chúng tôi xử lý',
           href: '#data-collected',
           icon: Database,
         },
@@ -464,14 +486,14 @@ function getPolicySectionLinks(lang: Lang) {
           icon: Lock,
         },
         {
-          shortLabel: '04 · API Xuyên biên giới',
-          title: '4. API Xuyên biên giới',
+          shortLabel: '04 · Tra cứu học thuật quốc tế',
+          title: '4. Tra cứu dữ liệu học thuật quốc tế',
           href: '#third-parties',
           icon: Globe,
         },
         {
-          shortLabel: '05 · Quyền & SLA',
-          title: '5. Quyền & SLA luật định',
+          shortLabel: '05 · Quyền & Thời gian phản hồi',
+          title: '5. Quyền dữ liệu & Thời gian phản hồi',
           href: '#rights',
           icon: UserCheck,
         },
@@ -484,8 +506,8 @@ function getPolicySectionLinks(lang: Lang) {
           icon: FileText,
         },
         {
-          shortLabel: '02 · Data Matrix',
-          title: '2. Data Mapping Matrix',
+          shortLabel: '02 · Data We Handle',
+          title: '2. Data We Handle',
           href: '#data-collected',
           icon: Database,
         },
@@ -496,14 +518,14 @@ function getPolicySectionLinks(lang: Lang) {
           icon: Lock,
         },
         {
-          shortLabel: '04 · Cross-Border',
-          title: '4. Cross-Border APIs',
+          shortLabel: '04 · Academic Lookups',
+          title: '4. International Academic Lookups',
           href: '#third-parties',
           icon: Globe,
         },
         {
-          shortLabel: '05 · Rights & SLAs',
-          title: '5. Rights & Statutory SLAs',
+          shortLabel: '05 · Rights & Response',
+          title: '5. Your Rights & Response Times',
           href: '#rights',
           icon: UserCheck,
         },
@@ -556,7 +578,7 @@ function PrivacySolvaHeader({
     lang === 'vi'
       ? [
           { label: 'Trang chủ', to: '/' },
-          { label: 'Quy trình hoạt động', to: '/#how-it-works' },
+          { label: 'Cách hoạt động', to: '/#how-it-works' },
           { label: 'Độ tin cậy', to: '/#benchmark-120k' },
           { label: 'Bảng giá', to: '/pricing' },
           { label: 'Bảo vệ dữ liệu', to: '/privacy', active: true },
@@ -895,22 +917,22 @@ function HeroPrivacyGovernanceWidget({
             code: '01 · CONSENT',
             badge: 'ĐIỀU 9 LUẬT 91/2025/QH15',
             title: 'Bằng chứng đồng ý tường minh',
-            metric: 'v1.0 · Ghi nhận thời điểm (UTC)',
+            metric: 'v1.0 · Lưu dấu thời gian đồng ý',
             detail:
-              'Ô tích chọn mặc định để trống khi đăng ký tài khoản và liên kết Google. Hệ thống ghi nhận chính xác thời điểm và phiên bản chính sách đã đồng ý.',
+              'Ô tích chọn mặc định để trống khi đăng ký tài khoản hoặc liên kết Google; hệ thống lưu rõ thời điểm và phiên bản chính sách bạn đã xác nhận.',
             rows: [
               { k: 'Trạng thái đồng ý', v: 'Xác nhận tường minh', ok: true },
-              { k: 'Mật khẩu & khóa API', v: 'Mã hóa một chiều', ok: true },
+              { k: 'Mật khẩu tài khoản', v: 'Bảo mật mã hóa một chiều', ok: true },
               { k: 'Cookie quảng cáo', v: '0 trình theo dõi', ok: true },
             ],
           },
           {
             code: '02 · MINIMIZER',
-            badge: 'ĐIỀU 20 · API XUYÊN BIÊN GIỚI',
+            badge: 'ĐIỀU 20 · TRA CỨU HỌC THUẬT QUỐC TẾ',
             title: 'Tối thiểu hóa truy vấn học thuật',
             metric: 'Chỉ gửi chuỗi thư mục',
             detail:
-              `CITRA tuyệt đối không gửi toàn văn hay các chương luận văn chưa công bố ra bên ngoài, và không lập chỉ mục vào kho đối sánh tương đồng dùng chung (không ảnh hưởng kết quả Turnitin của trường); chỉ gửi chuỗi thư mục ngắn tới ${SCHOLARLY_APIS_LABEL} cơ sở dữ liệu quốc tế.`,
+              `CITRA tuyệt đối không gửi toàn văn hay các chương luận văn chưa công bố ra bên ngoài, và không đưa bài vào kho đối sánh tương đồng dùng chung (không ảnh hưởng kết quả Turnitin của trường); chỉ gửi chuỗi thư mục ngắn tới ${SCHOLARLY_APIS_LABEL} thư viện học thuật quốc tế.`,
             rows: [
               { k: 'Dữ liệu gửi đi', v: 'Tiêu đề, tác giả, năm, DOI', ok: true },
               { k: 'Toàn văn luận văn', v: 'Không gửi · Không lưu kho chung', ok: true },
@@ -923,10 +945,10 @@ function HeroPrivacyGovernanceWidget({
             title: 'Xóa triệt để, không lưu tệp tồn dư',
             metric: '0 tệp tồn dư',
             detail:
-              'Chức năng tự xóa tài khoản tại Cài đặt (/settings) thu hồi toàn bộ phiên đăng nhập, xóa ảnh đại diện, bản ghi trích dẫn và gỡ bỏ vĩnh viễn tệp bản thảo gốc.',
+              'Chức năng tự xóa tài khoản trong trang Cài đặt lập tức thu hồi toàn bộ phiên đăng nhập, xóa ảnh đại diện, bản ghi trích dẫn và gỡ bỏ vĩnh viễn tệp bài viết gốc.',
             rows: [
               { k: 'Phiên đăng nhập', v: 'Thu hồi tức thì', ok: true },
-              { k: 'Tệp bản thảo (.pdf / .docx)', v: 'Xóa vĩnh viễn', ok: true },
+              { k: 'Tệp bài viết (.pdf / .docx)', v: 'Xóa vĩnh viễn', ok: true },
               { k: 'Bài nộp trong lớp học', v: 'Giữ nguyên cho sinh viên', ok: true },
             ],
           },
@@ -936,38 +958,38 @@ function HeroPrivacyGovernanceWidget({
             code: '01 · CONSENT',
             badge: 'ARTICLE 9 LAW 91/2025/QH15',
             title: 'Verifiable Explicit Consent',
-            metric: 'v1.0 · UTC Timestamp',
+            metric: 'v1.0 · Consent Timestamp Recorded',
             detail:
-              'Unchecked-by-default opt-in during registration and Google Sign-In onboarding. CITRA records the exact UTC timestamp and consented policy version.',
+              'Unchecked-by-default opt-in during registration and Google Sign-In onboarding. CITRA records the exact time and policy version you confirmed.',
             rows: [
               { k: 'Consent status', v: 'Explicit Opt-In', ok: true },
-              { k: 'Credential protection', v: 'One-way hashed', ok: true },
+              { k: 'Account password', v: 'One-way encrypted', ok: true },
               { k: 'Ad tracking pixels', v: '0 ad trackers', ok: true },
             ],
           },
           {
             code: '02 · MINIMIZER',
-            badge: 'ARTICLE 20 · CROSS-BORDER',
+            badge: 'ARTICLE 20 · INTERNATIONAL LOOKUPS',
             title: 'Bibliographic Query Minimization',
-            metric: 'Metadata Strings Only',
+            metric: 'Citation Details Only',
             detail:
-              `CITRA never transmits unpublished manuscript full text or chapters to external APIs and never indexes manuscripts into any shared cross-user or inter-university similarity pool (zero impact on Turnitin or institutional checks) — querying only short cited bibliographic fields across ${SCHOLARLY_APIS_LABEL} scholarly indexes.`,
+              `CITRA never transmits unpublished paper full text or chapters to external services and never indexes papers into any shared cross-user or inter-university similarity pool (zero impact on Turnitin or institutional checks) — querying only short cited reference fields across ${SCHOLARLY_APIS_LABEL} academic libraries.`,
             rows: [
               { k: 'Outbound query', v: 'Cited title, author, year, DOI', ok: true },
-              { k: 'Manuscript full text', v: 'Never sent · No shared pool', ok: true },
+              { k: 'Paper full text', v: 'Never sent · No shared pool', ok: true },
               { k: 'Card numbers & CVV/OTP', v: 'Handled by Stripe / VNPay', ok: true },
             ],
           },
           {
             code: '03 · PURGE',
-            badge: 'ARTICLE 14 · INSTANT PURGE',
+            badge: 'ARTICLE 14 · INSTANT DELETION',
             title: 'Complete Account & File Deletion',
             metric: '0 Residual Files',
             detail:
-              'Self-service deletion in Settings (/settings) revokes active sessions, deletes profile photos and citation records, and permanently removes all uploaded manuscript files.',
+              'Self-service deletion in Settings revokes active sessions, deletes profile photos and citation records, and permanently removes all uploaded paper files.',
             rows: [
               { k: 'Active sessions', v: 'Revoked immediately', ok: true },
-              { k: 'Manuscripts (.pdf / .docx)', v: 'Permanently purged', ok: true },
+              { k: 'Uploaded files (.pdf / .docx)', v: 'Permanently removed', ok: true },
               { k: 'Classroom submissions', v: 'Student ownership preserved', ok: true },
             ],
           },
@@ -1108,8 +1130,8 @@ function PrivacyRightsAccordion({ lang }: { lang: Lang }) {
           : 'How do I withdraw consent and permanently delete my account?',
       a:
         lang === 'vi'
-          ? 'Truy cập Cài đặt (/settings) → mục 05 "Bảo vệ dữ liệu cá nhân & Quyền chủ thể dữ liệu" → bấm "Xóa tài khoản & toàn bộ dữ liệu". Sau khi xác nhận mật khẩu (hoặc tên tài khoản với Google OAuth), hệ thống lập tức thu hồi phiên đăng nhập, xóa hồ sơ, ảnh đại diện và toàn bộ tệp bản thảo (.pdf, .docx, .bib, .ris) khỏi kho lưu trữ.'
-          : 'Navigate to Settings (/settings) → Section 05 "Personal Data Protection & Data Subject Rights" → select "Delete Account & All Data". Confirm your password (or exact username for Google-only accounts) to immediately purge your profile, photos, citation records, and uploaded manuscript files.',
+          ? 'Mở trang Cài đặt → mục 05 "Bảo vệ dữ liệu cá nhân & Quyền chủ thể dữ liệu" → bấm "Xóa tài khoản & toàn bộ dữ liệu". Sau khi xác nhận mật khẩu (hoặc tên tài khoản với đăng nhập Google), hệ thống lập tức thu hồi phiên đăng nhập, xóa hồ sơ, ảnh đại diện và toàn bộ tệp bài viết (.pdf, .docx, .bib, .ris) khỏi kho lưu trữ.'
+          : 'Open Settings → Section 05 "Personal Data Protection & Data Subject Rights" → select "Delete Account & All Data". Confirm your password (or exact username for Google-only accounts) to immediately remove your profile, photos, citation records, and uploaded paper files.',
     },
     {
       id: 'pfaq-1',
@@ -1144,8 +1166,8 @@ function PrivacyRightsAccordion({ lang }: { lang: Lang }) {
           : 'What payment data is stored when upgrading to Pro or Ultra?',
       a:
         lang === 'vi'
-          ? 'Số thẻ đầy đủ, mã CVV/CVC và OTP ngân hàng do cổng Stripe hoặc VNPay trực tiếp xử lý theo chuẩn bảo mật PCI-DSS. Hệ thống CITRA chỉ lưu mã giao dịch tham chiếu, thương hiệu thẻ, 4 số cuối thẻ thanh toán, tên ngân hàng thanh toán và thời hạn gói dịch vụ.'
-          : 'Full card numbers, CVV/CVC codes, and bank OTPs are processed directly by Stripe or VNPay under PCI-DSS security standards. CITRA stores only transaction reference IDs, card brand, the last 4 digits of your payment card, issuing bank code, and billing period.',
+          ? 'Số thẻ đầy đủ, mã CVV/CVC và OTP ngân hàng do cổng Stripe hoặc VNPay trực tiếp xử lý theo chuẩn bảo mật thanh toán quốc tế. Hệ thống CITRA chỉ lưu mã giao dịch tham chiếu, thương hiệu thẻ, 4 số cuối thẻ thanh toán, tên ngân hàng thanh toán và thời hạn gói dịch vụ.'
+          : 'Full card numbers, CVV/CVC codes, and bank OTPs are processed directly by Stripe or VNPay under international payment security standards. CITRA stores only transaction reference IDs, card brand, the last 4 digits of your payment card, issuing bank code, and billing period.',
     },
     {
       id: 'pfaq-4',
@@ -1155,8 +1177,8 @@ function PrivacyRightsAccordion({ lang }: { lang: Lang }) {
           : 'What are an Instructor’s obligations when batch-uploading student theses?',
       a:
         lang === 'vi'
-          ? 'Khi tải lên tối đa 50 bản thảo tại /batch-upload, Giảng viên hoặc Hội đồng thẩm định chịu trách nhiệm thông báo trước và bảo đảm đã có sự đồng ý hợp pháp hoặc căn cứ quy chế đào tạo của cơ sở giáo dục đối với việc trích xuất danh mục tài liệu tham khảo để kiểm chứng.'
-          : 'When uploading up to 50 manuscripts via /batch-upload, the instructor or review board is responsible for informing student/co-author contributors and ensuring lawful consent or institutional academic policy authorization.',
+          ? 'Khi tải lên tối đa 50 bài viết qua trang Kiểm tra hàng loạt, Giảng viên hoặc Hội đồng thẩm định chịu trách nhiệm thông báo trước và bảo đảm đã có sự đồng ý hợp pháp hoặc căn cứ quy chế đào tạo của cơ sở giáo dục đối với việc trích xuất danh mục tài liệu tham khảo để kiểm chứng.'
+          : 'When uploading up to 50 papers via Batch Check, the instructor or review board is responsible for informing student/co-author contributors and ensuring lawful consent or institutional academic policy authorization.',
     },
     {
       id: 'pfaq-5',
@@ -1281,11 +1303,11 @@ function PrivacySolvaFooter({ lang }: { lang: Lang }) {
           to: '/',
         },
         {
-          label: lang === 'vi' ? 'Thực nghiệm 120K bài báo' : '120K-Paper Benchmark',
+          label: lang === 'vi' ? 'Độ tin cậy' : 'Accuracy',
           to: '/#benchmark-120k',
         },
         {
-          label: lang === 'vi' ? 'Quy trình kiểm chứng trích dẫn' : 'How Verification Works',
+          label: lang === 'vi' ? 'Cách hoạt động' : 'How Verification Works',
           to: '/#architecture',
         },
         {
@@ -1314,36 +1336,39 @@ function PrivacySolvaFooter({ lang }: { lang: Lang }) {
           href: '#controller',
         },
         {
-          label: lang === 'vi' ? '2. Dữ liệu thu thập' : '2. Data Collected',
+          label: lang === 'vi' ? '2. Dữ liệu chúng tôi xử lý' : '2. Data We Handle',
           href: '#data-collected',
         },
         {
-          label: lang === 'vi' ? '3. Thanh toán nhạy cảm' : '3. Sensitive Billing Data',
+          label: lang === 'vi' ? '3. Bảo mật thanh toán' : '3. Payment Security',
           href: '#sensitive-data',
         },
         {
-          label: lang === 'vi' ? '4. API Xuyên biên giới' : '4. Cross-Border APIs',
+          label:
+            lang === 'vi'
+              ? '4. Tra cứu học thuật quốc tế'
+              : '4. International Academic Lookups',
           href: '#third-parties',
         },
       ],
     },
     {
-      header: lang === 'vi' ? 'Quyền chủ thể dữ liệu' : 'Data Subject Rights',
+      header: lang === 'vi' ? 'Quyền dữ liệu của bạn' : 'Your Data Rights',
       links: [
         {
           label: lang === 'vi' ? 'Cookie & Bộ nhớ trình duyệt' : 'Cookies & Browser Storage',
           href: '#cookies',
         },
         {
-          label: lang === 'vi' ? 'Lưu trữ & Xóa tệp gốc' : 'Retention & File Purge',
+          label: lang === 'vi' ? 'Lưu trữ & Xóa tệp gốc' : 'Retention & File Deletion',
           href: '#retention',
         },
         {
-          label: lang === 'vi' ? 'Cam kết SLA phản hồi' : 'Statutory Response SLAs',
+          label: lang === 'vi' ? 'Thời gian phản hồi theo luật' : 'Response Timelines',
           href: '#sla',
         },
         {
-          label: lang === 'vi' ? 'Tự xóa tài khoản (/settings)' : 'Self-Delete (/settings)',
+          label: lang === 'vi' ? 'Tự xóa dữ liệu trong Cài đặt' : 'Delete Data in Settings',
           to: '/settings',
         },
       ],
@@ -1570,8 +1595,8 @@ export function PrivacyPolicyPage(): JSX.Element {
                 <div className="flex flex-col items-start gap-[16px] sm:gap-[20px]">
                   <PrivacyEyebrow>
                     {isVi
-                      ? `Luật 91/2025/QH15 · Nghị định 356/2025/NĐ-CP · Phiên bản ${PRIVACY_POLICY_VERSION}`
-                      : `Law No. 91/2025/QH15 · Decree 356/2025/ND-CP · Version ${PRIVACY_POLICY_VERSION}`}
+                      ? `Minh bạch & Bảo vệ quyền riêng tư · Phiên bản ${PRIVACY_POLICY_VERSION}`
+                      : `Privacy & Data Transparency · Version ${PRIVACY_POLICY_VERSION}`}
                   </PrivacyEyebrow>
 
                   <PrivacyTwoToneHeading
@@ -1611,19 +1636,19 @@ export function PrivacyPolicyPage(): JSX.Element {
                     >
                       {isAuthenticated
                         ? isVi
-                          ? 'Quản lý Quyền dữ liệu (/settings)'
-                          : 'Manage Data Rights (/settings)'
+                          ? 'Quản lý quyền dữ liệu'
+                          : 'Manage Data Rights'
                         : isVi
                           ? 'Đăng nhập quản lý dữ liệu'
                           : 'Sign in to manage data'}
                     </SolvaButton>
                     <SolvaButton href="#data-collected" variant="outline">
-                      {isVi ? 'Xem bảng ánh xạ dữ liệu' : 'Explore Data Matrix'}
+                      {isVi ? 'Xem dữ liệu chúng tôi xử lý' : 'See Data We Handle'}
                     </SolvaButton>
                   </div>
                 </SolvaScrollReveal>
 
-                {/* Statutory SLA Proof Strip */}
+                {/* Statutory Response Timeline Proof Strip */}
                 <SolvaScrollReveal delayMs={140} yOffset={14} blurPx={0} className="w-full">
                   <a
                     href="#sla"
@@ -1641,8 +1666,8 @@ export function PrivacyPolicyPage(): JSX.Element {
                         <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
                         <span>
                           {isVi
-                            ? 'CAM KẾT PHẢN HỒI LUẬT ĐỊNH · ĐIỀU 5 NĐ 356/2025/NĐ-CP'
-                            : 'STATUTORY RESPONSE SLAs · DECREE 356/2025/ND-CP ART. 5'}
+                            ? 'THỜI GIAN PHẢN HỒI THEO LUẬT · ĐIỀU 5 NĐ 356'
+                            : 'RESPONSE TIMELINES · DECREE 356/2025/ND-CP ART. 5'}
                         </span>
                       </span>
                       <ArrowRight
@@ -1662,18 +1687,20 @@ export function PrivacyPolicyPage(): JSX.Element {
                           style={{ color: 'var(--solva-muted)' }}
                           className="font-solva-sans text-[11px] leading-snug mt-1"
                         >
-                          {isVi ? 'Tiếp nhận (làm việc)' : 'Business-day ack'}
+                          {isVi
+                            ? 'Phản hồi tiếp nhận (ngày làm việc)'
+                            : 'Confirmation reply (business days)'}
                         </div>
                       </div>
                       <div>
                         <div className="font-solva-serif text-[20px] sm:text-[22px] leading-none tracking-[-0.04em] text-emerald-700 dark:text-emerald-400">
-                          {isVi ? '10–15 ngày' : '10–15d'}
+                          {isVi ? '10–15 ngày' : '10–15 days'}
                         </div>
                         <div
                           style={{ color: 'var(--solva-muted)' }}
                           className="font-solva-sans text-[11px] leading-snug mt-1"
                         >
-                          {isVi ? 'Xem, sửa & cung cấp' : 'Access & rectify'}
+                          {isVi ? 'Xem, sửa & cung cấp' : 'View or update data'}
                         </div>
                       </div>
                       <div>
@@ -1681,13 +1708,13 @@ export function PrivacyPolicyPage(): JSX.Element {
                           style={{ color: 'var(--solva-ink)' }}
                           className="font-solva-serif text-[20px] sm:text-[22px] leading-none tracking-[-0.04em]"
                         >
-                          {isVi ? '20–30 ngày' : '20–30d'}
+                          {isVi ? '20–30 ngày' : '20–30 days'}
                         </div>
                         <div
                           style={{ color: 'var(--solva-muted)' }}
                           className="font-solva-sans text-[11px] leading-snug mt-1"
                         >
-                          {isVi ? 'Yêu cầu xóa dữ liệu' : 'Deletion requests'}
+                          {isVi ? 'Yêu cầu xóa dữ liệu' : 'Data deletion requests'}
                         </div>
                       </div>
                       <div>
@@ -1698,7 +1725,9 @@ export function PrivacyPolicyPage(): JSX.Element {
                           style={{ color: 'var(--solva-muted)' }}
                           className="font-solva-sans text-[11px] leading-snug mt-1"
                         >
-                          {isVi ? 'Tự xóa tại /settings' : 'Self-purge /settings'}
+                          {isVi
+                            ? 'Tự xóa dữ liệu trong Cài đặt'
+                            : 'Delete anytime in Settings'}
                         </div>
                       </div>
                     </div>
@@ -2259,8 +2288,8 @@ export function PrivacyPolicyPage(): JSX.Element {
                         <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 mt-1 shrink-0" />
                         <span style={{ color: 'var(--solva-ink)' }}>
                           {isVi
-                            ? 'Cổng thanh toán Stripe & VNPay chính thức: số thẻ đầy đủ, mã bảo mật CVV/CVC và OTP ngân hàng được xử lý trực tiếp trên hạ tầng chuẩn PCI-DSS của Stripe và VNPay. CITRA chỉ lưu mã giao dịch tham chiếu, thương hiệu thẻ, 4 số cuối thẻ thanh toán, tên ngân hàng thanh toán, quốc gia/mã bưu chính và thời hạn gói dịch vụ.'
-                            : 'Official Stripe & VNPay gateways: full card numbers, CVV/CVC codes, and bank OTPs are handled directly on Stripe and VNPay PCI-DSS infrastructure. CITRA retains only transaction IDs, card brand, last 4 card digits, issuing bank code, billing country/postal code, and plan tier.'}
+                            ? 'Cổng thanh toán Stripe & VNPay chính thức: số thẻ đầy đủ, mã bảo mật CVV/CVC và OTP ngân hàng được xử lý trực tiếp trên hạ tầng bảo mật chuẩn quốc tế của Stripe và VNPay. CITRA chỉ lưu mã giao dịch tham chiếu, thương hiệu thẻ, 4 số cuối thẻ thanh toán, tên ngân hàng thanh toán, quốc gia/mã bưu chính và thời hạn gói dịch vụ.'
+                            : 'Official Stripe & VNPay gateways: full card numbers, CVV/CVC codes, and bank OTPs are handled directly on Stripe and VNPay bank-grade payment infrastructure. CITRA retains only transaction IDs, card brand, last 4 card digits, issuing bank code, billing country/postal code, and plan tier.'}
                         </span>
                       </li>
                       <li className="flex items-start gap-2.5">
@@ -2271,8 +2300,8 @@ export function PrivacyPolicyPage(): JSX.Element {
                               ? 'Chế độ đánh giá học thuật (Stripe Demo / VNPay Sandbox): hiển thị cảnh báo rõ chỉ nhập thẻ kiểm thử công khai, tuyệt đối không nhập thẻ ngân hàng thật và chỉ ghi nhận 4 chữ số cuối.'
                               : 'Evaluator simulation mode (Stripe Demo / VNPay Sandbox): explicitly warns evaluators to enter public test cards only, never real bank cards, persisting only the last 4 digits.'
                             : isVi
-                              ? 'Đối soát minh bạch & tự quản lý gói dịch vụ: biên lai điện tử và hạn mức tải lên được kích hoạt tức thì qua chữ ký số xác thực; người dùng có thể tra cứu hóa đơn hoặc hủy gia hạn tự động bất cứ lúc nào tại Cài đặt (/settings).'
-                              : 'Cryptographic reconciliation & billing control: digital receipts and upload quotas unlock via verified webhook signatures, and subscribers can review invoices or cancel auto-renewal anytime in Settings (/settings).'}
+                              ? 'Đối soát minh bạch & tự quản lý gói dịch vụ: biên lai điện tử và hạn mức tải lên được kích hoạt tức thì sau khi xác nhận thanh toán; người dùng có thể tra cứu hóa đơn hoặc hủy gia hạn tự động bất cứ lúc nào trong trang Cài đặt.'
+                              : 'Transparent receipts & billing control: digital receipts and upload quotas unlock automatically once payment is confirmed, and subscribers can review invoices or cancel auto-renewal anytime in Settings.'}
                         </span>
                       </li>
                     </ul>
@@ -2294,9 +2323,11 @@ export function PrivacyPolicyPage(): JSX.Element {
                       >
                         <div className="flex items-center justify-between gap-2">
                           <span style={{ color: 'var(--solva-ink)' }} className="font-semibold">
-                            PCI-DSS · HMAC-SHA512
+                            {isVi
+                              ? 'Bảo mật thanh toán chuẩn quốc tế'
+                              : 'Bank-grade payment protection'}
                           </span>
-                          <span className="verdict-badge verdict-badge-verified px-2 py-0.5 text-[10px]">
+                          <span className="verdict-badge verdict-badge-verified px-2 py-0.5 text-[10px] shrink-0">
                             {isVi ? 'CÁCH LY BẢO MẬT' : 'ISOLATED'}
                           </span>
                         </div>
@@ -2311,7 +2342,7 @@ export function PrivacyPolicyPage(): JSX.Element {
                             </span>
                           </div>
                           <div className="flex justify-between gap-2">
-                            <span>{isVi ? '4 số cuối (card_last4)' : 'Last 4 digits (card_last4)'}</span>
+                            <span>{isVi ? '4 số cuối thẻ' : 'Last 4 card digits'}</span>
                             <span style={{ color: 'var(--solva-ink)' }}>
                               {demoEvaluatorMode
                                 ? '•••• 4242'
@@ -2445,8 +2476,8 @@ export function PrivacyPolicyPage(): JSX.Element {
                         <Trash2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 mt-1 shrink-0" />
                         <span style={{ color: 'var(--solva-ink)' }}>
                           {isVi
-                            ? 'Bạn có thể xóa từng bài nộp tại Lịch sử (/history) hoặc tự thực hiện "Xóa tài khoản & toàn bộ dữ liệu" tại Cài đặt (/settings) — hệ thống lập tức thu hồi phiên đăng nhập, xóa ảnh đại diện, bản ghi trích dẫn và gỡ bỏ vĩnh viễn tệp bản thảo gốc (.pdf, .docx, .bib, .ris).'
-                            : 'Delete individual submissions anytime in History (/history), or execute "Delete Account & All Data" in Settings (/settings) to revoke active sessions, remove profile photos and citation records, and permanently erase all physical manuscript files (.pdf, .docx, .bib, .ris).'}
+                            ? 'Bạn có thể xóa từng bài nộp trong trang Lịch sử hoặc tự thực hiện "Xóa tài khoản & toàn bộ dữ liệu" trong trang Cài đặt — hệ thống lập tức thu hồi phiên đăng nhập, xóa ảnh đại diện, bản ghi trích dẫn và gỡ bỏ vĩnh viễn tệp bài viết gốc (.pdf, .docx, .bib, .ris).'
+                            : 'Delete individual submissions anytime in History, or run "Delete Account & All Data" in Settings to revoke active sessions, remove profile photos and citation records, and permanently erase all uploaded files (.pdf, .docx, .bib, .ris).'}
                         </span>
                       </li>
                       <li className="flex items-start gap-2.5">
@@ -2476,7 +2507,7 @@ export function PrivacyPolicyPage(): JSX.Element {
                       >
                         <div className="flex items-center justify-between gap-2">
                           <span style={{ color: 'var(--solva-ink)' }} className="font-semibold">
-                            {isVi ? 'XÓA TỨC THÌ (/settings)' : 'SELF-SERVICE PURGE (/settings)'}
+                            {isVi ? 'TỰ XÓA TRONG CÀI ĐẶT' : 'SELF-SERVICE DELETION'}
                           </span>
                           <span className="verdict-badge verdict-badge-verified px-2 py-0.5 text-[10px]">
                             {isVi ? 'XÓA TRIỆT ĐỂ' : 'COMPLETE PURGE'}
@@ -2622,8 +2653,8 @@ export function PrivacyPolicyPage(): JSX.Element {
                           className="font-solva-sans text-[14px] leading-[21px]"
                         >
                           {isVi
-                            ? 'Xử lý giao dịch nâng cấp gói dịch vụ Pro / Ultra theo chuẩn mã hóa PCI-DSS và chữ ký số HMAC-SHA512.'
-                            : 'Subscription checkout processing for Pro / Ultra plans under PCI-DSS encryption and HMAC-SHA512 signatures.'}
+                            ? 'Xử lý giao dịch nâng cấp gói dịch vụ Pro / Ultra theo chuẩn bảo mật thanh toán quốc tế và xác thực giao dịch an toàn.'
+                            : 'Subscription checkout processing for Pro / Ultra plans under international payment security standards and verified transaction confirmation.'}
                         </p>
                       </div>
                     </div>
@@ -2675,8 +2706,8 @@ export function PrivacyPolicyPage(): JSX.Element {
                         <Sparkles className="w-3 h-3" />
                         <span>
                           {isVi
-                            ? `B · LIÊN HỢP ${SCHOLARLY_APIS_LABEL} CSDL & API HỌC THUẬT QUỐC TẾ`
-                            : `B · ${SCHOLARLY_APIS_LABEL} FEDERATED SCHOLARLY REGISTRIES & APIs`}
+                            ? `B · ${SCHOLARLY_APIS_LABEL} THƯ VIỆN HỌC THUẬT QUỐC TẾ`
+                            : `B · ${SCHOLARLY_APIS_LABEL} INTERNATIONAL ACADEMIC LIBRARIES`}
                         </span>
                       </span>
                     </div>
@@ -2686,14 +2717,14 @@ export function PrivacyPolicyPage(): JSX.Element {
                       className="font-solva-sans text-[15px] leading-[23px]"
                     >
                       {isVi
-                        ? 'Khi phân tích bản thảo, CITRA tuyệt đối KHÔNG gửi toàn văn hay các chương luận văn chưa công bố ra bên ngoài, KHÔNG đưa bài viết vào bất kỳ kho đối sánh tương đồng dùng chung hay liên trường nào (không ảnh hưởng kết quả kiểm tra Turnitin của trường) và KHÔNG gửi mật khẩu hay dữ liệu thanh toán; hệ thống chỉ truy vấn các trường thư mục ngắn (tiêu đề tài liệu được trích dẫn, tên tác giả được trích dẫn, năm xuất bản, mã DOI/arXiv/PMID/ISBN hoặc URL nguồn) tới:'
-                        : 'When verifying a manuscript, CITRA NEVER transmits unpublished manuscript full text or chapters to external APIs, NEVER indexes submissions into any shared cross-user or inter-university similarity pool (zero impact on subsequent Turnitin or institutional checks), and NEVER shares passwords or billing records — querying only short cited bibliographic fields (cited titles, cited author names, publication years, DOI/arXiv/PMID/ISBN, or cited URLs) across:'}
+                        ? 'Khi phân tích bài viết, CITRA tuyệt đối KHÔNG gửi toàn văn hay các chương luận văn chưa công bố ra bên ngoài, KHÔNG đưa bài viết vào bất kỳ kho đối sánh tương đồng dùng chung hay liên trường nào (không ảnh hưởng kết quả kiểm tra Turnitin của trường) và KHÔNG gửi mật khẩu hay dữ liệu thanh toán; hệ thống chỉ tra cứu các trường thư mục ngắn (tiêu đề tài liệu được trích dẫn, tên tác giả được trích dẫn, năm xuất bản, mã DOI/arXiv/PMID/ISBN hoặc đường dẫn nguồn) tới:'
+                        : 'When verifying a paper, CITRA NEVER transmits unpublished full text or chapters externally, NEVER indexes submissions into any shared cross-user or inter-university similarity pool (zero impact on subsequent Turnitin or institutional checks), and NEVER shares passwords or billing records — querying only short cited bibliographic fields (cited titles, cited author names, publication years, DOI/arXiv/PMID/ISBN, or cited URLs) across:'}
                     </p>
 
                     <div className="flex flex-wrap gap-2 pt-1">
-                      {SCHOLARLY_APIS.map((apiName) => (
+                      {getScholarlyLibraries(lang).map((source) => (
                         <span
-                          key={apiName}
+                          key={source.label}
                           style={{
                             backgroundColor: 'var(--solva-bg)',
                             borderColor: 'var(--solva-border)',
@@ -2701,8 +2732,8 @@ export function PrivacyPolicyPage(): JSX.Element {
                           }}
                           className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-[8px] border font-mono text-[11px] font-medium shadow-sm"
                         >
-                          <ScholarlySourceLogo name={apiName} size={13} />
-                          <span>{apiName}</span>
+                          <ScholarlySourceLogo name={source.iconKey} size={13} />
+                          <span>{source.label}</span>
                         </span>
                       ))}
                     </div>
@@ -2717,8 +2748,8 @@ export function PrivacyPolicyPage(): JSX.Element {
                   >
                     <p style={{ color: 'var(--solva-ink)' }} className="font-medium">
                       {isVi
-                        ? 'Trách nhiệm của Giảng viên / Người tải hộ (/upload & /batch-upload tối đa 50 tệp):'
-                        : 'Instructor / Uploader Responsibility (/upload & /batch-upload up to 50 files):'}
+                        ? 'Trách nhiệm của Giảng viên / Người tải hộ (Tải lên lẻ & Kiểm tra hàng loạt tối đa 50 tệp):'
+                        : 'Instructor / Uploader Responsibility (Single Upload & Batch Check up to 50 files):'}
                     </p>
                     <p style={{ color: 'var(--solva-muted)' }}>
                       {isVi
@@ -2765,8 +2796,8 @@ export function PrivacyPolicyPage(): JSX.Element {
                   className="font-solva-sans text-[15px] sm:text-[16px] leading-[23.8px] pt-1"
                 >
                   {isVi
-                    ? 'Bạn có đầy đủ quyền được biết, quyền đồng ý hoặc không đồng ý, quyền xem và chỉnh sửa trực tiếp tại Hồ sơ (/profile), quyền rút lại sự đồng ý, quyền yêu cầu cung cấp, hạn chế hoặc phản đối xử lý dữ liệu, quyền tự xóa ngay lập tức tại Cài đặt (/settings) và quyền khiếu nại, tố cáo, khởi kiện theo quy định pháp luật.'
-                    : 'You hold the rights to be informed, consent or decline, access and rectify directly in Profile (/profile), withdraw consent, request data provision, restrict or object to processing, self-delete immediately in Settings (/settings), and lodge legal claims.'}
+                    ? 'Bạn có đầy đủ quyền được biết, quyền đồng ý hoặc không đồng ý, quyền xem và chỉnh sửa trực tiếp tại trang Hồ sơ, quyền rút lại sự đồng ý, quyền yêu cầu cung cấp, hạn chế hoặc phản đối xử lý dữ liệu, quyền tự xóa ngay lập tức trong trang Cài đặt và quyền khiếu nại, tố cáo, khởi kiện theo quy định pháp luật.'
+                    : 'You hold the rights to be informed, consent or decline, view and update directly in Profile, withdraw consent, request data provision, restrict or object to processing, self-delete immediately in Settings, and lodge legal claims.'}
                 </p>
               </SolvaScrollReveal>
             </div>
@@ -2785,21 +2816,21 @@ export function PrivacyPolicyPage(): JSX.Element {
                 label={
                   isVi
                     ? 'Thông báo tiếp nhận yêu cầu (02 ngày làm việc)'
-                    : 'Request acknowledgment (within 2 business days)'
+                    : 'Request confirmation reply (within 2 business days)'
                 }
               />
               <PrivacyAnimatedMetric
                 targetValue={10}
-                suffix={isVi ? '–15 ngày' : '–15d'}
+                suffix={isVi ? '–15 ngày' : '–15 days'}
                 label={
                   isVi
                     ? 'Xem, chỉnh sửa hoặc cung cấp dữ liệu cá nhân'
-                    : 'Access, rectification, or data provision'
+                    : 'View, update, or export personal data'
                 }
               />
               <PrivacyAnimatedMetric
                 targetValue={15}
-                suffix={isVi ? '–20 ngày' : '–20d'}
+                suffix={isVi ? '–20 ngày' : '–20 days'}
                 label={
                   isVi
                     ? 'Rút lại sự đồng ý, hạn chế hoặc phản đối xử lý'
@@ -2808,16 +2839,16 @@ export function PrivacyPolicyPage(): JSX.Element {
               />
               <PrivacyAnimatedMetric
                 targetValue={20}
-                suffix={isVi ? '–30 ngày' : '–30d'}
+                suffix={isVi ? '–30 ngày' : '–30 days'}
                 label={
                   isVi
-                    ? 'Xóa dữ liệu theo yêu cầu (Tự xóa /settings: Tức thì)'
-                    : 'Statutory deletion (/settings self-purge: Instant)'
+                    ? 'Xóa dữ liệu theo yêu cầu (Tự xóa trong Cài đặt: Tức thì)'
+                    : 'Data deletion by request (In Settings: Instant)'
                 }
               />
             </div>
 
-            {/* Explicit Statutory SLA Breakdown Card (`#sla`) */}
+            {/* Explicit Statutory Response Breakdown Card (`#sla`) */}
             <SolvaScrollReveal delayMs={45} yOffset={18} blurPx={0}>
               <div
                 id="sla"
@@ -2834,7 +2865,7 @@ export function PrivacyPolicyPage(): JSX.Element {
                   >
                     {isVi
                       ? 'Chi tiết thời hạn tiếp nhận & xử lý yêu cầu (Điều 5 Nghị định 356/2025/NĐ-CP)'
-                      : 'Detailed Statutory Request Handling SLAs (Article 5 of Decree 356/2025/ND-CP)'}
+                      : 'Detailed Request Response Timelines (Article 5 of Decree 356/2025/ND-CP)'}
                   </h3>
                   <span className="verdict-badge verdict-badge-verified px-2.5 py-0.5 text-[11px] font-mono">
                     {isVi ? 'TỐI ĐA 01 LẦN GIA HẠN' : 'MAX 01 EXTENSION'}
@@ -2963,8 +2994,8 @@ export function PrivacyPolicyPage(): JSX.Element {
                     >
                       {isAuthenticated
                         ? isVi
-                          ? 'Mở Cài đặt Quyền dữ liệu (/settings)'
-                          : 'Open Data Rights Settings (/settings)'
+                          ? 'Mở Cài đặt quyền dữ liệu'
+                          : 'Open Data Rights Settings'
                         : isVi
                           ? 'Đăng nhập để quản lý dữ liệu'
                           : 'Sign in to manage data'}
@@ -2994,7 +3025,7 @@ export function PrivacyPolicyPage(): JSX.Element {
                           style={{ color: 'var(--solva-ink)' }}
                           className="font-mono text-[11px] font-semibold uppercase tracking-wider"
                         >
-                          {isVi ? 'TRUNG TÂM QUYỀN CHỦ THỂ DỮ LIỆU' : 'DATA SUBJECT CONTROL'}
+                          {isVi ? 'QUYỀN KIỂM SOÁT DỮ LIỆU' : 'DATA CONTROL'}
                         </span>
                         <span className="verdict-badge verdict-badge-verified px-2.5 py-0.5 text-[10px] font-mono">
                           v{PRIVACY_POLICY_VERSION}
@@ -3017,7 +3048,7 @@ export function PrivacyPolicyPage(): JSX.Element {
                           }}
                           className="rounded-[8px] border px-3 py-2"
                         >
-                          /profile · {isVi ? 'Xem & Sửa' : 'Rectify'}
+                          {isVi ? 'Hồ sơ · Xem & Sửa' : 'Profile · View & Edit'}
                         </div>
                         <div
                           style={{
@@ -3027,7 +3058,7 @@ export function PrivacyPolicyPage(): JSX.Element {
                           }}
                           className="rounded-[8px] border px-3 py-2"
                         >
-                          /settings · {isVi ? 'Xóa sạch' : 'Purge All'}
+                          {isVi ? 'Cài đặt · Xóa dữ liệu' : 'Settings · Delete All'}
                         </div>
                       </div>
                     </div>

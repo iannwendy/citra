@@ -437,7 +437,7 @@ function CitraFilmPlayer({ lang }: { lang: Lang }) {
                       : 'Watch the film'}
                 </span>
                 <span className="font-mono text-[10px] sm:text-[11px] tracking-[0.12em] text-[#FBFAF6]/60 uppercase">
-                  1:30 · 120fps · {lang === 'vi' ? 'bật âm thanh' : 'sound on'}
+                  1:30 · {lang === 'vi' ? 'có âm thanh' : 'sound on'}
                 </span>
               </span>
             </span>
@@ -487,7 +487,7 @@ export function SolvaFilmSection({ lang }: { lang: Lang }) {
       <div className="max-w-[1200px] mx-auto flex flex-col gap-[24px] sm:gap-[32px] lg:gap-[56px]">
         <div className="flex flex-col items-start gap-[12px] sm:gap-[16px] max-w-[720px]">
           <SolvaEyebrow>
-            {lang === 'vi' ? 'Phim giới thiệu · 90 giây · 120fps' : 'The 90-second film · 120fps'}
+            {lang === 'vi' ? 'Phim giới thiệu · 90 giây' : 'The 90-second film'}
           </SolvaEyebrow>
           <SolvaTwoToneHeading
             primary={
@@ -497,8 +497,8 @@ export function SolvaFilmSection({ lang }: { lang: Lang }) {
             }
             secondary={
               lang === 'vi'
-                ? 'Từ tải lên, truy vết 15+ CSDL đến kiểm định thực nghiệm 120.000 bài báo.'
-                : 'From manuscript upload to 120,000-paper empirical proof.'
+                ? 'Từ lúc tải bài lên, kiểm tra trên hơn 15 thư viện học thuật đến báo cáo trích dẫn rõ ràng.'
+                : 'From uploading your draft to checking 15+ academic libraries and getting a clear report.'
             }
           />
         </div>

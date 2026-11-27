@@ -307,6 +307,8 @@ export function HeroVerificationMockup({
     return () => window.clearInterval(timer);
   }, [isVisible]);
 
+  const PAPER_OVERALL_SCORE = 84.5;
+
   const citations = [
     {
       marker: '[1]',
@@ -317,8 +319,6 @@ export function HeroVerificationMockup({
       l2: 'VERIFIED',
       confNum: 99,
       nliScore: 0.96,
-      cisScore: 92.4,
-      latencies: [38, 52, 61],
       tone: 'emerald' as const,
     },
     {
@@ -330,8 +330,6 @@ export function HeroVerificationMockup({
       l2: 'METADATA_ERROR',
       confNum: 84,
       nliScore: 0.94,
-      cisScore: 88.6,
-      latencies: [44, 57, 68],
       tone: 'amber' as const,
     },
     {
@@ -341,19 +339,17 @@ export function HeroVerificationMockup({
       doi: '10.1038/s41586-024-99999-z',
       l1: 'MATCHED',
       l2: 'SUSPECTED_HALLUCINATION',
-      confNum: 11,
+      confNum: null,
       nliScore: 0.0,
-      cisScore: 92.4,
-      latencies: [51, 63, 79],
       tone: 'red' as const,
     },
   ];
 
   const selected = citations[activeStep % citations.length];
   const apiSources = [
-    { name: 'Crossref', ms: selected.latencies[0] },
-    { name: 'OpenAlex', ms: selected.latencies[1] },
-    { name: 'Semantic Scholar', ms: selected.latencies[2] },
+    { name: 'Crossref' },
+    { name: 'OpenAlex' },
+    { name: 'Semantic Scholar' },
   ];
 
   return (
@@ -405,14 +401,15 @@ export function HeroVerificationMockup({
           }}
           className="px-2 py-0.5 rounded-[5px] border font-mono text-[10px] font-semibold shrink-0 whitespace-nowrap"
         >
-          {lang === 'vi' ? 'Điểm:' : 'Score:'}{' '}
+          {lang === 'vi' ? 'Điểm bài viết:' : 'Paper Score:'}{' '}
           <SubtleNumber
             value={
               lang === 'vi'
-                ? selected.cisScore.toFixed(1).replace('.', ',')
-                : selected.cisScore.toFixed(1)
+                ? PAPER_OVERALL_SCORE.toFixed(1).replace('.', ',')
+                : PAPER_OVERALL_SCORE.toFixed(1)
             }
-          />
+          />{' '}
+          / 100
         </span>
       </div>
 
@@ -465,13 +462,23 @@ export function HeroVerificationMockup({
                   >
                     {item.marker} {item.ref}
                   </span>
-                  <span className="font-mono text-[10px] font-semibold text-[#56524A] dark:text-[#A8A296] shrink-0 whitespace-nowrap">
-                    <SolvaLiveNumber
-                      value={item.confNum}
-                      suffix="%"
-                      replaySeed={replaySeed}
-                      durationMs={1250 + idx * 140}
-                    />
+                  <span
+                    className={`font-mono text-[10px] font-semibold shrink-0 whitespace-nowrap ${
+                      item.confNum === null
+                        ? 'text-red-700 dark:text-red-300'
+                        : 'text-[#56524A] dark:text-[#A8A296]'
+                    }`}
+                  >
+                    {item.confNum === null ? (
+                      lang === 'vi' ? '0 khớp' : 'No match'
+                    ) : (
+                      <SolvaLiveNumber
+                        value={item.confNum}
+                        suffix="%"
+                        replaySeed={replaySeed}
+                        durationMs={1250 + idx * 140}
+                      />
+                    )}
                   </span>
                 </div>
                 <p
@@ -562,10 +569,10 @@ export function HeroVerificationMockup({
               >
                 {selected.tone === 'red'
                   ? lang === 'vi'
-                    ? '404 Không tồn tại'
-                    : 'Not Found (404)'
+                    ? 'Không tìm thấy nguồn'
+                    : 'Not found'
                   : lang === 'vi'
-                    ? '100% Khớp chuẩn'
+                    ? 'Khớp chuẩn 100%'
                     : '100% Match'}
               </span>
             </div>
@@ -645,7 +652,6 @@ export function HeroVerificationMockup({
             <div className="flex flex-wrap gap-1.5 text-[10px] font-mono">
               {apiSources.map((s, idx) => {
                 const isPulsing = idx === activeApiPulse;
-                const liveMs = isPulsing ? Math.max(1, s.ms - 1) : s.ms;
                 const href = getScholarlySourceUrl(s.name) ?? '#';
                 return (
                   <a
@@ -672,10 +678,19 @@ export function HeroVerificationMockup({
                       <span>{s.name}</span>
                     </span>
                     <span
-                      style={{ color: 'var(--solva-muted)' }}
-                      className="shrink-0 whitespace-nowrap"
+                      className={`shrink-0 whitespace-nowrap font-medium ${
+                        selected.tone === 'red'
+                          ? 'text-red-700 dark:text-red-300'
+                          : 'text-emerald-700 dark:text-emerald-300'
+                      }`}
                     >
-                      <SubtleNumber value={liveMs} suffix="ms" />
+                      {selected.tone === 'red'
+                        ? lang === 'vi'
+                          ? '0 khớp'
+                          : '0 hits'
+                        : lang === 'vi'
+                          ? '✓ Khớp'
+                          : '✓ Match'}
                     </span>
                   </a>
                 );
@@ -824,34 +839,23 @@ export function FeatureCardWidget({
     const apis = [
       {
         name: 'Crossref',
-        status: lang === 'vi' ? 'Khớp DOI' : 'DOI Match',
-        baseMs: 38,
-        delta: 2,
+        status: lang === 'vi' ? '✓ Khớp DOI' : '✓ DOI Match',
       },
       {
         name: 'OpenAlex',
-        status: lang === 'vi' ? 'Ấn phẩm' : 'Verified',
-        baseMs: 49,
-        delta: -2,
+        status: lang === 'vi' ? '✓ Ấn phẩm' : '✓ Verified',
       },
       {
         name: 'Semantic Scholar',
-        status: lang === 'vi' ? 'Khớp' : 'Match',
-        score: 0.96,
-        baseMs: 62,
-        delta: 3,
+        status: lang === 'vi' ? 'Khớp 96%' : '96% match',
       },
       {
         name: 'PubMed / Europe PMC',
-        status: lang === 'vi' ? 'Y sinh' : 'Indexed',
-        baseMs: 54,
-        delta: -1,
+        status: lang === 'vi' ? 'Y sinh' : 'Biomedical',
       },
       {
         name: 'DOAJ / OpenLibrary',
-        status: lang === 'vi' ? 'Sách & Mở' : 'Books & OA',
-        baseMs: 41,
-        delta: -1,
+        status: lang === 'vi' ? 'Sách & Tạp chí mở' : 'Books & Open Access',
       },
     ];
     return (
@@ -883,7 +887,6 @@ export function FeatureCardWidget({
         <div className="space-y-1.5 my-auto">
           {apis.map((api, idx) => {
             const isWaveActive = idx === cycleStep;
-            const liveMs = isWaveActive ? api.baseMs + api.delta : api.baseMs;
             const href = getScholarlySourceUrl(api.name) ?? '#';
             return (
               <a
@@ -911,8 +914,7 @@ export function FeatureCardWidget({
                   <span>{api.name}</span>
                 </span>
                 <span className="citra-nowrap-tail whitespace-nowrap shrink-0 font-mono text-[10px] text-emerald-700 dark:text-emerald-300">
-                  {api.score !== undefined ? `${api.status} ${api.score.toFixed(2)}` : api.status} ·{' '}
-                  <SubtleNumber value={liveMs} suffix="ms" />
+                  {api.status}
                 </span>
               </a>
             );
@@ -946,9 +948,9 @@ export function FeatureCardWidget({
   }
 
   // Widget 3: Details & Abstract Meaning Verification
-  const simScores = [0.97, 0.98, 0.97];
+  const simPercents = [97, 98, 97];
   const stancePercents = [94, 96, 94];
-  const currentSim = simScores[cycleStep % simScores.length];
+  const currentSim = simPercents[cycleStep % simPercents.length];
   const currentStance = stancePercents[cycleStep % stancePercents.length];
 
   return (
@@ -999,7 +1001,7 @@ export function FeatureCardWidget({
           <p style={{ color: 'var(--solva-ink)' }} className="text-[11.5px] font-medium leading-snug">
             {lang === 'vi' ? 'Khớp mã DOI & Tiêu đề ' : 'DOI & Title Match '}
             <span className="citra-nowrap-tail whitespace-nowrap font-mono">
-              (<SubtleNumber value={currentSim.toFixed(2)} />)
+              (<SubtleNumber value={currentSim} suffix="%" />)
             </span>
           </p>
         </div>
@@ -1143,8 +1145,8 @@ export function StickyCardWidget({
                   ? 'Xem dạng thẻ'
                   : 'Card view'
                 : lang === 'vi'
-                  ? 'Mã XML'
-                  : 'Raw XML'}
+                  ? 'Xem thông tin đã tách'
+                  : 'Structured Fields'}
             </span>
           </button>
         </div>
@@ -1154,46 +1156,61 @@ export function StickyCardWidget({
             id="xml-schema-preview-panel"
             style={{
               backgroundColor: 'var(--solva-surface)',
+              borderColor: 'var(--solva-border)',
             }}
-            className="p-2.5 sm:p-3 rounded-[8px] font-mono text-[10px] sm:text-[11px] space-y-1.5 break-all sm:break-normal"
+            className="p-2.5 sm:p-3 rounded-[8px] border text-[10.5px] sm:text-[11px] space-y-1.5"
           >
             <div
               style={{
                 color: activePhase === 0 ? 'var(--solva-ink)' : 'var(--solva-muted)',
                 transform: activePhase === 0 ? 'translateX(2px)' : 'translateX(0px)',
               }}
-              className="transition-[color,transform] duration-300"
+              className="flex items-start justify-between gap-2 transition-[color,transform] duration-300"
             >
-              &lt;biblStruct xml:id=&quot;b
-              <SubtleNumber value={String(currentXmlId).padStart(2, '0')} />
-              &quot;&gt;
+              <span className="font-mono text-[10px] shrink-0" style={{ color: 'var(--solva-muted)' }}>
+                {lang === 'vi' ? 'Tiêu đề' : 'Title'}
+              </span>
+              <span className="font-medium text-right" style={{ color: 'var(--solva-ink)' }}>
+                Deep Residual Learning for Image Recognition
+              </span>
             </div>
             <div
               style={{
                 color: 'var(--solva-ink)',
-                transform: activePhase === 1 ? 'translateX(3px)' : 'translateX(0px)',
+                transform: activePhase === 1 ? 'translateX(2px)' : 'translateX(0px)',
               }}
-              className="pl-2.5 sm:pl-3 transition-transform duration-300"
+              className="flex items-start justify-between gap-2 transition-transform duration-300"
             >
-              &lt;title&gt;Deep Residual Learning&lt;/title&gt;
+              <span className="font-mono text-[10px] shrink-0" style={{ color: 'var(--solva-muted)' }}>
+                {lang === 'vi' ? 'Tác giả' : 'Authors'}
+              </span>
+              <span className="text-right">K. He, X. Zhang, S. Ren, J. Sun</span>
             </div>
             <div
               style={{
                 color: 'var(--solva-ink)',
-                transform: activePhase === 2 ? 'translateX(3px)' : 'translateX(0px)',
+                transform: activePhase === 2 ? 'translateX(2px)' : 'translateX(0px)',
               }}
-              className="pl-2.5 sm:pl-3 transition-transform duration-300"
+              className="flex items-start justify-between gap-2 transition-transform duration-300"
             >
-              &lt;idno type=&quot;DOI&quot;&gt;10.1109/CVPR.2016.90&lt;/idno&gt;
+              <span className="font-mono text-[10px] shrink-0" style={{ color: 'var(--solva-muted)' }}>
+                {lang === 'vi' ? 'Năm · Nơi đăng' : 'Year · Venue'}
+              </span>
+              <span className="text-right">2016 · IEEE CVPR</span>
             </div>
             <div
               style={{
                 color: activePhase === 3 ? 'var(--solva-ink)' : 'var(--solva-muted)',
                 transform: activePhase === 3 ? 'translateX(2px)' : 'translateX(0px)',
               }}
-              className="transition-[color,transform] duration-300"
+              className="flex items-start justify-between gap-2 pt-1 border-t border-[#E7E3D9] dark:border-[#332F26] transition-[color,transform] duration-300"
             >
-              &lt;/biblStruct&gt;
+              <span className="font-mono text-[10px] shrink-0" style={{ color: 'var(--solva-muted)' }}>
+                DOI
+              </span>
+              <span className="font-mono text-[10px] text-right" style={{ color: 'var(--solva-ink)' }}>
+                10.1109/CVPR.2016.90
+              </span>
             </div>
           </div>
         ) : (
@@ -1272,8 +1289,8 @@ export function StickyCardWidget({
 
   if (index === 1) {
     // Card 1: Explainable Checks & Advisor Sign-Off
-    const stanceValues = [0.93, 0.96, 0.93];
-    const currentStance = stanceValues[activePhase % stanceValues.length];
+    const stancePercents = [93, 96, 93];
+    const currentStance = stancePercents[activePhase % stancePercents.length];
 
     return (
       <div
@@ -1318,9 +1335,9 @@ export function StickyCardWidget({
               </div>
               <div
                 style={{ color: 'var(--solva-muted)' }}
-                className="text-[10px] font-mono leading-snug mt-0.5"
+                className="text-[10px] leading-snug mt-0.5"
               >
-                {lang === 'vi' ? 'Đối chiếu mã DOI chính thức' : 'R01_DOI_EXACT'}
+                {lang === 'vi' ? 'Đối chiếu mã DOI chính thức' : 'Verified official DOI link'}
               </div>
             </div>
             <span className="citra-nowrap-tail whitespace-nowrap shrink-0 px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300">
@@ -1345,20 +1362,20 @@ export function StickyCardWidget({
                 {lang === 'vi' ? (
                   <>
                     Ghi trong bài 2018 · Xuất bản 2019{' '}
-                    <span className="citra-nowrap-tail whitespace-nowrap">(Δ=1 năm)</span>
+                    <span className="citra-nowrap-tail whitespace-nowrap">(lệch 1 năm)</span>
                   </>
                 ) : (
                   <>
                     Cited 2018 · Published 2019{' '}
-                    <span className="citra-nowrap-tail whitespace-nowrap">(Δ=1yr)</span>
+                    <span className="citra-nowrap-tail whitespace-nowrap">(1 yr off)</span>
                   </>
                 )}
               </div>
               <div
                 style={{ color: 'var(--solva-muted)' }}
-                className="text-[10px] font-mono leading-snug mt-0.5"
+                className="text-[10px] leading-snug mt-0.5"
               >
-                {lang === 'vi' ? 'So sánh năm bản nháp & năm công bố' : 'R05_YEAR_DRIFT'}
+                {lang === 'vi' ? 'So sánh năm bản nháp & năm công bố' : 'Publication year check'}
               </div>
             </div>
             <span className="citra-nowrap-tail whitespace-nowrap shrink-0 px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-amber-500/[0.12] text-amber-800 dark:text-amber-300">
@@ -1392,7 +1409,8 @@ export function StickyCardWidget({
               </div>
             </div>
             <span className="citra-nowrap-tail whitespace-nowrap shrink-0 px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300">
-              <SubtleNumber value={currentStance.toFixed(2)} />
+              {lang === 'vi' ? 'Khớp ' : ''}
+              <SubtleNumber value={currentStance} suffix={lang === 'vi' ? '%' : '% match'} />
             </span>
           </div>
         </div>
@@ -1401,10 +1419,8 @@ export function StickyCardWidget({
   }
 
   // Card 2: Revision Progress & Integrity Score (Screenshot 2)
-  const draftV2Targets = [95.6, 94.5, 95.6];
-  const cisDeltaTargets = [27.6, 26.5, 27.6];
-  const currentV2 = draftV2Targets[activePhase % draftV2Targets.length];
-  const currentCisDelta = cisDeltaTargets[activePhase % cisDeltaTargets.length];
+  const FINAL_V2_SCORE = 95.6;
+  const FINAL_CIS_DELTA = 27.6;
 
   return (
     <div
@@ -1427,14 +1443,14 @@ export function StickyCardWidget({
           </span>
         </span>
         <span className="citra-nowrap-tail whitespace-nowrap shrink-0 text-[11px] font-mono font-bold text-emerald-700 dark:text-emerald-300">
-          <SubtleNumber
+          <SolvaLiveNumber
+            value={FINAL_CIS_DELTA}
+            decimals={1}
+            decimalSeparator={lang === 'vi' ? ',' : '.'}
             prefix="+"
-            value={
-              lang === 'vi'
-                ? currentCisDelta.toFixed(1).replace('.', ',')
-                : currentCisDelta.toFixed(1)
-            }
             suffix={lang === 'vi' ? ' điểm' : ' pts'}
+            replaySeed={replaySeed}
+            durationMs={1400}
           />
         </span>
       </div>
@@ -1488,12 +1504,12 @@ export function StickyCardWidget({
             </span>
           </div>
           <div className="font-solva-serif text-[22px] sm:text-[24px] leading-tight mt-0.5 text-emerald-700 dark:text-emerald-300 whitespace-nowrap">
-            <SubtleNumber
-              value={
-                lang === 'vi'
-                  ? currentV2.toFixed(1).replace('.', ',')
-                  : currentV2.toFixed(1)
-              }
+            <SolvaLiveNumber
+              value={FINAL_V2_SCORE}
+              decimals={1}
+              decimalSeparator={lang === 'vi' ? ',' : '.'}
+              replaySeed={replaySeed}
+              durationMs={1450}
             />{' '}
             <span
               style={{ color: 'var(--solva-muted)' }}
@@ -1559,7 +1575,7 @@ export function PipelineStageVisual({
   tabIndex: number;
   lang: Lang;
 }) {
-  const { containerRef, isVisible, replaySeed } = useFloralCardAnimation();
+  const { containerRef, isVisible } = useFloralCardAnimation();
   const [activeRow, setActiveRow] = useState(0);
 
   useEffect(() => {
@@ -1583,7 +1599,10 @@ export function PipelineStageVisual({
       metrics: [
         {
           k: lang === 'vi' ? 'Định dạng tệp' : 'File Formats',
-          v: 'PDF, Word (.docx), BibTeX, RIS',
+          v:
+            lang === 'vi'
+              ? 'PDF, Word (.docx) hoặc file Zotero / Mendeley (.bib, .ris)'
+              : 'PDF, Word (.docx), or Zotero / Mendeley files (.bib, .ris)',
         },
         {
           k: lang === 'vi' ? 'Chuẩn trình bày' : 'Supported Styles',
@@ -1615,7 +1634,7 @@ export function PipelineStageVisual({
         },
         {
           k: lang === 'vi' ? 'Tốc độ tra cứu' : 'Lookup Speed',
-          v: lang === 'vi' ? '~40 ms đối chiếu song song' : '~40 ms parallel library lookup',
+          v: lang === 'vi' ? 'Tra cứu đồng thời trong vài giây' : 'Simultaneous lookup in seconds',
         },
       ],
     },
@@ -1635,7 +1654,7 @@ export function PipelineStageVisual({
         },
         {
           k: lang === 'vi' ? 'Tác giả & Năm XB' : 'Authors & Year',
-          v: lang === 'vi' ? 'Kiểm tra họ tên tác giả · nhận biết lệch ±1 năm bản nháp' : 'Author surname check · ±1 year preprint awareness',
+          v: lang === 'vi' ? 'Kiểm tra họ tên tác giả · nhận biết lệch ±1 năm bản nháp' : 'Author surname check · ±1 year early-draft awareness',
         },
         {
           k: lang === 'vi' ? 'Kiểm tra mã DOI' : 'Link & DOI Safety',
@@ -1663,7 +1682,7 @@ export function PipelineStageVisual({
         },
         {
           k: lang === 'vi' ? 'Chuẩn hóa nhanh' : 'Clean Export',
-          v: lang === 'vi' ? 'Xuất danh mục chuẩn APA 7th, IEEE, BibTeX & báo cáo Word/PDF' : 'One-click APA 7th, IEEE, BibTeX & Word/PDF report',
+          v: lang === 'vi' ? 'Xuất danh mục chuẩn APA 7th, IEEE & báo cáo Word / PDF' : 'One-click APA 7th, IEEE & Word / PDF report',
         },
       ],
     },
@@ -1737,21 +1756,15 @@ export function PipelineStageVisual({
           {tabIndex === 0 && (
             <>
               {lang === 'vi'
-                ? 'Đã nhận diện 28 trích dẫn trong bài ([1]–[28]) và nối khớp 27 mục tài liệu cuối bài trong '
-                : 'Found 28 in-text citations ([1]–[28]) and linked 27 bibliography entries in '}
-              <SolvaLiveNumber
-                value={340}
-                suffix="ms."
-                replaySeed={replaySeed}
-                durationMs={1250}
-              />
+                ? 'Đã nhận diện 28 trích dẫn trong bài ([1]–[28]) và nối khớp tự động 27 mục tài liệu cuối bài.'
+                : 'Found 28 in-text citations ([1]–[28]) and automatically linked 27 bibliography entries.'}
             </>
           )}
           {tabIndex === 1 && (
             <>
               {lang === 'vi'
-                ? 'Tra cứu đồng thời 15+ thư viện · Gộp 64 bản ghi trùng lặp · Chọn ra hồ sơ gốc chuẩn nhất.'
-                : 'Checked 15+ libraries at once · Merged 64 duplicate records · Matched official publication.'}
+                ? 'Tra cứu đồng thời 15+ thư viện · Tự động đối chiếu và chọn bản ghi bài báo gốc chuẩn nhất.'
+                : 'Checked 15+ libraries at once · Automatically matched the official publication record.'}
             </>
           )}
           {tabIndex === 2 && (
@@ -1759,12 +1772,12 @@ export function PipelineStageVisual({
               {lang === 'vi' ? (
                 <>
                   Xác nhận khớp mã DOI, tác giả &amp; năm xuất bản → Nguồn trích dẫn hợp lệ{' '}
-                  <span className="citra-nowrap-tail whitespace-nowrap">(Độ tin cậy: 98,4%).</span>
+                  <span className="citra-nowrap-tail whitespace-nowrap">(Độ khớp nguồn: 98,4%).</span>
                 </>
               ) : (
                 <>
                   Confirmed DOI, author &amp; year match → Verified Source{' '}
-                  <span className="citra-nowrap-tail whitespace-nowrap">(Confidence: 98.4%).</span>
+                  <span className="citra-nowrap-tail whitespace-nowrap">(Source match: 98.4%).</span>
                 </>
               )}
             </>
@@ -1947,13 +1960,13 @@ export function CohortBatchAuditWidget({ lang }: { lang: Lang }) {
   const theses = [
     {
       id: '#018',
-      file: 'Thesis_018_Neural_RAG.pdf',
+      file: lang === 'vi' ? 'KLTN_018_TaiChinh_So.pdf' : 'Thesis_018_FinTech_Policy.pdf',
       verdict: lang === 'vi' ? 'DOI KHÔNG TỒN TẠI' : 'DOI NOT FOUND',
       tone: 'red' as const,
       rule:
         lang === 'vi'
-          ? 'Không tìm thấy mã DOI trên Crossref (404)'
-          : 'DOI Not Found on Crossref (404)',
+          ? 'Không tìm thấy mã DOI trên Crossref'
+          : 'DOI Not Found on Crossref',
       detail:
         lang === 'vi' ? (
           <>
@@ -1970,7 +1983,7 @@ export function CohortBatchAuditWidget({ lang }: { lang: Lang }) {
     },
     {
       id: '#047',
-      file: 'Thesis_047_Legal_NLP.pdf',
+      file: lang === 'vi' ? 'KLTN_047_Luat_ThuongMai.pdf' : 'Thesis_047_Corporate_Law.pdf',
       verdict: lang === 'vi' ? 'LỆCH NĂM XB' : 'WRONG YEAR',
       tone: 'amber' as const,
       rule:
@@ -1979,13 +1992,13 @@ export function CohortBatchAuditWidget({ lang }: { lang: Lang }) {
           : 'Publication Year Off by 1 Year',
       detail:
         lang === 'vi'
-          ? 'Ghi nhầm năm bản nháp (2018) thay vì năm công bố chính thức (2019)'
-          : 'Cites draft year (2018) instead of official proceedings year (2019)',
+          ? 'Ghi nhầm năm bản nháp (2018) thay vì năm xuất bản chính thức (2019)'
+          : 'Cites early draft year (2018) instead of official published year (2019)',
       cisNum: 88.5,
     },
     {
       id: '#104',
-      file: 'Thesis_104_BioMed_VLM.pdf',
+      file: lang === 'vi' ? 'KLTN_104_YTe_CongDong.pdf' : 'Thesis_104_Public_Health.pdf',
       verdict: lang === 'vi' ? 'HỢP LỆ' : 'VERIFIED',
       tone: 'emerald' as const,
       rule:
@@ -1994,8 +2007,8 @@ export function CohortBatchAuditWidget({ lang }: { lang: Lang }) {
           : 'All Details & Abstract Verified',
       detail:
         lang === 'vi'
-          ? 'Đồng nhất 38/38 tài liệu tham khảo trên Crossref, PubMed & OpenAlex'
-          : '38/38 references verified across Crossref, PubMed & OpenAlex',
+          ? 'Cả 38/38 tài liệu đều có thật và khớp thông tin trên Crossref, PubMed & OpenAlex'
+          : 'All 38/38 references verified across Crossref, PubMed & OpenAlex',
       cisNum: 98.4,
     },
   ];
@@ -2183,7 +2196,8 @@ export function CohortBatchAuditWidget({ lang }: { lang: Lang }) {
                     ? activeThesis.cisNum.toFixed(1).replace('.', ',')
                     : activeThesis.cisNum.toFixed(1)
                 }
-              />
+              />{' '}
+              / 100
             </strong>
           </span>
         </div>

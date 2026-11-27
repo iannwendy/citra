@@ -30,6 +30,7 @@ import {
   normalizeMappingStatusKey,
   normalizeVerdictKey,
   resolveAcademicLang,
+  sanitizeReasoningForDisplay,
 } from '@/lib/academicTaxonomy';
 import {
   extractObservedWebMeta,
@@ -63,11 +64,36 @@ import {
 
 interface LiveCitationSandboxProps {
   lang?: 'vi' | 'en';
+  defaultMode?: 'raw_paste' | 'acl_studio';
 }
 
 const DEFAULT_RAW_REFS_SAMPLE = `Vaswani, A., Shazeer, N., & Parmar, N. (2017). Attention Is All You Need. Advances in Neural Information Processing Systems (NeurIPS). https://doi.org/10.48550/arXiv.1706.03762\nDevlin, J., Chang, M., Lee, K., & Toutanova, K. (2022). BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding. NAACL-HLT. https://doi.org/10.18653/v1/N19-1423\nSmith, J., & Nguyen, T. (2024). Autonomous Quantum Hyper-Graph Transformers for Zero-Shot Reasoning. Journal of Imaginary AI Research. https://doi.org/10.9999/fake.hallucination.2024`;
 
-export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps) {
+const RAW_BACKEND_METRIC_RE =
+  /\b(?:author_jaccard|fuzzy_title_sim|title_sim|author_sim|year_distance|provenance\s+penalty)\b|\[Neural:|Suspected\s+AI-hallucinated/i;
+
+function formatSandboxExplanation(
+  rawText: string | null | undefined,
+  verdict: Verdict,
+  lang: 'vi' | 'en',
+): string {
+  const sanitized = sanitizeReasoningForDisplay(rawText, lang)
+    .replace(/\b(?:author_jaccard|fuzzy_title_sim|title_sim|author_sim)\s*=\s*[0-9.]+/gi, '')
+    .replace(/\bprovenance\s+penalty\b[^.;]*/gi, '')
+    .replace(/\bSuspected\s+AI-hallucinated\b/gi, lang === 'vi' ? 'Không tìm thấy nguồn gốc' : 'Source not found')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+
+  if (!sanitized || RAW_BACKEND_METRIC_RE.test(sanitized)) {
+    return getVerdictExplanation(verdict, lang);
+  }
+  return sanitized;
+}
+
+export function LiveCitationSandbox({
+  lang: langProp,
+  defaultMode = 'raw_paste',
+}: LiveCitationSandboxProps) {
   const { i18n } = useTranslation();
   const i18nLang = resolveAcademicLang(i18n.resolvedLanguage || i18n.language);
   const lang: 'vi' | 'en' = langProp ?? i18nLang;
@@ -79,11 +105,13 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
 
   const [upgradeOpen, setUpgradeOpen] = useState(false);
 
-  const [mode, setMode] = useState<'acl_studio' | 'raw_paste'>('acl_studio');
+  const [mode, setMode] = useState<'acl_studio' | 'raw_paste'>(defaultMode);
   const [sampleCount, setSampleCount] = useState<number>(12);
   const [style, setStyle] = useState<'apa' | 'ieee'>('apa');
   const [manuscriptTitle, setManuscriptTitle] = useState<string>(
-    'Empirical Evaluation of Neural Language Representations and Citation Integrity in Computational Linguistics',
+    isVi
+      ? 'Bài mẫu: Tác động của chuyển đổi số đến năng suất doanh nghiệp vừa và nhỏ'
+      : 'Sample Study: Digital Transformation and Performance Across Small Enterprises',
   );
   const [items, setItems] = useState<SandboxAclPaperItem[]>([]);
   const [loadingSample, setLoadingSample] = useState(false);
@@ -129,8 +157,8 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
       setItems(res.items || []);
       toast.success(
         isVi
-          ? `Đã lấy ngẫu nhiên ${res.items.length} bài báo thật từ kho 128.000+ bài báo học thuật.`
-          : `Sampled ${res.items.length} real papers from the 128K+ scholarly papers corpus.`,
+          ? `Đã lấy ngẫu nhiên ${res.items.length} bài báo thật từ thư viện 128.000+ bài báo học thuật.`
+          : `Sampled ${res.items.length} real papers from the 128K+ academic paper library.`,
       );
     } catch (e) {
       toast.error(
@@ -138,8 +166,8 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
           e,
           lang,
           isVi
-            ? 'Không thể lấy mẫu từ kho bài báo học thuật. Vui lòng thử lại.'
-            : 'Failed to sample papers from the scholarly corpus. Please try again.',
+            ? 'Không thể lấy mẫu từ thư viện bài báo học thuật. Vui lòng thử lại.'
+            : 'Failed to sample papers from the academic library. Please try again.',
         ),
       );
     } finally {
@@ -218,8 +246,8 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
         if (preset === 'wrong_year') {
           base.year = String(origYr >= 2023 ? origYr - 4 : origYr + 3);
         } else if (preset === 'wrong_author') {
-          base.authors_text = 'Michael Anderson; Elena Rostova';
-          base.authors = ['Michael Anderson', 'Elena Rostova'];
+          base.authors_text = 'Marcus Vance; D. K. Thornton';
+          base.authors = ['Marcus Vance', 'D. K. Thornton'];
         } else if (preset === 'hallucinated') {
           const topicWords = orig.title
             .split(/\s+/)
@@ -288,8 +316,8 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
         if (idx === 2) {
           return {
             ...cleanItem,
-            authors_text: 'Michael Anderson; Elena Rostova',
-            authors: ['Michael Anderson', 'Elena Rostova'],
+            authors_text: 'Marcus Vance; D. K. Thornton',
+            authors: ['Marcus Vance', 'D. K. Thornton'],
             mutation_preset: 'wrong_author',
           };
         }
@@ -513,7 +541,7 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
       default:
         return (
           <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
-            {isVi ? 'Bản gốc ACL' : 'Canonical ACL'}
+            {isVi ? 'Thư viện học thuật' : 'Original Record'}
           </span>
         );
     }
@@ -625,33 +653,20 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
             >
               {mode === 'acl_studio'
                 ? isVi
-                  ? 'Lấy ngẫu nhiên 10–20 bài báo thật từ kho 128.000+ bài báo học thuật, tùy chỉnh thông tin hoặc liên kết trích dẫn và xuất tệp PDF mẫu để chạy thử kiểm chứng.'
-                  : 'Sample 10–20 real papers from the 128K+ scholarly papers corpus, edit citation details or linking live, and build a sample academic PDF to test verification.'
+                  ? 'Lấy ngẫu nhiên 10–20 bài báo thật từ thư viện 128.000+ bài báo học thuật, tùy chỉnh thông tin hoặc liên kết trích dẫn và tạo tệp PDF mẫu để chạy thử kiểm tra.'
+                  : 'Sample 10–20 real papers from 128K+ academic papers, edit citation details or linking live, and build a sample PDF paper to test verification.'
                 : isVi
-                  ? 'Dán trực tiếp danh sách tài liệu tham khảo (APA, IEEE, Vancouver hoặc BibTeX) để đối chiếu nhanh trên hơn 15 thư viện học thuật chỉ trong vài giây.'
-                  : 'Paste your reference list (APA, IEEE, Vancouver, or BibTeX) to cross-check citations across 15+ academic libraries in seconds.'}
+                  ? 'Dán trực tiếp danh sách tài liệu tham khảo (APA, IEEE, Vancouver hoặc file Zotero/BibTeX) để đối chiếu nhanh trên hơn 15 thư viện học thuật chỉ trong vài giây.'
+                  : 'Paste your reference list (APA, IEEE, Vancouver, or Zotero/BibTeX) to cross-check citations across 15+ academic libraries in seconds.'}
             </p>
           </div>
         </div>
 
-        {/* Mode Switcher */}
+        {/* Mode Switcher (Quick Check first as default student flow) */}
         <div
           data-testid="sandbox-mode-switcher"
           className="flex sm:inline-flex w-full md:w-auto items-center p-1 rounded-xl bg-slate-100 dark:bg-slate-800/90 border border-slate-200/90 dark:border-slate-700 gap-1 shrink-0 self-start md:self-auto"
         >
-          <button
-            type="button"
-            data-testid="sandbox-mode-acl-btn"
-            aria-pressed={mode === 'acl_studio'}
-            onClick={() => handleModeSwitch('acl_studio')}
-            className={`min-w-0 flex-1 sm:flex-initial text-center px-2.5 py-2 rounded-lg text-xs sm:text-sm font-semibold whitespace-nowrap truncate transition-all cursor-pointer ${
-              mode === 'acl_studio'
-                ? 'bg-indigo-600 text-white shadow-sm'
-                : 'text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white'
-            }`}
-          >
-            {isVi ? 'Tạo bài mẫu PDF' : 'Sample PDF'}
-          </button>
           <button
             type="button"
             data-testid="sandbox-mode-raw-btn"
@@ -664,6 +679,19 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
             }`}
           >
             {isVi ? 'Kiểm tra nhanh' : 'Quick Check'}
+          </button>
+          <button
+            type="button"
+            data-testid="sandbox-mode-acl-btn"
+            aria-pressed={mode === 'acl_studio'}
+            onClick={() => handleModeSwitch('acl_studio')}
+            className={`min-w-0 flex-1 sm:flex-initial text-center px-2.5 py-2 rounded-lg text-xs sm:text-sm font-semibold whitespace-nowrap truncate transition-all cursor-pointer ${
+              mode === 'acl_studio'
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white'
+            }`}
+          >
+            {isVi ? 'Tạo bài mẫu PDF' : 'Sample PDF'}
           </button>
         </div>
       </div>
@@ -711,8 +739,12 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
                     onChange={(e) => setStyle(e.target.value as 'apa' | 'ieee')}
                     className="h-9 pl-2.5 pr-8 rounded-xl text-xs font-mono font-semibold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 flex-1 sm:flex-initial min-w-0 max-w-full"
                   >
-                    <option value="apa">APA 7th (Author-Year)</option>
-                    <option value="ieee">IEEE Numeric [1]..[N]</option>
+                    <option value="apa">
+                      {isVi ? 'APA 7 (Tác giả, Năm)' : 'APA 7th (Author, Year)'}
+                    </option>
+                    <option value="ieee">
+                      {isVi ? 'IEEE (Đánh số [1], [2]...)' : 'IEEE (Numbered [1], [2]...)'}
+                    </option>
                   </select>
                 </div>
 
@@ -763,12 +795,12 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
                 <p className="text-sm font-display font-bold text-slate-800 dark:text-slate-200 leading-snug">
                   {isVi
                     ? `Nhấn "Lấy ngẫu nhiên ${sampleCount} bài báo" ở trên để tải danh sách bài báo mẫu`
-                    : `Click "Sample ${sampleCount} Random Papers" above to load real papers from the scholarly corpus`}
+                    : `Click "Sample ${sampleCount} Random Papers" above to load real papers from the academic library`}
                 </p>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5 max-w-xl mx-auto leading-relaxed">
                   {isVi
-                    ? 'Sau khi tải 10–20 bài báo thật từ kho bài báo học thuật, bạn có thể chỉnh sửa năm, tác giả, tiêu đề, mã DOI hoặc bật/tắt liên kết trích dẫn rồi tạo tệp PDF mẫu để thử nghiệm toàn bộ quy trình kiểm chứng.'
-                    : 'Once loaded, you can edit any metadata field or toggle in-text ↔ bibliography links, then build a sample PDF manuscript to run through the full verification workflow.'}
+                    ? 'Sau khi tải 10–20 bài báo thật từ thư viện học thuật, bạn có thể chỉnh sửa năm, tác giả, tiêu đề, mã DOI hoặc bật/tắt liên kết trích dẫn rồi tạo tệp PDF mẫu để thử nghiệm toàn bộ quy trình kiểm tra.'
+                    : 'Once loaded, you can edit any citation detail (title, author, year, DOI) or toggle in-text ↔ bibliography links, then build a sample PDF paper to run through the full verification workflow.'}
                 </p>
               </div>
             ) : (
@@ -811,7 +843,7 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
                           {presetBadge(it.mutation_preset)}
                           {it.paper_id && (
                             <span className="text-[10px] font-mono text-slate-400">
-                              ACL #{it.paper_id}
+                              {isVi ? 'Bài mẫu' : 'Sample'} #{it.paper_id}
                             </span>
                           )}
                         </div>
@@ -825,12 +857,12 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
                             className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-slate-100 hover:bg-emerald-100 text-slate-700 hover:text-emerald-800 dark:bg-slate-800 dark:text-slate-300 transition-colors cursor-pointer"
                             title={
                               isVi
-                                ? 'Khôi phục dữ liệu gốc từ kho bài báo học thuật'
-                                : 'Restore canonical scholarly record'
+                                ? 'Khôi phục dữ liệu gốc từ thư viện học thuật'
+                                : 'Restore original academic record'
                             }
                           >
                             <RotateCcw className="h-2.5 w-2.5 inline mr-0.5" />
-                            {isVi ? 'Bản gốc ACL' : 'Canonical ACL'}
+                            {isVi ? 'Thư viện học thuật' : 'Original Record'}
                           </button>
                           <button
                             type="button"
@@ -862,7 +894,7 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
                             onClick={() => applyItemPreset(idx, 'year_mismatch_intext')}
                             className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-violet-100/90 hover:bg-violet-200 text-violet-900 dark:bg-violet-950 dark:text-violet-300 transition-colors cursor-pointer"
                           >
-                            {isVi ? 'Lệch năm trong bài' : 'In-text Year Drift'}
+                            {isVi ? 'Lệch năm trong bài' : 'Wrong In-Text Year'}
                           </button>
                           <button
                             type="button"
@@ -923,7 +955,7 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
                         </div>
                         <div className="md:col-span-3">
                           <label className="block text-[10px] font-mono uppercase text-slate-500 mb-0.5">
-                            {isVi ? 'DOI / Mã định danh' : 'DOI / Identifier'}
+                            {isVi ? 'Mã bài báo (DOI)' : 'DOI'}
                           </label>
                           <input
                             type="text"
@@ -975,7 +1007,7 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
                           <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
                             {isVi
                               ? 'Năm ghi trong đoạn văn (tùy chọn):'
-                              : 'In-text year override (optional):'}
+                              : 'Different year in body text (optional):'}
                           </span>
                           <input
                             type="text"
@@ -1489,7 +1521,6 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
                                     rawUrlStatus === 'unchecked'
                                   ? rawUrlStatus
                                   : null;
-                            const urlCode = r.url_status_code ?? r.features?.url_status_code;
                             const markerDisplay =
                               r.composite_label || r.sub_index || r.numeric_index != null
                                 ? getCitationMarkerLabel(r, r.index ? r.index - 1 : rIdx)
@@ -1522,13 +1553,14 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
                               is_overridden: false,
                             };
 
-                            const explanationText = isVi
-                              ? r.reasoning_vi ||
-                                r.reasoning ||
-                                getVerdictExplanation(verdictForExplain, 'vi')
-                              : r.reasoning_en ||
-                                r.reasoning ||
-                                getVerdictExplanation(verdictForExplain, 'en');
+                            const rawExplanation = isVi
+                              ? r.reasoning_vi || r.reasoning
+                              : r.reasoning_en || r.reasoning;
+                            const explanationText = formatSandboxExplanation(
+                              rawExplanation,
+                              verdictForExplain,
+                              lang,
+                            );
 
                             const rulesList = r.triggered_rules ?? [];
                             const isTechExpanded = Boolean(expandedTechCards[cardKey]);
@@ -1570,35 +1602,41 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
                                             ? 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800'
                                             : urlStatus === 'unchecked'
                                               ? 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
-                                              : urlStatus === 'alive' ||
-                                                  urlStatus === 'restricted_alive'
+                                              : urlStatus === 'alive'
                                                 ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800'
-                                                : urlStatus === 'archived_alive'
+                                                : urlStatus === 'restricted_alive' ||
+                                                    urlStatus === 'archived_alive'
                                                   ? 'bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800'
                                                   : 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-300 dark:border-red-800'
                                         }`}
                                       >
                                         {isUrlMismatch
                                           ? isVi
-                                            ? `HTTP ${urlCode || 200} · Sai nội dung trang`
-                                            : `HTTP ${urlCode || 200} · Wrong Page`
+                                            ? 'Nội dung trang không khớp'
+                                            : 'Page content mismatch'
                                           : urlStatus === 'unchecked'
                                             ? isVi
                                               ? 'Đã khớp học thuật'
-                                              : 'Scholarly Match'
+                                              : 'Academic Match'
                                             : urlStatus === 'alive'
-                                              ? `HTTP ${urlCode || 200} OK`
+                                              ? isVi
+                                                ? 'Đường dẫn hoạt động'
+                                                : 'Link works'
                                               : urlStatus === 'restricted_alive'
-                                                ? `HTTP ${urlCode || 403} OK`
+                                                ? isVi
+                                                  ? 'Trang web hạn chế truy cập tự động'
+                                                  : 'Site restricts automated checks'
                                                 : urlStatus === 'archived_alive'
                                                   ? isVi
-                                                    ? 'Bản lưu Wayback'
-                                                    : 'Wayback Archived'
+                                                    ? 'Bản lưu trữ web'
+                                                    : 'Web archive copy'
                                                   : urlStatus === 'dead_link'
-                                                    ? `HTTP ${urlCode || 404} · ${isVi ? 'Liên kết hỏng' : 'Dead Link'}`
+                                                    ? isVi
+                                                      ? 'Liên kết không truy cập được'
+                                                      : 'Link unreachable'
                                                     : isVi
-                                                      ? 'URL không hợp lệ'
-                                                      : 'Invalid URL'}
+                                                      ? 'Liên kết không hợp lệ'
+                                                      : 'Invalid link'}
                                       </span>
                                     )}
                                     {isLayer1Applicable && (
@@ -1659,11 +1697,11 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
                                       <div className="font-semibold">
                                         {observedWeb?.title
                                           ? isVi
-                                            ? 'Thông tin trang web: '
-                                            : 'Observed web metadata: '
+                                            ? 'Thông tin trên trang web: '
+                                            : 'Found on web page: '
                                           : isVi
-                                            ? 'Bản ghi chuẩn đối chiếu: '
-                                            : 'Canonical match: '}
+                                            ? 'Thông tin bài báo gốc: '
+                                            : 'Official source found: '}
                                         {observedWeb?.title || primarySource?.title}
                                       </div>
                                     ) : null}
@@ -1747,7 +1785,7 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
         onOpenChange={setUpgradeOpen}
         featureName={
           isVi
-            ? 'Tạo & Kiểm chứng Bản thảo PDF mẫu'
+            ? 'Tạo & Kiểm tra bài mẫu PDF'
             : 'Sample PDF Verification'
         }
       />

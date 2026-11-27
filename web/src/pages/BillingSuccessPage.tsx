@@ -294,11 +294,11 @@ export function BillingSuccessPage() {
             <Sparkles className="h-3.5 w-3.5" />
             {isVNPay
               ? lang === 'vi'
-                ? 'THANH TOÁN THÀNH CÔNG · VNPAY VERIFIED'
-                : 'PAYMENT SUCCEEDED · VNPAY VERIFIED'
+                ? 'THANH TOÁN THÀNH CÔNG · ĐÃ XÁC NHẬN QUA VNPAY'
+                : 'PAYMENT CONFIRMED · VNPAY'
               : lang === 'vi'
-                ? 'THANH TOÁN THÀNH CÔNG · STRIPE VERIFIED'
-                : 'PAYMENT SUCCEEDED · STRIPE VERIFIED'}
+                ? 'THANH TOÁN THÀNH CÔNG · ĐÃ XÁC NHẬN QUA STRIPE'
+                : 'PAYMENT CONFIRMED · STRIPE'}
           </div>
           <h1 className="font-display text-2xl sm:text-4xl font-bold text-slate-900 dark:text-white tracking-tight">
             {lang === 'vi'
@@ -320,8 +320,8 @@ export function BillingSuccessPage() {
             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#F4F2EC] dark:bg-slate-800 border border-[#E7E3D9] dark:border-slate-700 text-[11px] font-mono font-semibold text-slate-700 dark:text-slate-200">
               <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
               {lang === 'vi'
-                ? `${SCHOLARLY_APIS_LABEL} Nguồn học thuật`
-                : `${SCHOLARLY_APIS_LABEL} Scholarly APIs`}
+                ? `${SCHOLARLY_APIS_LABEL} Thư viện học thuật`
+                : `${SCHOLARLY_APIS_LABEL} Academic Libraries`}
             </span>
             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#F4F2EC] dark:bg-slate-800 border border-[#E7E3D9] dark:border-slate-700 text-[11px] font-mono font-semibold text-slate-700 dark:text-slate-200">
               <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
@@ -355,7 +355,17 @@ export function BillingSuccessPage() {
             <div className="flex items-center justify-between">
               <span className="text-slate-500">{lang === 'vi' ? 'Gói đăng ký:' : 'Plan:'}</span>
               <span className="font-semibold text-slate-900 dark:text-white">
-                CITRA {transaction.plan_name} ({transaction.billing_cycle})
+                CITRA {transaction.plan_name} (
+                {transaction.billing_cycle === 'annual'
+                  ? lang === 'vi'
+                    ? 'Theo năm'
+                    : 'Annual'
+                  : transaction.billing_cycle === 'monthly'
+                    ? lang === 'vi'
+                      ? 'Theo tháng'
+                      : 'Monthly'
+                    : transaction.billing_cycle}
+                )
               </span>
             </div>
             {transaction.promo_code && (transaction.discount_usd ?? 0) > 0 && (
@@ -373,7 +383,9 @@ export function BillingSuccessPage() {
                 data-testid="receipt-amount-paid"
               >
                 {isVNPay
-                  ? `${formatVndStr(amountVnd)} VND ($${transaction.amount_usd.toFixed(2)} USD)`
+                  ? lang === 'vi'
+                    ? `${formatVndStr(amountVnd)} (~$${transaction.amount_usd.toFixed(2)})`
+                    : `${formatVndStr(amountVnd)} ($${transaction.amount_usd.toFixed(2)} USD)`
                   : `$${transaction.amount_usd.toFixed(2)} USD`}
               </span>
             </div>
@@ -445,7 +457,7 @@ export function BillingSuccessPage() {
           >
             <Link to="/upload">
               <Upload className="h-4 w-4 mr-2" />
-              {lang === 'vi' ? 'Tải tài liệu kiểm chứng ngay' : 'Upload Manuscript Now'}
+              {lang === 'vi' ? 'Tải bài lên kiểm tra ngay' : 'Upload Your Paper Now'}
             </Link>
           </Button>
           <Button

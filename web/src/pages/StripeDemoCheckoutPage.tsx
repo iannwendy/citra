@@ -26,7 +26,6 @@ import {
   Building2,
   KeyRound,
   ExternalLink,
-  Copy,
 } from 'lucide-react';
 import {
   api,
@@ -435,22 +434,20 @@ export function StripeDemoCheckoutPage() {
     { disableEscape: submitting },
   );
   const [vnpayModalTab, setVnpayModalTab] = useState<'atm' | 'qr'>('atm');
-  const [vnpayCardNumber, setVnpayCardNumber] = useState('9704198526191432198');
-  const [vnpayCardHolder, setVnpayCardHolder] = useState('NGUYEN VAN A');
-  const [vnpayIssueDate, setVnpayIssueDate] = useState('07/15');
-  const [vnpayOtpCode, setVnpayOtpCode] = useState('123456');
+  const [vnpayCardNumber, setVnpayCardNumber] = useState('');
+  const [vnpayCardHolder, setVnpayCardHolder] = useState('');
+  const [vnpayIssueDate, setVnpayIssueDate] = useState('');
+  const [vnpayOtpCode, setVnpayOtpCode] = useState('');
   const [vnpayModalError, setVnpayModalError] = useState<string | null>(null);
-  const [vnpayShowSignedUrl, setVnpayShowSignedUrl] = useState(false);
-  const [vnpayCopiedUrl, setVnpayCopiedUrl] = useState(false);
 
-  // Card form state (pre-filled with Stripe official test card 4242 for instant sandbox testing)
-  const [cardNumber, setCardNumber] = useState('4242 4242 4242 4242');
-  const [expiry, setExpiry] = useState('12/28');
-  const [cvc, setCvc] = useState('424');
-  const [cardholderName, setCardholderName] = useState('NGUYEN VAN A');
+  // Card form state (clean empty inputs with placeholders; users can type or use test guide in demo mode)
+  const [cardNumber, setCardNumber] = useState('');
+  const [expiry, setExpiry] = useState('');
+  const [cvc, setCvc] = useState('');
+  const [cardholderName, setCardholderName] = useState('');
   const [cardBrand, setCardBrand] = useState<CardBrand>('visa');
   const [billingCountry, setBillingCountry] = useState('VN');
-  const [billingZip, setBillingZip] = useState('700000');
+  const [billingZip, setBillingZip] = useState('');
 
   // Promo code state (6-character alphanumeric)
   const [promoInput, setPromoInput] = useState('');
@@ -591,6 +588,12 @@ export function StripeDemoCheckoutPage() {
   const handleAutofillTestCard = (brand: CardBrand) => {
     setCardBrand(brand);
     setError(null);
+    if (!cardholderName.trim()) {
+      setCardholderName('NGUYEN VAN A');
+    }
+    if (!billingZip.trim()) {
+      setBillingZip('700000');
+    }
     if (brand === 'visa') {
       setCardNumber('4242 4242 4242 4242');
       setExpiry('12/28');
@@ -885,7 +888,11 @@ export function StripeDemoCheckoutPage() {
       if (!res.is_success) {
         const msg = lang === 'vi' ? res.message_vi : res.message_en;
         setVnpayModalError(
-          `[vnp_ResponseCode: ${res.vnp_response_code}] ${msg}`,
+          res.vnp_response_code
+            ? lang === 'vi'
+              ? `${msg} (Mã lỗi: ${res.vnp_response_code})`
+              : `${msg} (Error code: ${res.vnp_response_code})`
+            : msg,
         );
         setSubmitting(false);
         return;
@@ -909,13 +916,6 @@ export function StripeDemoCheckoutPage() {
       );
       setSubmitting(false);
     }
-  };
-
-  const handleCopySignedUrl = () => {
-    if (!vnpayGatewayData?.payment_url) return;
-    void navigator.clipboard?.writeText(vnpayGatewayData.payment_url);
-    setVnpayCopiedUrl(true);
-    setTimeout(() => setVnpayCopiedUrl(false), 2000);
   };
 
   if (loading) {
@@ -1017,8 +1017,8 @@ export function StripeDemoCheckoutPage() {
                     ? 'Chế độ thử nghiệm'
                     : 'Test Mode'
                   : lang === 'vi'
-                    ? 'Mã hóa TLS 1.3'
-                    : 'TLS 1.3 Encrypted'}
+                    ? 'Bảo mật thanh toán'
+                    : 'Secure Checkout'}
               </span>
             </div>
 
@@ -1054,7 +1054,7 @@ export function StripeDemoCheckoutPage() {
                     className="inline-flex items-center gap-2 px-2.5 py-1 rounded-lg bg-sky-50 dark:bg-sky-500/15 border border-sky-200/90 dark:border-sky-400/30 text-[#005BAA] dark:text-sky-200 text-xs font-mono font-medium flex-wrap"
                     data-testid="checkout-vnd-amount-display"
                   >
-                    <VNPayLogo active />
+                    <CreditCard className="h-3.5 w-3.5 shrink-0" />
                     <span>≈ ${details.amount_usd.toFixed(2)} USD</span>
                     <span className="text-[10px] text-sky-700/75 dark:text-sky-300/70">
                       (1 USD = {formatVnd(usdToVndRate)})
@@ -1084,7 +1084,7 @@ export function StripeDemoCheckoutPage() {
                     data-testid="checkout-vnd-amount-display"
                   >
                     <VNPayLogo active />
-                    <span>≈ {formatVnd(amountVnd)} VND</span>
+                    <span>≈ {formatVnd(amountVnd)}</span>
                     <span className="text-[10px] text-sky-700/75 dark:text-sky-300/70">
                       (1 USD = {formatVnd(usdToVndRate)})
                     </span>
@@ -1350,7 +1350,7 @@ export function StripeDemoCheckoutPage() {
               <strong className="text-[#005BAA] dark:text-sky-300">VNPAY</strong>
             </span>
             <span className="font-mono text-[10px]">
-              PCI-DSS · TLS 1.3
+              {lang === 'vi' ? 'Bảo mật chuẩn ngân hàng' : 'Bank-grade security'}
             </span>
           </div>
         </div>
@@ -1476,7 +1476,7 @@ export function StripeDemoCheckoutPage() {
                 }`}
               >
                 <CreditCard className="h-3.5 w-3.5 shrink-0" />
-                <span className="truncate">{lang === 'vi' ? 'Thẻ Quốc Tế' : 'Card'}</span>
+                <span className="truncate">{lang === 'vi' ? 'Thẻ quốc tế' : 'Card'}</span>
               </button>
 
               <button
@@ -1759,8 +1759,8 @@ export function StripeDemoCheckoutPage() {
                     <>
                       <Loader2 className="h-4 w-4 animate-spin mr-2" />
                       {lang === 'vi'
-                        ? 'Đang mã hóa & xử lý giao dịch Stripe...'
-                        : 'Tokenizing & Processing Stripe Payment...'}
+                        ? 'Đang xử lý thanh toán...'
+                        : 'Processing payment...'}
                     </>
                   ) : (
                     <>
@@ -1859,7 +1859,7 @@ export function StripeDemoCheckoutPage() {
                         </span>
                       </div>
                       <p className="text-xs font-bold">
-                        {lang === 'vi' ? 'Thẻ ATM Nội Địa' : 'Domestic ATM Card'}
+                        {lang === 'vi' ? 'Thẻ ATM nội địa' : 'Domestic ATM Card'}
                       </p>
                       <p className="text-[10px] text-slate-600 dark:text-slate-300">
                         {lang === 'vi' ? 'NCB, VCB, TCB, BIDV...' : '40+ Vietnam Banks'}
@@ -1886,7 +1886,7 @@ export function StripeDemoCheckoutPage() {
                         </span>
                       </div>
                       <p className="text-xs font-bold">
-                        {lang === 'vi' ? 'Quét Mã VNPAY-QR' : 'Scan VNPAY-QR'}
+                        {lang === 'vi' ? 'Quét mã VNPAY-QR' : 'Scan VNPAY-QR'}
                       </p>
                       <p className="text-[10px] text-slate-600 dark:text-slate-300">
                         {lang === 'vi' ? 'App Banking / Ví VNPay' : 'Banking App / VietQR'}
@@ -1913,7 +1913,7 @@ export function StripeDemoCheckoutPage() {
                         </span>
                       </div>
                       <p className="text-xs font-bold">
-                        {lang === 'vi' ? 'Thẻ Quốc Tế VNPay' : 'Intl Card via VNPay'}
+                        {lang === 'vi' ? 'Thẻ quốc tế VNPay' : 'Intl Card via VNPay'}
                       </p>
                       <p className="text-[10px] text-slate-600 dark:text-slate-300">
                         Visa / MC / JCB
@@ -2028,8 +2028,8 @@ export function StripeDemoCheckoutPage() {
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
                     {lang === 'vi'
-                      ? 'Thông tin thẻ của bạn được mã hóa bằng Token thiết bị chuẩn EMVCo, không chia sẻ số thẻ thật với hệ thống.'
-                      : 'Your card details are tokenized via EMVCo device credentials and never shared directly with merchants.'}
+                      ? 'Số thẻ thật của bạn được bảo mật trực tiếp trên thiết bị và không bao giờ chia sẻ với CITRA.'
+                      : 'Your real card number stays private on your device and is never shared with CITRA.'}
                   </p>
                 </div>
 
@@ -2092,8 +2092,8 @@ export function StripeDemoCheckoutPage() {
             <p className="text-[11px] text-center text-slate-500 flex items-center justify-center gap-1.5">
               <ShieldCheck className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
               {lang === 'vi'
-                ? 'Bảo mật chuẩn PCI-DSS & TLS 1.3: Không lưu số thẻ hay mã OTP. Nâng cấp tức thì.'
-                : 'PCI-DSS & TLS 1.3 Protected: Card numbers and OTP are never stored. Instant upgrade.'}
+                ? 'Bảo mật thanh toán chuẩn ngân hàng: Không lưu số thẻ hay mã OTP. Nâng cấp tức thì.'
+                : 'Bank-grade checkout security: Card numbers and OTP are never stored. Instant upgrade.'}
             </p>
           </div>
         </div>
@@ -2140,11 +2140,11 @@ export function StripeDemoCheckoutPage() {
                       className="font-display text-sm sm:text-base font-bold text-slate-900 dark:text-white"
                     >
                       {lang === 'vi'
-                        ? 'Cổng Thanh Toán VNPAY Sandbox v2.1.0'
-                        : 'VNPAY Sandbox Payment Gateway v2.1.0'}
+                        ? 'Thanh toán qua VNPAY'
+                        : 'Pay with VNPAY'}
                     </h3>
                     <p className="text-[11px] font-mono text-slate-500">
-                      Mã đơn (vnp_TxnRef):{' '}
+                      {lang === 'vi' ? 'Mã đơn hàng:' : 'Order ID:'}{' '}
                       <strong
                         className="text-slate-800 dark:text-slate-200"
                         data-testid="vnpay-modal-txn-ref"
@@ -2166,7 +2166,7 @@ export function StripeDemoCheckoutPage() {
                 </button>
               </div>
 
-              {/* Order Summary & Cryptographic Checksum Inspector */}
+              {/* Order Amount Summary */}
               <div
                 className="p-3.5 rounded-2xl bg-[#F4F2EC]/90 dark:bg-slate-950 border border-[#E7E3D9] dark:border-slate-800 text-slate-900 dark:text-white space-y-2 text-xs"
                 data-testid="vnpay-signature-inspector"
@@ -2182,64 +2182,6 @@ export function StripeDemoCheckoutPage() {
                     {formatVnd(vnpayGatewayData.amount_vnd)}
                   </span>
                 </div>
-
-                {/* Toggle Signed URL Inspector */}
-                <div className="pt-1.5 border-t border-[#E7E3D9] dark:border-slate-800 flex items-center justify-between gap-2 flex-wrap">
-                  <button
-                    type="button"
-                    data-testid="vnpay-toggle-signed-url-btn"
-                    onClick={() => setVnpayShowSignedUrl((prev) => !prev)}
-                    className="text-[11px] font-mono text-[#005BAA] hover:text-sky-700 dark:text-sky-400 dark:hover:text-sky-300 underline cursor-pointer"
-                  >
-                    {vnpayShowSignedUrl
-                      ? lang === 'vi'
-                        ? 'Ẩn URL chữ ký số vnp_SecureHash'
-                        : 'Hide signed vnp_SecureHash URL'
-                      : lang === 'vi'
-                        ? 'Xem URL chuẩn VNPay & vnp_SecureHash'
-                        : 'Inspect signed VNPay URL & vnp_SecureHash'}
-                  </button>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={handleCopySignedUrl}
-                      className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded bg-white hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 cursor-pointer"
-                    >
-                      <Copy className="h-3 w-3" />
-                      {vnpayCopiedUrl
-                        ? lang === 'vi'
-                          ? 'Đã chép'
-                          : 'Copied'
-                        : 'Copy URL'}
-                    </button>
-                    {(() => {
-                      const safeGatewayUrl = toSafeExternalHref(
-                        vnpayGatewayData.payment_url,
-                      );
-                      if (!safeGatewayUrl) return null;
-                      return (
-                        <a
-                          href={safeGatewayUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded bg-sky-100 hover:bg-sky-200 dark:bg-sky-900/70 dark:hover:bg-sky-800 text-[#005BAA] dark:text-sky-200"
-                        >
-                          <ExternalLink className="h-3 w-3" />
-                          sandbox.vnpayment.vn
-                        </a>
-                      );
-                    })()}
-                  </div>
-                </div>
-
-                {vnpayShowSignedUrl && (
-                  <div
-                    className="p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 font-mono text-[10px] text-slate-700 dark:text-slate-300 break-all max-h-28 overflow-y-auto"
-                    data-testid="vnpay-signed-url-box"
-                  >
-                    {vnpayGatewayData.payment_url}
-                  </div>
-                )}
               </div>
 
               {/* Modal Payment Mode Switcher: ATM Card vs VNPAY-QR */}
@@ -2294,52 +2236,54 @@ export function StripeDemoCheckoutPage() {
 
               {vnpayModalTab === 'atm' ? (
                 <div className="space-y-3">
-                  {/* 1-Click VNPay Sandbox Test Scenarios */}
-                  <div className="space-y-1.5">
-                    <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-300 block">
-                      {lang === 'vi'
-                        ? 'Chọn nhanh kịch bản Thẻ Test NCB Sandbox:'
-                        : 'Quick-Fill NCB Sandbox Test Card Scenarios:'}
-                    </span>
-                    <div className="grid grid-cols-3 gap-1.5">
-                      <button
-                        type="button"
-                        data-testid="vnpay-testcard-00"
-                        onClick={() => handleAutofillVNPayTestCard('00')}
-                        className={`py-1.5 px-2 rounded-lg text-[11px] font-mono font-semibold border transition-all cursor-pointer ${
-                          vnpayCardNumber === '9704198526191432198'
-                            ? 'bg-emerald-600 text-white border-emerald-600'
-                            : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
-                        }`}
-                      >
-                        ✓ NCB ••2198 (00)
-                      </button>
-                      <button
-                        type="button"
-                        data-testid="vnpay-testcard-51"
-                        onClick={() => handleAutofillVNPayTestCard('51')}
-                        className={`py-1.5 px-2 rounded-lg text-[11px] font-mono font-semibold border transition-all cursor-pointer ${
-                          vnpayCardNumber === '9704195798621412'
-                            ? 'bg-amber-600 text-white border-amber-600'
-                            : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
-                        }`}
-                      >
-                        ⚠ Hết tiền (51)
-                      </button>
-                      <button
-                        type="button"
-                        data-testid="vnpay-testcard-12"
-                        onClick={() => handleAutofillVNPayTestCard('12')}
-                        className={`py-1.5 px-2 rounded-lg text-[11px] font-mono font-semibold border transition-all cursor-pointer ${
-                          vnpayCardNumber === '9704193360968149'
-                            ? 'bg-rose-600 text-white border-rose-600'
-                            : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
-                        }`}
-                      >
-                        ✕ Khóa thẻ (12)
-                      </button>
+                  {/* 1-Click Test Card Helper (only in Demo/Test Mode) */}
+                  {isSandboxMode && (
+                    <div className="space-y-1.5">
+                      <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-300 block">
+                        {lang === 'vi'
+                          ? 'Chế độ thử nghiệm — điền nhanh thẻ mẫu:'
+                          : 'Test mode — quick-fill sample card:'}
+                      </span>
+                      <div className="grid grid-cols-3 gap-1.5">
+                        <button
+                          type="button"
+                          data-testid="vnpay-testcard-00"
+                          onClick={() => handleAutofillVNPayTestCard('00')}
+                          className={`py-1.5 px-2 rounded-lg text-[11px] font-medium border transition-all cursor-pointer ${
+                            vnpayCardNumber === '9704198526191432198'
+                              ? 'bg-emerald-600 text-white border-emerald-600'
+                              : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                          }`}
+                        >
+                          {lang === 'vi' ? '✓ Thành công' : '✓ Approved'}
+                        </button>
+                        <button
+                          type="button"
+                          data-testid="vnpay-testcard-51"
+                          onClick={() => handleAutofillVNPayTestCard('51')}
+                          className={`py-1.5 px-2 rounded-lg text-[11px] font-medium border transition-all cursor-pointer ${
+                            vnpayCardNumber === '9704195798621412'
+                              ? 'bg-amber-600 text-white border-amber-600'
+                              : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                          }`}
+                        >
+                          {lang === 'vi' ? '⚠ Thiếu số dư' : '⚠ Low balance'}
+                        </button>
+                        <button
+                          type="button"
+                          data-testid="vnpay-testcard-12"
+                          onClick={() => handleAutofillVNPayTestCard('12')}
+                          className={`py-1.5 px-2 rounded-lg text-[11px] font-medium border transition-all cursor-pointer ${
+                            vnpayCardNumber === '9704193360968149'
+                              ? 'bg-rose-600 text-white border-rose-600'
+                              : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                          }`}
+                        >
+                          {lang === 'vi' ? '✕ Thẻ bị khóa' : '✕ Locked card'}
+                        </button>
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   {/* Card Number */}
                   <div className="flex flex-col gap-1">
@@ -2348,8 +2292,8 @@ export function StripeDemoCheckoutPage() {
                       className="text-xs font-semibold flex items-center gap-1 h-4"
                     >
                       {lang === 'vi'
-                        ? 'Số thẻ ATM nội địa (Ngân hàng NCB Sandbox)'
-                        : 'Domestic ATM Card Number (NCB Sandbox)'}
+                        ? 'Số thẻ ATM nội địa'
+                        : 'Domestic ATM Card Number'}
                     </Label>
                     <Input
                       id="vnpay-card-number"
@@ -2358,7 +2302,7 @@ export function StripeDemoCheckoutPage() {
                       onChange={(e) =>
                         setVnpayCardNumber(e.target.value.replace(/\D/g, '').slice(0, 19))
                       }
-                      placeholder="9704198526191432198"
+                      placeholder="9704 1985 2619 1432 198"
                       className="font-mono text-sm h-10 rounded-xl"
                     />
                   </div>
@@ -2409,12 +2353,14 @@ export function StripeDemoCheckoutPage() {
                       >
                         <KeyRound className="h-3.5 w-3.5 text-[#005BAA]" />
                         {lang === 'vi'
-                          ? 'Mã xác thực OTP Sandbox (Mặc định: 123456)'
-                          : 'Sandbox OTP Code (Default: 123456)'}
+                          ? 'Mã xác thực OTP'
+                          : 'OTP Verification Code'}
                       </Label>
-                      <span className="text-[10px] font-mono text-emerald-600">
-                        OTP = 123456
-                      </span>
+                      {isSandboxMode && (
+                        <span className="text-[10px] font-mono text-emerald-600">
+                          {lang === 'vi' ? 'Mã thử nghiệm: 123456' : 'Test code: 123456'}
+                        </span>
+                      )}
                     </div>
                     <Input
                       id="vnpay-otp"
@@ -2436,7 +2382,7 @@ export function StripeDemoCheckoutPage() {
                 >
                   <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-sky-100 dark:bg-sky-950 text-[#005BAA] dark:text-sky-300 text-[11px] font-semibold">
                     <QrCode className="h-3.5 w-3.5" />
-                    <span>VietQR · VNPAY-QR EMVCo Dynamic Code</span>
+                    <span>{lang === 'vi' ? 'Quét mã VietQR · VNPAY-QR' : 'Scan VietQR · VNPAY-QR'}</span>
                   </div>
 
                   {/* Real ISO/IEC 18004 QR Code Frame */}
@@ -2446,9 +2392,9 @@ export function StripeDemoCheckoutPage() {
                       const qrPayload =
                         rawUrl && new TextEncoder().encode(rawUrl).length <= 390
                           ? rawUrl
-                          : `https://sandbox.vnpayment.vn/paymentv2/vpcpay.html?vnp_TxnRef=${encodeURIComponent(
+                          : `vnpay://pay?order=${encodeURIComponent(
                               vnpayGatewayData?.vnp_txn_ref || sessionId,
-                            )}&vnp_Amount=${encodeURIComponent(
+                            )}&amount=${encodeURIComponent(
                               String(vnpayGatewayData?.vnp_amount || 0),
                             )}`;
                       const qrMatrix = encodeQrMatrix(qrPayload);
@@ -2489,9 +2435,13 @@ export function StripeDemoCheckoutPage() {
                   </div>
 
                   <p className="text-xs text-slate-600 dark:text-slate-400 max-w-xs mx-auto">
-                    {lang === 'vi'
-                      ? 'Trong môi trường Sandbox, nhấn nút bên dưới để giả lập quét mã VNPAY-QR thành công và nhận callback chữ ký số.'
-                      : 'In Sandbox mode, click confirm below to simulate an instant VNPAY-QR mobile banking scan and signed callback.'}
+                    {isSandboxMode
+                      ? lang === 'vi'
+                        ? 'Đây là cổng thanh toán mô phỏng — nhấn nút bên dưới để xác nhận thanh toán thử nghiệm.'
+                        : 'This is a test checkout — click below to confirm the test QR payment.'
+                      : lang === 'vi'
+                        ? 'Mở ứng dụng ngân hàng để quét mã VNPAY-QR, sau đó nhấn xác nhận bên dưới.'
+                        : 'Open your banking app to scan the VNPAY-QR code, then click confirm below.'}
                   </p>
                 </div>
               )}
@@ -2517,8 +2467,8 @@ export function StripeDemoCheckoutPage() {
                       <CheckCircle2 className="h-4 w-4 mr-2" />
                       {vnpayModalTab === 'qr'
                         ? lang === 'vi'
-                          ? `Xác nhận đã quét VNPAY-QR · ${formatVnd(vnpayGatewayData.amount_vnd)}`
-                          : `Simulate VNPAY-QR Scan · ${formatVnd(vnpayGatewayData.amount_vnd)}`
+                          ? `Xác nhận thanh toán VNPAY-QR · ${formatVnd(vnpayGatewayData.amount_vnd)}`
+                          : `Confirm VNPAY-QR Payment · ${formatVnd(vnpayGatewayData.amount_vnd)}`
                         : lang === 'vi'
                           ? `Xác nhận OTP & Thanh toán ${formatVnd(vnpayGatewayData.amount_vnd)}`
                           : `Verify OTP & Pay ${formatVnd(vnpayGatewayData.amount_vnd)}`}
@@ -2705,8 +2655,8 @@ export function StripeDemoCheckoutPage() {
                     <>
                       <Loader2 className="h-4 w-4 animate-spin mr-2" />
                       {lang === 'vi'
-                        ? 'Đang xác thực sinh trắc học...'
-                        : 'Verifying Biometric Token...'}
+                        ? 'Đang xác nhận thanh toán...'
+                        : 'Confirming payment...'}
                     </>
                   ) : (
                     <>
@@ -2831,7 +2781,7 @@ export function StripeDemoCheckoutPage() {
                     : celebrationStage === 'provisioning'
                       ? lang === 'vi'
                         ? `Đang kích hoạt ${displayPlanName}...`
-                        : `Provisioning ${details.plan_name} Workspace...`
+                        : `Setting up your ${details.plan_name} plan...`
                       : lang === 'vi'
                         ? `Chào mừng đến với ${displayPlanName}!`
                         : `Welcome to ${details.plan_name}!`}
@@ -2839,12 +2789,12 @@ export function StripeDemoCheckoutPage() {
                 <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 max-w-sm mx-auto">
                   {celebrationStage === 'verifying'
                     ? lang === 'vi'
-                      ? 'Đối chiếu chữ ký mật mã & xác nhận thanh toán từ ngân hàng phát hành.'
-                      : 'Validating cryptographic signature and confirming settlement with issuing bank.'
+                      ? 'Đang xác nhận giao dịch với ngân hàng phát hành.'
+                      : 'Confirming your payment with the issuing bank.'
                     : celebrationStage === 'provisioning'
                       ? lang === 'vi'
-                        ? 'Mở khóa hạn mức tải tài liệu, xuất báo cáo PDF/DOCX và 15+ nguồn học thuật.'
-                        : 'Unlocking elevated document quotas, PDF/DOCX exports, and 15+ scholarly APIs.'
+                        ? 'Mở khóa hạn mức tải bài viết, xuất báo cáo Word/PDF và 15+ thư viện học thuật.'
+                        : 'Unlocking higher check limits, Word/PDF exports, and 15+ academic libraries.'
                       : lang === 'vi'
                         ? 'Tài khoản của bạn đã được nâng cấp thành công. Đang mở biên lai điện tử...'
                         : 'Your workspace is now upgraded. Opening your official payment receipt...'}

@@ -3,7 +3,6 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   SCHOLARLY_APIS_LABEL,
-  SYMBOLIC_RULES_RANGE,
   isDemoEvaluatorMode,
 } from '@/lib/productFacts';
 import {
@@ -89,10 +88,10 @@ function resolveComparisonValue(value: LocalizedQuotaValue, lang: Lang): boolean
 
 const COMPARISON_MATRIX: ComparisonRow[] = [
   {
-    category_en: 'Monthly Manuscript Checks (.PDF, .DOCX, .BIB, .RIS)',
-    category_vi: 'Số lượt kiểm tra bản thảo (.PDF, .DOCX, .BIB, .RIS) / tháng',
-    basic: { en: '3 manuscripts / mo', vi: '3 bản thảo / tháng' },
-    pro: { en: '50 manuscripts / mo', vi: '50 bản thảo / tháng' },
+    category_en: 'Monthly Paper Checks (PDF, Word, Zotero/Mendeley)',
+    category_vi: 'Số lượt kiểm tra bài viết (PDF, Word, file Zotero/Mendeley) / tháng',
+    basic: { en: '3 papers / mo', vi: '3 bài viết / tháng' },
+    pro: { en: '50 papers / mo', vi: '50 bài viết / tháng' },
     ultra: { en: 'Up to 1,000 / mo', vi: 'Tối đa 1.000 / tháng' },
   },
   {
@@ -103,52 +102,52 @@ const COMPARISON_MATRIX: ComparisonRow[] = [
     ultra: { en: '100 MB', vi: '100 MB' },
   },
   {
-    category_en: 'Maximum Pages per Manuscript',
-    category_vi: 'Số trang tối đa mỗi bản thảo',
+    category_en: 'Maximum Pages per Paper',
+    category_vi: 'Số trang tối đa mỗi bài viết',
     basic: { en: '15 pages', vi: '15 trang' },
     pro: { en: '100 pages', vi: '100 trang' },
     ultra: { en: '500 pages', vi: '500 trang' },
   },
   {
-    category_en: 'Citations Verified per Manuscript',
+    category_en: 'Citations Verified per Paper',
     category_vi: 'Số trích dẫn kiểm chứng mỗi tài liệu',
     basic: { en: 'Up to 30', vi: 'Tối đa 30 trích dẫn' },
     pro: { en: 'Up to 200', vi: 'Tối đa 200 trích dẫn' },
     ultra: { en: 'Unlimited', vi: 'Không giới hạn' },
   },
   {
-    category_en: 'Simultaneous Multi-File Upload (.PDF / .DOCX)',
-    category_vi: 'Tải lên và kiểm tra đồng thời nhiều tệp (.PDF / .DOCX)',
+    category_en: 'Simultaneous Multi-File Upload (PDF / Word)',
+    category_vi: 'Tải lên và kiểm tra đồng thời nhiều tệp (PDF / Word)',
     basic: false,
     pro: { en: 'Up to 10 files', vi: 'Tối đa 10 tệp / lần' },
     ultra: { en: 'Up to 50 files', vi: 'Tối đa 50 tệp / lần' },
   },
   {
-    category_en: 'Scholarly Indexes & Legal Registry',
-    category_vi: 'Cơ sở dữ liệu học thuật & Văn bản Pháp luật VN',
+    category_en: 'Academic Libraries & Legal Registry',
+    category_vi: 'Thư viện học thuật & Văn bản pháp luật VN',
     basic: {
       en: 'Crossref, OpenAlex & Vietnam Legal Registry',
-      vi: 'Crossref, OpenAlex & Văn bản Pháp luật VN',
+      vi: 'Crossref, OpenAlex & Văn bản pháp luật VN',
     },
     pro: {
-      en: '15+ Scholarly Indexes (PubMed, arXiv, DOAJ, DBLP, DataCite, Wayback, Retraction Watch)',
-      vi: '15+ CSDL học thuật quốc tế (PubMed, arXiv, DOAJ, DBLP, DataCite, Wayback, Retraction Watch)',
+      en: '15+ Academic Libraries (PubMed, arXiv, DOAJ, DBLP, DataCite, Web Archive, Retraction Watch)',
+      vi: '15+ thư viện học thuật quốc tế (PubMed, arXiv, DOAJ, DBLP, DataCite, Kho lưu trữ web, Retraction Watch)',
     },
     ultra: {
-      en: 'All 15+ Indexes + Extended Google Scholar Discovery',
-      vi: 'Toàn bộ 15+ CSDL + Tra cứu mở rộng Google Scholar',
+      en: 'All 15+ Libraries + Extended Google Scholar Discovery',
+      vi: 'Toàn bộ 15+ thư viện + Tra cứu mở rộng Google Scholar',
     },
   },
   {
-    category_en: 'Automated Bibliography Formatting (APA, IEEE, BibTeX, RIS)',
-    category_vi: 'Tự động chuẩn hóa danh mục tham khảo (APA, IEEE, TDTU, BibTeX, RIS)',
+    category_en: 'Automated Reference Formatting (APA, IEEE, Harvard, Zotero/BibTeX)',
+    category_vi: 'Tự động định dạng danh mục tham khảo (Chuẩn APA / IEEE / Harvard & khóa luận ĐH)',
     basic: false,
     pro: true,
     ultra: true,
   },
   {
-    category_en: 'Deep Semantic Evidence & Claim Alignment',
-    category_vi: 'Đối chiếu ngữ nghĩa sâu giữa câu trích dẫn và tài liệu gốc',
+    category_en: 'Verify Cited Paper Abstracts Match Your Claims',
+    category_vi: 'Kiểm tra bài báo gốc có khớp với ý bạn trích dẫn không',
     basic: false,
     pro: true,
     ultra: true,
@@ -161,28 +160,28 @@ const COMPARISON_MATRIX: ComparisonRow[] = [
     ultra: true,
   },
   {
-    category_en: 'Interactive Citation Network & Step-by-Step Reasoning',
-    category_vi: 'Đồ thị mạng lưới trích dẫn & giải thích suy luận từng bước',
+    category_en: 'Interactive Citation Network & Step-by-Step Explanations',
+    category_vi: 'Sơ đồ mạng lưới trích dẫn & giải thích lý do từng bước',
     basic: false,
     pro: true,
     ultra: true,
   },
   {
-    category_en: 'Academic Report Export Formats',
-    category_vi: 'Định dạng xuất báo cáo thẩm định',
-    basic: { en: 'Interactive Web Report', vi: 'Báo cáo tương tác trực tuyến' },
+    category_en: 'Report Export Formats',
+    category_vi: 'Định dạng xuất báo cáo kiểm tra',
+    basic: { en: 'Interactive Web Report', vi: 'Báo cáo trực tuyến đầy đủ' },
     pro: {
-      en: 'Word (DOCX), PDF, CSV, JSON, BibTeX, RIS',
-      vi: 'Word (DOCX), PDF, CSV, JSON, BibTeX, RIS',
+      en: 'Word, PDF, spreadsheet (CSV) & Zotero/LaTeX citation files',
+      vi: 'Word, PDF, bảng tính Excel (CSV) & file trích dẫn cho Zotero/LaTeX',
     },
     ultra: {
-      en: 'Word, PDF, CSV, JSON, BibTeX, RIS + Full-Cohort Archive (.ZIP)',
-      vi: 'Word, PDF, CSV, JSON, BibTeX, RIS + Trọn bộ cả lớp (.ZIP)',
+      en: 'Word, PDF, CSV, Zotero/LaTeX files + Full-Class Archive (.ZIP)',
+      vi: 'Word, PDF, CSV, file Zotero/LaTeX + Trọn bộ cả lớp (.ZIP)',
     },
   },
   {
     category_en: 'Classroom Cohorts (CITRA-XXXX) & Instructor Review',
-    category_vi: 'Quản lý lớp học (CITRA-XXXX), thống kê khóa luận & giảng viên duyệt kết luận',
+    category_vi: 'Quản lý lớp học (CITRA-XXXX), thống kê bài nộp & giảng viên duyệt kết luận',
     basic: { en: 'Join Classes via Code', vi: 'Tham gia lớp học bằng mã' },
     pro: {
       en: 'Up to 3 Cohorts + Analytics & Verdict Review',
@@ -216,7 +215,7 @@ const FEDERATED_SOURCES = [
   'Europe PMC',
   'Retraction Watch',
   'Wayback Machine',
-  'IETF RFC',
+  'OpenLibrary',
   'VN Legal',
 ];
 
@@ -309,7 +308,10 @@ export function PricingPage() {
   // Admins always have Ultra-level access (contract C3): every checkout CTA is
   // disabled and Ultra is shown as the current plan.
   const adminLocked = Boolean(user && isAdmin);
-  const [billingCycle, setBillingCycle] = useState<BillingCycle>('annual');
+  const initialBillingParam = searchParams.get('billing');
+  const [billingCycle, setBillingCycle] = useState<BillingCycle>(
+    initialBillingParam === 'monthly' ? 'monthly' : 'annual',
+  );
   const [loadingTier, setLoadingTier] = useState<'pro' | 'ultra' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const canceled = searchParams.get('canceled') === '1';
@@ -490,8 +492,8 @@ export function PricingPage() {
                   className="font-solva-sans text-[14.5px] sm:text-[15px] font-normal leading-[22px] max-w-[660px]"
                 >
                   {lang === 'vi'
-                    ? 'Bắt đầu miễn phí với gói Basic cho tiểu luận môn học, hoặc nâng cấp lên Pro & Ultra để tra cứu hơn 15 cơ sở dữ liệu học thuật quốc tế (Crossref, OpenAlex, PubMed, arXiv, DOAJ, DataCite, Wayback Machine, Retraction Watch), đối chiếu ngữ nghĩa sâu giữa câu trích dẫn với tài liệu gốc và xuất báo cáo Word/PDF chuẩn hội đồng.'
-                    : 'Start free with Basic for course essays, or upgrade to Pro & Ultra to cross-check citations across 15+ international scholarly indexes (Crossref, OpenAlex, PubMed, arXiv, DOAJ, DataCite, Wayback Machine, Retraction Watch), verify semantic alignment against source papers, and export Word/PDF reports ready for committee review.'}
+                    ? 'Bắt đầu miễn phí với gói Basic cho tiểu luận môn học, hoặc nâng cấp lên Pro & Ultra để tra cứu hơn 15 thư viện học thuật quốc tế (Crossref, OpenAlex, PubMed, arXiv, DOAJ, DataCite, Retraction Watch...), kiểm tra bài báo gốc có khớp với ý bạn viết không và xuất báo cáo Word/PDF gọn đẹp.'
+                    : 'Start free with Basic for course essays, or upgrade to Pro & Ultra to cross-check citations across 15+ trusted academic libraries (Crossref, OpenAlex, PubMed, arXiv, DOAJ, DataCite, Retraction Watch), verify source abstracts match your claims, and export clean Word/PDF reports.'}
                 </p>
               </SolvaScrollReveal>
 
@@ -602,8 +604,8 @@ export function PricingPage() {
                     >
                       {lang === 'vi' ? (
                         <>
-                          <span className="hidden sm:inline">Thanh toán theo Tháng</span>
-                          <span className="sm:hidden">Theo Tháng</span>
+                          <span className="hidden sm:inline">Thanh toán theo tháng</span>
+                          <span className="sm:hidden">Theo tháng</span>
                         </>
                       ) : (
                         <>
@@ -637,8 +639,8 @@ export function PricingPage() {
                       <span>
                         {lang === 'vi' ? (
                           <>
-                            <span className="hidden sm:inline">Thanh toán theo Năm</span>
-                            <span className="sm:hidden">Theo Năm</span>
+                            <span className="hidden sm:inline">Thanh toán theo năm</span>
+                            <span className="sm:hidden">Theo năm</span>
                           </>
                         ) : (
                           <>
@@ -662,7 +664,7 @@ export function PricingPage() {
                             ? '✨ Đang áp dụng ưu đãi trả theo năm: Tiết kiệm 20% (tương đương hơn 2 tháng miễn phí)!'
                             : '✨ Annual discount active: Equivalent to over 2 months free!'
                           : lang === 'vi'
-                            ? '💡 Mẹo: Chuyển sang gói theo Năm để tiết kiệm ngay 1.200.000 ₫/năm (Pro) hoặc 12.000.000 ₫/năm (Ultra).'
+                            ? '💡 Mẹo: Chuyển sang gói theo năm để tiết kiệm ngay 1.200.000 ₫/năm (Pro) hoặc 12.000.000 ₫/năm (Ultra).'
                             : '💡 Tip: Switch to Annual billing to save $48/year on Pro or $480/year on Ultra.'
                       }
                     />
@@ -781,7 +783,7 @@ export function PricingPage() {
                       </p>
                     </div>
 
-                    {/* Row 3: Price Display (`Sentient` 44px Light + Prominent VND in VI) */}
+                    {/* Row 3: Price Display */}
                     <div
                       style={{ borderColor: 'var(--solva-border)' }}
                       className={`pt-[16px] ${subgridRowPb18Class} border-t`}
@@ -795,32 +797,25 @@ export function PricingPage() {
                               : 'text-[40px] sm:text-[44px] tracking-[-0.05em]'
                           }`}
                         >
-                          {lang === 'vi' ? '0 ₫' : '$0'}
+                          {lang === 'vi' ? 'Miễn phí' : '$0'}
                         </span>
-                        <span
-                          style={{ color: 'var(--solva-muted)' }}
-                          className="font-solva-sans text-[14px]"
-                        >
-                          / {lang === 'vi' ? 'tháng' : 'month'}
-                        </span>
+                        {lang !== 'vi' && (
+                          <span
+                            style={{ color: 'var(--solva-muted)' }}
+                            className="font-solva-sans text-[14px]"
+                          >
+                            / month
+                          </span>
+                        )}
                       </div>
                       <p
                         style={{ color: 'var(--solva-muted)' }}
                         className="font-mono text-[12px] mt-1"
                       >
                         {lang === 'vi'
-                          ? '$0 USD · Miễn phí trọn đời · Không cần thẻ'
+                          ? 'Dùng mãi mãi · Không cần thẻ ngân hàng · Dùng được ngay'
                           : 'Free forever · No credit card required'}
                       </p>
-                      {lang === 'vi' && (
-                        <p
-                          style={{ color: 'var(--solva-muted)' }}
-                          className="font-mono text-[12px] mt-1"
-                        >
-                          <span className="whitespace-nowrap">0 ₫/tháng</span> ·{' '}
-                          <span className="whitespace-nowrap">Khởi tạo tức thì</span>
-                        </p>
-                      )}
                     </div>
 
                     {/* Row 4: Features Checklist (Constructive Basic Framing) */}
@@ -834,15 +829,15 @@ export function PricingPage() {
                       <ul className="space-y-[9px]">
                         {(lang === 'vi'
                           ? [
-                              '3 lượt kiểm tra bản thảo (.PDF, .DOCX, .BIB, .RIS) / tháng',
+                              '3 lượt kiểm tra bài viết (PDF, Word, file Zotero/Mendeley) / tháng',
                               'Dung lượng tối đa 5 MB / tệp tải lên',
                               'Tối đa 15 trang & 30 trích dẫn mỗi tài liệu',
                               'Tự động đối chiếu trích dẫn trong bài với danh mục tham khảo',
-                              'Xác thực xuất bản qua Crossref, OpenAlex & Văn bản Pháp luật VN',
+                              'Xác thực xuất bản qua Crossref, OpenAlex & Văn bản pháp luật VN',
                               'Điểm toàn vẹn trích dẫn & phân loại chi tiết từng lỗi sai lệch',
                             ]
                           : [
-                              '3 manuscript checks (.PDF, .DOCX, .BIB, .RIS) / month',
+                              '3 paper checks (PDF, Word, Zotero/Mendeley) / month',
                               'Maximum 5 MB file size per upload',
                               'Up to 15 pages & 30 citations per document',
                               'Automated in-text to bibliography cross-checking',
@@ -862,12 +857,12 @@ export function PricingPage() {
                           ? [
                               'Báo cáo trực tuyến đầy đủ · Mở khóa xuất Word/PDF ở gói Pro',
                               'Bảng tổng hợp kết luận · Mở khóa đối chiếu trang PDF ở gói Pro',
-                              'Kiểm tra từng bản thảo · Mở khóa tải nhiều tệp cùng lúc ở gói Pro',
+                              'Kiểm tra từng bài viết · Mở khóa tải nhiều tệp cùng lúc ở gói Pro',
                             ]
                           : [
                               'Web verification report included (Word/PDF export on Pro)',
                               'Summary verdict table included (interactive PDF reader on Pro)',
-                              'Single-manuscript check per upload (multi-file upload on Pro)',
+                              'Single-paper check per upload (multi-file upload on Pro)',
                             ]
                         ).map((item) => (
                           <li
@@ -1014,12 +1009,12 @@ export function PricingPage() {
                           className="font-solva-sans text-[15px] leading-[22.5px]"
                         >
                           {lang === 'vi'
-                            ? 'Thẩm định toàn diện khóa luận, luận văn thạc sĩ và bài báo khoa học với hơn 15 nguồn học thuật quốc tế cùng xuất báo cáo chuẩn hội đồng.'
-                            : 'Comprehensive citation verification across 15+ scholarly indexes for full-length theses, research manuscripts, and faculty grading.'}
+                            ? 'Kiểm tra toàn diện khóa luận, luận văn thạc sĩ và bài báo khoa học trên hơn 15 thư viện học thuật cùng xuất báo cáo Word/PDF gọn đẹp.'
+                            : 'Comprehensive citation verification across 15+ trusted academic libraries for full-length theses, research papers, and faculty grading.'}
                         </p>
                       </div>
 
-                      {/* Row 3: Price Display (`Sentient` Light + Prominent VND in VI + USD Subtext) */}
+                      {/* Row 3: Price Display (Clean Primary Currency + Single Subtle Secondary Line) */}
                       <div
                         style={{ borderColor: 'var(--solva-border)' }}
                         className={`pt-[16px] ${subgridRowPb18Class} border-t`}
@@ -1030,10 +1025,12 @@ export function PricingPage() {
                               <span
                                 style={{ color: 'var(--solva-ink)' }}
                                 className="font-solva-serif font-light text-[34px] sm:text-[38px] leading-[44px] tracking-[-0.03em] whitespace-nowrap"
+                                data-testid="pro-price-display"
                               >
                                 <NumberPopIn
-                                  value={billingCycle === 'annual' ? '400.000 ₫' : '500.000 ₫'}
+                                  value={billingCycle === 'annual' ? '400.000' : '500.000'}
                                 />
+                                {' ₫'}
                               </span>
                               <span
                                 style={{ color: 'var(--solva-muted)' }}
@@ -1041,87 +1038,59 @@ export function PricingPage() {
                               >
                                 / tháng
                               </span>
+                              {billingCycle === 'annual' && (
+                                <span
+                                  style={{ color: 'var(--solva-muted)' }}
+                                  className="text-[13px] line-through font-mono whitespace-nowrap"
+                                >
+                                  500.000 ₫
+                                </span>
+                              )}
                             </div>
-                            <div className="flex items-baseline gap-2 flex-wrap mt-1">
+                            <p
+                              data-testid="pro-vnd-equivalent"
+                              style={{ color: 'var(--solva-muted)' }}
+                              className="font-mono text-[12px] mt-1.5 leading-relaxed"
+                            >
+                              {billingCycle === 'annual'
+                                ? 'Thanh toán 4.800.000 ₫/năm (~$192/năm) qua VNPay hoặc thẻ quốc tế'
+                                : 'Thanh toán hàng tháng (~$20/tháng) qua VNPay hoặc thẻ quốc tế'}
+                            </p>
+                          </>
+                        ) : (
+                          <>
+                            <div className="flex items-baseline gap-2 flex-wrap">
                               <span
                                 style={{ color: 'var(--solva-ink)' }}
-                                className="font-mono text-[13px] font-semibold"
+                                className="font-solva-serif font-light text-[40px] sm:text-[44px] leading-[48px] tracking-[-0.05em]"
                                 data-testid="pro-price-display"
                               >
                                 <NumberPopIn value={`$${proPrice}`} />
                               </span>
                               <span
                                 style={{ color: 'var(--solva-muted)' }}
-                                className="font-mono text-[12px]"
+                                className="font-solva-sans text-[14px]"
                               >
-                                USD / tháng
+                                / month
                               </span>
                               {billingCycle === 'annual' && (
                                 <span
                                   style={{ color: 'var(--solva-muted)' }}
-                                  className="text-[12px] line-through font-mono"
+                                  className="text-[14px] line-through font-mono"
                                 >
                                   $20
                                 </span>
                               )}
                             </div>
-                          </>
-                        ) : (
-                          <div className="flex items-baseline gap-2 flex-wrap">
-                            <span
-                              style={{ color: 'var(--solva-ink)' }}
-                              className="font-solva-serif font-light text-[40px] sm:text-[44px] leading-[48px] tracking-[-0.05em]"
-                              data-testid="pro-price-display"
-                            >
-                              <NumberPopIn value={`$${proPrice}`} />
-                            </span>
-                            <span
+                            <p
                               style={{ color: 'var(--solva-muted)' }}
-                              className="font-solva-sans text-[14px]"
+                              className="font-mono text-[12px] mt-1"
                             >
-                              / month
-                            </span>
-                            {billingCycle === 'annual' && (
-                              <span
-                                style={{ color: 'var(--solva-muted)' }}
-                                className="text-[14px] line-through font-mono"
-                              >
-                                $20
-                              </span>
-                            )}
-                          </div>
-                        )}
-                        <p
-                          style={{ color: 'var(--solva-muted)' }}
-                          className="font-mono text-[12px] mt-1"
-                        >
-                          {billingCycle === 'annual'
-                            ? lang === 'vi'
-                              ? 'Thanh toán $192/năm (Tiết kiệm $48/năm — Giảm 20%)'
-                              : 'Billed $192 annually ($16/mo equivalent — Save 20%)'
-                            : lang === 'vi'
-                              ? 'Thanh toán $20 định kỳ hàng tháng (Hoặc $16/tháng khi trả năm)'
-                              : 'Billed $20 monthly (Or $16/mo when billed annually)'}
-                        </p>
-                        {lang === 'vi' && (
-                          <p
-                            data-testid="pro-vnd-equivalent"
-                            style={{ color: 'var(--solva-ink)' }}
-                            className="font-mono text-[12px] font-medium mt-1"
-                          >
-                            {billingCycle === 'annual' ? (
-                              <>
-                                <span className="whitespace-nowrap">400.000 ₫/tháng</span> ·{' '}
-                                <span className="whitespace-nowrap">4.800.000 ₫/năm</span>{' '}
-                                <span className="whitespace-nowrap">qua VNPay</span>
-                              </>
-                            ) : (
-                              <>
-                                <span className="whitespace-nowrap">500.000 ₫/tháng</span>{' '}
-                                <span className="whitespace-nowrap">qua VNPay &amp; thẻ quốc tế</span>
-                              </>
-                            )}
-                          </p>
+                              {billingCycle === 'annual'
+                                ? 'Billed $192/year (Save $48 — 20% off)'
+                                : 'Billed $20 monthly (Or $16/mo billed yearly)'}
+                            </p>
+                          </>
                         )}
                       </div>
 
@@ -1138,27 +1107,27 @@ export function PricingPage() {
                         <ul className="space-y-[9px]">
                           {(lang === 'vi'
                             ? [
-                                '50 lượt kiểm tra (.PDF, .DOCX, .BIB, .RIS) mỗi tháng (gấp 16 lần gói Basic)',
+                                '50 bài viết (PDF, Word, file Zotero/Mendeley) mỗi tháng',
                                 'Tối đa 25 MB & 100 trang / bài (trọn vẹn Khóa luận & Luận văn Thạc sĩ)',
                                 'Kiểm chứng tới 200 trích dẫn / bài & tải lên đồng thời 10 tệp',
-                                'Tra cứu hơn 15 cơ sở dữ liệu học thuật quốc tế (PubMed, arXiv, DOAJ, DBLP, DataCite...)',
-                                'Cảnh báo bài báo bị rút hồi (Retraction Watch) & khôi phục liên kết hỏng qua Wayback Machine',
-                                'Đối chiếu ngữ nghĩa sâu giữa câu trích dẫn và nội dung tài liệu gốc',
+                                'Tra cứu hơn 15 thư viện học thuật quốc tế (PubMed, arXiv, DOAJ, DBLP, DataCite...)',
+                                'Cảnh báo bài báo đã bị tạp chí thu hồi (Retraction Watch) & tìm lại bản lưu trữ web',
+                                'Kiểm tra bài báo gốc có khớp với ý bạn trích dẫn không',
                                 'Kiểm chứng trích dẫn chéo đa ngôn ngữ (Tiếng Việt ↔ Tiếng Anh)',
-                                'Mở khóa trình đọc đối chiếu trang PDF, giải thích suy luận & đồ thị trích dẫn',
-                                'Tự động chuẩn hóa danh mục (APA, IEEE, BibTeX) & xuất báo cáo Word, PDF, CSV, JSON',
-                                'Quản lý tới 3 lớp học & quyền giảng viên điều chỉnh kết luận thẩm định',
+                                'Mở khóa trình đọc đối chiếu trang PDF, giải thích rõ lý do & sơ đồ trích dẫn',
+                                'Tự động định dạng danh mục (APA, IEEE, Harvard) & xuất báo cáo Word, PDF, Excel (CSV)',
+                                'Quản lý tới 3 lớp học & quyền giảng viên duyệt kết luận',
                               ]
                             : [
-                                '50 manuscript checks (.PDF, .DOCX, .BIB, .RIS) / month (16× Basic)',
+                                '50 paper checks (PDF, Word, Zotero/Mendeley) / month',
                                 'Up to 25 MB & 100 pages per document (Full Bachelor & Master Theses)',
                                 'Up to 200 citations per document & multi-file upload (up to 10 files)',
-                                'Full 15+ scholarly indexes (PubMed, arXiv, DOAJ, DBLP, DataCite & Europe PMC)',
-                                'Retracted paper alerts (Retraction Watch) & broken URL archive recovery (Wayback Machine)',
-                                'Deep semantic evidence matching between cited claims and source papers',
+                                'Full 15+ academic libraries (PubMed, arXiv, DOAJ, DBLP, DataCite & Europe PMC)',
+                                'Retracted paper alerts (Retraction Watch) & broken link archive lookup',
+                                'Verify cited paper abstracts match your claims',
                                 'Cross-lingual citation verification (Vietnamese ↔ English)',
-                                'Interactive PDF source-to-page reader, step-by-step reasoning & citation graph',
-                                'Automated bibliography formatting (APA, IEEE, BibTeX) & Word, PDF, CSV, JSON export',
+                                'Interactive PDF source-to-page reader, step-by-step explanations & citation map',
+                                'One-click reference formatting (APA, IEEE, Harvard) & Word, PDF, CSV export',
                                 'Manage up to 3 classroom cohorts & instructor verdict review',
                               ]
                           ).map((feat) => (
@@ -1249,9 +1218,9 @@ export function PricingPage() {
                               <>
                                 Nâng cấp lên Pro
                                 <span className="hidden 2xl:inline">
-                                  {` · $${
-                                    billingCycle === 'annual' ? '192/năm' : '20/tháng'
-                                  }`}
+                                  {billingCycle === 'annual'
+                                    ? ' · 4.800.000 ₫/năm'
+                                    : ' · 500.000 ₫/tháng'}
                                 </span>
                               </>
                             ) : (
@@ -1296,7 +1265,7 @@ export function PricingPage() {
                         }}
                         className="inline-flex items-center px-2 py-1 rounded-[6px] border font-mono text-[10px] font-medium leading-none whitespace-nowrap shrink-0"
                       >
-                        {lang === 'vi' ? 'QUY MÔ LỚN' : 'ENTERPRISE LAB'}
+                        {lang === 'vi' ? 'QUY MÔ LỚN' : 'INSTITUTIONAL'}
                       </span>
                       {billingCycle === 'annual' ? (
                         <span className="inline-flex items-center px-2 py-1 rounded-[6px] bg-[#FBFAF6] text-emerald-800 border border-emerald-700/25 dark:bg-[#141310] dark:text-emerald-300 dark:border-emerald-400/30 shadow-sm font-mono text-[10px] font-semibold leading-none whitespace-nowrap shrink-0">
@@ -1349,8 +1318,8 @@ export function PricingPage() {
                             className="font-solva-sans text-[13px] mt-0.5"
                           >
                             {lang === 'vi'
-                              ? 'Phòng Thí Nghiệm, Bộ Môn & Hội Đồng'
-                              : 'Research Labs, Faculties & Review Boards'}
+                              ? 'Nhóm nghiên cứu, Bộ môn & Hội đồng'
+                              : 'Research Groups, Faculties & Review Boards'}
                           </p>
                         </div>
                       </div>
@@ -1360,12 +1329,12 @@ export function PricingPage() {
                         className="font-solva-sans text-[15px] leading-[22.5px]"
                       >
                         {lang === 'vi'
-                          ? 'Năng lực thẩm định quy mô lớn cho nhóm nghiên cứu, bộ môn đại học và hội đồng chấm luận án Tiến sĩ.'
-                          : 'High-volume verification scale for university departments, research labs, and doctoral committees.'}
+                          ? 'Năng lực rà soát quy mô lớn cho nhóm nghiên cứu, khoa/bộ môn đại học và hội đồng chấm luận án Tiến sĩ.'
+                          : 'High-volume verification scale for university departments, research groups, and doctoral committees.'}
                       </p>
                     </div>
 
-                    {/* Row 3: Price Display (`Sentient` Light + Prominent VND in VI + USD Subtext) */}
+                    {/* Row 3: Price Display (Clean Primary Currency + Single Subtle Secondary Line) */}
                     <div
                       style={{ borderColor: 'var(--solva-border)' }}
                       className={`pt-[16px] ${subgridRowPb18Class} border-t`}
@@ -1376,10 +1345,12 @@ export function PricingPage() {
                             <span
                               style={{ color: 'var(--solva-ink)' }}
                               className="font-solva-serif font-light text-[34px] sm:text-[38px] leading-[44px] tracking-[-0.03em] whitespace-nowrap"
+                              data-testid="ultra-price-display"
                             >
                               <NumberPopIn
-                                value={billingCycle === 'annual' ? '4.000.000 ₫' : '5.000.000 ₫'}
+                                value={billingCycle === 'annual' ? '4.000.000' : '5.000.000'}
                               />
+                              {' ₫'}
                             </span>
                             <span
                               style={{ color: 'var(--solva-muted)' }}
@@ -1387,87 +1358,59 @@ export function PricingPage() {
                             >
                               / tháng
                             </span>
+                            {billingCycle === 'annual' && (
+                              <span
+                                style={{ color: 'var(--solva-muted)' }}
+                                className="text-[13px] line-through font-mono whitespace-nowrap"
+                              >
+                                5.000.000 ₫
+                              </span>
+                            )}
                           </div>
-                          <div className="flex items-baseline gap-2 flex-wrap mt-1">
+                          <p
+                            data-testid="ultra-vnd-equivalent"
+                            style={{ color: 'var(--solva-muted)' }}
+                            className="font-mono text-[12px] mt-1.5 leading-relaxed"
+                          >
+                            {billingCycle === 'annual'
+                              ? 'Thanh toán 48.000.000 ₫/năm (~$1.920/năm) qua VNPay hoặc thẻ quốc tế'
+                              : 'Thanh toán hàng tháng (~$200/tháng) qua VNPay hoặc thẻ quốc tế'}
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <div className="flex items-baseline gap-2 flex-wrap">
                             <span
                               style={{ color: 'var(--solva-ink)' }}
-                              className="font-mono text-[13px] font-semibold"
+                              className="font-solva-serif font-light text-[40px] sm:text-[44px] leading-[48px] tracking-[-0.05em]"
                               data-testid="ultra-price-display"
                             >
                               <NumberPopIn value={`$${ultraPrice}`} />
                             </span>
                             <span
                               style={{ color: 'var(--solva-muted)' }}
-                              className="font-mono text-[12px]"
+                              className="font-solva-sans text-[14px]"
                             >
-                              USD / tháng
+                              / month
                             </span>
                             {billingCycle === 'annual' && (
                               <span
                                 style={{ color: 'var(--solva-muted)' }}
-                                className="text-[12px] line-through font-mono"
+                                className="text-[14px] line-through font-mono"
                               >
                                 $200
                               </span>
                             )}
                           </div>
-                        </>
-                      ) : (
-                        <div className="flex items-baseline gap-2 flex-wrap">
-                          <span
-                            style={{ color: 'var(--solva-ink)' }}
-                            className="font-solva-serif font-light text-[40px] sm:text-[44px] leading-[48px] tracking-[-0.05em]"
-                            data-testid="ultra-price-display"
-                          >
-                            <NumberPopIn value={`$${ultraPrice}`} />
-                          </span>
-                          <span
+                          <p
                             style={{ color: 'var(--solva-muted)' }}
-                            className="font-solva-sans text-[14px]"
+                            className="font-mono text-[12px] mt-1"
                           >
-                            / month
-                          </span>
-                          {billingCycle === 'annual' && (
-                            <span
-                              style={{ color: 'var(--solva-muted)' }}
-                              className="text-[14px] line-through font-mono"
-                            >
-                              $200
-                            </span>
-                          )}
-                        </div>
-                      )}
-                      <p
-                        style={{ color: 'var(--solva-muted)' }}
-                        className="font-mono text-[12px] mt-1"
-                      >
-                        {billingCycle === 'annual'
-                          ? lang === 'vi'
-                            ? 'Thanh toán $1.920/năm (Tiết kiệm $480/năm — Giảm 20%)'
-                            : 'Billed $1,920 annually ($160/mo equivalent — Save $480)'
-                          : lang === 'vi'
-                            ? 'Thanh toán $200 định kỳ hàng tháng (Hoặc $160/tháng khi trả năm)'
-                            : 'Billed $200 monthly (Or $160/mo when billed annually)'}
-                      </p>
-                      {lang === 'vi' && (
-                        <p
-                          data-testid="ultra-vnd-equivalent"
-                          style={{ color: 'var(--solva-muted)' }}
-                          className="font-mono text-[12px] mt-1"
-                        >
-                          {billingCycle === 'annual' ? (
-                            <>
-                              <span className="whitespace-nowrap">4.000.000 ₫/tháng</span> ·{' '}
-                              <span className="whitespace-nowrap">48.000.000 ₫/năm</span>{' '}
-                              <span className="whitespace-nowrap">qua VNPay</span>
-                            </>
-                          ) : (
-                            <>
-                              <span className="whitespace-nowrap">5.000.000 ₫/tháng</span>{' '}
-                              <span className="whitespace-nowrap">qua VNPay &amp; thẻ quốc tế</span>
-                            </>
-                          )}
-                        </p>
+                            {billingCycle === 'annual'
+                              ? 'Billed $1,920/year (Save $480 — 20% off)'
+                              : 'Billed $200 monthly (Or $160/mo billed yearly)'}
+                          </p>
+                        </>
                       )}
                     </div>
 
@@ -1484,22 +1427,22 @@ export function PricingPage() {
                       <ul className="space-y-[9px]">
                         {(lang === 'vi'
                           ? [
-                              'Hạn mức cấp đơn vị lên tới 1.000 bản thảo / tháng',
+                              'Hạn mức cấp đơn vị lên tới 1.000 bài viết / tháng',
                               'Tối đa 100 MB & 500 trang / bài (Luận án Tiến sĩ & Sách chuyên khảo)',
                               'Không giới hạn số lượng trích dẫn trong mỗi tài liệu',
                               'Tra cứu mở rộng qua Google Scholar cho sách chuyên khảo & ấn phẩm hiếm',
-                              'Kiểm tra tình trạng hoạt động của mã DOI & đường dẫn trực tuyến theo thời gian thực',
-                              'Rà soát hàng loạt công suất lớn: tối đa 50 bản thảo PDF/DOCX cùng lúc',
+                              'Kiểm tra đường dẫn & mã DOI còn mở được không theo thời gian thực',
+                              'Rà soát hàng loạt công suất lớn: tối đa 50 bài nộp PDF/Word cùng lúc',
                               'Không giới hạn lớp học, sinh viên & tải trọn bộ báo cáo cả lớp (.ZIP)',
                               'Lưu trữ lịch sử báo cáo vĩnh viễn & luồng xử lý ưu tiên 24/7',
                             ]
                           : [
-                              'Institutional volume up to 1,000 manuscripts / month',
+                              'Institutional volume up to 1,000 papers / month',
                               'Up to 100 MB & 500 pages per document (Doctoral Dissertations & Books)',
-                              'Unlimited citations verified per manuscript',
+                              'Unlimited citations verified per paper',
                               'Extended Google Scholar discovery for rare monographs & regional literature',
-                              'Real-time live DOI & URL reachability verification',
-                              'Bulk cohort verification: upload up to 50 manuscripts at once',
+                              'Real-time live DOI & web link availability checks',
+                              'Bulk cohort verification: upload up to 50 papers at once',
                               'Unlimited classroom cohorts, students & full-cohort archive export (.ZIP)',
                               'Lifetime report retention & 24/7 priority processing queue',
                             ]
@@ -1568,9 +1511,9 @@ export function PricingPage() {
                             <>
                               Nâng cấp lên Ultra
                               <span className="hidden 2xl:inline">
-                                {` · $${
-                                  billingCycle === 'annual' ? '1.920/năm' : '200/tháng'
-                                }`}
+                                {billingCycle === 'annual'
+                                  ? ' · 48.000.000 ₫/năm'
+                                  : ' · 5.000.000 ₫/tháng'}
                               </span>
                             </>
                           ) : (
@@ -1599,8 +1542,8 @@ export function PricingPage() {
                   className="font-solva-sans text-[13px] text-center"
                 >
                   {lang === 'vi'
-                    ? 'Đối chiếu trực tiếp hơn 200 triệu công trình khoa học từ 15+ cơ sở dữ liệu quốc tế uy tín'
-                    : 'Cross-referencing 200M+ canonical works across 15+ federated scholarly & technical indexes'}
+                    ? 'Đối chiếu hơn 200 triệu công trình khoa học trên 15+ thư viện học thuật quốc tế uy tín'
+                    : 'Cross-checking over 200M real publications across 15+ trusted academic libraries'}
                 </p>
 
                 <div className="w-full overflow-hidden solva-ticker-mask py-1">
@@ -2257,8 +2200,8 @@ export function PricingPage() {
                         </span>
                         <span style={{ color: 'var(--solva-muted)' }}>
                           {lang === 'vi'
-                            ? `kèm đối chiếu nguồn gốc từng trường thông tin (${SYMBOLIC_RULES_RANGE}) minh bạch.”`
-                            : `with clear, field-by-field source checks (${SYMBOLIC_RULES_RANGE}).”`}
+                            ? 'kèm đối chiếu rõ từng thông tin tác giả, năm và tên tạp chí minh bạch.”'
+                            : 'with clear, field-by-field verification against official library records.”'}
                         </span>
                       </blockquote>
 
@@ -2341,25 +2284,25 @@ export function PricingPage() {
                 demoEvaluatorMode
                   ? {
                       icon: ShieldCheck,
-                      title_vi: 'Thanh toán Stripe An toàn (Chế độ Đánh giá)',
-                      title_en: 'Secure Stripe Checkout (Evaluator Mode)',
+                      title_vi: 'Thanh toán an toàn (Chế độ thử nghiệm)',
+                      title_en: 'Secure Checkout (Demo Mode)',
                       desc_vi:
-                        'Hỗ trợ thẻ quốc tế Visa/Mastercard qua cổng Stripe Demo chuẩn bảo mật PCI-DSS kèm thẻ kiểm thử 1-Click. Nâng cấp tài khoản và mở khóa hạn mức tức thì.',
+                        'Trải nghiệm nâng cấp tài khoản tức thì kèm biên lai điện tử đầy đủ qua cổng thanh toán thử nghiệm.',
                       desc_en:
-                        'Instant activation via Stripe Demo Checkout with full invoice receipts and 1-click test card support.',
+                        'Instant tier upgrade with complete digital receipts in test checkout mode.',
                     }
                   : {
                       icon: ShieldCheck,
-                      title_vi: 'Thanh toán Stripe & VNPay Mã hóa',
-                      title_en: 'Encrypted Stripe & VNPay Checkout',
+                      title_vi: 'Thanh toán bảo mật chuẩn ngân hàng',
+                      title_en: 'Bank-Grade Encrypted Checkout',
                       desc_vi:
-                        'Giao dịch mã hóa TLS 1.3 theo chuẩn PCI-DSS qua cổng quốc tế Stripe (Visa, Mastercard, Apple Pay, Google Pay) và VNPay nội địa (VNPAY-QR, thẻ ATM/NAPAS). Kích hoạt hạn mức và xuất biên lai điện tử tức thì.',
+                        'Thanh toán an toàn qua Stripe (Visa, Mastercard, Apple Pay, Google Pay) và VNPay (VNPAY-QR, thẻ ATM nội địa). Kích hoạt gói và xuất biên lai điện tử tức thì.',
                       desc_en:
-                        'TLS 1.3 encrypted, PCI-DSS compliant checkout via Stripe (Visa, Mastercard, Apple Pay, Google Pay) and VNPay domestic gateway (VNPAY-QR & ATM/NAPAS cards), with instant quota activation and digital receipts.',
+                        'Bank-grade encrypted checkout via Stripe (Visa, Mastercard, Apple Pay, Google Pay) and VNPay (VNPAY-QR & domestic cards), with instant activation and digital receipts.',
                     },
                 {
                   icon: Database,
-                  title_vi: 'Chuyển đổi Tháng / Năm linh hoạt',
+                  title_vi: 'Chuyển đổi tháng / năm linh hoạt',
                   title_en: 'Flexible Monthly & Annual Plans',
                   desc_vi:
                     'Nâng cấp, chuyển sang chu kỳ năm tiết kiệm 20% hoặc hủy gia hạn tự động bất cứ lúc nào trong trang Cài đặt.',
@@ -2368,10 +2311,10 @@ export function PricingPage() {
                 },
                 {
                   icon: HelpCircle,
-                  title_vi: 'Đảm bảo Tính Toàn vẹn Học thuật',
-                  title_en: 'Academic Decision-Support',
-                  desc_vi: `Mọi kết quả kiểm chứng đều đi kèm bằng chứng truy xuất từ ${SCHOLARLY_APIS_LABEL} cơ sở dữ liệu khoa học quốc tế uy tín và luật suy diễn ${SYMBOLIC_RULES_RANGE}.`,
-                  desc_en: `Every verdict is backed by explainable symbolic rules (${SYMBOLIC_RULES_RANGE}) and live scholarly metadata.`,
+                  title_vi: 'Minh bạch mọi nguồn đối chiếu',
+                  title_en: 'Transparent Evidence on Every Check',
+                  desc_vi: `Mọi kết quả kiểm tra đều kèm đường dẫn bài gốc từ hơn ${SCHOLARLY_APIS_LABEL} thư viện học thuật uy tín và giải thích lý do rõ ràng.`,
+                  desc_en: `Every flag includes direct links to real records across ${SCHOLARLY_APIS_LABEL} trusted academic libraries and a plain-English explanation.`,
                 },
               ].map((item, idx) => {
                 const Icon = item.icon;
@@ -2447,7 +2390,7 @@ export function PricingPage() {
                           }
                           secondary={
                             lang === 'vi'
-                              ? 'cho mỗi bản thảo học thuật.'
+                              ? 'cho mỗi bài viết và khóa luận.'
                               : 'verifiable integrity.'
                           }
                         />
@@ -2456,8 +2399,8 @@ export function PricingPage() {
                           className="font-solva-sans text-[16px] font-normal leading-[23.2px] max-w-[420px]"
                         >
                           {lang === 'vi'
-                            ? 'Bắt đầu miễn phí ngay hôm nay với 3 lượt kiểm tra (.PDF, .DOCX, .BIB, .RIS) mỗi tháng, hoặc nâng cấp lên gói Pro để tra cứu toàn diện hơn 15 thư viện học thuật và xuất báo cáo đầy đủ.'
-                            : 'Start free today with 3 checks (.PDF, .DOCX, .BIB, .RIS) per month, or upgrade to CITRA Pro for full 15+ academic library verification and complete exports.'}
+                            ? 'Bắt đầu miễn phí ngay hôm nay với 3 bài viết (PDF, Word, Zotero/Mendeley) mỗi tháng, hoặc nâng cấp lên gói Pro để tra cứu toàn diện hơn 15 thư viện học thuật và xuất báo cáo đầy đủ.'
+                            : 'Start free today with 3 paper checks (PDF, Word, Zotero/Mendeley) per month, or upgrade to CITRA Pro for full 15+ academic library verification and complete exports.'}
                         </p>
                       </div>
 
@@ -2787,7 +2730,7 @@ function PricingSolvaHeader({
             className="inline-flex items-center gap-1.5 h-[40px] px-2.5 xl:px-3 rounded-[8px] font-solva-sans text-[14px] xl:text-[15px] font-normal whitespace-nowrap shrink-0 hover:opacity-80 transition-opacity"
           >
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-            <span>{lang === 'vi' ? 'Thực nghiệm 120K' : '120K Benchmark'}</span>
+            <span>{lang === 'vi' ? 'Độ tin cậy' : 'Accuracy'}</span>
           </Link>
         </nav>
 
@@ -2955,8 +2898,8 @@ function PricingSolvaFAQSection({
           : 'Is the Basic ($0) tier really free forever?',
       a:
         lang === 'vi'
-          ? 'Hoàn toàn miễn phí trọn đời và không yêu cầu thẻ tín dụng. Mỗi tháng tài khoản Basic được cấp mới 3 lượt kiểm tra bản thảo (.PDF, .DOCX, .BIB, .RIS — tối đa 15 trang và 30 trích dẫn mỗi bài) cùng đầy đủ kết quả đối chiếu trích dẫn trong bài và xác minh nguồn thật.'
-          : 'Yes — Basic is free forever with no credit card required. Your quota automatically resets every month with 3 manuscript checks (.PDF, .DOCX, .BIB, .RIS — up to 15 pages and 30 citations per document) with complete in-text link and real-source verification.',
+          ? 'Hoàn toàn miễn phí trọn đời và không yêu cầu thẻ ngân hàng. Mỗi tháng tài khoản Basic được cấp mới 3 lượt kiểm tra bài viết (PDF, Word hoặc file Zotero/Mendeley — tối đa 15 trang và 30 trích dẫn mỗi bài) cùng đầy đủ kết quả đối chiếu trích dẫn trong bài và xác minh nguồn thật.'
+          : 'Yes — Basic is free forever with no credit card required. Your quota automatically resets every month with 3 paper checks (PDF, Word, or Zotero/Mendeley files — up to 15 pages and 30 citations per document) with complete in-text link and real-source verification.',
     },
     {
       id: 'pfaq-1',
@@ -2966,18 +2909,18 @@ function PricingSolvaFAQSection({
           : `What unlocks immediately when I upgrade to Pro (${activeProLabelEn})?`,
       a:
         lang === 'vi'
-          ? 'Gói Pro nâng hạn mức lên 50 tài liệu/tháng (tối đa 100 trang, 200 trích dẫn/bài), mở khóa toàn bộ hơn 15 thư viện học thuật quốc tế (PubMed, arXiv, DBLP, DOAJ, DataCite, Retraction Watch, Wayback Machine), đối chiếu nội dung tóm tắt bài gốc, gợi ý sửa định dạng trích dẫn 1 chạm, trình đọc đối chiếu trực tiếp trên trang PDF và xuất báo cáo ra PDF/DOCX/CSV.'
-          : 'Pro unlocks 50 manuscripts/month (up to 100 pages & 200 citations each), all 15+ trusted academic libraries, source-abstract content matching, one-click citation formatting fixes, side-by-side PDF page inspection, and full PDF/DOCX/CSV report exports.',
+          ? 'Gói Pro nâng hạn mức lên 50 bài viết/tháng (tối đa 100 trang, 200 trích dẫn/bài), mở khóa toàn bộ hơn 15 thư viện học thuật quốc tế (PubMed, arXiv, DBLP, DOAJ, DataCite, Retraction Watch...), đối chiếu nội dung tóm tắt bài gốc, gợi ý sửa định dạng trích dẫn 1 chạm, trình đọc đối chiếu trực tiếp trên trang PDF và xuất báo cáo ra PDF/Word/CSV.'
+          : 'Pro unlocks 50 papers/month (up to 100 pages & 200 citations each), all 15+ trusted academic libraries, source-abstract content matching, one-click citation formatting fixes, side-by-side PDF page inspection, and full PDF/Word/CSV report exports.',
     },
     {
       id: 'pfaq-2',
       q:
         lang === 'vi'
-          ? 'Thanh toán theo Năm (Tiết kiệm 20%) hoạt động như thế nào?'
+          ? 'Thanh toán theo năm (Tiết kiệm 20%) hoạt động như thế nào?'
           : 'How does the 20% Annual Billing discount work?',
       a:
         lang === 'vi'
-          ? 'Khi chọn chu kỳ Thanh toán theo Năm, gói Pro giảm từ 500.000 ₫ xuống còn 400.000 ₫/tháng (4.800.000 ₫/năm — tiết kiệm 1.200.000 ₫/năm; tương đương $16/tháng · $192/năm) và gói Ultra giảm từ 5.000.000 ₫ xuống còn 4.000.000 ₫/tháng (48.000.000 ₫/năm — tiết kiệm 12.000.000 ₫/năm), tương đương hơn 2 tháng sử dụng miễn phí.'
+          ? 'Khi chọn chu kỳ thanh toán theo năm, gói Pro giảm từ 500.000 ₫ xuống còn 400.000 ₫/tháng (4.800.000 ₫/năm — tiết kiệm 1.200.000 ₫/năm; tương đương ~$192/năm) và gói Ultra giảm từ 5.000.000 ₫ xuống còn 4.000.000 ₫/tháng (48.000.000 ₫/năm — tiết kiệm 12.000.000 ₫/năm), tương đương hơn 2 tháng sử dụng miễn phí.'
           : 'When billed annually, Pro drops from $20 to $16/month ($192/year — saving $48) and Ultra drops from $200 to $160/month ($1,920/year — saving $480), giving you over 2 months free.',
     },
   ];
@@ -3008,15 +2951,15 @@ function PricingSolvaFAQSection({
           ? 'Hệ thống tích hợp cổng thanh toán Stripe bảo mật kèm chế độ điền nhanh thẻ kiểm thử 1-Click (Visa 4242 / Mastercard 4444) để hội đồng và người dùng trải nghiệm trọn vẹn luồng nâng cấp hóa đơn và mở khóa tính năng tức thì.'
           : 'CITRA integrates Stripe Checkout with 1-click test card autofill (Visa 4242 & Mastercard 4444) so evaluators, researchers, and students can experience instant tier activation and invoice generation.'
         : lang === 'vi'
-          ? 'CITRA xử lý thanh toán qua kết nối mã hóa TLS 1.3 trên hạ tầng chuẩn bảo mật PCI-DSS của Stripe (thẻ quốc tế Visa, Mastercard, Apple Pay, Google Pay) và cổng thanh toán nội địa VNPay (quét mã VNPAY-QR, thẻ ATM/NAPAS ngân hàng Việt Nam). CITRA không lưu trữ số thẻ gốc; hạn mức gói cước và biên lai điện tử được kích hoạt tức thì ngay sau khi xác thực giao dịch.'
-          : 'CITRA processes payments over TLS 1.3 through PCI-DSS compliant Stripe (Visa, Mastercard, Apple Pay, Google Pay) and VNPay (VNPAY-QR and domestic Vietnamese ATM/NAPAS cards). CITRA never stores raw card numbers, and your upgraded tier quota and digital receipt unlock immediately upon payment confirmation.',
+          ? 'CITRA xử lý thanh toán bảo mật chuẩn ngân hàng qua cổng quốc tế Stripe (Visa, Mastercard, Apple Pay, Google Pay) và cổng thanh toán nội địa VNPay (quét mã VNPAY-QR, thẻ ATM/NAPAS ngân hàng Việt Nam). CITRA không lưu trữ số thẻ gốc; gói cước và biên lai điện tử được kích hoạt ngay sau khi thanh toán thành công.'
+          : 'CITRA processes payments with bank-grade security through Stripe (Visa, Mastercard, Apple Pay, Google Pay) and VNPay (VNPAY-QR and domestic Vietnamese ATM/NAPAS cards). CITRA never stores raw card numbers, and your upgraded tier and digital receipt unlock immediately upon payment confirmation.',
     },
     {
       id: 'pfaq-5',
       q:
         lang === 'vi'
-          ? 'Gói Ultra dành cho Bộ môn & Phòng thí nghiệm có ưu điểm gì đặc biệt?'
-          : 'When should a research lab or department choose Ultra?',
+          ? 'Gói Ultra dành cho Nhóm nghiên cứu & Khoa có ưu điểm gì đặc biệt?'
+          : 'When should a research group or department choose Ultra?',
       a:
         lang === 'vi'
           ? 'Gói Ultra hỗ trợ tài liệu dài tới 500 trang (luận án Tiến sĩ, sách chuyên khảo), tải lên hàng loạt 50 tệp PDF cùng lúc, tra cứu mở rộng qua Google Scholar cho tài liệu hiếm, quản lý không giới hạn lớp học và tải trọn bộ báo cáo cả lớp dạng tệp nén ZIP.'
@@ -3153,7 +3096,7 @@ function PricingSolvaFooter({ lang }: { lang: Lang }) {
         { label: lang === 'vi' ? 'Cách hoạt động' : 'How It Works', to: '/#how-it-works' },
         { label: lang === 'vi' ? 'Kiểm tra thử trích dẫn' : 'Live Citation Check', to: '/#interactive-demo' },
         { label: lang === 'vi' ? 'Kiểm tra 2 bước rõ ràng' : 'Two-Step Citation Check', to: '/#architecture' },
-        { label: lang === 'vi' ? 'Độ tin cậy (120.000 bài)' : 'Proven Accuracy (120K)', to: '/#benchmark-120k' },
+        { label: lang === 'vi' ? 'Độ tin cậy' : 'Accuracy', to: '/#benchmark-120k' },
         { label: lang === 'vi' ? 'Bảng so sánh gói cước' : 'Comparison Matrix', href: '#compare-matrix' },
       ],
     },
@@ -3167,7 +3110,7 @@ function PricingSolvaFooter({ lang }: { lang: Lang }) {
       ],
     },
     {
-      header: lang === 'vi' ? 'Công nghệ' : 'Capabilities',
+      header: lang === 'vi' ? 'Tính năng chính' : 'Capabilities',
       links: [
         { label: lang === 'vi' ? 'Đọc chuẩn APA, IEEE, Harvard' : 'APA, IEEE & Harvard Reader', to: '/#how-it-works' },
         { label: lang === 'vi' ? 'Tra cứu 15+ thư viện học thuật' : '15+ Academic Libraries', to: '/#architecture' },
