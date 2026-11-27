@@ -86,7 +86,6 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
     'Empirical Evaluation of Neural Language Representations and Citation Integrity in Computational Linguistics',
   );
   const [items, setItems] = useState<SandboxAclPaperItem[]>([]);
-  const [dbTotalPapers, setDbTotalPapers] = useState<number>(128626);
   const [loadingSample, setLoadingSample] = useState(false);
   const [generatingPdf, setGeneratingPdf] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
@@ -128,16 +127,10 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
     try {
       const res = await api.sampleSandboxAclPapers(targetCount, style);
       setItems(res.items || []);
-      if (res.database_total_papers) {
-        setDbTotalPapers(res.database_total_papers);
-      }
-      const totalFormatted = (res.database_total_papers || 128626).toLocaleString(
-        isVi ? 'vi-VN' : 'en-US',
-      );
       toast.success(
         isVi
-          ? `Đã lấy ngẫu nhiên ${res.items.length} bài báo thật từ kho học thuật ACL (${totalFormatted} bài).`
-          : `Sampled ${res.items.length} real papers from the ACL scholarly corpus (${totalFormatted} papers).`,
+          ? `Đã lấy ngẫu nhiên ${res.items.length} bài báo thật từ kho 128.000+ bài báo học thuật.`
+          : `Sampled ${res.items.length} real papers from the 128K+ scholarly papers corpus.`,
       );
     } catch (e) {
       toast.error(
@@ -592,8 +585,6 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
     );
   };
 
-  const formattedCorpusCount = dbTotalPapers.toLocaleString(isVi ? 'vi-VN' : 'en-US');
-
   return (
     <Card
       data-testid="live-citation-sandbox"
@@ -615,12 +606,17 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
                   ? 'Kiểm tra nhanh & Tạo bài mẫu thử nghiệm'
                   : 'Quick Citation Check & Sample Paper Builder'}
               </h1>
-              <Badge className="bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/80 dark:text-emerald-300 dark:border-emerald-800 font-mono text-[10px]">
+              <Badge
+                data-testid="sandbox-corpus-badge"
+                className="bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/80 dark:text-emerald-300 dark:border-emerald-800 font-mono text-[10px]"
+              >
                 {mode === 'acl_studio'
-                  ? `${formattedCorpusCount} ${isVi ? 'BÀI BÁO KHO ACL' : 'ACL CORPUS'}`
+                  ? isVi
+                    ? '128.000+ bài báo học thuật'
+                    : '128K+ scholarly papers'
                   : isVi
-                    ? '15+ THƯ VIỆN HỌC THUẬT'
-                    : '15+ ACADEMIC LIBRARIES'}
+                    ? '15+ thư viện học thuật'
+                    : '15+ academic libraries'}
               </Badge>
             </div>
             <p
@@ -629,8 +625,8 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
             >
               {mode === 'acl_studio'
                 ? isVi
-                  ? 'Lấy ngẫu nhiên 10–20 bài báo thật từ kho học thuật ACL (128K+), tùy chỉnh thông tin hoặc liên kết trích dẫn và xuất tệp PDF mẫu để chạy thử kiểm chứng.'
-                  : 'Sample 10–20 real papers from the 128K+ ACL scholarly corpus, edit citation details or linking live, and build a sample academic PDF to test verification.'
+                  ? 'Lấy ngẫu nhiên 10–20 bài báo thật từ kho 128.000+ bài báo học thuật, tùy chỉnh thông tin hoặc liên kết trích dẫn và xuất tệp PDF mẫu để chạy thử kiểm chứng.'
+                  : 'Sample 10–20 real papers from the 128K+ scholarly papers corpus, edit citation details or linking live, and build a sample academic PDF to test verification.'
                 : isVi
                   ? 'Dán trực tiếp danh sách tài liệu tham khảo (APA, IEEE, Vancouver hoặc BibTeX) để đối chiếu nhanh trên hơn 15 thư viện học thuật chỉ trong vài giây.'
                   : 'Paste your reference list (APA, IEEE, Vancouver, or BibTeX) to cross-check citations across 15+ academic libraries in seconds.'}
@@ -641,33 +637,33 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
         {/* Mode Switcher */}
         <div
           data-testid="sandbox-mode-switcher"
-          className="grid grid-cols-2 sm:inline-flex w-full md:w-auto items-center p-1 rounded-xl bg-slate-100 dark:bg-slate-800/90 border border-slate-200/90 dark:border-slate-700 gap-1 shrink-0 self-start md:self-auto"
+          className="flex sm:inline-flex w-full md:w-auto items-center p-1 rounded-xl bg-slate-100 dark:bg-slate-800/90 border border-slate-200/90 dark:border-slate-700 gap-1 shrink-0 self-start md:self-auto"
         >
           <button
             type="button"
             data-testid="sandbox-mode-acl-btn"
             aria-pressed={mode === 'acl_studio'}
             onClick={() => handleModeSwitch('acl_studio')}
-            className={`w-full sm:w-auto justify-center text-center whitespace-nowrap px-2.5 sm:px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-mono font-semibold transition-all cursor-pointer ${
+            className={`min-w-0 flex-1 sm:flex-initial text-center px-2.5 py-2 rounded-lg text-xs sm:text-sm font-semibold whitespace-nowrap truncate transition-all cursor-pointer ${
               mode === 'acl_studio'
                 ? 'bg-indigo-600 text-white shadow-sm'
                 : 'text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white'
             }`}
           >
-            {isVi ? 'Tạo bài mẫu (ACL → PDF)' : 'Sample Paper (ACL → PDF)'}
+            {isVi ? 'Tạo bài mẫu PDF' : 'Sample PDF'}
           </button>
           <button
             type="button"
             data-testid="sandbox-mode-raw-btn"
             aria-pressed={mode === 'raw_paste'}
             onClick={() => handleModeSwitch('raw_paste')}
-            className={`w-full sm:w-auto justify-center text-center whitespace-nowrap px-2.5 sm:px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-mono font-semibold transition-all cursor-pointer ${
+            className={`min-w-0 flex-1 sm:flex-initial text-center px-2.5 py-2 rounded-lg text-xs sm:text-sm font-semibold whitespace-nowrap truncate transition-all cursor-pointer ${
               mode === 'raw_paste'
                 ? 'bg-indigo-600 text-white shadow-sm'
                 : 'text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white'
             }`}
           >
-            {isVi ? 'Dán kiểm tra nhanh' : 'Quick Paste'}
+            {isVi ? 'Kiểm tra nhanh' : 'Quick Check'}
           </button>
         </div>
       </div>

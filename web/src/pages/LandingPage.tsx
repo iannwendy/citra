@@ -1405,7 +1405,7 @@ function SolvaHeroSection({
             >
               <div className="w-full my-auto">
                 <UIGenerationReveal
-                  className="rounded-[10px]"
+                  className="rounded-[10px] [&_.t-gen-tag]:top-auto [&_.t-gen-tag]:bottom-2 sm:[&_.t-gen-tag]:top-2 sm:[&_.t-gen-tag]:bottom-auto"
                   steps={
                     lang === 'vi'
                       ? [
@@ -1484,9 +1484,6 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
   const { containerRef: benchTabsRef, pillStyle: benchPill } = useSlidingPill<HTMLDivElement>(
     `${activeView}-${showTechnicalDetails}`,
   );
-  const { containerRef: benchRef, replaySeed: benchSeed } = useFloralCardAnimation(0);
-  const sep = lang === 'vi' ? '.' : ',';
-  const decSep = lang === 'vi' ? ',' : '.';
   const fmtPct = (pct: number) =>
     lang === 'vi' ? `${pct.toFixed(2).replace('.', ',')}%` : `${pct.toFixed(2)}%`;
   const fmtDec = (raw: string) => (lang === 'vi' ? raw.replace('.', ',') : raw);
@@ -1541,12 +1538,12 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
 
   const headlineMetrics = [
     {
-      badge: lang === 'vi' ? '0% RÒ RỈ DỮ LIỆU · PAPER & TITLE DISJOINT' : '0% LEAKAGE · PAPER & TITLE DISJOINT',
+      badge:
+        lang === 'vi'
+          ? '0% RÒ RỈ DỮ LIỆU · TÁCH BIỆT BÀI BÁO & TIÊU ĐỀ'
+          : '0% LEAKAGE · PAPER & TITLE DISJOINT',
       badgeTone: 'neutral' as const,
-      value: 120000,
-      decimals: 0,
-      suffix: '',
-      formatThousands: true,
+      displayValue: lang === 'vi' ? '120.000' : '120,000',
       title:
         lang === 'vi'
           ? 'Mẫu kiểm định độc lập (từ kho 128K+ bài báo)'
@@ -1557,51 +1554,45 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
           : 'Drawn from our 128K+ local scholarly corpus with strict paper- & title-disjoint splits: 84,000 Train · 18,000 Val · 18,000 Held-Out Test (|Train ∩ Val ∩ Test| = 0) prior to perturbation. 419,109 unique texts encoded via Sentence-BERT with zero artificial score clamping.',
     },
     {
-      badge: lang === 'vi' ? 'MACRO-F1: 0,9965 · HẠNG #1 ID & OOD' : 'MACRO-F1: 0.9965 · #1 ON ID & OOD',
+      badge:
+        lang === 'vi'
+          ? 'MACRO-F1: 0,9965 · HẠNG #1 TRONG & NGOÀI TẬP DỮ LIỆU'
+          : 'MACRO-F1: 0.9965 · #1 ON ID & OOD',
       badgeTone: 'emerald' as const,
-      value: 99.67,
-      decimals: 2,
-      suffix: '%',
-      formatThousands: false,
+      displayValue: lang === 'vi' ? '99,67%' : '99.67%',
       title:
         lang === 'vi'
-          ? 'Độ chính xác Neuro-Symbolic (99,96% trên 2.400 mẫu OOD)'
+          ? 'Độ chính xác Neuro-Symbolic (99,96% trên 2.400 mẫu ngoài tập dữ liệu)'
           : 'Neuro-Symbolic Accuracy (99.96% on 2,400-Sample OOD)',
       desc:
         lang === 'vi'
-          ? 'Kiến trúc Neuro-Symbolic đề xuất đạt độ chính xác 99,67% (17.941/18.000, Macro-F1 0,9965), vượt trội mô hình học máy thuần túy B5 (97,70%, kiểm định McNemar p = 1,66e-73) trên ID và bỏ xa B5 trên bộ 2.400 mẫu OOD (99,96% so với 57,33%).'
+          ? 'Kiến trúc Neuro-Symbolic đề xuất đạt độ chính xác 99,67% (17.941/18.000, Macro-F1 0,9965), vượt trội mô hình học máy thuần túy B5 (97,70%, kiểm định McNemar p = 1,66e-73) trên tập trong phân phối và bỏ xa B5 trên bộ 2.400 mẫu ngoài tập dữ liệu (99,96% so với 57,33%).'
           : 'Proposed Neuro-Symbolic engine achieves 99.67% Accuracy (17,941/18,000, 0.9965 Macro-F1), statistically outperforming Pure ML B5 on ID (97.70%, McNemar p = 1.66e-73) and OOD (99.96% vs. 57.33%).',
     },
     {
       badge: lang === 'vi' ? '0% KẾT LUẬN OAN CHO BÀI THẬT' : '0% FALSE ACCUSATIONS',
       badgeTone: 'emerald' as const,
-      value: 99.93,
-      decimals: 2,
-      suffix: '%',
-      formatThousands: false,
+      displayValue: lang === 'vi' ? '99,93%' : '99.93%',
       title:
         lang === 'vi'
-          ? 'Precision nhận diện trích dẫn ngụy tạo (F1 = 0,9994)'
+          ? 'Độ chuẩn xác nhận diện trích dẫn ngụy tạo (F1 = 0,9994)'
           : 'Hallucination Detection Precision (F1 = 0.9994)',
       desc:
         lang === 'vi'
-          ? 'Phát hiện 5.398 / 5.400 trích dẫn chắp vá cùng miền tinh vi (Recall 99,96%, Precision 99,93%) mà không cáo buộc oan bất kỳ công trình hợp lệ nào (0 / 6.480 VERIFIED) và không để lọt bất kỳ trích dẫn ảo nào sang VERIFIED (0 / 5.400).'
+          ? 'Phát hiện 5.398 / 5.400 trích dẫn chắp vá cùng miền tinh vi (Độ phủ 99,96%, Độ chuẩn xác 99,93%) mà không cáo buộc oan bất kỳ công trình hợp lệ nào (0 / 6.480 Đã xác minh) và không để lọt bất kỳ trích dẫn ảo nào sang Đã xác minh (0 / 5.400).'
           : 'Catches 5,398 / 5,400 plausible same-domain spliced hallucinations (99.96% recall, 99.93% precision) with 0 / 6,480 legitimate works falsely accused and 0 / 5,400 fabrications leaked into VERIFIED.',
     },
     {
       badge: lang === 'vi' ? '↓ 6,12× ECE · ↓ 12,58× BRIER' : '↓ 6.12× ECE · ↓ 12.58× BRIER',
       badgeTone: 'amber' as const,
-      value: 0.0405,
-      decimals: 4,
-      suffix: '',
-      formatThousands: false,
+      displayValue: lang === 'vi' ? '0,0405' : '0.0405',
       title:
         lang === 'vi'
           ? 'Sai số hiệu chỉnh xác suất ECE (Brier = 0,0067)'
           : 'Expected Calibration Error ECE (Brier = 0.0067)',
       desc:
         lang === 'vi'
-          ? 'Hiệu chỉnh hậu nghiệm Logit-Space Platt Scaling (a = 1,8913; b = 1,1386) kéo giảm 6,12 lần sai số ECE (0,2477 → 0,0405) và 12,58 lần Brier (0,0843 → 0,0067), đạt 99,73% chính xác ở độ phủ 90% và 100% (120/120) E2E Gold.'
+          ? 'Hiệu chỉnh hậu nghiệm Logit-Space Platt Scaling (a = 1,8913; b = 1,1386) kéo giảm 6,12 lần sai số ECE (0,2477 → 0,0405) và 12,58 lần Brier (0,0843 → 0,0067), đạt 99,73% chính xác ở độ phủ 90% và 100% (120/120) bộ chuẩn E2E.'
           : 'Post-hoc Logit-Space Platt Scaling (a = 1.8913, b = 1.1386) cuts ECE by 6.12× (0.2477 → 0.0405) and Brier by 12.58× (0.0843 → 0.0067), with 99.73% accuracy @ 90% coverage and 100% (120/120) E2E Gold.',
     },
   ];
@@ -1786,10 +1777,7 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
       data-testid="benchmark-120k-section"
       className="scroll-mt-[84px] lg:scroll-mt-[108px] py-[36px] sm:py-[52px] lg:py-[96px] px-5 sm:px-6 lg:px-[40px]"
     >
-      <div
-        ref={benchRef}
-        className="max-w-[1200px] mx-auto flex flex-col gap-[28px] sm:gap-[36px] lg:gap-[44px]"
-      >
+      <div className="max-w-[1200px] mx-auto flex flex-col gap-[28px] sm:gap-[36px] lg:gap-[44px]">
         {/* Top Section Header + Plain-Language Trust Callout */}
         <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6">
           <div className="flex flex-col items-start gap-[12px] sm:gap-[16px] max-w-[680px]">
@@ -1937,7 +1925,7 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
             <div className="space-y-[24px] animate-debugger-switch">
             {/* 4 Technical Telemetry Cards (`120,000` · `99.67%` · `99.93%` · `0.0405`) */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-[16px]">
-              {headlineMetrics.map((item, idx) => (
+              {headlineMetrics.map((item) => (
                 <div
                   key={item.title}
                   style={{
@@ -1963,18 +1951,9 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
 
                     <div
                       style={{ color: 'var(--solva-ink)' }}
-                      className="font-solva-serif font-light text-[36px] sm:text-[42px] leading-[1.08] tracking-[-0.05em]"
+                      className="font-solva-serif font-light text-[36px] sm:text-[42px] leading-[1.08] tracking-[-0.05em] tabular-nums"
                     >
-                      <SolvaLiveNumber
-                        value={item.value}
-                        decimals={item.decimals}
-                        suffix={item.suffix}
-                        formatThousands={item.formatThousands}
-                        thousandSeparator={sep}
-                        decimalSeparator={decSep}
-                        replaySeed={benchSeed}
-                        durationMs={1400 + idx * 120}
-                      />
+                      {item.displayValue}
                     </div>
 
                     <h3
@@ -2185,10 +2164,12 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
 
                           <div className="flex flex-wrap items-center gap-3 sm:gap-4 font-mono text-[11px] sm:text-[12px] shrink-0">
                             <span style={{ color: 'var(--solva-muted)' }}>
-                              Prec: <strong style={{ color: 'var(--solva-ink)' }}>{fmtDec(row.prec)}</strong>
+                              {lang === 'vi' ? 'Độ chuẩn xác:' : 'Prec:'}{' '}
+                              <strong style={{ color: 'var(--solva-ink)' }}>{fmtDec(row.prec)}</strong>
                             </span>
                             <span style={{ color: 'var(--solva-muted)' }}>
-                              Rec: <strong style={{ color: 'var(--solva-ink)' }}>{fmtDec(row.rec)}</strong>
+                              {lang === 'vi' ? 'Độ phủ:' : 'Rec:'}{' '}
+                              <strong style={{ color: 'var(--solva-ink)' }}>{fmtDec(row.rec)}</strong>
                             </span>
                             <span
                               className={
@@ -2208,7 +2189,7 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
                               }`}
                               style={!row.highlight ? { color: 'var(--solva-ink)' } : undefined}
                             >
-                              {fmtPct(row.acc)} Acc
+                              {fmtPct(row.acc)} {lang === 'vi' ? 'Chính xác' : 'Acc'}
                             </span>
                           </div>
                         </div>
@@ -2303,7 +2284,9 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
 
                         <div className="grid grid-cols-3 gap-2 pt-2.5 border-t border-[#E7E3D9] dark:border-[#332F26] font-mono text-[11px]">
                           <div>
-                            <div style={{ color: 'var(--solva-muted)' }}>PRECISION</div>
+                            <div style={{ color: 'var(--solva-muted)' }}>
+                              {lang === 'vi' ? 'ĐỘ CHUẨN XÁC' : 'PRECISION'}
+                            </div>
                             <div
                               style={{ color: 'var(--solva-ink)' }}
                               className="font-bold text-[13px] mt-0.5"
@@ -2312,7 +2295,9 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
                             </div>
                           </div>
                           <div>
-                            <div style={{ color: 'var(--solva-muted)' }}>RECALL</div>
+                            <div style={{ color: 'var(--solva-muted)' }}>
+                              {lang === 'vi' ? 'ĐỘ PHỦ' : 'RECALL'}
+                            </div>
                             <div
                               style={{ color: 'var(--solva-ink)' }}
                               className="font-bold text-[13px] mt-0.5"
@@ -4327,11 +4312,12 @@ function SolvaTaxonomyPricingSection({
         : '01 · FREE FOREVER') as string | null,
       savingsBadge: null as string | null,
       metricNum: 0,
+      vndPrimary: '0 ₫',
       unit: lang === 'vi' ? 'tháng · Miễn phí' : 'month',
       vndNode:
         lang === 'vi' ? (
           <>
-            <span className="whitespace-nowrap">0 ₫/tháng</span> ·{' '}
+            <span className="whitespace-nowrap">Miễn phí trọn đời</span> ·{' '}
             <span className="whitespace-nowrap">Không cần thẻ thanh toán</span>
           </>
         ) : null,
@@ -4372,10 +4358,11 @@ function SolvaTaxonomyPricingSection({
       headerEyebrow: null as string | null,
       savingsBadge: annualBilling
         ? lang === 'vi'
-          ? 'Tiết kiệm $48/năm'
+          ? 'Tiết kiệm 1.200.000 ₫/năm'
           : 'Save $48/yr'
         : null,
       metricNum: annualBilling ? 16 : 20,
+      vndPrimary: annualBilling ? '400.000 ₫' : '500.000 ₫',
       unit:
         lang === 'vi'
           ? annualBilling
@@ -4388,13 +4375,13 @@ function SolvaTaxonomyPricingSection({
         lang === 'vi' ? (
           annualBilling ? (
             <>
-              <span className="whitespace-nowrap">≈ 400.000 ₫/tháng</span> ·{' '}
+              <span className="whitespace-nowrap">400.000 ₫/tháng</span> ·{' '}
               <span className="whitespace-nowrap">4.800.000 ₫/năm</span>{' '}
               <span className="whitespace-nowrap">qua VNPay</span>
             </>
           ) : (
             <>
-              <span className="whitespace-nowrap">≈ 500.000 ₫/tháng</span>{' '}
+              <span className="whitespace-nowrap">500.000 ₫/tháng</span>{' '}
               <span className="whitespace-nowrap">qua VNPay &amp; thẻ quốc tế</span>
             </>
           )
@@ -4439,10 +4426,11 @@ function SolvaTaxonomyPricingSection({
         : '03 · FACULTY & COHORT') as string | null,
       savingsBadge: annualBilling
         ? lang === 'vi'
-          ? 'Tiết kiệm $480/năm'
+          ? 'Tiết kiệm 12.000.000 ₫/năm'
           : 'Save $480/yr'
         : null,
       metricNum: annualBilling ? 160 : 200,
+      vndPrimary: annualBilling ? '4.000.000 ₫' : '5.000.000 ₫',
       unit:
         lang === 'vi'
           ? annualBilling
@@ -4455,13 +4443,13 @@ function SolvaTaxonomyPricingSection({
         lang === 'vi' ? (
           annualBilling ? (
             <>
-              <span className="whitespace-nowrap">≈ 4.000.000 ₫/tháng</span> ·{' '}
+              <span className="whitespace-nowrap">4.000.000 ₫/tháng</span> ·{' '}
               <span className="whitespace-nowrap">48.000.000 ₫/năm</span>{' '}
               <span className="whitespace-nowrap">qua VNPay</span>
             </>
           ) : (
             <>
-              <span className="whitespace-nowrap">≈ 5.000.000 ₫/tháng</span>{' '}
+              <span className="whitespace-nowrap">5.000.000 ₫/tháng</span>{' '}
               <span className="whitespace-nowrap">qua VNPay &amp; thẻ quốc tế</span>
             </>
           )
@@ -4695,32 +4683,77 @@ function SolvaTaxonomyPricingSection({
                       </p>
                     </div>
 
-                    {/* Row 3: Price Display (`Sentient` 40px Light + #02 Per-Digit NumberPopIn) + VI VND Equivalent */}
+                    {/* Row 3: Price Display (`Sentient` Light + Prominent VND in VI + #02 Per-Digit NumberPopIn) */}
                     <div
                       style={{ borderColor: 'var(--solva-border)' }}
                       className="pt-[16px] lg:pb-[18px] border-t"
                     >
-                      <div className="flex items-baseline gap-1.5 flex-wrap">
-                        <span
-                          style={{ color: 'var(--solva-ink)' }}
-                          className="font-solva-serif font-light text-[36px] sm:text-[40px] leading-[46px] tracking-[-0.05em]"
-                        >
-                          <NumberPopIn
-                            value={`$${tier.metricNum}`}
-                            data-testid={`landing-price-${tier.key}`}
-                          />
-                        </span>
-                        <span
-                          style={{
-                            color: tier.featured ? 'var(--solva-ink)' : 'var(--solva-muted)',
-                          }}
-                          className={`font-solva-sans text-[14px] ${
-                            tier.featured ? 'font-medium' : ''
-                          }`}
-                        >
-                          <SoftTextSwap text={`/ ${tier.unit}`} />
-                        </span>
-                      </div>
+                      {lang === 'vi' ? (
+                        <>
+                          <div className="flex items-baseline gap-1.5 flex-wrap">
+                            <span
+                              style={{ color: 'var(--solva-ink)' }}
+                              className="font-solva-serif font-light text-[32px] sm:text-[36px] leading-[42px] tracking-[-0.03em] whitespace-nowrap"
+                              data-testid={`landing-vnd-price-${tier.key}`}
+                            >
+                              {tier.key === 'basic' ? (
+                                tier.vndPrimary
+                              ) : (
+                                <NumberPopIn value={tier.vndPrimary} />
+                              )}
+                            </span>
+                            <span
+                              style={{
+                                color: tier.featured ? 'var(--solva-ink)' : 'var(--solva-muted)',
+                              }}
+                              className={`font-solva-sans text-[14px] ${
+                                tier.featured ? 'font-medium' : ''
+                              }`}
+                            >
+                              <SoftTextSwap text={`/ ${tier.unit}`} />
+                            </span>
+                          </div>
+                          <div className="flex items-baseline gap-1.5 flex-wrap mt-1">
+                            <span
+                              style={{ color: 'var(--solva-ink)' }}
+                              className="font-mono text-[13px] font-semibold"
+                            >
+                              <NumberPopIn
+                                value={`$${tier.metricNum}`}
+                                data-testid={`landing-price-${tier.key}`}
+                              />
+                            </span>
+                            <span
+                              style={{ color: 'var(--solva-muted)' }}
+                              className="font-mono text-[12px]"
+                            >
+                              USD / tháng
+                            </span>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="flex items-baseline gap-1.5 flex-wrap">
+                          <span
+                            style={{ color: 'var(--solva-ink)' }}
+                            className="font-solva-serif font-light text-[36px] sm:text-[40px] leading-[46px] tracking-[-0.05em]"
+                          >
+                            <NumberPopIn
+                              value={`$${tier.metricNum}`}
+                              data-testid={`landing-price-${tier.key}`}
+                            />
+                          </span>
+                          <span
+                            style={{
+                              color: tier.featured ? 'var(--solva-ink)' : 'var(--solva-muted)',
+                            }}
+                            className={`font-solva-sans text-[14px] ${
+                              tier.featured ? 'font-medium' : ''
+                            }`}
+                          >
+                            <SoftTextSwap text={`/ ${tier.unit}`} />
+                          </span>
+                        </div>
+                      )}
                       {tier.vndNode && (
                         <p
                           data-testid={tier.vndTestId}

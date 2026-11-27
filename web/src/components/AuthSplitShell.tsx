@@ -472,6 +472,7 @@ export function AuthSplitShell({
                     <SolvaLiveNumber
                       value={activeTrace.cisScore}
                       decimals={1}
+                      decimalSeparator={lang === 'vi' ? ',' : '.'}
                       replaySeed={replaySeed}
                       durationMs={950}
                     />{' '}

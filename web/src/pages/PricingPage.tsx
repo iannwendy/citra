@@ -662,7 +662,7 @@ export function PricingPage() {
                             ? '✨ Đang áp dụng ưu đãi trả theo năm: Tiết kiệm 20% (tương đương hơn 2 tháng miễn phí)!'
                             : '✨ Annual discount active: Equivalent to over 2 months free!'
                           : lang === 'vi'
-                            ? '💡 Mẹo: Chuyển sang gói theo Năm để tiết kiệm ngay $48/năm (Pro) hoặc $480/năm (Ultra).'
+                            ? '💡 Mẹo: Chuyển sang gói theo Năm để tiết kiệm ngay 1.200.000 ₫/năm (Pro) hoặc 12.000.000 ₫/năm (Ultra).'
                             : '💡 Tip: Switch to Annual billing to save $48/year on Pro or $480/year on Ultra.'
                       }
                     />
@@ -969,7 +969,7 @@ export function PricingPage() {
                         </span>
                         {billingCycle === 'annual' && (
                           <span className="inline-flex items-center px-2 py-1 rounded-[6px] bg-[#FBFAF6] text-emerald-800 border border-emerald-700/25 dark:bg-[#141310] dark:text-emerald-300 dark:border-emerald-400/30 shadow-sm font-mono text-[10px] font-semibold leading-none whitespace-nowrap shrink-0">
-                            {lang === 'vi' ? 'Tiết kiệm $48/năm' : 'Save $48/yr'}
+                            {lang === 'vi' ? 'Tiết kiệm 1.200.000 ₫/năm' : 'Save $48/yr'}
                           </span>
                         )}
                       </div>
@@ -1300,7 +1300,7 @@ export function PricingPage() {
                       </span>
                       {billingCycle === 'annual' ? (
                         <span className="inline-flex items-center px-2 py-1 rounded-[6px] bg-[#FBFAF6] text-emerald-800 border border-emerald-700/25 dark:bg-[#141310] dark:text-emerald-300 dark:border-emerald-400/30 shadow-sm font-mono text-[10px] font-semibold leading-none whitespace-nowrap shrink-0">
-                          {lang === 'vi' ? 'Tiết kiệm $480/năm' : 'Save $480/yr'}
+                          {lang === 'vi' ? 'Tiết kiệm 12.000.000 ₫/năm' : 'Save $480/yr'}
                         </span>
                       ) : user && planTier === 'ultra' && user.billing_cycle === 'annual' ? (
                         <span className="inline-flex items-center px-2 py-1 rounded-[6px] bg-emerald-500/[0.12] text-emerald-800 border border-emerald-700/25 dark:text-emerald-300 dark:border-emerald-400/30 font-mono text-[10px] font-semibold leading-none whitespace-nowrap shrink-0">
@@ -1699,7 +1699,7 @@ export function PricingPage() {
                       {
                         tier: 'basic' as const,
                         id: 'mobile-compare-tab-basic',
-                        label: 'Basic ($0)',
+                        label: lang === 'vi' ? 'Basic (0 ₫)' : 'Basic ($0)',
                       },
                       {
                         tier: 'pro' as const,
@@ -1847,12 +1847,23 @@ export function PricingPage() {
                     className="inline-flex items-baseline gap-1 px-2.5 py-1 rounded-[8px] border font-mono text-[13px] font-semibold whitespace-nowrap shrink-0"
                   >
                     <span>
-                      $
-                      {mobileCompareTier === 'basic'
-                        ? 0
-                        : mobileCompareTier === 'pro'
-                          ? proPrice
-                          : ultraPrice}
+                      {lang === 'vi'
+                        ? mobileCompareTier === 'basic'
+                          ? '0 ₫'
+                          : mobileCompareTier === 'pro'
+                            ? billingCycle === 'annual'
+                              ? '400.000 ₫'
+                              : '500.000 ₫'
+                            : billingCycle === 'annual'
+                              ? '4.000.000 ₫'
+                              : '5.000.000 ₫'
+                        : `$${
+                            mobileCompareTier === 'basic'
+                              ? 0
+                              : mobileCompareTier === 'pro'
+                                ? proPrice
+                                : ultraPrice
+                          }`}
                     </span>
                     <span
                       style={{ color: 'var(--solva-muted)' }}
@@ -2094,7 +2105,9 @@ export function PricingPage() {
                             }}
                             className="w-[24%] py-3.5 px-2.5 xl:px-4 text-center font-bold rounded-t-[10px]"
                           >
-                            Pro (${proPrice}/{lang === 'vi' ? 'tháng' : 'mo'})
+                            {lang === 'vi'
+                              ? `Pro (${billingCycle === 'annual' ? '400.000 ₫' : '500.000 ₫'}/tháng)`
+                              : `Pro ($${proPrice}/mo)`}
                           </th>
                           <th
                             style={{
@@ -2103,7 +2116,9 @@ export function PricingPage() {
                             }}
                             className="w-[24%] py-3.5 pl-2.5 xl:pl-4 text-center font-bold"
                           >
-                            Ultra (${ultraPrice}/{lang === 'vi' ? 'tháng' : 'mo'})
+                            {lang === 'vi'
+                              ? `Ultra (${billingCycle === 'annual' ? '4.000.000 ₫' : '5.000.000 ₫'}/tháng)`
+                              : `Ultra ($${ultraPrice}/mo)`}
                           </th>
                         </tr>
                       </thead>
@@ -2962,7 +2977,7 @@ function PricingSolvaFAQSection({
           : 'How does the 20% Annual Billing discount work?',
       a:
         lang === 'vi'
-          ? 'Khi chọn chu kỳ Thanh toán theo Năm, gói Pro giảm từ $20 xuống còn $16/tháng (thanh toán $192/năm — tiết kiệm $48) và gói Ultra giảm từ $200 xuống $160/tháng (tiết kiệm $480/năm), tương đương hơn 2 tháng sử dụng miễn phí.'
+          ? 'Khi chọn chu kỳ Thanh toán theo Năm, gói Pro giảm từ 500.000 ₫ xuống còn 400.000 ₫/tháng (4.800.000 ₫/năm — tiết kiệm 1.200.000 ₫/năm; tương đương $16/tháng · $192/năm) và gói Ultra giảm từ 5.000.000 ₫ xuống còn 4.000.000 ₫/tháng (48.000.000 ₫/năm — tiết kiệm 12.000.000 ₫/năm), tương đương hơn 2 tháng sử dụng miễn phí.'
           : 'When billed annually, Pro drops from $20 to $16/month ($192/year — saving $48) and Ultra drops from $200 to $160/month ($1,920/year — saving $480), giving you over 2 months free.',
     },
   ];

@@ -401,4 +401,65 @@ describe('LiveCitationSandbox i18n, Academic Taxonomy & Quick Paste UX', () => {
     });
     expect(spy).toHaveBeenCalledTimes(2);
   });
+
+  it('Round 2 [P2-03] — keeps compact mobile-safe mode tab labels without ACL jargon and keeps corpus count steady without jumping', async () => {
+    vi.spyOn(api, 'sampleSandboxAclPapers').mockResolvedValue({
+      database_total_papers: 129157,
+      count: 1,
+      style: 'apa',
+      items: [
+        {
+          index: 1,
+          paper_id: 101,
+          title: 'Compact Tab Verification Study',
+          authors: ['Nguyen, A.'],
+          authors_text: 'Nguyen, A.',
+          year: '2024',
+          venue: 'ACL',
+          doi: '10.18653/v1/2024.acl-long.1',
+          abstract: 'Sample abstract.',
+          source: 'ACL Anthology',
+          cite_in_text: true,
+          include_in_references: true,
+          in_text_year_override: '',
+          in_text_context: 'Prior research verified this method.',
+        },
+      ],
+    });
+
+    // VI mode
+    const { unmount: unmountVi } = renderWithProviders(<LiveCitationSandbox lang="vi" />);
+    const aclTabVi = screen.getByTestId('sandbox-mode-acl-btn');
+    const rawTabVi = screen.getByTestId('sandbox-mode-raw-btn');
+    expect(aclTabVi.textContent?.trim()).toBe('Tạo bài mẫu PDF');
+    expect(rawTabVi.textContent?.trim()).toBe('Kiểm tra nhanh');
+    expect(aclTabVi.textContent).not.toContain('ACL');
+    expect(aclTabVi.className).toContain('min-w-0');
+    expect(aclTabVi.className).toContain('truncate');
+    expect(rawTabVi.className).toContain('min-w-0');
+    expect(rawTabVi.className).toContain('truncate');
+
+    const corpusBadgeVi = screen.getByTestId('sandbox-corpus-badge');
+    expect(corpusBadgeVi.textContent).toContain('128.000+ bài báo học thuật');
+    expect(corpusBadgeVi.textContent).not.toContain('128,626');
+
+    fireEvent.click(screen.getByTestId('sandbox-random-acl-btn'));
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('Compact Tab Verification Study')).toBeDefined();
+    });
+    // Must stay steady and never jump to 129,157
+    expect(corpusBadgeVi.textContent).toContain('128.000+ bài báo học thuật');
+    expect(corpusBadgeVi.textContent).not.toContain('129,157');
+    expect(corpusBadgeVi.textContent).not.toContain('129.157');
+    unmountVi();
+
+    // EN mode
+    const { unmount: unmountEn } = renderWithProviders(<LiveCitationSandbox lang="en" />);
+    expect(screen.getByTestId('sandbox-mode-acl-btn').textContent?.trim()).toBe('Sample PDF');
+    expect(screen.getByTestId('sandbox-mode-raw-btn').textContent?.trim()).toBe('Quick Check');
+    expect(screen.getByTestId('sandbox-corpus-badge').textContent).toContain(
+      '128K+ scholarly papers',
+    );
+    unmountEn();
+  });
 });

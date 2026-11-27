@@ -1885,8 +1885,8 @@ describe('Premium Subscription, Pricing, Stripe Checkout & Paywall UI/UX Flows',
         initialEntries: ['/pricing'],
       });
 
-      const save48Vi = screen.getByText('Tiết kiệm $48/năm');
-      const save480Vi = screen.getByText('Tiết kiệm $480/năm');
+      const save48Vi = screen.getByText('Tiết kiệm 1.200.000 ₫/năm');
+      const save480Vi = screen.getByText('Tiết kiệm 12.000.000 ₫/năm');
       expect(save48Vi.className).toContain('whitespace-nowrap');
       expect(save48Vi.className).toContain('shrink-0');
       expect(save480Vi.className).toContain('whitespace-nowrap');
@@ -2699,5 +2699,109 @@ describe('Premium Subscription, Pricing, Stripe Checkout & Paywall UI/UX Flows',
     unmountErr();
 
     await i18n.changeLanguage('en');
+  });
+
+  it('Round 2 [P2-01] & [P3] — localizes VI checkout promo errors, order summary, VND primary currency, removes TDTU50, and aligns PricingPage VI comparison headers & savings badges to VND', async () => {
+    try {
+      await i18n.changeLanguage('vi');
+
+      // 1. PricingPage VI: VND savings badges + VND desktop comparison column headers
+      const { unmount: unmountPricing } = renderWithAuth(<PricingPage />, {
+        user: null,
+        initialEntries: ['/pricing'],
+      });
+      expect(screen.getByText('Tiết kiệm 1.200.000 ₫/năm')).toBeDefined();
+      expect(screen.getByText('Tiết kiệm 12.000.000 ₫/năm')).toBeDefined();
+
+      const desktopCompare = screen.getByTestId('desktop-compare-table-wrap');
+      expect(desktopCompare.textContent).toContain('Pro (400.000 ₫/tháng)');
+      expect(desktopCompare.textContent).toContain('Ultra (4.000.000 ₫/tháng)');
+
+      fireEvent.click(screen.getByTestId('billing-toggle-monthly'));
+      expect(desktopCompare.textContent).toContain('Pro (500.000 ₫/tháng)');
+      expect(desktopCompare.textContent).toContain('Ultra (5.000.000 ₫/tháng)');
+      unmountPricing();
+
+      // 2. StripeDemoCheckoutPage VI: primary VND, fully localized order summary, zero TDTU50, localized >6-char promo error
+      vi.spyOn(api, 'getCheckoutSessionDetails').mockResolvedValue({
+        session_id: 'cs_r2_vi_pro_annual',
+        plan_tier: 'pro',
+        plan_name: 'CITRA Pro',
+        billing_cycle: 'annual',
+        amount_usd: 192,
+        subtotal_usd: 192,
+        discount_usd: 0,
+        amount_vnd: 4800000,
+        usd_to_vnd_rate: 25000,
+        monthly_equivalent_usd: 16,
+        annual_savings_usd: 48,
+        currency: 'USD',
+        merchant_name: 'CITRA',
+        customer_email: 'student@citra.edu.vn',
+        customer_name: 'Nguyen Van A',
+        payment_mode: 'stripe_demo',
+        features_en: ['1-Click Auto-Fix Studio'],
+        features_vi: ['1-Click Auto-Fix Studio (tự động sửa trích dẫn)'],
+        status: 'pending',
+      });
+      const promoSpy = vi.spyOn(api, 'applyCheckoutSessionPromo').mockRejectedValue(
+        new Error('Promo code must be exactly 6 alphanumeric characters (A-Z, 0-9).'),
+      );
+
+      const { container: checkoutC, unmount: unmountCheckout } = renderWithAuth(
+        <Routes>
+          <Route path="/billing/checkout" element={<StripeDemoCheckoutPage />} />
+        </Routes>,
+        {
+          user: createMockUser({ plan_tier: 'basic' }),
+          initialEntries: ['/billing/checkout?session_id=cs_r2_vi_pro_annual'],
+        },
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('checkout-order-summary-panel')).toBeDefined();
+      });
+
+      const summaryText = screen.getByTestId('checkout-order-summary-panel').textContent ?? '';
+      // Primary VND hero & total due, USD in smaller subtext
+      expect(screen.getByTestId('checkout-amount-display').textContent).toBe('4.800.000 ₫');
+      expect(screen.getByTestId('checkout-total-due-display').textContent).toBe('4.800.000 ₫');
+      expect(screen.getByTestId('checkout-total-vnd-line').textContent).toContain('$192.00 USD');
+      // Localized order summary lines & sanitized feature text
+      expect(summaryText).toContain('Gói CITRA Pro (Theo năm)');
+      expect(summaryText).toContain('Đã áp dụng ưu đãi (-1.200.000 ₫)');
+      expect(summaryText).toContain('Tự động sửa & chuẩn hóa trích dẫn 1 chạm');
+      expect(summaryText).not.toContain('CITRA Pro (Annual)');
+      expect(summaryText).not.toContain('Included (-$48.00)');
+      expect(summaryText).not.toContain('1-Click Auto-Fix Studio');
+      // Zero hardcoded TDTU50 chip or placeholder hint
+      expect(checkoutC.textContent).not.toContain('TDTU50');
+      expect(screen.queryByTestId('quick-promo-TDTU50')).toBeNull();
+
+      // Client-side validation for >6-char promo code displays localized Vietnamese error (no raw English)
+      fireEvent.change(screen.getByTestId('checkout-promo-input'), {
+        target: { value: 'INVALIDPROMO' },
+      });
+      fireEvent.click(screen.getByTestId('checkout-promo-apply-btn'));
+      expect(screen.getByTestId('checkout-promo-error').textContent).toBe(
+        'Mã giảm giá phải gồm đúng 6 ký tự chữ và số (A–Z, 0–9).',
+      );
+      expect(promoSpy).not.toHaveBeenCalled();
+
+      // Backend rejection for a 6-char code also maps cleanly to localized Vietnamese
+      fireEvent.change(screen.getByTestId('checkout-promo-input'), {
+        target: { value: 'ABC123' },
+      });
+      fireEvent.click(screen.getByTestId('checkout-promo-apply-btn'));
+      await waitFor(() => {
+        expect(promoSpy).toHaveBeenCalledWith('cs_r2_vi_pro_annual', 'ABC123');
+      });
+      expect(screen.getByTestId('checkout-promo-error').textContent).toBe(
+        'Mã giảm giá phải gồm đúng 6 ký tự chữ và số (A–Z, 0–9).',
+      );
+      unmountCheckout();
+    } finally {
+      await i18n.changeLanguage('en');
+    }
   });
 });

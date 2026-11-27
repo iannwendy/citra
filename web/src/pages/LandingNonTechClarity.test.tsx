@@ -15,6 +15,7 @@ import {
   StickyCardWidget,
 } from '@/components/landing/SolvaMockupWidgets';
 import { ScholarlySourceLogo } from '@/components/landing/ScholarlySourceLogos';
+import { AuthSplitShell } from '@/components/AuthSplitShell';
 import { LandingPage } from '@/pages/LandingPage';
 
 describe('Task 2.1 — Human-First Copywriting & Collapsible Progressive Disclosure (EN & VI)', () => {
@@ -537,5 +538,90 @@ describe('Task 2.1 — Human-First Copywriting & Collapsible Progressive Disclos
 
       unmount();
     }
+  });
+
+  it('8. Round 2 [P2-04] & [P3] — separates Hero scan pill from libraries bar, fixes Sticky Card 2 / 100 scale, cleans VI benchmark fragments, displays prominent Landing VI VND pricing, and formats AuthSplitShell VI decimal', async () => {
+    // A. Sticky Card 2 uses consistent / 100 scale (never mixes % with điểm/pts)
+    const { container: sticky2Vi, unmount: uS2Vi } = render(
+      <StickyCardWidget index={2} lang="vi" />,
+    );
+    expect(sticky2Vi.textContent).toContain('68,0 / 100');
+    expect(sticky2Vi.textContent).toContain('95,6 / 100');
+    expect(sticky2Vi.textContent).toContain('+27,6 điểm');
+    expect(sticky2Vi.textContent).not.toContain('68.0%');
+    expect(sticky2Vi.textContent).not.toContain('95.6%');
+    uS2Vi();
+
+    const { container: sticky2En, unmount: uS2En } = render(
+      <StickyCardWidget index={2} lang="en" />,
+    );
+    expect(sticky2En.textContent).toContain('68.0 / 100');
+    expect(sticky2En.textContent).toContain('95.6 / 100');
+    expect(sticky2En.textContent).toContain('+27.6 pts');
+    expect(sticky2En.textContent).not.toContain('68.0%');
+    uS2En();
+
+    // B. LandingPage VI: Hero 2-row non-overlapping chrome, cleaned expanded #benchmark-120k, and prominent VND pricing
+    await i18n.changeLanguage('vi');
+    const { container: landingVi, unmount: uLandVi } = renderLanding();
+
+    const titlebar = screen.getByTestId('hero-mockup-titlebar');
+    const metabar = screen.getByTestId('hero-mockup-metabar');
+    expect(titlebar.textContent).toContain('thesis_citation_audit_2026.pdf');
+    expect(titlebar.textContent).not.toContain('15+ Thư viện');
+    expect(metabar.textContent).toContain('PDF · DOCX · 15+ Thư viện');
+    expect(metabar.textContent).toContain('Điểm: 92,4');
+
+    const bench = landingVi.querySelector('#benchmark-120k') as HTMLElement;
+    fireEvent.click(within(bench).getByTestId('benchmark-technical-details-toggle'));
+    const expandedVi = bench.textContent ?? '';
+    expect(expandedVi).toContain('TÁCH BIỆT BÀI BÁO & TIÊU ĐỀ');
+    expect(expandedVi).toContain('TRONG & NGOÀI TẬP DỮ LIỆU');
+    expect(expandedVi).toContain('Độ chuẩn xác');
+    expect(expandedVi).toContain('120.000');
+    expect(expandedVi).toContain('99,67%');
+    expect(expandedVi).toContain('99,93%');
+    expect(expandedVi).toContain('0,0405');
+    expect(expandedVi).not.toContain('PAPER & TITLE DISJOINT');
+    expect(expandedVi).not.toContain('ID & OOD');
+
+    // Prominent VND prices on Landing / VI cards + VND savings badges when annual toggle active
+    expect(screen.getByTestId('landing-vnd-price-basic').textContent).toBe('0 ₫');
+    expect(screen.getByTestId('landing-vnd-price-pro').textContent).toBe('500.000 ₫');
+    expect(screen.getByTestId('landing-vnd-price-ultra').textContent).toBe('5.000.000 ₫');
+    fireEvent.click(screen.getByTestId('landing-billing-toggle'));
+    expect(screen.getByTestId('landing-vnd-price-pro').textContent).toBe('400.000 ₫');
+    expect(screen.getByTestId('landing-vnd-price-ultra').textContent).toBe('4.000.000 ₫');
+    expect(landingVi.querySelector('#taxonomy')?.textContent).toContain('Tiết kiệm 1.200.000 ₫/năm');
+    expect(landingVi.querySelector('#taxonomy')?.textContent).toContain('Tiết kiệm 12.000.000 ₫/năm');
+    uLandVi();
+
+    // C. AuthSplitShell formats VI decimal with comma (94,8 / 100) and EN with dot (94.8 / 100)
+    await i18n.changeLanguage('vi');
+    const { container: authVi, unmount: uAuthVi } = render(
+      <MemoryRouter>
+        <ThemeProvider>
+          <AuthSplitShell>
+            <div>Form</div>
+          </AuthSplitShell>
+        </ThemeProvider>
+      </MemoryRouter>,
+    );
+    expect(authVi.textContent).toContain('94,8 / 100');
+    expect(authVi.textContent).not.toContain('94.8 / 100');
+    uAuthVi();
+
+    await i18n.changeLanguage('en');
+    const { container: authEn, unmount: uAuthEn } = render(
+      <MemoryRouter>
+        <ThemeProvider>
+          <AuthSplitShell>
+            <div>Form</div>
+          </AuthSplitShell>
+        </ThemeProvider>
+      </MemoryRouter>,
+    );
+    expect(authEn.textContent).toContain('94.8 / 100');
+    uAuthEn();
   });
 });

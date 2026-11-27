@@ -1,4 +1,4 @@
-import { useState, useEffect, useContext, useRef } from 'react';
+import { useState, useEffect, useContext, useRef, type ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
@@ -54,10 +54,10 @@ interface TermsSectionItem {
   shortNav: string;
   badge: string;
   title: string;
-  lead: string;
-  bullets: string[];
+  lead: ReactNode;
+  bullets: ReactNode[];
   calloutTitle: string;
-  calloutBody: string;
+  calloutBody: ReactNode;
   icon: typeof Scale;
 }
 
@@ -94,7 +94,7 @@ function getTermsSections(lang: Lang): TermsSectionItem[] {
           'Không chia sẻ toàn văn ra bên ngoài & không đưa vào kho đối chiếu chung kiểu Turnitin: CITRA tuyệt đối không gửi toàn văn bài viết sang bên thứ ba và không lưu bài nộp vào bất kỳ kho dữ liệu so trùng dùng chung nào.',
           'Không huấn luyện mô hình AI sinh văn bản: Nội dung luận văn và công trình chưa công bố của bạn không bao giờ được sử dụng để huấn luyện các mô hình trí tuệ nhân tạo thương mại.',
           'Chỉ các chuỗi thông tin thư mục cần kiểm chứng (tiêu đề tài liệu được trích dẫn, tên tác giả được dẫn, năm xuất bản, mã DOI/URL) mới được gửi tra cứu tới các danh mục khoa học mở như Crossref, OpenAlex, PubMed, arXiv và DBLP.',
-          'Chủ tài khoản có thể tự xóa từng báo cáo hoặc xóa vĩnh viễn toàn bộ tài khoản và tệp gốc bất cứ lúc nào tại trang Cài đặt (/settings).',
+          'Chủ tài khoản có thể tự xóa từng báo cáo hoặc xóa vĩnh viễn toàn bộ tài khoản và tệp gốc bất cứ lúc nào tại trang Cài đặt tài khoản.',
         ],
         calloutTitle: 'An toàn cho luận văn & bài báo trước ngày công bố',
         calloutBody:
@@ -125,13 +125,24 @@ function getTermsSections(lang: Lang): TermsSectionItem[] {
         shortNav: '04 · Gói cước & Thanh toán',
         badge: 'HẠN MỨC & THANH TOÁN',
         title: 'Gói Dịch vụ, Hạn mức Kiểm tra & Thanh toán Mã hóa',
-        lead:
-          'CITRA cung cấp gói Basic miễn phí trọn đời ($0) cùng các gói nâng cấp Pro và Ultra với biểu phí và hạn mức công bố minh bạch tại trang Bảng giá (/pricing).',
+        lead: (
+          <>
+            CITRA cung cấp gói Basic miễn phí trọn đời (0 ₫) cùng các gói nâng cấp Pro và Ultra
+            với biểu phí và hạn mức công bố minh bạch tại{' '}
+            <Link
+              to="/pricing"
+              className="underline underline-offset-4 hover:opacity-80 transition-opacity"
+            >
+              trang Bảng giá
+            </Link>
+            .
+          </>
+        ),
         bullets: [
           'Hạn mức số lượt kiểm tra bản thảo mỗi tháng được làm mới tự động theo chu kỳ gói cước; các lượt chưa sử dụng không cộng dồn sang kỳ tiếp theo.',
           'Giao dịch nâng cấp được mã hóa qua giao thức TLS 1.3 thông qua cổng thanh toán quốc tế Stripe (thẻ Visa, Mastercard, Apple Pay, Google Pay) và cổng thanh toán nội địa VNPay (VNPAY-QR, thẻ ATM/NAPAS ngân hàng Việt Nam).',
           'CITRA không bao giờ lưu trữ số thẻ đầy đủ hay mã bảo mật CVV; hệ thống chỉ ghi nhận 4 chữ số cuối và trạng thái biên lai để đối soát gói cước.',
-          'Người dùng có thể hủy gia hạn tự động bất cứ lúc nào với một thao tác tại trang Cài đặt (/settings) và vẫn giữ trọn quyền lợi Pro hoặc Ultra đến hết chu kỳ đã thanh toán.',
+          'Người dùng có thể hủy gia hạn tự động bất cứ lúc nào với một thao tác tại trang Cài đặt tài khoản và vẫn giữ trọn quyền lợi Pro hoặc Ultra đến hết chu kỳ đã thanh toán.',
         ],
         calloutTitle: 'Không phí ẩn · Chủ động hủy gia hạn 1 nhấp chuột',
         calloutBody:
@@ -147,14 +158,35 @@ function getTermsSections(lang: Lang): TermsSectionItem[] {
         lead:
           'Điều khoản dịch vụ này được điều chỉnh và giải thích theo pháp luật nước Cộng hòa Xã hội Chủ nghĩa Việt Nam.',
         bullets: [
-          'Hoạt động xử lý và bảo vệ dữ liệu cá nhân tuân thủ nghiêm ngặt Luật Bảo vệ dữ liệu cá nhân số 91/2025/QH15 và Nghị định 356/2025/NĐ-CP, được quy định chi tiết tại Chính sách Bảo vệ Dữ liệu Cá nhân (/privacy).',
+          <>
+            Hoạt động xử lý và bảo vệ dữ liệu cá nhân tuân thủ nghiêm ngặt Luật Bảo vệ dữ liệu cá
+            nhân số 91/2025/QH15 và Nghị định 356/2025/NĐ-CP, được quy định chi tiết tại{' '}
+            <Link
+              to="/privacy"
+              className="underline underline-offset-4 text-[var(--solva-ink)] hover:opacity-80 transition-opacity"
+            >
+              Chính sách bảo vệ dữ liệu cá nhân
+            </Link>
+            .
+          </>,
           'Khi có cập nhật quan trọng về điều khoản hoặc quyền lợi gói cước, CITRA sẽ thông báo rõ ràng trên hệ thống kèm phiên bản hiệu lực mới.',
           'Đơn vị phát triển & vận hành học thuật: Nhóm nghiên cứu CITRA tại Trường Đại học Tôn Đức Thắng (19 Nguyễn Hữu Thọ, phường Tân Hưng, TP. Hồ Chí Minh).',
           'Liên hệ hỗ trợ học thuật, gói dịch vụ và pháp lý dữ liệu: privacy@citra.io.vn.',
         ],
         calloutTitle: 'Đồng bộ cùng Chính sách Bảo vệ Dữ liệu Cá nhân',
-        calloutBody:
-          'Xem chi tiết quy trình thực thi quyền chủ thể dữ liệu và thời hạn phản hồi theo luật định tại trang /privacy.',
+        calloutBody: (
+          <>
+            Xem chi tiết quy trình thực thi quyền chủ thể dữ liệu và thời hạn phản hồi theo luật
+            định trong{' '}
+            <Link
+              to="/privacy"
+              className="underline underline-offset-4 text-[var(--solva-ink)] hover:opacity-80 transition-opacity"
+            >
+              Chính sách bảo vệ dữ liệu cá nhân
+            </Link>
+            .
+          </>
+        ),
         icon: ShieldCheck,
       },
     ];
@@ -191,7 +223,7 @@ function getTermsSections(lang: Lang): TermsSectionItem[] {
         'Zero full-text external sharing & zero shared Turnitin pool: CITRA never transmits your full manuscript prose to external third parties and never deposits unpublished theses or papers into any shared Turnitin-style similarity database.',
         'Zero generative AI training: Uploaded theses, student submissions, and unpublished research papers are never used to train external or commercial language models.',
         'Only extracted bibliographic citation fields (cited paper titles, cited author names, publication years, and DOIs/URLs) are queried against scholarly indexes including Crossref, OpenAlex, PubMed, arXiv, and DBLP.',
-        'Account holders can delete individual verification reports or permanently purge their entire account and uploaded files at any time from Settings (/settings).',
+        'Account holders can delete individual verification reports or permanently purge their entire account and uploaded files at any time from account Settings.',
       ],
       calloutTitle: 'Safe for unpublished theses & journal submissions',
       calloutBody:
@@ -222,13 +254,24 @@ function getTermsSections(lang: Lang): TermsSectionItem[] {
       shortNav: '04 · Plans & Billing',
       badge: 'QUOTAS & BILLING',
       title: 'Subscriptions, Quotas & Encrypted Billing',
-      lead:
-        'CITRA offers a permanent free Basic plan ($0) alongside Pro and Ultra subscriptions with transparent monthly quotas published on our Pricing page (/pricing).',
+      lead: (
+        <>
+          CITRA offers a permanent free Basic plan ($0) alongside Pro and Ultra subscriptions with
+          transparent monthly quotas published on our{' '}
+          <Link
+            to="/pricing"
+            className="underline underline-offset-4 hover:opacity-80 transition-opacity"
+          >
+            Pricing page
+          </Link>
+          .
+        </>
+      ),
       bullets: [
         'Monthly manuscript verification quotas renew automatically at the start of each billing cycle; unused monthly checks do not roll over.',
         'Paid upgrades are processed over TLS 1.3 via PCI-DSS compliant Stripe (Visa, Mastercard, Apple Pay, Google Pay) and VNPay (VNPAY-QR and domestic Vietnamese ATM/NAPAS bank cards).',
         'CITRA never stores raw card numbers or CVV security codes; only non-reversible payment references and the last 4 digits are retained for billing receipts.',
-        'You may cancel or reactivate auto-renewal at any time with one click in Settings (/settings), keeping full Pro or Ultra access through the end of your paid billing period.',
+        'You may cancel or reactivate auto-renewal at any time with one click in account Settings, keeping full Pro or Ultra access through the end of your paid billing period.',
       ],
       calloutTitle: 'Predictable academic billing · 1-click cancellation',
       calloutBody:
@@ -244,14 +287,35 @@ function getTermsSections(lang: Lang): TermsSectionItem[] {
       lead:
         'These Academic Terms of Service are governed by and construed in accordance with the laws of the Socialist Republic of Vietnam.',
       bullets: [
-        'Personal data protection, cross-border bibliographic queries, and statutory user rights are governed by Vietnam’s Personal Data Protection Law No. 91/2025/QH15 and Decree 356/2025/ND-CP, detailed in our Personal Data Protection Policy (/privacy).',
+        <>
+          Personal data protection, cross-border bibliographic queries, and statutory user rights
+          are governed by Vietnam’s Personal Data Protection Law No. 91/2025/QH15 and Decree
+          356/2025/ND-CP, detailed in our{' '}
+          <Link
+            to="/privacy"
+            className="underline underline-offset-4 text-[var(--solva-ink)] hover:opacity-80 transition-opacity"
+          >
+            Personal Data Protection Policy
+          </Link>
+          .
+        </>,
         'Material updates to these terms are announced clearly with an updated version identifier.',
         'Academic research & operational base: CITRA Research Group, Ton Duc Thang University (19 Nguyen Huu Tho Street, Tan Hung Ward, Ho Chi Minh City, Vietnam).',
         'Direct contact for academic support, institutional plans, or legal inquiries: privacy@citra.io.vn.',
       ],
       calloutTitle: 'Paired with our Personal Data Protection Policy',
-      calloutBody:
-        'Review full statutory response timelines and self-service data controls at /privacy.',
+      calloutBody: (
+        <>
+          Review full statutory response timelines and self-service data controls in our{' '}
+          <Link
+            to="/privacy"
+            className="underline underline-offset-4 text-[var(--solva-ink)] hover:opacity-80 transition-opacity"
+          >
+            Personal Data Protection Policy
+          </Link>
+          .
+        </>
+      ),
       icon: ShieldCheck,
     },
   ];
@@ -753,7 +817,7 @@ export function TermsOfServicePage(): JSX.Element {
         {
           badge: 'THANH TOÁN & DỮ LIỆU MINH BẠCH',
           title: 'Stripe, VNPay & Luật 91/2025/QH15',
-          desc: 'Mã hóa TLS 1.3 không lưu số thẻ gốc, hủy gia hạn 1 nhấp chuột và tự xóa dữ liệu tại /settings.',
+          desc: 'Mã hóa TLS 1.3 không lưu số thẻ gốc, hủy gia hạn 1 nhấp chuột và tự xóa dữ liệu tại trang Cài đặt.',
           icon: FileCheck2,
         },
       ]
@@ -1008,8 +1072,8 @@ export function TermsOfServicePage(): JSX.Element {
                       </p>
 
                       <ul className="space-y-3.5">
-                        {sec.bullets.map((bullet) => (
-                          <li key={bullet} className="flex items-start gap-3">
+                        {sec.bullets.map((bullet, bulletIdx) => (
+                          <li key={`${sec.id}-bullet-${bulletIdx}`} className="flex items-start gap-3">
                             <CheckCircle2 className="w-[18px] h-[18px] mt-1 text-emerald-700 dark:text-emerald-400 shrink-0" />
                             <span
                               style={{ color: 'var(--solva-muted)' }}

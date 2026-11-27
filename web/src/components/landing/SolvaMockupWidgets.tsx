@@ -364,10 +364,11 @@ export function HeroVerificationMockup({
       }}
       className="solva-glass-ring rounded-[10px] w-full max-w-full border border-[#E7E3D9]/80 dark:border-[#332F26] overflow-visible text-left select-none"
     >
-      {/* Top Window Chrome */}
+      {/* Top Window Chrome (Row 1: Title Bar with dedicated unobstructed right slot for scan badge) */}
       <div
+        data-testid="hero-mockup-titlebar"
         style={{ borderColor: 'var(--solva-border)' }}
-        className="px-2.5 sm:px-3.5 py-2.5 border-b rounded-t-[10px] flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5 bg-[#FBFAF6]/90 dark:bg-[#1E1C17] min-w-0"
+        className="px-2.5 sm:px-3.5 py-2 border-b rounded-t-[10px] flex items-center justify-between gap-2 bg-[#FBFAF6]/90 dark:bg-[#1E1C17] min-h-[36px] min-w-0"
       >
         <div className="flex items-center gap-2 min-w-0">
           <div className="flex items-center gap-1.5 shrink-0" aria-label="macOS window controls">
@@ -382,30 +383,37 @@ export function HeroVerificationMockup({
             thesis_citation_audit_2026.pdf
           </span>
         </div>
-        <div className="flex items-center gap-1.5 shrink-0">
-          <span className="hidden sm:inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[5px] bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300 font-mono text-[10px] font-medium shrink-0 whitespace-nowrap">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            <span>
-              {lang === 'vi' ? 'PDF · DOCX · 15+ Thư viện' : 'PDF · DOCX · 15+ Libraries'}
-            </span>
+      </div>
+
+      {/* Row 2: Dedicated Non-Overlapping Workspace Meta Bar (Libraries + Score) */}
+      <div
+        data-testid="hero-mockup-metabar"
+        style={{ borderColor: 'var(--solva-border)' }}
+        className="px-2.5 sm:px-3.5 py-1.5 border-b flex flex-wrap items-center justify-between gap-x-2 gap-y-1 bg-[#F4F2EC]/65 dark:bg-[#181612]/90 min-w-0"
+      >
+        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[5px] bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300 font-mono text-[10px] font-medium shrink-0 whitespace-nowrap">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+          <span>
+            {lang === 'vi' ? 'PDF · DOCX · 15+ Thư viện' : 'PDF · DOCX · 15+ Libraries'}
           </span>
-          <span
-            style={{
-              backgroundColor: 'var(--solva-surface)',
-              color: 'var(--solva-ink)',
-            }}
-            className="px-2 py-0.5 rounded-[5px] font-mono text-[10px] font-semibold shrink-0 whitespace-nowrap"
-          >
-            {lang === 'vi' ? 'Điểm:' : 'Score:'}{' '}
-            <SubtleNumber
-              value={
-                lang === 'vi'
-                  ? selected.cisScore.toFixed(1).replace('.', ',')
-                  : selected.cisScore.toFixed(1)
-              }
-            />
-          </span>
-        </div>
+        </span>
+        <span
+          style={{
+            backgroundColor: 'var(--solva-card-elevated)',
+            color: 'var(--solva-ink)',
+            borderColor: 'var(--solva-border)',
+          }}
+          className="px-2 py-0.5 rounded-[5px] border font-mono text-[10px] font-semibold shrink-0 whitespace-nowrap"
+        >
+          {lang === 'vi' ? 'Điểm:' : 'Score:'}{' '}
+          <SubtleNumber
+            value={
+              lang === 'vi'
+                ? selected.cisScore.toFixed(1).replace('.', ',')
+                : selected.cisScore.toFixed(1)
+            }
+          />
+        </span>
       </div>
 
       {/* Two-Column Workspace Preview */}
@@ -1393,8 +1401,8 @@ export function StickyCardWidget({
   }
 
   // Card 2: Revision Progress & Integrity Score (Screenshot 2)
-  const draftV2Targets = [94.5, 95.6, 94.5];
-  const cisDeltaTargets = [26.5, 27.6, 26.5];
+  const draftV2Targets = [95.6, 94.5, 95.6];
+  const cisDeltaTargets = [27.6, 26.5, 27.6];
   const currentV2 = draftV2Targets[activePhase % draftV2Targets.length];
   const currentCisDelta = cisDeltaTargets[activePhase % cisDeltaTargets.length];
 
@@ -1446,16 +1454,21 @@ export function StickyCardWidget({
           </div>
           <div
             style={{ color: 'var(--solva-ink)' }}
-            className="font-solva-serif text-[24px] sm:text-[26px] leading-tight mt-0.5"
+            className="font-solva-serif text-[22px] sm:text-[24px] leading-tight mt-0.5 whitespace-nowrap"
           >
             <SolvaLiveNumber
               value={68.0}
               decimals={1}
               decimalSeparator={lang === 'vi' ? ',' : '.'}
-              suffix="%"
               replaySeed={replaySeed}
               durationMs={1350}
-            />
+            />{' '}
+            <span
+              style={{ color: 'var(--solva-muted)' }}
+              className="font-mono text-[11px]"
+            >
+              / 100
+            </span>
           </div>
         </div>
         <div
@@ -1474,15 +1487,20 @@ export function StickyCardWidget({
               {lang === 'vi' ? '(Đã chuẩn hóa)' : '(Verified)'}
             </span>
           </div>
-          <div className="font-solva-serif text-[24px] sm:text-[26px] leading-tight mt-0.5 text-emerald-700 dark:text-emerald-300">
+          <div className="font-solva-serif text-[22px] sm:text-[24px] leading-tight mt-0.5 text-emerald-700 dark:text-emerald-300 whitespace-nowrap">
             <SubtleNumber
               value={
                 lang === 'vi'
                   ? currentV2.toFixed(1).replace('.', ',')
                   : currentV2.toFixed(1)
               }
-              suffix="%"
-            />
+            />{' '}
+            <span
+              style={{ color: 'var(--solva-muted)' }}
+              className="font-mono text-[11px]"
+            >
+              / 100
+            </span>
           </div>
         </div>
       </div>

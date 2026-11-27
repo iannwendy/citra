@@ -243,6 +243,31 @@ function sanitizeCheckoutFeature(feature: string, lang: 'vi' | 'en', planTier: s
       ? 'Mở rộng tìm kiếm trên Google Scholar cho sách in & tài liệu hiếm'
       : 'Extended Google Scholar lookup for books & rare sources';
   }
+  if (/auto-?fix\s+studio/i.test(feature)) {
+    return lang === 'vi'
+      ? 'Tự động sửa & chuẩn hóa trích dẫn 1 chạm'
+      : '1-Click Auto-Fix & Citation Formatting';
+  }
+  if (lang === 'vi') {
+    if (/document\s+inspector/i.test(feature)) {
+      return 'Trình đọc đối chiếu trang PDF & đánh dấu vị trí trích dẫn';
+    }
+    if (/deep\s+neural\s+sentence-?bert/i.test(feature)) {
+      return 'Đối chiếu ngữ nghĩa sâu giữa câu trích dẫn và tài liệu gốc (Việt ↔ Anh)';
+    }
+    if (/batch\s+check/i.test(feature)) {
+      return 'Tải lên & kiểm tra đồng thời tối đa 10 bản thảo PDF/DOCX';
+    }
+    if (/batch\s+upload/i.test(feature)) {
+      return 'Tải lên & kiểm tra đồng thời tối đa 50 bản thảo PDF/DOCX';
+    }
+    if (/override\s+verdict/i.test(feature)) {
+      return 'Không giới hạn lớp học, sinh viên & quyền giảng viên duyệt kết luận';
+    }
+    if (/class\s+zip/i.test(feature)) {
+      return 'Xuất báo cáo tổng hợp cả lớp (.ZIP) & bảng thống kê CSV';
+    }
+  }
   if (
     planTier === 'ultra' &&
     (/unlimited\s+(?:uploads|checks|pdf|manuscripts)/i.test(feature) ||
@@ -253,6 +278,89 @@ function sanitizeCheckoutFeature(feature: string, lang: 'vi' | 'en', planTier: s
       : 'Up to 1,000 manuscript checks / month';
   }
   return feature;
+}
+
+function formatCheckoutPlanName(
+  planTier: string,
+  planName: string,
+  lang: 'vi' | 'en',
+): string {
+  if (lang !== 'vi') return planName;
+  const normalizedTier = planTier.toLowerCase();
+  if (normalizedTier === 'pro') return 'Gói CITRA Pro';
+  if (normalizedTier === 'ultra') return 'Gói CITRA Ultra';
+  return planName.startsWith('Gói ') ? planName : `Gói ${planName}`;
+}
+
+function formatBillingCycleLabel(cycle: string, lang: 'vi' | 'en'): string {
+  if (cycle === 'annual') {
+    return lang === 'vi' ? 'Theo năm' : 'Annual';
+  }
+  return lang === 'vi' ? 'Theo tháng' : 'Monthly';
+}
+
+function formatPromoError(
+  err: unknown,
+  lang: 'vi' | 'en',
+  usdToVndRate: number,
+): string {
+  const raw =
+    typeof err === 'string'
+      ? err
+      : err instanceof Error
+        ? err.message
+        : err && typeof err === 'object' && 'detail' in err
+          ? String((err as { detail?: unknown }).detail ?? '')
+          : '';
+
+  if (/exactly\s+6\s+alphanumeric/i.test(raw)) {
+    return lang === 'vi'
+      ? 'Mã giảm giá phải gồm đúng 6 ký tự chữ và số (A–Z, 0–9).'
+      : 'Promo code must be exactly 6 alphanumeric characters (A-Z, 0-9).';
+  }
+
+  if (lang === 'vi') {
+    if (/was\s+not\s+found/i.test(raw)) {
+      return 'Mã giảm giá không tồn tại. Vui lòng kiểm tra lại.';
+    }
+    if (/currently\s+inactive/i.test(raw)) {
+      return 'Mã giảm giá này hiện chưa được kích hoạt.';
+    }
+    if (/has\s+expired/i.test(raw)) {
+      return 'Mã giảm giá này đã hết hạn sử dụng.';
+    }
+    const tierMatch = raw.match(/only\s+valid\s+for\s+the\s+citra\s+(\w+)\s+plan/i);
+    if (tierMatch) {
+      return `Mã giảm giá này chỉ áp dụng cho gói CITRA ${tierMatch[1]}.`;
+    }
+    const cycleMatch = raw.match(/only\s+valid\s+for\s+(monthly|annual)\s+billing/i);
+    if (cycleMatch) {
+      return `Mã giảm giá này chỉ áp dụng cho chu kỳ thanh toán ${
+        cycleMatch[1].toLowerCase() === 'annual' ? 'theo năm' : 'theo tháng'
+      }.`;
+    }
+    const minMatch = raw.match(/minimum\s+order\s+of\s+\$?([\d.,]+)/i);
+    if (minMatch) {
+      const minUsd = Number.parseFloat(minMatch[1].replace(/,/g, ''));
+      if (Number.isFinite(minUsd)) {
+        return `Mã giảm giá này yêu cầu đơn hàng tối thiểu ${formatVnd(minUsd * usdToVndRate)} ($${minUsd.toFixed(2)} USD).`;
+      }
+    }
+    if (/maximum\s+redemption\s+limit/i.test(raw)) {
+      return 'Mã giảm giá này đã hết lượt sử dụng.';
+    }
+    if (/already\s+used\s+promo\s+code/i.test(raw)) {
+      return 'Bạn đã sử dụng mã giảm giá này trước đó.';
+    }
+  }
+
+  return formatUserError(
+    err,
+    lang,
+    lang === 'vi'
+      ? 'Mã giảm giá không tồn tại hoặc đã hết hạn.'
+      : 'Promo code not found or expired.',
+  );
 }
 
 const BILLING_COUNTRIES = [
@@ -493,11 +601,22 @@ export function StripeDemoCheckoutPage() {
   const handleApplyPromoCode = async (codeOverride?: string) => {
     if (!sessionId) return;
     const targetCode = (codeOverride ?? promoInput).trim().toUpperCase();
+    const activeRate = details?.usd_to_vnd_rate ?? details?.vnpay?.usd_to_vnd_rate ?? 25000;
     if (!targetCode) {
       setPromoError(
         lang === 'vi'
           ? 'Vui lòng nhập mã giảm giá.'
           : 'Please enter a promo code.',
+      );
+      setPromoSuccessMsg(null);
+      return;
+    }
+
+    if (!/^[A-Z0-9]{6}$/.test(targetCode)) {
+      setPromoError(
+        lang === 'vi'
+          ? 'Mã giảm giá phải gồm đúng 6 ký tự chữ và số (A–Z, 0–9).'
+          : 'Promo code must be exactly 6 alphanumeric characters (A-Z, 0-9).',
       );
       setPromoSuccessMsg(null);
       return;
@@ -510,21 +629,17 @@ export function StripeDemoCheckoutPage() {
       const updated = await api.applyCheckoutSessionPromo(sessionId, targetCode);
       setDetails(updated);
       setPromoInput('');
+      const updatedRate = updated.usd_to_vnd_rate ?? updated.vnpay?.usd_to_vnd_rate ?? activeRate;
+      const updatedDiscountUsd = updated.discount_usd ?? 0;
+      const updatedDiscountVnd =
+        updated.discount_vnd ?? Math.round(updatedDiscountUsd * updatedRate);
       setPromoSuccessMsg(
         lang === 'vi'
-          ? `Đã áp dụng mã ${updated.promo_code}: Giảm -$${(updated.discount_usd ?? 0).toFixed(2)} USD!`
-          : `Applied code ${updated.promo_code}: Saved -$${(updated.discount_usd ?? 0).toFixed(2)} USD!`,
+          ? `Đã áp dụng mã ${updated.promo_code}: Giảm -${formatVnd(updatedDiscountVnd)} (-$${updatedDiscountUsd.toFixed(2)} USD)!`
+          : `Applied code ${updated.promo_code}: Saved -$${updatedDiscountUsd.toFixed(2)} USD!`,
       );
     } catch (err) {
-      setPromoError(
-        formatUserError(
-          err,
-          lang,
-          lang === 'vi'
-            ? 'Mã giảm giá không tồn tại hoặc đã hết hạn.'
-            : 'Promo code not found or expired.',
-        ),
-      );
+      setPromoError(formatPromoError(err, lang, activeRate));
     } finally {
       setPromoLoading(false);
     }
@@ -831,11 +946,23 @@ export function StripeDemoCheckoutPage() {
       : details.merchant_name;
   const isSandboxMode =
     isDemoEvaluatorMode() || details.payment_mode === 'stripe_demo';
+  const showEvaluatorPromoHints = isDemoEvaluatorMode();
+  const displayPlanName = formatCheckoutPlanName(
+    details.plan_tier,
+    details.plan_name,
+    lang,
+  );
+  const billingCycleLabel = formatBillingCycleLabel(details.billing_cycle, lang);
   const subtotalUsd = details.subtotal_usd ?? details.amount_usd;
   const discountUsd = details.discount_usd ?? 0;
   const usdToVndRate = details.usd_to_vnd_rate ?? details.vnpay?.usd_to_vnd_rate ?? 25000;
   const amountVnd = details.amount_vnd ?? Math.round(details.amount_usd * usdToVndRate);
+  const subtotalVnd = Math.round(subtotalUsd * usdToVndRate);
   const discountVnd = details.discount_vnd ?? Math.round(discountUsd * usdToVndRate);
+  const annualSavingsVnd = Math.round((details.annual_savings_usd ?? 0) * usdToVndRate);
+  const monthlyEquivalentVnd = Math.round(
+    (details.monthly_equivalent_usd ?? 0) * usdToVndRate,
+  );
 
   return (
     <div
@@ -891,49 +1018,73 @@ export function StripeDemoCheckoutPage() {
                   : `SUBSCRIBE TO ${details.billing_cycle.toUpperCase()} PLAN`}
               </p>
               <h1 className="font-display text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white">
-                {details.plan_name}
+                {displayPlanName}
               </h1>
-              <div className="flex items-baseline gap-2.5 pt-1 flex-wrap">
-                <span
-                  className="font-display text-4xl sm:text-5xl font-bold text-slate-900 dark:text-white"
-                  data-testid="checkout-amount-display"
-                >
-                  ${details.amount_usd.toFixed(2)}
-                </span>
-                {discountUsd > 0 && (
-                  <span className="text-lg font-mono text-slate-400 dark:text-slate-500 line-through">
-                    ${subtotalUsd.toFixed(2)}
-                  </span>
-                )}
-                <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">
-                  USD /{' '}
-                  {details.billing_cycle === 'annual'
-                    ? lang === 'vi'
-                      ? 'năm'
-                      : 'year'
-                    : lang === 'vi'
-                      ? 'tháng'
-                      : 'month'}
-                </span>
-              </div>
-              <div
-                className="inline-flex items-center gap-2 px-2.5 py-1 rounded-lg bg-sky-50 dark:bg-sky-500/15 border border-sky-200/90 dark:border-sky-400/30 text-[#005BAA] dark:text-sky-200 text-xs font-mono font-medium"
-                data-testid="checkout-vnd-amount-display"
-              >
-                <VNPayLogo active />
-                <span>
-                  ≈ {formatVnd(amountVnd)} VND
-                </span>
-                <span className="text-[10px] text-sky-700/75 dark:text-sky-300/70">
-                  (1 USD = {formatVnd(usdToVndRate)})
-                </span>
-              </div>
+              {lang === 'vi' ? (
+                <>
+                  <div className="flex items-baseline gap-2.5 pt-1 flex-wrap">
+                    <span
+                      className="font-display text-3xl sm:text-4xl font-bold text-slate-900 dark:text-white whitespace-nowrap"
+                      data-testid="checkout-amount-display"
+                    >
+                      {formatVnd(amountVnd)}
+                    </span>
+                    {discountVnd > 0 && (
+                      <span className="text-base font-mono text-slate-400 dark:text-slate-500 line-through whitespace-nowrap">
+                        {formatVnd(subtotalVnd)}
+                      </span>
+                    )}
+                    <span className="text-xs text-slate-500 dark:text-slate-400 font-mono whitespace-nowrap">
+                      / {details.billing_cycle === 'annual' ? 'năm' : 'tháng'}
+                    </span>
+                  </div>
+                  <div
+                    className="inline-flex items-center gap-2 px-2.5 py-1 rounded-lg bg-sky-50 dark:bg-sky-500/15 border border-sky-200/90 dark:border-sky-400/30 text-[#005BAA] dark:text-sky-200 text-xs font-mono font-medium flex-wrap"
+                    data-testid="checkout-vnd-amount-display"
+                  >
+                    <VNPayLogo active />
+                    <span>≈ ${details.amount_usd.toFixed(2)} USD</span>
+                    <span className="text-[10px] text-sky-700/75 dark:text-sky-300/70">
+                      (1 USD = {formatVnd(usdToVndRate)})
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-baseline gap-2.5 pt-1 flex-wrap">
+                    <span
+                      className="font-display text-4xl sm:text-5xl font-bold text-slate-900 dark:text-white"
+                      data-testid="checkout-amount-display"
+                    >
+                      ${details.amount_usd.toFixed(2)}
+                    </span>
+                    {discountUsd > 0 && (
+                      <span className="text-lg font-mono text-slate-400 dark:text-slate-500 line-through">
+                        ${subtotalUsd.toFixed(2)}
+                      </span>
+                    )}
+                    <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">
+                      USD / {details.billing_cycle === 'annual' ? 'year' : 'month'}
+                    </span>
+                  </div>
+                  <div
+                    className="inline-flex items-center gap-2 px-2.5 py-1 rounded-lg bg-sky-50 dark:bg-sky-500/15 border border-sky-200/90 dark:border-sky-400/30 text-[#005BAA] dark:text-sky-200 text-xs font-mono font-medium"
+                    data-testid="checkout-vnd-amount-display"
+                  >
+                    <VNPayLogo active />
+                    <span>≈ {formatVnd(amountVnd)} VND</span>
+                    <span className="text-[10px] text-sky-700/75 dark:text-sky-300/70">
+                      (1 USD = {formatVnd(usdToVndRate)})
+                    </span>
+                  </div>
+                </>
+              )}
               {details.billing_cycle === 'annual' && (
                 <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-500/20 border border-emerald-200/90 dark:border-emerald-400/30 text-emerald-700 dark:text-emerald-300 text-xs font-mono font-medium">
-                  <Sparkles className="h-3.5 w-3.5" />
+                  <Sparkles className="h-3.5 w-3.5 shrink-0" />
                   <span>
                     {lang === 'vi'
-                      ? `Chỉ $${details.monthly_equivalent_usd}/tháng · Tiết kiệm $${details.annual_savings_usd}/năm`
+                      ? `Chỉ ${formatVnd(monthlyEquivalentVnd)}/tháng · Tiết kiệm ${formatVnd(annualSavingsVnd)}/năm`
                       : `Only $${details.monthly_equivalent_usd}/mo · Save $${details.annual_savings_usd}/yr`}
                   </span>
                 </div>
@@ -958,12 +1109,14 @@ export function StripeDemoCheckoutPage() {
                   data-testid="checkout-applied-promo-badge"
                 >
                   <div className="min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="px-2 py-0.5 rounded bg-emerald-600 text-white dark:bg-emerald-500/25 font-mono text-xs font-bold tracking-wider dark:text-emerald-200">
                         {details.promo_code}
                       </span>
                       <span className="text-xs font-mono font-semibold text-emerald-700 dark:text-emerald-300">
-                        -${discountUsd.toFixed(2)} USD
+                        {lang === 'vi'
+                          ? `-${formatVnd(discountVnd)} (-$${discountUsd.toFixed(2)})`
+                          : `-$${discountUsd.toFixed(2)} USD`}
                       </span>
                     </div>
                     {details.promo_details?.description && (
@@ -1005,7 +1158,11 @@ export function StripeDemoCheckoutPage() {
                         }
                       }}
                       maxLength={32}
-                      placeholder={lang === 'vi' ? 'Nhập mã ưu đãi (VD: CITRA2)' : 'Enter promo code (e.g. CITRA2)'}
+                      placeholder={
+                        lang === 'vi'
+                          ? 'Nhập mã giảm giá (6 ký tự)'
+                          : 'Enter 6-character promo code'
+                      }
                       data-testid="checkout-promo-input"
                       className="h-9 bg-[#FBFAF6] dark:bg-slate-950 border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-mono text-xs uppercase tracking-wider placeholder:text-slate-400 dark:placeholder:text-slate-500 rounded-xl"
                     />
@@ -1027,30 +1184,34 @@ export function StripeDemoCheckoutPage() {
                     </Button>
                   </div>
 
-                  {/* Quick 1-click Demo Promo Chips */}
-                  <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
-                    <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400">
-                      {lang === 'vi' ? 'Thử nhanh:' : 'Try:'}
-                    </span>
-                    {[
-                      { code: 'CITRA2', label: '-20%' },
-                      { code: 'TDTU50', label: '-50% Pro' },
-                      { code: 'SAVE10', label: '-$10' },
-                    ].map((chip) => (
-                      <button
-                        key={chip.code}
-                        type="button"
-                        data-testid={`quick-promo-${chip.code}`}
-                        onClick={() => {
-                          setPromoInput(chip.code);
-                          void handleApplyPromoCode(chip.code);
-                        }}
-                        className="px-2 py-0.5 rounded-md bg-[#F4F2EC] hover:bg-indigo-50 dark:bg-slate-800/90 dark:hover:bg-indigo-950 border border-slate-300/90 hover:border-indigo-400 dark:border-slate-700 dark:hover:border-indigo-500/50 text-[10px] font-mono text-slate-700 hover:text-indigo-700 dark:text-slate-300 dark:hover:text-indigo-200 transition-colors cursor-pointer"
-                      >
-                        {chip.code} ({chip.label})
-                      </button>
-                    ))}
-                  </div>
+                  {/* Neutral Demo Promo Chips (only in explicit evaluator demo mode) */}
+                  {showEvaluatorPromoHints && (
+                    <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                      <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400">
+                        {lang === 'vi' ? 'Thử nhanh:' : 'Try:'}
+                      </span>
+                      {[
+                        { code: 'CITRA2', label: '-20%' },
+                        {
+                          code: 'SAVE10',
+                          label: lang === 'vi' ? `-${formatVnd(10 * usdToVndRate)}` : '-$10',
+                        },
+                      ].map((chip) => (
+                        <button
+                          key={chip.code}
+                          type="button"
+                          data-testid={`quick-promo-${chip.code}`}
+                          onClick={() => {
+                            setPromoInput(chip.code);
+                            void handleApplyPromoCode(chip.code);
+                          }}
+                          className="px-2 py-0.5 rounded-md bg-[#F4F2EC] hover:bg-indigo-50 dark:bg-slate-800/90 dark:hover:bg-indigo-950 border border-slate-300/90 hover:border-indigo-400 dark:border-slate-700 dark:hover:border-indigo-500/50 text-[10px] font-mono text-slate-700 hover:text-indigo-700 dark:text-slate-300 dark:hover:text-indigo-200 transition-colors cursor-pointer"
+                        >
+                          {chip.code} ({chip.label})
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1077,56 +1238,76 @@ export function StripeDemoCheckoutPage() {
 
             {/* Line Items Summary */}
             <div className="space-y-2.5 pt-3 border-t border-[#E7E3D9] dark:border-slate-800 text-xs">
-              <div className="flex items-center justify-between text-slate-600 dark:text-slate-300">
+              <div className="flex items-center justify-between gap-2 text-slate-600 dark:text-slate-300">
                 <span>
-                  {details.plan_name} (
-                  {details.billing_cycle === 'annual' ? 'Annual' : 'Monthly'})
+                  {displayPlanName} ({billingCycleLabel})
                 </span>
-                <span className="font-mono font-medium text-slate-900 dark:text-slate-200" data-testid="checkout-subtotal-display">
-                  ${subtotalUsd.toFixed(2)}
+                <span
+                  className="font-mono font-medium text-slate-900 dark:text-slate-200 whitespace-nowrap"
+                  data-testid="checkout-subtotal-display"
+                >
+                  {lang === 'vi' ? formatVnd(subtotalVnd) : `$${subtotalUsd.toFixed(2)}`}
                 </span>
               </div>
               {details.annual_savings_usd > 0 && (
-                <div className="flex items-center justify-between text-emerald-700 dark:text-emerald-400 font-medium">
+                <div className="flex items-center justify-between gap-2 text-emerald-700 dark:text-emerald-400 font-medium">
                   <span>
                     {lang === 'vi'
                       ? 'Ưu đãi chu kỳ năm (-20%)'
                       : 'Annual Billing Discount (20%)'}
                   </span>
-                  <span className="font-mono">
-                    Included (-${details.annual_savings_usd}.00)
+                  <span className="font-mono text-right">
+                    {lang === 'vi'
+                      ? `Đã áp dụng ưu đãi (-${formatVnd(annualSavingsVnd)})`
+                      : `Included (-$${details.annual_savings_usd}.00)`}
                   </span>
                 </div>
               )}
               {discountUsd > 0 && (
                 <div
-                  className="flex items-center justify-between text-emerald-700 dark:text-emerald-400 font-medium"
+                  className="flex items-center justify-between gap-2 text-emerald-700 dark:text-emerald-400 font-medium"
                   data-testid="checkout-discount-row"
                 >
                   <span>
                     {lang === 'vi' ? 'Mã giảm giá' : 'Promo Code'} (
                     {details.promo_code})
                   </span>
-                  <span className="font-mono">-${discountUsd.toFixed(2)}</span>
+                  <span className="font-mono whitespace-nowrap">
+                    {lang === 'vi' ? `-${formatVnd(discountVnd)}` : `-$${discountUsd.toFixed(2)}`}
+                  </span>
                 </div>
               )}
-              <div className="flex items-center justify-between pt-3 border-t border-[#E7E3D9] dark:border-slate-800 text-sm font-bold text-slate-900 dark:text-white">
+              <div className="flex items-center justify-between gap-2 pt-3 border-t border-[#E7E3D9] dark:border-slate-800 text-sm font-bold text-slate-900 dark:text-white">
                 <span>
                   {lang === 'vi' ? 'Tổng thanh toán hôm nay' : 'Total due today'}
                 </span>
-                <span className="font-mono" data-testid="checkout-total-due-display">
-                  ${details.amount_usd.toFixed(2)} USD
+                <span
+                  className="font-mono whitespace-nowrap"
+                  data-testid="checkout-total-due-display"
+                >
+                  {lang === 'vi'
+                    ? formatVnd(amountVnd)
+                    : `$${details.amount_usd.toFixed(2)} USD`}
                 </span>
               </div>
-              <div className="flex items-center justify-between text-xs text-[#005BAA] dark:text-sky-300 font-mono font-medium">
+              <div className="flex items-center justify-between gap-2 text-xs text-[#005BAA] dark:text-sky-300 font-mono font-medium">
                 <span>
                   {lang === 'vi'
-                    ? 'Quy đổi cổng VNPay (VND):'
+                    ? 'Quy đổi thẻ quốc tế (USD):'
                     : 'VNPay Gateway Equivalent (VND):'}
                 </span>
-                <span data-testid="checkout-total-vnd-line">
-                  {formatVnd(amountVnd)}
-                  {discountVnd > 0 ? ` (-${formatVnd(discountVnd)})` : ''}
+                <span data-testid="checkout-total-vnd-line" className="whitespace-nowrap">
+                  {lang === 'vi' ? (
+                    <>
+                      ${details.amount_usd.toFixed(2)} USD
+                      {discountUsd > 0 ? ` (-$${discountUsd.toFixed(2)})` : ''}
+                    </>
+                  ) : (
+                    <>
+                      {formatVnd(amountVnd)}
+                      {discountVnd > 0 ? ` (-${formatVnd(discountVnd)})` : ''}
+                    </>
+                  )}
                 </span>
               </div>
             </div>
@@ -1152,7 +1333,8 @@ export function StripeDemoCheckoutPage() {
           <div className="pt-6 border-t border-[#E7E3D9] dark:border-slate-800/80 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 relative z-10 flex-wrap gap-2">
             <span className="flex items-center gap-1.5">
               <Lock className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-              Powered by <strong className="text-slate-900 dark:text-white">Stripe</strong> &amp;{' '}
+              {lang === 'vi' ? 'Xử lý bởi' : 'Powered by'}{' '}
+              <strong className="text-slate-900 dark:text-white">Stripe</strong> &amp;{' '}
               <strong className="text-[#005BAA] dark:text-sky-300">VNPAY</strong>
             </span>
             <span className="font-mono text-[10px]">
@@ -1201,7 +1383,7 @@ export function StripeDemoCheckoutPage() {
                     : 'Express One-Click Checkout'}
                 </span>
                 <span className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400">
-                  VNPAY-QR · Biometric
+                  {lang === 'vi' ? 'VNPAY-QR · Sinh trắc học' : 'VNPAY-QR · Biometric'}
                 </span>
               </div>
 
@@ -1496,7 +1678,7 @@ export function StripeDemoCheckoutPage() {
                     onChange={(e) =>
                       setCardholderName(e.target.value.toUpperCase())
                     }
-                    placeholder="FULL NAME ON CARD"
+                    placeholder={lang === 'vi' ? 'HO TEN IN TREN THE' : 'FULL NAME ON CARD'}
                     autoComplete="cc-name"
                     className="text-sm h-11 rounded-xl uppercase"
                     required={!(details.amount_usd <= 0 || details.payment_mode === 'promo_waiver')}
@@ -1572,7 +1754,7 @@ export function StripeDemoCheckoutPage() {
                     <>
                       <Lock className="h-4 w-4 mr-2" />
                       {lang === 'vi'
-                        ? `Thanh toán $${details.amount_usd.toFixed(2)} & Kích hoạt ${details.plan_name}`
+                        ? `Thanh toán ${formatVnd(amountVnd)} & Kích hoạt ${displayPlanName}`
                         : `Pay $${details.amount_usd.toFixed(2)} & Activate ${details.plan_name}`}
                     </>
                   )}
@@ -1854,14 +2036,14 @@ export function StripeDemoCheckoutPage() {
                     <>
                       <AppleLogoSvg className="w-4 h-4 mr-2" />
                       {lang === 'vi'
-                        ? `Mở Apple Pay · $${details.amount_usd.toFixed(2)} USD`
+                        ? `Mở Apple Pay · ${formatVnd(amountVnd)}`
                         : `Continue with Apple Pay · $${details.amount_usd.toFixed(2)} USD`}
                     </>
                   ) : (
                     <>
                       <GooglePaySvg className="w-4 h-4 mr-2" />
                       {lang === 'vi'
-                        ? `Mở Google Pay · $${details.amount_usd.toFixed(2)} USD`
+                        ? `Mở Google Pay · ${formatVnd(amountVnd)}`
                         : `Continue with Google Pay · $${details.amount_usd.toFixed(2)} USD`}
                     </>
                   )}
@@ -2468,19 +2650,25 @@ export function StripeDemoCheckoutPage() {
                     {lang === 'vi' ? 'Gói đăng ký:' : 'Subscription:'}
                   </span>
                   <span className="font-medium text-slate-800 dark:text-slate-200">
-                    {details.plan_name} ({details.billing_cycle})
+                    {displayPlanName} ({billingCycleLabel})
                   </span>
                 </div>
                 {details.promo_code && discountUsd > 0 && (
                   <div className="flex items-center justify-between text-emerald-600 dark:text-emerald-400">
-                    <span>Promo ({details.promo_code}):</span>
-                    <span className="font-mono">-${discountUsd.toFixed(2)}</span>
+                    <span>
+                      {lang === 'vi' ? 'Mã giảm giá' : 'Promo'} ({details.promo_code}):
+                    </span>
+                    <span className="font-mono">
+                      {lang === 'vi' ? `-${formatVnd(discountVnd)}` : `-$${discountUsd.toFixed(2)}`}
+                    </span>
                   </div>
                 )}
                 <div className="flex items-center justify-between pt-2 border-t border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-900 dark:text-white">
                   <span>{lang === 'vi' ? 'Tổng cộng:' : 'Total:'}</span>
                   <span className="font-mono">
-                    ${details.amount_usd.toFixed(2)} USD
+                    {lang === 'vi'
+                      ? `${formatVnd(amountVnd)} ($${details.amount_usd.toFixed(2)})`
+                      : `$${details.amount_usd.toFixed(2)} USD`}
                   </span>
                 </div>
               </div>
@@ -2512,7 +2700,7 @@ export function StripeDemoCheckoutPage() {
                     <>
                       <CheckCircle2 className="h-4 w-4 mr-2" />
                       {lang === 'vi'
-                        ? `Xác nhận thanh toán $${details.amount_usd.toFixed(2)}`
+                        ? `Xác nhận thanh toán ${formatVnd(amountVnd)}`
                         : `Confirm & Pay $${details.amount_usd.toFixed(2)}`}
                     </>
                   )}
@@ -2630,10 +2818,10 @@ export function StripeDemoCheckoutPage() {
                       : 'Verifying Secure Transaction...'
                     : celebrationStage === 'provisioning'
                       ? lang === 'vi'
-                        ? `Đang kích hoạt gói ${details.plan_name}...`
+                        ? `Đang kích hoạt ${displayPlanName}...`
                         : `Provisioning ${details.plan_name} Workspace...`
                       : lang === 'vi'
-                        ? `Chào mừng đến với ${details.plan_name}!`
+                        ? `Chào mừng đến với ${displayPlanName}!`
                         : `Welcome to ${details.plan_name}!`}
                 </h2>
                 <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 max-w-sm mx-auto">

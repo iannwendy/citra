@@ -268,6 +268,14 @@ describe('Task 1.5 — Public Routes, Clean IA Anchors, 3-Role Workspaces, /term
     privacyLinks.forEach((lnk) => {
       expect(lnk.textContent).not.toContain('(/privacy)');
     });
+    // Round 2 [P3]: zero raw route paths in visible prose (EN)
+    expect(termsPage.textContent).not.toContain('(/privacy)');
+    expect(termsPage.textContent).not.toContain('(/settings)');
+    expect(termsPage.textContent).not.toContain('(/pricing)');
+    expect(termsPage.querySelector('#governing-law')?.textContent).not.toContain('/privacy');
+    expect(
+      termsPage.querySelector('#governing-law a[href="/privacy"]')?.textContent,
+    ).toBe('Personal Data Protection Policy');
 
     // Switch to Vietnamese via header toggle and verify localized editorial copy
     fireEvent.click(within(termsPage).getByRole('button', { name: /VI \/ EN/i }));
@@ -276,6 +284,13 @@ describe('Task 1.5 — Public Routes, Clean IA Anchors, 3-Role Workspaces, /term
       expect(termsPage.textContent).toMatch(/Đại học Tôn Đức Thắng/i);
       expect(termsPage.textContent).toMatch(/Hỗ trợ Ra Quyết định/i);
       expect(termsPage.textContent).not.toMatch(/\bDRAFT\b|BẢN NHÁP|\[CHECK:|\[KIỂM TRA:/i);
+      expect(termsPage.textContent).not.toContain('(/privacy)');
+      expect(termsPage.textContent).not.toContain('(/settings)');
+      expect(termsPage.textContent).not.toContain('(/pricing)');
+      expect(termsPage.querySelector('#governing-law')?.textContent).not.toContain('/privacy');
+      expect(
+        termsPage.querySelector('#governing-law a[href="/privacy"]')?.textContent,
+      ).toBe('Chính sách bảo vệ dữ liệu cá nhân');
     });
 
     // Terms footer includes /terms, /privacy, and cross-page role links
