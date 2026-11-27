@@ -210,11 +210,11 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
 
         {/* Split Body */}
         <div className="flex flex-1 min-h-0 overflow-hidden flex-col md:flex-row">
-          {/* Sidebar Navigation — horizontal scroll strip on mobile, 272px column on desktop (zero truncation) */}
+          {/* Sidebar Navigation — 2x2 grid on <sm mobile (zero clipping), flex bar on sm, 272px column on md+ */}
           <div className="w-full md:w-[272px] shrink-0 bg-slate-50/60 dark:bg-slate-900/50 border-b md:border-b-0 md:border-r border-slate-200/80 dark:border-slate-800 p-2.5 sm:p-3 flex flex-col justify-between gap-3">
             <nav
               aria-label={isVi ? 'Danh mục trợ giúp' : 'Help sections'}
-              className="flex md:flex-col gap-1.5 overflow-x-auto scrollbar-none md:overflow-x-visible"
+              className="grid grid-cols-2 gap-1.5 sm:flex sm:flex-wrap md:flex-col md:flex-nowrap"
             >
               {sections.map((section) => {
                 const Icon = section.icon;
@@ -225,15 +225,15 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
                     type="button"
                     onClick={() => setActiveSection(section.id)}
                     aria-label={section.label}
-                    className={`group shrink-0 md:w-full flex items-center justify-between gap-2.5 px-3 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm text-left whitespace-nowrap transition-all cursor-pointer ${
+                    className={`group min-w-0 w-full sm:w-auto sm:shrink-0 md:w-full flex items-center justify-between gap-2 sm:gap-2.5 px-2.5 sm:px-3 py-2 sm:py-2.5 rounded-xl text-[11.5px] sm:text-sm text-left transition-all cursor-pointer ${
                       isActive
                         ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-semibold shadow-sm ring-1 ring-slate-200/90 dark:ring-slate-700'
                         : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100/80 dark:hover:bg-slate-800/50'
                     }`}
                   >
-                    <span className="flex items-center gap-2.5">
+                    <span className="flex items-center gap-2 sm:gap-2.5 min-w-0">
                       <span
-                        className={`h-7 w-7 rounded-lg flex items-center justify-center shrink-0 transition-colors ${
+                        className={`h-6 w-6 sm:h-7 sm:w-7 rounded-lg flex items-center justify-center shrink-0 transition-colors ${
                           isActive
                             ? 'bg-indigo-600 text-white shadow-sm'
                             : 'bg-slate-200/70 dark:bg-slate-800 text-slate-600 dark:text-slate-400 group-hover:text-slate-800 dark:group-hover:text-slate-200'
@@ -241,7 +241,9 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
                       >
                         <Icon className="h-3.5 w-3.5" />
                       </span>
-                      <span className="whitespace-nowrap">{section.label}</span>
+                      <span className="leading-tight whitespace-normal sm:whitespace-nowrap">
+                        {section.label}
+                      </span>
                     </span>
                     <ChevronRight
                       className={`hidden md:block h-3.5 w-3.5 shrink-0 transition-transform ${

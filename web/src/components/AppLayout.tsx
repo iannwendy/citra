@@ -697,7 +697,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                         className={
                           isDesktopCollapsed
                             ? 'pt-1 space-y-0.5'
-                            : 'relative mt-1 ml-4 pl-2.5 space-y-0.5'
+                            : 'relative mt-1 ml-3.5 pl-2 space-y-0.5'
                         }
                       >
                         {!isDesktopCollapsed && (
@@ -711,7 +711,10 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                         {visibleAdminItems.map((item, idx) => {
                           const Icon = item.icon;
                           const active = isActive(item.path);
-                          const itemLabel = t(item.labelKey);
+                          const itemLabel =
+                            currentLang === 'vi' && item.path === '/admin/audit'
+                              ? 'Nhật ký duyệt bài'
+                              : t(item.labelKey);
 
                           return (
                             <Link
@@ -736,7 +739,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                               className={`citra-admin-item-gpu relative flex items-center rounded-xl text-[13px] font-medium ${
                                 isDesktopCollapsed
                                   ? 'justify-center h-9 w-10 mx-auto px-0'
-                                  : 'gap-2.5 px-2.5 py-1.5'
+                                  : 'gap-2 px-2.5 py-1.5'
                               } ${
                                 active
                                   ? 'bg-indigo-50/90 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 font-semibold'

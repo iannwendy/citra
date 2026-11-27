@@ -713,7 +713,7 @@ export function FeatureCardWidget({
   index: 0 | 1 | 2;
   lang: Lang;
 }) {
-  const { containerRef, isVisible, replaySeed, getStaggerStyle } = useFloralCardAnimation();
+  const { containerRef, isVisible, getStaggerStyle } = useFloralCardAnimation();
   const [cycleStep, setCycleStep] = useState(0);
 
   useEffect(() => {
@@ -855,7 +855,7 @@ export function FeatureCardWidget({
       },
       {
         name: 'DOAJ / OpenLibrary',
-        status: lang === 'vi' ? 'Sách & Tạp chí mở' : 'Books & Open Access',
+        status: lang === 'vi' ? 'Sách & Báo mở' : 'Books & Open',
       },
     ];
     return (
@@ -900,20 +900,20 @@ export function FeatureCardWidget({
                   backgroundColor: 'var(--solva-surface)',
                   borderColor: isWaveActive ? 'var(--solva-ink)' : 'transparent',
                 }}
-                className="group px-2 py-1.5 rounded-[8px] border flex flex-wrap items-center justify-between gap-x-1.5 gap-y-0.5 text-[11px] transition-[border-color,background-color] duration-300 hover:border-[#1C1A15]/50 dark:hover:border-[#FBFAF6]/40 cursor-pointer"
+                className="group px-2 py-1.5 rounded-[8px] border flex flex-nowrap items-center justify-between gap-1.5 text-[10.5px] sm:text-[11px] transition-[border-color,background-color] duration-300 hover:border-[#1C1A15]/50 dark:hover:border-[#FBFAF6]/40 cursor-pointer"
               >
                 <span
                   style={{ color: 'var(--solva-ink)' }}
-                  className="font-medium inline-flex items-center gap-1.5 whitespace-nowrap group-hover:underline underline-offset-2"
+                  className="font-medium inline-flex items-center gap-1.5 whitespace-nowrap min-w-0 group-hover:underline underline-offset-2"
                 >
                   <ScholarlySourceLogo
                     name={api.name}
                     size={13}
-                    className="opacity-85 group-hover:opacity-100"
+                    className="opacity-85 group-hover:opacity-100 shrink-0"
                   />
-                  <span>{api.name}</span>
+                  <span className="whitespace-nowrap">{api.name}</span>
                 </span>
-                <span className="citra-nowrap-tail whitespace-nowrap shrink-0 font-mono text-[10px] text-emerald-700 dark:text-emerald-300">
+                <span className="citra-nowrap-tail whitespace-nowrap shrink-0 font-mono text-[9.5px] sm:text-[10px] text-emerald-700 dark:text-emerald-300">
                   {api.status}
                 </span>
               </a>
@@ -933,14 +933,9 @@ export function FeatureCardWidget({
           </span>
           <span
             style={{ color: 'var(--solva-ink)' }}
-            className="citra-nowrap-tail whitespace-nowrap shrink-0 font-mono font-semibold"
+            className="citra-nowrap-tail whitespace-nowrap shrink-0 font-mono font-semibold tabular-nums"
           >
-            <SolvaLiveNumber
-              value={200}
-              suffix={lang === 'vi' ? 'Tr+ Ấn phẩm' : 'M+ Works'}
-              replaySeed={replaySeed}
-              durationMs={1500}
-            />
+            {lang === 'vi' ? '200Tr+ Ấn phẩm' : '200M+ Works'}
           </span>
         </div>
       </div>
@@ -1946,7 +1941,7 @@ export function BottomCTAMockup({ lang }: { lang: Lang }) {
  * directly illustrating the "120 graduation theses on Monday morning" case study.
  */
 export function CohortBatchAuditWidget({ lang }: { lang: Lang }) {
-  const { containerRef, isVisible, replaySeed, getStaggerStyle } = useFloralCardAnimation();
+  const { containerRef, isVisible, getStaggerStyle } = useFloralCardAnimation();
   const [activeIndex, setActiveIndex] = useState(0);
 
   useEffect(() => {
@@ -2014,7 +2009,6 @@ export function CohortBatchAuditWidget({ lang }: { lang: Lang }) {
   ];
 
   const activeThesis = theses[activeIndex] || theses[0];
-  const sep = lang === 'vi' ? '.' : ',';
 
   return (
     <div
@@ -2047,66 +2041,45 @@ export function CohortBatchAuditWidget({ lang }: { lang: Lang }) {
           </div>
           <div
             style={{ color: 'var(--solva-ink)' }}
-            className="text-[13.5px] sm:text-[15px] font-medium leading-snug mt-0.5"
+            className="text-[13.5px] sm:text-[15px] font-medium leading-snug mt-0.5 tabular-nums"
           >
-            <SolvaLiveNumber value={120} replaySeed={replaySeed} durationMs={1300} />{' '}
-            {lang === 'vi' ? 'Khóa luận Tốt nghiệp ' : 'Graduation Theses '}
+            120 {lang === 'vi' ? 'Khóa luận Tốt nghiệp ' : 'Graduation Theses '}
             <span className="citra-nowrap-tail whitespace-nowrap">
-              (
-              <SolvaLiveNumber
-                value={4380}
-                formatThousands
-                thousandSeparator={sep}
-                replaySeed={replaySeed}
-                durationMs={1500}
-              />{' '}
-              {lang === 'vi' ? 'trích dẫn)' : 'refs)'}
+              ({lang === 'vi' ? '4.380 trích dẫn' : '4,380 refs'})
             </span>
           </div>
         </div>
-        <span className="citra-nowrap-tail whitespace-nowrap px-2 py-0.5 rounded-[6px] bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300 font-mono text-[10px] font-semibold shrink-0">
-          <SolvaLiveNumber value={48} replaySeed={replaySeed} durationMs={1200} />
-          {lang === 'vi' ? ' phút ' : 'm '}
-          <SolvaLiveNumber value={12} replaySeed={replaySeed} durationMs={1350} />
-          {lang === 'vi' ? ' giây' : 's'}
+        <span className="citra-nowrap-tail whitespace-nowrap px-2 py-0.5 rounded-[6px] bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300 font-mono text-[10px] font-semibold tabular-nums shrink-0">
+          {lang === 'vi' ? '48 phút 12 giây' : '48m 12s'}
         </span>
       </div>
 
-      {/* Cohort Breakdown Mini-Metrics */}
+      {/* Cohort Breakdown Mini-Metrics (exact sum: 4,192 + 146 + 42 = 4,380) */}
       <div style={getStaggerStyle(110)} className="grid grid-cols-3 gap-2 text-center">
         {[
           {
             label: lang === 'vi' ? 'HỢP LỆ' : 'VERIFIED',
-            val: 4192,
-            format: true,
+            display: lang === 'vi' ? '4.192' : '4,192',
             color: 'text-emerald-700 dark:text-emerald-300',
           },
           {
             label: lang === 'vi' ? 'LỆCH NĂM' : 'WRONG YEAR',
-            val: 146,
-            format: false,
+            display: '146',
             color: 'text-amber-800 dark:text-amber-300',
           },
           {
             label: lang === 'vi' ? 'KHÔNG TỒN TẠI' : 'NOT FOUND',
-            val: 42,
-            format: false,
+            display: '42',
             color: 'text-red-700 dark:text-red-300',
           },
-        ].map((stat, idx) => (
+        ].map((stat) => (
           <div
             key={stat.label}
             style={{ backgroundColor: 'var(--solva-surface)' }}
             className="p-2 rounded-[8px]"
           >
-            <div className={`font-solva-serif text-[20px] sm:text-[22px] leading-none ${stat.color}`}>
-              <SolvaLiveNumber
-                value={stat.val}
-                formatThousands={stat.format}
-                thousandSeparator={sep}
-                replaySeed={replaySeed}
-                durationMs={1400 + idx * 120}
-              />
+            <div className={`font-solva-serif text-[20px] sm:text-[22px] leading-none tabular-nums ${stat.color}`}>
+              {stat.display}
             </div>
             <div
               style={{ color: 'var(--solva-muted)' }}

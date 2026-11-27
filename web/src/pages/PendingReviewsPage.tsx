@@ -1400,7 +1400,7 @@ export function PendingReviewsPage() {
                   )}
                 </div>
 
-                <div className="relative sm:w-56 shrink-0">
+                <div className="relative sm:w-64 shrink-0">
                   <ArrowUpDown className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
                   <select
                     value={sortMode}
@@ -1415,7 +1415,7 @@ export function PendingReviewsPage() {
                   >
                     <option value="urgent">
                       {lang === 'vi'
-                        ? 'Lỗi nghiêm trọng nhất trước'
+                        ? 'Ưu tiên lỗi nặng nhất'
                         : 'Most serious issues first'}
                     </option>
                     <option value="newest">

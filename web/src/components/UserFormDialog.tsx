@@ -438,8 +438,8 @@ export function UserFormDialog({
               </p>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1.5">
+            <div className="grid grid-cols-1 sm:grid-cols-12 gap-4">
+              <div className="space-y-1.5 sm:col-span-5">
                 <Label htmlFor="user-form-role">{t('admin.tableRole')}</Label>
                 <Select
                   id="user-form-role"
@@ -474,7 +474,7 @@ export function UserFormDialog({
                 </Select>
               </div>
 
-              <div className="space-y-1.5">
+              <div className="space-y-1.5 sm:col-span-7">
                 <Label htmlFor="user-form-plan-tier-select">
                   {lang === 'vi' ? 'Gói dịch vụ' : 'Plan Tier'}
                 </Label>
@@ -488,21 +488,22 @@ export function UserFormDialog({
                   }}
                   disabled={loading}
                   wrapperClassName="w-full"
+                  className="text-[13px] pl-3 pr-8"
                 >
                   <option value="basic">
                     {lang === 'vi'
-                      ? 'CITRA Basic (3 lượt/tháng)'
-                      : 'CITRA Basic (3 checks/mo)'}
+                      ? 'CITRA Basic · 3 lượt/tháng'
+                      : 'CITRA Basic · 3/mo'}
                   </option>
                   <option value="pro">
                     {lang === 'vi'
-                      ? 'CITRA Pro (50 lượt/tháng)'
-                      : 'CITRA Pro (50 checks/mo)'}
+                      ? 'CITRA Pro · 50 lượt/tháng'
+                      : 'CITRA Pro · 50/mo'}
                   </option>
                   <option value="ultra">
                     {lang === 'vi'
-                      ? 'CITRA Ultra (1.000 lượt/tháng)'
-                      : 'CITRA Ultra (1,000 checks/mo)'}
+                      ? 'CITRA Ultra · 1.000 lượt/tháng'
+                      : 'CITRA Ultra · 1,000/mo'}
                   </option>
                 </Select>
                 {role === 'admin' && (

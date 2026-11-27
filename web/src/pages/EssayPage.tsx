@@ -18,6 +18,11 @@ import { OverrideControls } from '@/components/OverrideControls';
 import { CitationGraphView, EvidenceGraph } from '@/components/CitationGraph';
 import { UpgradeModal } from '@/components/UpgradeModal';
 import { BibliographyRemediationModal } from '@/components/BibliographyRemediationModal';
+import {
+  NeuralAlignmentPanel,
+  VerificationTraceTimeline,
+  hasNeuralAlignmentData,
+} from '@/components/VerificationTracePanels';
 import { RULE_DEFINITIONS } from '@/components/RuleInspector';
 import { DecisionSupportBanner } from '@/components/DecisionSupportBanner';
 import { useEssayReport, useOverrideVerdict } from '@/hooks/useEssayReport';
@@ -69,7 +74,6 @@ import {
   Microscope,
   Lock,
   ListChecks,
-  Layers,
   X,
   ArrowLeft,
   ArrowUpDown,
@@ -243,13 +247,41 @@ export function ReportSummaryAndNavBar({
   const unscannable = isReportUnscannable(report);
   const cisScore = report.cis?.score ?? 0;
 
-  const consistencyAllMatched =
-    (report.linking_summary?.missing_reference ?? 0) === 0 &&
-    (report.linking_summary?.uncited_reference ?? 0) === 0 &&
-    (report.linking_summary?.in_text_mismatch ?? 0) === 0 &&
-    (report.linking_summary?.ambiguous_mapping ?? 0) === 0 &&
-    (report.linking_summary?.duplicate_reference ?? 0) === 0 &&
-    (report.linking_summary?.style_inconsistent ?? 0) === 0;
+  const hasCriticalIssue = useMemo(() => {
+    if (counts.suspected_hallucination > 0) return true;
+    return (report.verdicts ?? []).some((v) => {
+      const urlSt = v.url_status ?? v.features?.url_status;
+      const rules = v.triggered_rules ?? [];
+      return (
+        urlSt === 'dead_link' ||
+        urlSt === 'fake_domain' ||
+        rules.includes('R-DEAD-URL') ||
+        rules.includes('R-BROKEN-LINK') ||
+        rules.includes('R-FAKE-URL')
+      );
+    });
+  }, [counts.suspected_hallucination, report.verdicts]);
+
+  const linkingIssueCount = useMemo(() => {
+    const ls = report.linking_summary;
+    if (ls) {
+      return (
+        (ls.missing_reference ?? 0) +
+        (ls.uncited_reference ?? 0) +
+        (ls.in_text_mismatch ?? 0) +
+        (ls.ambiguous_mapping ?? 0) +
+        (ls.duplicate_reference ?? 0) +
+        (ls.style_inconsistent ?? 0)
+      );
+    }
+    return (report.verdicts ?? []).filter(
+      (v) => Boolean(v.mapping_status) && v.mapping_status !== 'matched',
+    ).length;
+  }, [report.linking_summary, report.verdicts]);
+
+  const consistencyAllMatched = linkingIssueCount === 0;
+  const effectiveLayer: ReportWorkspaceMode =
+    activeLayer === 'issues' || activeLayer === 'trace' ? 'debugger' : activeLayer;
 
   const cisBand = getCisBand(cisScore, lang);
   const cisHealthPill = unscannable
@@ -274,7 +306,7 @@ export function ReportSummaryAndNavBar({
           : '#ef4444';
 
   const { containerRef: tabListRef, pillStyle } = useSlidingPill<HTMLDivElement>(
-    `${activeLayer}-${lang}-${canDocument}-${canConsistency}-${canTrace}`,
+    `${effectiveLayer}-${lang}-${canDocument}-${canConsistency}-${canTrace}`,
   );
 
   const tabBase =
@@ -338,7 +370,11 @@ export function ReportSummaryAndNavBar({
                 <span>•</span>
                 <span className="font-semibold text-amber-700 dark:text-amber-400">
                   {counts.attentionCount}{' '}
-                  {lang === 'vi' ? 'cần kiểm tra' : 'need review'}
+                  {lang === 'vi'
+                    ? 'cần kiểm tra'
+                    : counts.attentionCount === 1
+                      ? 'needs review'
+                      : 'need review'}
                 </span>
               </>
             )}
@@ -357,7 +393,7 @@ export function ReportSummaryAndNavBar({
         {quietRevisionSlot}
       </div>
 
-      {/* Unified 6-Tab Horizontally Scrollable Navigation Bar across L1-L5 */}
+      {/* Unified 4-Tab Horizontally Scrollable Task Navigation Bar */}
       <div
         ref={tabListRef}
         data-testid="report-view-tablist"
@@ -378,24 +414,32 @@ export function ReportSummaryAndNavBar({
           className="t-tabs-pill rounded-lg bg-white dark:bg-slate-900 shadow-sm ring-1 ring-slate-200/80 dark:ring-slate-700/80"
         />
 
-        {/* Tab 1: Citations (L1) */}
+        {/* Tab 1: Citations (includes unified Issues filter & Verification Details drawer) */}
         {onChangeWorkspaceMode ? (
           <button
             type="button"
             role="tab"
-            aria-selected={activeLayer === 'debugger'}
-            data-pill-active={activeLayer === 'debugger' ? 'true' : 'false'}
+            aria-selected={effectiveLayer === 'debugger'}
+            data-pill-active={effectiveLayer === 'debugger' ? 'true' : 'false'}
             data-testid="mode-citations-btn"
             onClick={() => onChangeWorkspaceMode('debugger')}
             className={`${tabBase} ${
-              activeLayer === 'debugger' ? activeTabCls : inactiveTabCls
+              effectiveLayer === 'debugger' ? activeTabCls : inactiveTabCls
             }`}
           >
             <FileText className="h-3.5 w-3.5 shrink-0" />
             <span>{lang === 'vi' ? 'Trích dẫn' : 'Citations'}</span>
-            {counts.attentionCount > 0 && (
-              <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">
-                {counts.attentionCount}
+            {counts.actionableIssues > 0 && (
+              <span
+                data-testid="citations-issue-badge"
+                data-severity={hasCriticalIssue ? 'critical' : 'warning'}
+                className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                  hasCriticalIssue
+                    ? 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300'
+                    : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                }`}
+              >
+                {counts.actionableIssues}
               </span>
             )}
           </button>
@@ -403,55 +447,43 @@ export function ReportSummaryAndNavBar({
           <Link
             to={`/verification/report/${essayId}`}
             role="tab"
-            aria-selected={activeLayer === 'debugger'}
-            data-pill-active={activeLayer === 'debugger' ? 'true' : 'false'}
+            aria-selected={effectiveLayer === 'debugger'}
+            data-pill-active={effectiveLayer === 'debugger' ? 'true' : 'false'}
             data-testid="mode-citations-btn"
             className={`${tabBase} ${
-              activeLayer === 'debugger' ? activeTabCls : inactiveTabCls
+              effectiveLayer === 'debugger' ? activeTabCls : inactiveTabCls
             }`}
           >
             <FileText className="h-3.5 w-3.5 shrink-0" />
             <span>{lang === 'vi' ? 'Trích dẫn' : 'Citations'}</span>
-            {counts.attentionCount > 0 && (
-              <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">
-                {counts.attentionCount}
+            {counts.actionableIssues > 0 && (
+              <span
+                data-testid="citations-issue-badge"
+                data-severity={hasCriticalIssue ? 'critical' : 'warning'}
+                className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                  hasCriticalIssue
+                    ? 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300'
+                    : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                }`}
+              >
+                {counts.actionableIssues}
               </span>
             )}
           </Link>
         )}
 
-        {/* Tab 2: Issues (L2) */}
-        <Link
-          to={`/verification/report/${essayId}/issues`}
-          role="tab"
-          aria-selected={activeLayer === 'issues'}
-          data-pill-active={activeLayer === 'issues' ? 'true' : 'false'}
-          data-testid="mode-issues-btn"
-          className={`${tabBase} ${
-            activeLayer === 'issues' ? activeTabCls : inactiveTabCls
-          }`}
-        >
-          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-          <span>{lang === 'vi' ? 'Vấn đề' : 'Issues'}</span>
-          {counts.actionableIssues > 0 && (
-            <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300">
-              {counts.actionableIssues}
-            </span>
-          )}
-        </Link>
-
-        {/* Tab 3: In Document (L4) */}
+        {/* Tab 2: In Document */}
         {canDocument ? (
           onChangeWorkspaceMode ? (
             <button
               type="button"
               role="tab"
-              aria-selected={activeLayer === 'document'}
-              data-pill-active={activeLayer === 'document' ? 'true' : 'false'}
+              aria-selected={effectiveLayer === 'document'}
+              data-pill-active={effectiveLayer === 'document' ? 'true' : 'false'}
               data-testid="mode-document-btn"
               onClick={() => onChangeWorkspaceMode('document')}
               className={`${tabBase} ${
-                activeLayer === 'document' ? activeTabCls : inactiveTabCls
+                effectiveLayer === 'document' ? activeTabCls : inactiveTabCls
               }`}
             >
               <Microscope className="h-3.5 w-3.5 shrink-0" />
@@ -459,13 +491,13 @@ export function ReportSummaryAndNavBar({
             </button>
           ) : (
             <Link
-              to={`/verification/report/${essayId}/document`}
+              to={`/verification/report/${essayId}?view=document`}
               role="tab"
-              aria-selected={activeLayer === 'document'}
-              data-pill-active={activeLayer === 'document' ? 'true' : 'false'}
+              aria-selected={effectiveLayer === 'document'}
+              data-pill-active={effectiveLayer === 'document' ? 'true' : 'false'}
               data-testid="mode-document-btn"
               className={`${tabBase} ${
-                activeLayer === 'document' ? activeTabCls : inactiveTabCls
+                effectiveLayer === 'document' ? activeTabCls : inactiveTabCls
               }`}
             >
               <Microscope className="h-3.5 w-3.5 shrink-0" />
@@ -491,41 +523,61 @@ export function ReportSummaryAndNavBar({
           </button>
         )}
 
-        {/* Tab 4: Citation Link Check (L5) */}
+        {/* Tab 3: Citation Link Check */}
         {canConsistency ? (
           onChangeWorkspaceMode ? (
             <button
               type="button"
               role="tab"
-              aria-selected={activeLayer === 'consistency'}
-              data-pill-active={activeLayer === 'consistency' ? 'true' : 'false'}
+              aria-selected={effectiveLayer === 'consistency'}
+              data-pill-active={effectiveLayer === 'consistency' ? 'true' : 'false'}
               data-testid="mode-consistency-btn"
               onClick={() => onChangeWorkspaceMode('consistency')}
               className={`${tabBase} ${
-                activeLayer === 'consistency' ? activeTabCls : inactiveTabCls
+                effectiveLayer === 'consistency' ? activeTabCls : inactiveTabCls
               }`}
             >
               <ListChecks className="h-3.5 w-3.5 shrink-0" />
               <span>{lang === 'vi' ? 'Khớp trích dẫn' : 'Link Check'}</span>
-              {consistencyAllMatched && (
-                <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0" />
+              {consistencyAllMatched ? (
+                <span
+                  data-testid="consistency-matched-dot"
+                  className="h-2 w-2 rounded-full bg-emerald-500 shrink-0"
+                />
+              ) : (
+                <span
+                  data-testid="consistency-issue-badge"
+                  className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                >
+                  {linkingIssueCount}
+                </span>
               )}
             </button>
           ) : (
             <Link
-              to={`/verification/report/${essayId}/consistency`}
+              to={`/verification/report/${essayId}?view=consistency`}
               role="tab"
-              aria-selected={activeLayer === 'consistency'}
-              data-pill-active={activeLayer === 'consistency' ? 'true' : 'false'}
+              aria-selected={effectiveLayer === 'consistency'}
+              data-pill-active={effectiveLayer === 'consistency' ? 'true' : 'false'}
               data-testid="mode-consistency-btn"
               className={`${tabBase} ${
-                activeLayer === 'consistency' ? activeTabCls : inactiveTabCls
+                effectiveLayer === 'consistency' ? activeTabCls : inactiveTabCls
               }`}
             >
               <ListChecks className="h-3.5 w-3.5 shrink-0" />
               <span>{lang === 'vi' ? 'Khớp trích dẫn' : 'Link Check'}</span>
-              {consistencyAllMatched && (
-                <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0" />
+              {consistencyAllMatched ? (
+                <span
+                  data-testid="consistency-matched-dot"
+                  className="h-2 w-2 rounded-full bg-emerald-500 shrink-0"
+                />
+              ) : (
+                <span
+                  data-testid="consistency-issue-badge"
+                  className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                >
+                  {linkingIssueCount}
+                </span>
               )}
             </Link>
           )
@@ -548,18 +600,18 @@ export function ReportSummaryAndNavBar({
           </button>
         )}
 
-        {/* Tab 5: Network Flow (Sơ đồ) */}
+        {/* Tab 4: Network Flow (Sơ đồ) */}
         {canTrace ? (
           onChangeWorkspaceMode ? (
             <button
               type="button"
               role="tab"
-              aria-selected={activeLayer === 'graph'}
-              data-pill-active={activeLayer === 'graph' ? 'true' : 'false'}
+              aria-selected={effectiveLayer === 'graph'}
+              data-pill-active={effectiveLayer === 'graph' ? 'true' : 'false'}
               data-testid="mode-graph-btn"
               onClick={() => onChangeWorkspaceMode('graph')}
               className={`${tabBase} ${
-                activeLayer === 'graph' ? activeTabCls : inactiveTabCls
+                effectiveLayer === 'graph' ? activeTabCls : inactiveTabCls
               }`}
             >
               <GitBranch className="h-3.5 w-3.5 shrink-0" />
@@ -569,11 +621,11 @@ export function ReportSummaryAndNavBar({
             <Link
               to={`/verification/report/${essayId}?view=graph`}
               role="tab"
-              aria-selected={activeLayer === 'graph'}
-              data-pill-active={activeLayer === 'graph' ? 'true' : 'false'}
+              aria-selected={effectiveLayer === 'graph'}
+              data-pill-active={effectiveLayer === 'graph' ? 'true' : 'false'}
               data-testid="mode-graph-btn"
               className={`${tabBase} ${
-                activeLayer === 'graph' ? activeTabCls : inactiveTabCls
+                effectiveLayer === 'graph' ? activeTabCls : inactiveTabCls
               }`}
             >
               <GitBranch className="h-3.5 w-3.5 shrink-0" />
@@ -596,40 +648,6 @@ export function ReportSummaryAndNavBar({
           >
             <Lock className="h-3 w-3 shrink-0" />
             <span>{lang === 'vi' ? 'Sơ đồ' : 'Network'}</span>
-          </button>
-        )}
-
-        {/* Tab 6: Check Details / Summary (L3) */}
-        {canTrace ? (
-          <Link
-            to={`/verification/report/${essayId}/trace`}
-            role="tab"
-            aria-selected={activeLayer === 'trace'}
-            data-pill-active={activeLayer === 'trace' ? 'true' : 'false'}
-            data-testid="mode-trace-btn"
-            className={`${tabBase} ${
-              activeLayer === 'trace' ? activeTabCls : inactiveTabCls
-            }`}
-          >
-            <Layers className="h-3.5 w-3.5 shrink-0" />
-            <span>{lang === 'vi' ? 'Chi tiết kiểm tra' : 'Check Details'}</span>
-          </Link>
-        ) : (
-          <button
-            type="button"
-            role="tab"
-            aria-selected={false}
-            data-testid="locked-trace-btn"
-            onClick={() =>
-              handleLockedClick(
-                'Chi tiết kiểm tra trích dẫn (Gói Pro)',
-                'Check Details (Pro)',
-              )
-            }
-            className={`${tabBase} text-slate-400 dark:text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400`}
-          >
-            <Lock className="h-3 w-3 shrink-0" />
-            <span>{lang === 'vi' ? 'Chi tiết kiểm tra' : 'Check Details'}</span>
           </button>
         )}
       </div>
@@ -1840,7 +1858,7 @@ function getLinkBadgeVisuals(
         status,
         text:
           lang === 'vi'
-            ? '✕ Liên kết không mở được'
+            ? '✕ Liên kết hỏng'
             : '✕ Broken Link',
         badgeClass:
           'bg-red-50 text-red-700 border border-red-200 dark:bg-red-950/70 dark:text-red-300 dark:border-red-800 font-semibold',
@@ -2203,7 +2221,8 @@ function enrichVerdictItem(
   index: number,
   references: Citation[],
   extractedCitations: Citation[],
-  lang: 'vi' | 'en'
+  lang: 'vi' | 'en',
+  isPdfDocument = true,
 ): EnrichedCitationItem {
   const verdict: Verdict = {
     ...rawVerdict,
@@ -2302,16 +2321,22 @@ function enrichVerdictItem(
     lang,
   );
 
-  const pageNum =
-    matchedInText?.page_num ||
-    matchedRef?.cited_on_pages?.[0] ||
-    matchedRef?.page_num ||
-    null;
+  const candidatePages = [
+    matchedInText?.page_num,
+    matchedRef?.cited_on_pages?.[0],
+    matchedRef?.page_num,
+  ];
+  const validPageNum = isPdfDocument
+    ? candidatePages.find(
+        (p): p is number =>
+          typeof p === 'number' && Number.isFinite(p) && p > 0,
+      ) ?? null
+    : null;
   const pageLabel =
-    pageNum && pageNum > 0
+    validPageNum !== null
       ? lang === 'vi'
-        ? `tr. ${pageNum}`
-        : `p. ${pageNum}`
+        ? `tr. ${Math.floor(validPageNum)}`
+        : `p. ${Math.floor(validPageNum)}`
       : '';
 
   // Separate scholarly/legal/standard sources from web_html_meta / wayback_html_meta
@@ -3112,6 +3137,10 @@ function enrichVerdictItem(
   ];
 
   const usedSourceIndices = new Set<number>();
+  const rawCandidateSim = Math.max(
+    verdict.features?.title_sim_fuzzy ?? 0,
+    verdict.features?.title_sim_semantic ?? 0,
+  );
   const sources: SourceRetrievalItem[] = standardEngines.map((engine) => {
     const foundIdx = (verdict.matched_sources ?? []).findIndex((ms, idx) => {
       if (usedSourceIndices.has(idx)) return false;
@@ -3122,7 +3151,12 @@ function enrichVerdictItem(
     if (foundIdx !== -1 && verdict.matched_sources) {
       usedSourceIndices.add(foundIdx);
       const ms = verdict.matched_sources[foundIdx];
-      const conf = ms.confidence ?? verdict.confidence;
+      const conf =
+        typeof ms.confidence === 'number'
+          ? ms.confidence
+          : isOverallUnconfirmed
+            ? rawCandidateSim
+            : verdict.confidence;
       const contextualLabel =
         engine.key === 'tech_standard'
           ? formatEssaySourceDisplay(ms.source, lang, verdict, ms)
@@ -3148,14 +3182,15 @@ function enrichVerdictItem(
           String(s).toLowerCase().includes('local'),
         ))
     ) {
+      const localConf = isOverallUnconfirmed ? rawCandidateSim : verdict.confidence;
       return {
         name: engine.label,
         status: isOverallUnconfirmed
           ? 'candidate_insufficient'
-          : verdict.confidence >= 0.7
+          : localConf >= 0.7
             ? 'matched'
             : 'partial',
-        score: verdict.confidence.toFixed(2),
+        score: localConf.toFixed(2),
         matchedFields: [],
       };
     }
@@ -3177,7 +3212,12 @@ function enrichVerdictItem(
       if (low === 'web_html_meta' || low === 'wayback_html_meta') {
         hasWebHtmlSourceCard = true;
       }
-      const conf = ms.confidence ?? verdict.confidence;
+      const conf =
+        typeof ms.confidence === 'number'
+          ? ms.confidence
+          : isOverallUnconfirmed
+            ? rawCandidateSim
+            : verdict.confidence;
       sources.unshift({
         name: formatEssaySourceDisplay(ms.source, lang, verdict, ms),
         status: isOverallUnconfirmed
@@ -3215,12 +3255,60 @@ function enrichVerdictItem(
       score: (
         typeof verdict.features?.html_meta_title_sim === 'number'
           ? verdict.features.html_meta_title_sim
-          : verdict.confidence
+          : isOverallUnconfirmed
+            ? rawCandidateSim
+            : verdict.confidence
       ).toFixed(2),
       matchedFields: extractedFields,
       url: observedWeb.url ?? undefined,
       doi: observedWeb.doi ?? undefined,
     });
+  }
+
+  // Deduplicate checked sources by display name (keeping higher-score / richer-fields entry)
+  const sourceStatusRank: Record<SourceRetrievalItem['status'], number> = {
+    matched: 3,
+    partial: 2,
+    candidate_insufficient: 1,
+    not_found: 0,
+  };
+  const dedupedSources: SourceRetrievalItem[] = [];
+  const sourceIndexByName = new Map<string, number>();
+  for (const item of sources) {
+    const normName = item.name.trim().toLowerCase();
+    const existingIdx = sourceIndexByName.get(normName);
+    if (existingIdx === undefined) {
+      sourceIndexByName.set(normName, dedupedSources.length);
+      dedupedSources.push(item);
+    } else {
+      const existing = dedupedSources[existingIdx];
+      const itemRank = sourceStatusRank[item.status];
+      const existingRank = sourceStatusRank[existing.status];
+      const itemScore = Number(item.score) || 0;
+      const existingScore = Number(existing.score) || 0;
+      const itemHasLink = (item.url ? 1 : 0) + (item.doi ? 1 : 0);
+      const existingHasLink = (existing.url ? 1 : 0) + (existing.doi ? 1 : 0);
+      const itemIsBetter =
+        itemRank > existingRank ||
+        (itemRank === existingRank &&
+          (itemScore > existingScore ||
+            (itemScore === existingScore &&
+              (item.matchedFields.length > existing.matchedFields.length ||
+                (item.matchedFields.length === existing.matchedFields.length &&
+                  itemHasLink > existingHasLink)))));
+      const winner = itemIsBetter ? item : existing;
+      const loser = itemIsBetter ? existing : item;
+      const mergedFields =
+        winner.status !== 'not_found' && loser.status !== 'not_found'
+          ? Array.from(new Set([...winner.matchedFields, ...loser.matchedFields]))
+          : winner.matchedFields;
+      dedupedSources[existingIdx] = {
+        ...winner,
+        matchedFields: mergedFields,
+        url: winner.url ?? (loser.status !== 'not_found' ? loser.url : undefined),
+        doi: winner.doi ?? (loser.status !== 'not_found' ? loser.doi : undefined),
+      };
+    }
   }
 
   const verdictVisual = getVerdictBadgeVisuals(
@@ -3258,7 +3346,7 @@ function enrichVerdictItem(
     contextAfter,
     explanationText,
     rules,
-    sources,
+    sources: dedupedSources,
   };
 }
 
@@ -3305,7 +3393,7 @@ export function EssayPage() {
   const toast = useToast();
 
   const location = useLocation();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const resolveInitialMode = (): ReportWorkspaceMode => {
     if (location.pathname.endsWith('/document') && has('view_document_inspector')) {
@@ -3321,30 +3409,83 @@ export function EssayPage() {
     return 'debugger';
   };
 
+  const resolveInitialFilter = (): string =>
+    location.pathname.endsWith('/issues') || searchParams.get('filter') === 'issues'
+      ? 'issues'
+      : 'all';
+
+  const resolveInitialTraceFocus = (): boolean =>
+    Boolean(
+      canViewDeepTrace &&
+        (location.pathname.endsWith('/trace') || searchParams.get('drawer') === 'trace'),
+    );
+
   const [selectedCitationId, setSelectedCitationId] = useState<string | null>(null);
-  const [filterLabel, setFilterLabel] = useState<string>('all');
+  const [filterLabel, setFilterLabel] = useState<string>(resolveInitialFilter);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [sortBy, setSortBy] = useState<'priority' | 'index_asc' | 'index_desc' | 'author_asc'>('priority');
   const [workspaceMode, setWorkspaceMode] = useState<ReportWorkspaceMode>(resolveInitialMode);
+  const handleChangeWorkspaceMode = (nextMode: ReportWorkspaceMode) => {
+    setWorkspaceMode(nextMode);
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (nextMode === 'debugger') {
+          next.delete('view');
+        } else {
+          next.set('view', nextMode);
+        }
+        return next;
+      },
+      { replace: true },
+    );
+  };
+  const handleChangeFilterLabel = (nextFilter: string) => {
+    setFilterLabel(nextFilter);
+    if (nextFilter !== 'issues' && searchParams.has('filter')) {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.delete('filter');
+          return next;
+        },
+        { replace: true },
+      );
+    }
+  };
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [lockedFeatureName, setLockedFeatureName] = useState<string>('');
   const [remediationOpen, setRemediationOpen] = useState(false);
-  const [deepDrawerOpen, setDeepDrawerOpen] = useState(false);
+  const [deepDrawerOpen, setDeepDrawerOpen] = useState<boolean>(resolveInitialTraceFocus);
+  const [deepTab, setDeepTab] = useState<'sources' | 'content' | 'steps' | 'graph'>(() =>
+    resolveInitialTraceFocus() ? 'steps' : 'sources',
+  );
   const [customRevisionDiff, setCustomRevisionDiff] = useState<RevisionDiffData | null>(null);
   const [revisionExpanded, setRevisionExpanded] = useState(false);
   const [mobileRevisionOpen, setMobileRevisionOpen] = useState(false);
   const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
   const [loadingRevisionDiff, setLoadingRevisionDiff] = useState(false);
   const isBelowLg = useIsBelowLg();
+  const prevEssayIdRef = useRef<number | null>(essayId);
   const { containerRef: queueFilterPillRef, pillStyle: queueFilterPill } =
-    useSlidingPill<HTMLDivElement>(`${filterLabel}-${lang}-${workspaceMode}`);
+    useSlidingPill<HTMLDivElement>(
+      `${filterLabel}-${lang}-${workspaceMode}-${report?.verdicts?.length ?? 0}`,
+    );
 
   useEffect(() => {
+    if (prevEssayIdRef.current === essayId) return;
+    prevEssayIdRef.current = essayId;
+    const nextTraceFocus = resolveInitialTraceFocus();
+    setWorkspaceMode(resolveInitialMode());
+    setFilterLabel(resolveInitialFilter());
+    setSelectedCitationId(null);
+    setSearchQuery('');
     setCustomRevisionDiff(null);
     setRevisionExpanded(false);
     setMobileRevisionOpen(false);
     setMobileDetailOpen(false);
-    setDeepDrawerOpen(false);
+    setDeepDrawerOpen(nextTraceFocus);
+    setDeepTab(nextTraceFocus ? 'steps' : 'sources');
   }, [essayId]);
 
   const handleCompareRevisionChange = async (targetPrevId: number) => {
@@ -3395,21 +3536,25 @@ export function EssayPage() {
     const target = findVerdictByCitationParam(report.verdicts, citationParam);
     if (!target) return;
     appliedCitationParamRef.current = key;
-    setFilterLabel('all');
+    if (searchParams.get('filter') !== 'issues' || !isActionableIssueVerdict(target)) {
+      setFilterLabel('all');
+    }
     setSearchQuery('');
-    setWorkspaceMode('debugger');
     setSelectedCitationId(target.citation_id);
-    const scroll = () => {
-      const el = Array.from(
-        document.querySelectorAll<HTMLElement>('[data-citation-id]'),
-      ).find((node) => node.dataset.citationId === target.citation_id);
-      if (el && typeof el.scrollIntoView === 'function') {
-        el.scrollIntoView({ block: 'center', behavior: 'smooth' });
-      }
-      el?.focus?.({ preventScroll: true });
-    };
-    requestAnimationFrame(() => requestAnimationFrame(scroll));
-  }, [report, citationParam]);
+    if (!searchParams.get('view')) {
+      setWorkspaceMode('debugger');
+      const scroll = () => {
+        const el = Array.from(
+          document.querySelectorAll<HTMLElement>('[data-citation-id]'),
+        ).find((node) => node.dataset.citationId === target.citation_id);
+        if (el && typeof el.scrollIntoView === 'function') {
+          el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        }
+        el?.focus?.({ preventScroll: true });
+      };
+      requestAnimationFrame(() => requestAnimationFrame(scroll));
+    }
+  }, [report, citationParam, searchParams]);
 
   const rawErrorMessage =
     essayId === null
@@ -3429,13 +3574,15 @@ export function EssayPage() {
 
   const enrichedItems = useMemo(() => {
     if (!report) return [];
+    const isPdfDocument = /\.pdf$/i.test(report.filename ?? '');
     return (report.verdicts ?? []).map((v, idx) =>
       enrichVerdictItem(
         v,
         idx,
         report.references ?? [],
         report.extracted_citations ?? [],
-        lang
+        lang,
+        isPdfDocument,
       )
     );
   }, [report, lang]);
@@ -3451,8 +3598,12 @@ export function EssayPage() {
 
     return enrichedItems
       .filter((item) => {
-        if (filterLabel !== 'all') {
-          if (item.verdict.label !== filterLabel) {
+        if (filterLabel === 'issues') {
+          if (!isActionableIssueVerdict(item.verdict)) {
+            return false;
+          }
+        } else if (filterLabel !== 'all') {
+          if (getEffectiveVerdictKey(item.verdict) !== filterLabel) {
             return false;
           }
         }
@@ -3550,7 +3701,7 @@ export function EssayPage() {
       'Invalid Domain': 'Liên kết không hợp lệ',
       'Link Active': 'Liên kết hoạt động',
       'Restricted Access': 'Truy cập hạn chế',
-      'Broken Link': 'Liên kết không mở được',
+      'Broken Link': 'Liên kết hỏng',
       'Verified Link': 'Liên kết hợp lệ',
       'Resolved URL': 'Liên kết tìm được',
       Preprint: 'Bản thảo chưa xuất bản',
@@ -4253,8 +4404,22 @@ export function EssayPage() {
                                       : '⚠ Needs Attention'}
                           </span>
                           <span className="text-[10px] px-2 py-0.5 rounded bg-white/80 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
-                            {formatRevisionVerdictLabel(chg.before_label, lang)} →{' '}
-                            {formatRevisionVerdictLabel(chg.after_label, lang)}
+                            {(() => {
+                              const rawBefore = (chg.before_label ?? '').trim();
+                              const beforeLabelText = formatRevisionVerdictLabel(
+                                chg.before_label,
+                                lang,
+                              );
+                              const displayBefore =
+                                !rawBefore ||
+                                rawBefore === '—' ||
+                                beforeLabelText === '—'
+                                  ? lang === 'vi'
+                                    ? 'Mới'
+                                    : 'New'
+                                  : beforeLabelText;
+                              return `${displayBefore} → ${formatRevisionVerdictLabel(chg.after_label, lang)}`;
+                            })()}
                           </span>
                         </div>
                         <p className="text-slate-700 dark:text-slate-300 line-clamp-2 text-[11.5px]">
@@ -4287,12 +4452,12 @@ export function EssayPage() {
         </div>
       )}
 
-      {/* Zone 2: Unified Summary Health & Single-Purpose 6-Tab Navigation Bar */}
+      {/* Zone 2: Unified Summary Health & Single-Purpose 4-Tab Navigation Bar */}
       <ReportSummaryAndNavBar
         essayId={id ?? String(report.essay_id)}
         report={report}
         activeLayer={workspaceMode}
-        onChangeWorkspaceMode={setWorkspaceMode}
+        onChangeWorkspaceMode={handleChangeWorkspaceMode}
         onOpenLockedFeature={(featureName) => {
           setLockedFeatureName(featureName);
           setUpgradeOpen(true);
@@ -4371,7 +4536,7 @@ export function EssayPage() {
               embedded={true}
               onSelectVerdictInCitations={(cid) => {
                 setSelectedCitationId(cid);
-                setWorkspaceMode('debugger');
+                handleChangeWorkspaceMode('debugger');
               }}
             />
           ) : workspaceMode === 'consistency' && has('view_orphan_detection') ? (
@@ -4380,7 +4545,7 @@ export function EssayPage() {
               embedded={true}
               onSelectVerdictInCitations={(cid) => {
                 setSelectedCitationId(cid);
-                setWorkspaceMode('debugger');
+                handleChangeWorkspaceMode('debugger');
               }}
             />
           ) : (
@@ -4404,7 +4569,7 @@ export function EssayPage() {
                   }}
                   onInspectDetails={(v) => {
                     setSelectedCitationId(v.citation_id);
-                    setWorkspaceMode('debugger');
+                    handleChangeWorkspaceMode('debugger');
                   }}
                   onOverride={canOverride ? handleOverride : undefined}
                 />
@@ -4493,23 +4658,45 @@ export function EssayPage() {
                                   ? `Tất cả (${counts.all})`
                                   : `All (${counts.all})`,
                               ],
-                              [
-                                'verified',
-                                `✓ ${getVerdictDisplay('verified', lang).label} (${counts.verified})`,
-                              ],
-                              [
-                                'metadata_error',
-                                `⚠ ${getVerdictDisplay('metadata_error', lang).label} (${counts.metadata_error})`,
-                              ],
-                              [
-                                'suspected_hallucination',
-                                `✕ ${getVerdictDisplay('suspected_hallucination', lang).label} (${counts.suspected_hallucination})`,
-                              ],
+                              ...(counts.actionableIssues > 0
+                                ? [
+                                    [
+                                      'issues',
+                                      lang === 'vi'
+                                        ? `⚠ Cần xử lý (${counts.actionableIssues})`
+                                        : `⚠ Issues (${counts.actionableIssues})`,
+                                    ] as const,
+                                  ]
+                                : []),
+                              ...(counts.suspected_hallucination > 0
+                                ? [
+                                    [
+                                      'suspected_hallucination',
+                                      `✕ ${getVerdictDisplay('suspected_hallucination', lang).label} (${counts.suspected_hallucination})`,
+                                    ] as const,
+                                  ]
+                                : []),
+                              ...(counts.metadata_error > 0
+                                ? [
+                                    [
+                                      'metadata_error',
+                                      `⚠ ${getVerdictDisplay('metadata_error', lang).label} (${counts.metadata_error})`,
+                                    ] as const,
+                                  ]
+                                : []),
                               ...(counts.unresolved > 0
                                 ? [
                                     [
                                       'unresolved',
                                       `— ${getVerdictDisplay('unresolved', lang).label} (${counts.unresolved})`,
+                                    ] as const,
+                                  ]
+                                : []),
+                              ...(counts.verified > 0
+                                ? [
+                                    [
+                                      'verified',
+                                      `✓ ${getVerdictDisplay('verified', lang).label} (${counts.verified})`,
                                     ] as const,
                                   ]
                                 : []),
@@ -4528,8 +4715,9 @@ export function EssayPage() {
                               <button
                                 key={key}
                                 type="button"
+                                data-testid={`queue-filter-${key}`}
                                 data-pill-active={isActive ? 'true' : 'false'}
-                                onClick={() => setFilterLabel(key)}
+                                onClick={() => handleChangeFilterLabel(key)}
                                 className={`t-tab px-2.5 py-1 rounded-full text-[11px] font-semibold transition-colors border cursor-pointer ${
                                   isActive
                                     ? queueFilterPill.ready
@@ -4655,6 +4843,54 @@ export function EssayPage() {
                           </button>
                         );
                       };
+
+                      if (filteredItems.length === 0) {
+                        const isIssuesEmpty =
+                          filterLabel === 'issues' && !searchQuery.trim();
+                        return (
+                          <div
+                            data-testid={
+                              isIssuesEmpty ? 'queue-empty-issues' : 'queue-empty-filtered'
+                            }
+                            className="p-6 text-center rounded-xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-2.5"
+                          >
+                            <div className="mx-auto w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200/80 dark:border-emerald-800/70 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
+                              <Check className="h-5 w-5" />
+                            </div>
+                            <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                              {isIssuesEmpty
+                                ? lang === 'vi'
+                                  ? 'Không phát hiện vấn đề nào cần xử lý'
+                                  : 'No actionable issues found'
+                                : lang === 'vi'
+                                  ? 'Không tìm thấy trích dẫn phù hợp'
+                                  : 'No matching citations'}
+                            </p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                              {isIssuesEmpty
+                                ? lang === 'vi'
+                                  ? 'Tất cả trích dẫn và liên kết trong báo cáo đều đang ở trạng thái tốt.'
+                                  : 'All citations and links in this report look clean.'
+                                : lang === 'vi'
+                                  ? 'Thử xóa từ khóa tìm kiếm hoặc xem toàn bộ danh sách trích dẫn.'
+                                  : 'Try clearing your search or viewing all citations.'}
+                            </p>
+                            <button
+                              type="button"
+                              data-testid="queue-reset-filter-btn"
+                              onClick={() => {
+                                handleChangeFilterLabel('all');
+                                setSearchQuery('');
+                              }}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white transition-colors cursor-pointer"
+                            >
+                              {lang === 'vi'
+                                ? 'Xem tất cả trích dẫn'
+                                : 'Show all citations'}
+                            </button>
+                          </div>
+                        );
+                      }
 
                       if (!showGroupHeaders) {
                         return filteredItems.map(renderQueueCard);
@@ -4968,7 +5204,7 @@ export function EssayPage() {
                                 ? 'Dữ liệu gốc tìm được'
                                 : 'Published Record'}
                             </th>
-                            <th className="py-2.5 px-3 w-[160px] min-w-[140px] whitespace-nowrap text-right">
+                            <th className="py-2.5 px-3 w-[176px] min-w-[164px] whitespace-nowrap text-right">
                               {lang === 'vi' ? 'Kết quả' : 'Status'}
                             </th>
                           </tr>
@@ -5285,7 +5521,20 @@ export function EssayPage() {
                       type="button"
                       data-testid="deep-verification-drawer-toggle"
                       aria-expanded={deepDrawerOpen}
-                      onClick={() => setDeepDrawerOpen((v) => !v)}
+                      onClick={() => {
+                        const nextOpen = !deepDrawerOpen;
+                        setDeepDrawerOpen(nextOpen);
+                        if (!nextOpen && searchParams.has('drawer')) {
+                          setSearchParams(
+                            (prev) => {
+                              const next = new URLSearchParams(prev);
+                              next.delete('drawer');
+                              return next;
+                            },
+                            { replace: true },
+                          );
+                        }
+                      }}
                       className="w-full px-4 py-3 flex items-center justify-between gap-3 text-left text-xs sm:text-[13px] font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100/80 dark:hover:bg-slate-800/70 transition-colors cursor-pointer"
                     >
                       <span className="flex items-center gap-2 min-w-0">
@@ -5322,49 +5571,74 @@ export function EssayPage() {
                           {canViewDeepTrace ? (
                             <>
                               <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600 dark:text-slate-400">
-                                <span>
-                                  {lang === 'vi' ? 'Mức độ khớp:' : 'Match Confidence:'}{' '}
-                                  <strong className="font-sans font-bold text-slate-900 dark:text-white">
-                                    {activeItem.confidencePct}%
-                                  </strong>
-                                </span>
-                                <Link
-                                  to={`/verification/report/${report.essay_id}/trace`}
-                                  className="inline-flex items-center gap-1 font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
-                                >
-                                  <span>
+                                {activeItem.verdict.label === 'suspected_hallucination' ||
+                                activeItem.verdict.label === 'unresolved' ? (
+                                  <span
+                                    data-testid="deep-manual-check-hint"
+                                    className="font-medium text-slate-600 dark:text-slate-300"
+                                  >
                                     {lang === 'vi'
-                                      ? 'Mở trang Chi tiết kiểm tra'
-                                      : 'Open Full Check Details'}
+                                      ? 'Cần kiểm tra thủ công'
+                                      : 'Manual check recommended'}
                                   </span>
-                                  <ArrowUpRight className="h-3.5 w-3.5" />
-                                </Link>
+                                ) : (
+                                  <span>
+                                    {lang === 'vi' ? 'Mức độ khớp:' : 'Match Confidence:'}{' '}
+                                    <strong className="font-sans font-bold text-slate-900 dark:text-white">
+                                      {activeItem.confidencePct}%
+                                    </strong>
+                                  </span>
+                                )}
+                                <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                                  {lang === 'vi'
+                                    ? `${activeItem.rules.length} tiêu chí đánh giá`
+                                    : `${activeItem.rules.length} verification ${activeItem.rules.length === 1 ? 'check' : 'checks'}`}
+                                </span>
                               </div>
 
-                              <Tabs defaultValue="sources" className="w-full">
-                                <TabsList className="grid grid-cols-1 sm:grid-cols-3 w-full bg-slate-100 dark:bg-slate-900 p-1 rounded-xl h-auto gap-1">
+                              <Tabs
+                                value={deepTab}
+                                onValueChange={(v) =>
+                                  setDeepTab(
+                                    v as 'sources' | 'content' | 'steps' | 'graph',
+                                  )
+                                }
+                                className="w-full"
+                              >
+                                <TabsList className="grid grid-cols-2 sm:grid-cols-4 w-full bg-slate-100 dark:bg-slate-900 p-1 rounded-xl h-auto gap-1">
                                   <TabsTrigger
                                     value="sources"
-                                    className="w-full text-xs font-semibold py-1.5 px-2.5 truncate"
+                                    data-testid="inspector-tab-sources"
+                                    className="w-full text-xs font-semibold py-1.5 px-2 truncate"
                                   >
                                     {lang === 'vi' ? '1. Nguồn đối chiếu' : '1. Checked Sources'}
                                   </TabsTrigger>
                                   <TabsTrigger
-                                    value="rules"
-                                    className="w-full text-xs font-semibold py-1.5 px-2.5 truncate"
+                                    value="steps"
+                                    data-testid="inspector-tab-steps"
+                                    className="w-full text-xs font-semibold py-1.5 px-2 truncate"
                                   >
                                     {lang === 'vi'
-                                      ? `2. Tiêu chí đánh giá (${activeItem.rules.length})`
+                                      ? `2. Các bước & Tiêu chí (${activeItem.rules.length})`
                                       : `2. Verification Checks (${activeItem.rules.length})`}
+                                  </TabsTrigger>
+                                  <TabsTrigger
+                                    value="content"
+                                    data-testid="inspector-tab-content"
+                                    className="w-full text-xs font-semibold py-1.5 px-2 truncate"
+                                  >
+                                    {lang === 'vi'
+                                      ? '3. Đối chiếu nội dung'
+                                      : '3. Content Match'}
                                   </TabsTrigger>
                                   <TabsTrigger
                                     value="graph"
                                     data-testid="inspector-tab-graph"
-                                    className="w-full text-xs font-semibold py-1.5 px-2.5 gap-1 truncate"
+                                    className="w-full text-xs font-semibold py-1.5 px-2 gap-1 truncate"
                                   >
                                     <GitBranch className="h-3 w-3 shrink-0 text-violet-500" />
                                     <span className="truncate">
-                                      {lang === 'vi' ? '3. Sơ đồ kiểm tra' : '3. Decision Flow'}
+                                      {lang === 'vi' ? '4. Sơ đồ kiểm tra' : '4. Decision Flow'}
                                     </span>
                                   </TabsTrigger>
                                 </TabsList>
@@ -5533,52 +5807,84 @@ export function EssayPage() {
                                   })()}
                                 </TabsContent>
 
-                                {/* Verification Checks (Plain-language titles & empathetic explanations — zero R-* code pills or IF/THEN pseudo-code) */}
-                                <TabsContent value="rules" className="mt-3">
-                                  <div className="space-y-2.5">
-                                    {activeItem.rules.map((rule) => (
-                                      <div
-                                        key={rule.code}
-                                        className={`p-3 rounded-xl border text-xs ${
-                                          rule.status === 'passed'
-                                            ? 'bg-emerald-50/50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800/70'
-                                            : rule.status === 'warning'
-                                              ? 'bg-amber-50/50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800/70'
-                                              : 'bg-red-50/50 dark:bg-red-950/30 border-red-200 dark:border-red-800/70'
-                                        }`}
-                                      >
-                                        <div className="flex items-start justify-between gap-2 mb-1">
-                                          <span className="font-semibold text-slate-900 dark:text-white leading-snug">
-                                            {rule.name}
-                                          </span>
-                                          <span
-                                            className={`text-[11px] font-bold shrink-0 ${
+                                {/* Semantic Content & Cross-Lingual Alignment (folded from Verification / L3) */}
+                                <TabsContent value="content" className="mt-3">
+                                  {hasNeuralAlignmentData(activeItem.verdict) ? (
+                                    <NeuralAlignmentPanel
+                                      verdict={activeItem.verdict}
+                                      lang={lang}
+                                    />
+                                  ) : (
+                                    <div
+                                      data-testid="content-match-empty"
+                                      className="rounded-xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/50 p-4 text-xs text-slate-600 dark:text-slate-400 leading-relaxed"
+                                    >
+                                      {lang === 'vi'
+                                        ? 'Chưa có dữ liệu tóm tắt bài gốc hoặc ngữ cảnh đối chiếu song ngữ cho mục này (ví dụ: liên kết web tham khảo hoặc tài liệu chưa tìm thấy bản gốc).'
+                                        : 'No source abstract or semantic context alignment data is available for this citation (e.g. a web resource or an unmatched reference).'}
+                                    </div>
+                                  )}
+                                </TabsContent>
+
+                                {/* 5-Step Verification Trace + Plain-Language Verification Checks */}
+                                <TabsContent value="steps" className="mt-3 space-y-4">
+                                  <VerificationTraceTimeline
+                                    verdict={activeItem.verdict}
+                                    lang={lang}
+                                  />
+                                  {activeItem.rules.length > 0 && (
+                                    <div>
+                                      <h5 className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
+                                        {lang === 'vi'
+                                          ? `Tiêu chí kiểm tra chi tiết (${activeItem.rules.length})`
+                                          : `Detailed Verification Checks (${activeItem.rules.length})`}
+                                      </h5>
+                                      <div className="space-y-2.5">
+                                        {activeItem.rules.map((rule) => (
+                                          <div
+                                            key={rule.code}
+                                            className={`p-3 rounded-xl border text-xs ${
                                               rule.status === 'passed'
-                                                ? 'text-emerald-700 dark:text-emerald-400'
+                                                ? 'bg-emerald-50/50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800/70'
                                                 : rule.status === 'warning'
-                                                  ? 'text-amber-700 dark:text-amber-400'
-                                                  : 'text-red-700 dark:text-red-400'
+                                                  ? 'bg-amber-50/50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800/70'
+                                                  : 'bg-red-50/50 dark:bg-red-950/30 border-red-200 dark:border-red-800/70'
                                             }`}
                                           >
-                                            {rule.status === 'passed'
-                                              ? lang === 'vi'
-                                                ? '✓ Đạt'
-                                                : '✓ Pass'
-                                              : rule.status === 'warning'
-                                                ? lang === 'vi'
-                                                  ? '⚠ Lưu ý'
-                                                  : '⚠ Notice'
-                                                : lang === 'vi'
-                                                  ? '✕ Chưa khớp'
-                                                  : '✕ Unmatched'}
-                                          </span>
-                                        </div>
-                                        <p className="text-[11.5px] text-slate-600 dark:text-slate-300 leading-relaxed">
-                                          {rule.explanation}
-                                        </p>
+                                            <div className="flex items-start justify-between gap-2 mb-1">
+                                              <span className="font-semibold text-slate-900 dark:text-white leading-snug">
+                                                {rule.name}
+                                              </span>
+                                              <span
+                                                className={`text-[11px] font-bold shrink-0 ${
+                                                  rule.status === 'passed'
+                                                    ? 'text-emerald-700 dark:text-emerald-400'
+                                                    : rule.status === 'warning'
+                                                      ? 'text-amber-700 dark:text-amber-400'
+                                                      : 'text-red-700 dark:text-red-400'
+                                                }`}
+                                              >
+                                                {rule.status === 'passed'
+                                                  ? lang === 'vi'
+                                                    ? '✓ Đạt'
+                                                    : '✓ Pass'
+                                                  : rule.status === 'warning'
+                                                    ? lang === 'vi'
+                                                      ? '⚠ Lưu ý'
+                                                      : '⚠ Notice'
+                                                    : lang === 'vi'
+                                                      ? '✕ Chưa khớp'
+                                                      : '✕ Unmatched'}
+                                              </span>
+                                            </div>
+                                            <p className="text-[11.5px] text-slate-600 dark:text-slate-300 leading-relaxed">
+                                              {rule.explanation}
+                                            </p>
+                                          </div>
+                                        ))}
                                       </div>
-                                    ))}
-                                  </div>
+                                    </div>
+                                  )}
                                 </TabsContent>
 
                                 {/* Evidence Graph */}

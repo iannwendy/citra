@@ -245,9 +245,18 @@ export function SettingsPage(): JSX.Element {
   const [newlyCreatedKey, setNewlyCreatedKey] =
     useState<CreatedApiKeyResponse | null>(null);
   const [copiedRawKey, setCopiedRawKey] = useState(false);
+  const [apiSectionOpen, setApiSectionOpen] = useState<boolean>(() => Boolean(isAdmin));
+  const [apiSectionTouched, setApiSectionTouched] = useState<boolean>(false);
 
   const canManageApiKeys =
     !isBasic || isAdmin || user?.role === 'teacher' || user?.role === 'admin';
+
+  useEffect(() => {
+    if (apiSectionTouched) return;
+    if (isAdmin || apiKeys.length > 0) {
+      setApiSectionOpen(true);
+    }
+  }, [isAdmin, apiKeys.length, apiSectionTouched]);
 
   // Smoothly scroll to Delete Account section when navigated via /settings#delete-account-section
   useEffect(() => {
@@ -959,9 +968,13 @@ export function SettingsPage(): JSX.Element {
         </div>
       </div>
 
-      {/* Collapsible Developer Access (API) — closed by default for Basic students */}
+      {/* Collapsible Developer Access (API) — closed by default for all non-admin users without existing keys */}
       <details
-        open={canManageApiKeys || undefined}
+        open={apiSectionOpen}
+        onToggle={(e) => {
+          setApiSectionTouched(true);
+          setApiSectionOpen(e.currentTarget.open);
+        }}
         className="group rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden"
         data-testid="settings-api-keys-section"
       >

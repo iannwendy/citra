@@ -1073,6 +1073,11 @@ const ERROR_MAPPING_RULES: ErrorMappingRule[] = [
     en: 'You cannot demote or deactivate the last active administrator.',
   },
   {
+    pattern: /untrusted\s+vnpay\s+return_url\s+origin|must\s+match\s+frontend_url/i,
+    vi: 'Không thể mở cổng thanh toán từ địa chỉ hiện tại. Vui lòng thử lại từ tên miền chính thức.',
+    en: 'Unable to open payment checkout from this address. Please try again from the official site.',
+  },
+  {
     pattern: /vnp_txnref|vnp_securehash|pci-dss|payment_status=unpaid|vnpay\s+amount\s+mismatch|\[vnpay\s+code/i,
     vi: 'Giao dịch thanh toán chưa hoàn tất. Vui lòng thử lại.',
     en: 'Payment could not be completed. Please try again.',

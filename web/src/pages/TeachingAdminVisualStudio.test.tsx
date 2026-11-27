@@ -1128,7 +1128,7 @@ describe('Visual Action Studio Redesign — 6 Teaching & Admin Pages', () => {
       const row = await screen.findByTestId('class-essay-row-301');
       expect(row.textContent).toContain('Nguyen Van A');
       expect(row.textContent).not.toContain('(user)');
-      expect(row.textContent).toContain('CIS 92.6 / 100');
+      expect(row.textContent).toContain('Score 92.6 / 100');
       expect(row.textContent).not.toContain('92.6%');
 
       const avgCis = screen.getByTestId('cohort-avg-cis-value');

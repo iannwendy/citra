@@ -246,7 +246,7 @@ describe('v3.70.0 Classroom, Pending Reviews, Sandbox, Modals & RuleInspector', 
     // Smart routing for ClassEssay rows
     const completedRow = screen.getByTestId('class-essay-row-101');
     expect(completedRow.getAttribute('href')).toBe('/verification/report/101');
-    expect(within(completedRow).getByText('CIS 91.4 / 100')).toBeTruthy();
+    expect(within(completedRow).getByText('Score 91.4 / 100')).toBeTruthy();
 
     const queuedRow = screen.getByTestId('class-essay-row-102');
     expect(queuedRow.getAttribute('href')).toBe('/verification/processing/102');

@@ -1172,11 +1172,11 @@ export function StripeDemoCheckoutPage() {
                       maxLength={32}
                       placeholder={
                         lang === 'vi'
-                          ? 'Nhập mã giảm giá (6 ký tự)'
-                          : 'Enter 6-character promo code'
+                          ? 'Nhập mã ưu đãi'
+                          : 'Enter promo code'
                       }
                       data-testid="checkout-promo-input"
-                      className="h-9 bg-[#FBFAF6] dark:bg-slate-950 border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-mono text-xs uppercase tracking-wider placeholder:text-slate-400 dark:placeholder:text-slate-500 rounded-xl"
+                      className="h-9 bg-[#FBFAF6] dark:bg-slate-950 border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-mono text-xs uppercase tracking-wider placeholder:font-sans placeholder:normal-case placeholder:tracking-normal placeholder:text-slate-400 dark:placeholder:text-slate-500 rounded-xl"
                     />
                     <Button
                       type="button"

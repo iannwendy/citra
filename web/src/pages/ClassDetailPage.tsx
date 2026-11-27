@@ -1182,9 +1182,9 @@ export function ClassDetailPage() {
             </div>
 
             {/* Right: Shared Flagged Citations Across Students */}
-            <div className="lg:col-span-7 p-4 rounded-2xl bg-slate-50/80 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800 flex flex-col justify-between">
-              <div>
-                <div className="flex items-center justify-between gap-2 mb-3">
+            <div className="lg:col-span-7 p-4 rounded-2xl bg-slate-50/80 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800 flex flex-col h-full">
+              <div className="flex flex-col flex-1 min-h-0">
+                <div className="flex items-center justify-between gap-2 mb-3 shrink-0">
                   <p className="text-xs font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
                     <AlertTriangle className="h-3.5 w-3.5 text-rose-500" />
                     {lang === 'vi'
@@ -1208,7 +1208,7 @@ export function ClassDetailPage() {
                       : 'No flagged or repeated citation warnings across submissions yet.'}
                   </div>
                 ) : (
-                  <div className="space-y-2.5 max-h-64 overflow-y-auto pr-1">
+                  <div className="space-y-2.5 flex-1 max-h-[680px] overflow-y-auto pr-1">
                     {(analytics.shared_hallucinations ?? []).map((item, idx) => {
                       const verdictDisplay = getVerdictDisplay(item.label, lang);
                       const resolvedStudentNames = Array.from(
@@ -1755,7 +1755,7 @@ export function ClassDetailPage() {
                             <span className="text-xs font-mono font-bold text-slate-800 dark:text-slate-200 tabular-nums whitespace-nowrap">
                               {lang === 'vi'
                                 ? `Điểm ${formatCisScore(cisVal)}`
-                                : `CIS ${formatCisScore(cisVal)}`}
+                                : `Score ${formatCisScore(cisVal)}`}
                             </span>
                             <span
                               className={`hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap ${cisBand.badgeClass}`}

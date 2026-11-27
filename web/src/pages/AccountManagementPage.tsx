@@ -507,8 +507,8 @@ export function AccountManagementPage() {
                 <TableHead className="text-left py-3 px-2.5 xl:px-3 text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap">
                   {institutionColumnLabel}
                 </TableHead>
-                <TableHead className="text-left py-3 px-2.5 xl:px-3 text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap">
-                  {lang === 'vi' ? 'Lần đăng nhập gần nhất' : 'Last Sign-In'}
+                <TableHead className="text-left py-3 px-2.5 xl:px-3 min-w-[140px] text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap">
+                  {lang === 'vi' ? 'Đăng nhập gần nhất' : 'Last Sign-In'}
                 </TableHead>
                 <TableHead className="lg:sticky lg:right-0 bg-slate-50 dark:bg-slate-800/95 text-right py-3 px-2.5 xl:px-3 text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap">
                   {t('admin.tableActions')}
@@ -655,9 +655,9 @@ export function AccountManagementPage() {
                       </span>
                     </TableCell>
 
-                    <TableCell className="flex lg:table-cell items-center justify-between gap-2 p-0 lg:py-3 lg:px-2.5 xl:px-3 text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap font-mono tabular-nums">
+                    <TableCell className="flex lg:table-cell items-center justify-between gap-2 p-0 lg:py-3 lg:px-2.5 xl:px-3 lg:min-w-[140px] text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap font-mono tabular-nums">
                       <span className="lg:hidden text-[11px] font-mono uppercase text-slate-400 font-sans">
-                        {lang === 'vi' ? 'Lần đăng nhập gần nhất' : 'Last Sign-In'}
+                        {lang === 'vi' ? 'Đăng nhập gần nhất' : 'Last Sign-In'}
                       </span>
                       <span className="whitespace-nowrap">{formattedLogin}</span>
                     </TableCell>

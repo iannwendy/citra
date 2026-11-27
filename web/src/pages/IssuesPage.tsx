@@ -198,9 +198,10 @@ function IssueCard({
           ? `Trang web tham khảo: «${observedWeb.title}»${observedWeb.venue ? ` (${observedWeb.venue})` : ''}. Không ảnh hưởng điểm trích dẫn.`
           : `Web source: “${observedWeb.title}”${observedWeb.venue ? ` (${observedWeb.venue})` : ''}. Does not affect your citation score.`;
       }
+      const cleanRawCitation = v.citation_raw.trim().replace(/\.+$/, '');
       return lang === 'vi'
-        ? `Liên kết tham khảo: ${v.citation_raw}. Không ảnh hưởng điểm trích dẫn.`
-        : `Web link: ${v.citation_raw}. Does not affect your citation score.`;
+        ? `Liên kết tham khảo: ${cleanRawCitation}. Không ảnh hưởng điểm trích dẫn.`
+        : `Web link: ${cleanRawCitation}. Does not affect your citation score.`;
     }
     if (v.label === 'suspected_hallucination') {
       return lang === 'vi'
@@ -284,8 +285,8 @@ function IssueCard({
                         : '🔒 Paywalled / login required (link active)'
                       : urlStatus === 'archived_alive'
                         ? lang === 'vi'
-                          ? '🏛️ Bản lưu Wayback'
-                          : '🏛️ Wayback archived'
+                          ? 'Bản lưu trữ web'
+                          : 'Web Archive'
                         : urlStatus === 'dead_link'
                           ? lang === 'vi'
                             ? '✕ Đường dẫn không mở được'
@@ -313,7 +314,7 @@ function IssueCard({
             {displayCitationRaw}
           </p>
           <p className={`text-xs font-medium break-words [overflow-wrap:anywhere] ${config.textColor}`}>
-            {getIssueDescription(verdict)}
+            {getIssueDescription(verdict).replace(/\.{2,}/g, '.')}
           </p>
           {observedWeb &&
             (observedWeb.title ||
@@ -327,8 +328,8 @@ function IssueCard({
                 <div className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
                   {observedWeb.isArchived
                     ? lang === 'vi'
-                      ? 'Thông tin từ bản lưu Wayback Machine'
-                      : 'Wayback Archive Page Details'
+                      ? 'Thông tin từ bản lưu trữ web'
+                      : 'Web Archive Page Details'
                     : lang === 'vi'
                       ? 'Thông tin đọc được từ trang web'
                       : 'Web Page Details'}
@@ -404,7 +405,10 @@ function IssueCard({
                   {lang === 'vi' ? 'Giải thích kết quả' : 'What this means'}
                 </h4>
                 <p className="text-xs sm:text-sm text-slate-700 dark:text-slate-300">
-                  {sanitizeReasoningForDisplay(getVerdictExplanation(verdict, lang), lang)}
+                  {sanitizeReasoningForDisplay(
+                    getVerdictExplanation(verdict, lang),
+                    lang,
+                  ).replace(/\.{2,}/g, '.')}
                 </p>
               </div>
             </div>

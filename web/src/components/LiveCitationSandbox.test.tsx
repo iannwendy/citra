@@ -239,10 +239,11 @@ describe('LiveCitationSandbox i18n, Academic Taxonomy & Quick Paste UX', () => {
     expect(screen.queryByTestId('sandbox-layer1-badge-1')).toBeNull();
     // Preserves backend reasoning_vi
     expect(resultsEl.textContent).toContain('Tiền tố DOI 10.9999 không hợp lệ');
-    // Raw rule IDs hidden behind collapsible "Chi tiết kỹ thuật"
+    // Raw rule IDs are never exposed even inside collapsible "Chi tiết kỹ thuật" (plain human descriptions shown instead)
     expect(resultsEl.textContent).not.toContain('R-FABRICATED-DOI');
     fireEvent.click(screen.getByTestId('sandbox-tech-toggle-2'));
-    expect(screen.getByTestId('sandbox-tech-panel-2').textContent).toContain('R-FABRICATED-DOI');
+    expect(screen.getByTestId('sandbox-tech-panel-2').textContent).not.toContain('R-FABRICATED-DOI');
+    expect(screen.getByTestId('sandbox-tech-panel-2').textContent).toContain('Mã DOI');
     // Dark mode contrast on Copy BibTeX button & icon
     const copyBtn = screen.getByTestId('sandbox-copy-bibtex-btn');
     expect(copyBtn.className).toContain('dark:text-[#FBFAF6]');

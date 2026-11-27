@@ -183,10 +183,10 @@ const SATELLITE_CLUSTERS: SatelliteClusterDef[] = [
   },
   {
     key: 'web',
-    nameVi: 'Web & Wayback',
-    nameEn: 'Web & Wayback',
+    nameVi: 'Trang web & Lưu trữ',
+    nameEn: 'Web & Archive',
     domainVi: 'Kiểm tra đường dẫn trực tuyến & Lưu trữ số',
-    domainEn: 'Live URL verification & Wayback digital archive',
+    domainEn: 'Live URL verification & digital web archive',
     sourceKeys: ['web_html_meta', 'wayback_html_meta'],
     xPct: 81.5,
     yPct: 87,
@@ -714,8 +714,8 @@ export function InteractiveDecisionFlowBoard({
             : '✕ Broken link'
           : urlSt === 'archived_alive'
             ? isVi
-              ? '✓ Khôi phục qua Wayback'
-              : '✓ Wayback archived'
+              ? '✓ Bản lưu trữ web'
+              : '✓ Web Archive'
             : isWarnWeb
               ? isVi
                 ? '⚠ Khác tiêu đề trang'
@@ -858,11 +858,26 @@ export function InteractiveDecisionFlowBoard({
         : effectiveLabel === 'suspected_hallucination'
           ? 'rose'
           : 'slate';
-    const step2Sub =
-      hitNames.length > 0
+    const primaryHitSat = matchedSatellites[0];
+    const primaryHitShortName = primaryHitSat
+      ? primaryHitSat.key === 'local_scholarly'
         ? isVi
-          ? `Tìm thấy tại ${hitNames.slice(0, 2).join(', ')}`
-          : `Found in ${hitNames.slice(0, 2).join(', ')}`
+          ? 'Thư viện CITRA'
+          : 'CITRA Library'
+        : isVi
+          ? primaryHitSat.nameVi
+          : primaryHitSat.nameEn
+      : '';
+    const extraHitCount = Math.max(0, matchedSatellites.length - 1);
+    const step2Sub =
+      matchedSatellites.length > 0
+        ? extraHitCount > 0
+          ? isVi
+            ? `Tìm thấy tại ${primaryHitShortName} +${extraHitCount} nguồn`
+            : `Matched in ${primaryHitShortName} +${extraHitCount} ${extraHitCount === 1 ? 'source' : 'sources'}`
+          : isVi
+            ? `Tìm thấy tại ${primaryHitShortName}`
+            : `Matched in ${primaryHitShortName}`
         : isVi
           ? '0 kết quả trên 15+ kho dữ liệu'
           : '0 matches across 15+ databases';

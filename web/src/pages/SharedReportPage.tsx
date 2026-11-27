@@ -760,27 +760,37 @@ export function SharedReportPage() {
             </div>
 
             {/* QR Matrix + Report Verification Code Block */}
-            <div className="flex items-center gap-4 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 w-full lg:w-[296px] lg:shrink-0">
-              <VerificationQrMatrixSvg
-                value={shareUrlFull}
-                matrix={qrMatrixForUrl}
-                size={112}
-              />
-              <div className="space-y-1.5 text-xs min-w-0 flex-1">
-                <div className="font-bold text-slate-800 dark:text-slate-200">
-                  {lang === 'vi' ? 'Mã xác nhận báo cáo' : 'Report Verification Code'}
-                </div>
-                <div className="text-slate-500 dark:text-slate-400 text-[11px] leading-relaxed">
-                  {lang === 'vi'
-                    ? 'Quét mã để mở lại báo cáo gốc trực tiếp trên CITRA'
-                    : 'Scan to open and confirm the original report directly on CITRA'}
-                </div>
-                {report.signature_prefix && (
-                  <div className="text-[11px] font-mono text-indigo-600 dark:text-indigo-400 truncate">
-                    {lang === 'vi' ? 'Mã xác nhận:' : 'Verification ID:'} {report.signature_prefix}
+            <div className="flex flex-col gap-3 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 w-full lg:w-[320px] lg:shrink-0">
+              <div className="flex items-center gap-3.5">
+                <VerificationQrMatrixSvg
+                  value={shareUrlFull}
+                  matrix={qrMatrixForUrl}
+                  size={108}
+                />
+                <div className="space-y-1.5 text-xs min-w-0 flex-1">
+                  <div className="font-bold text-slate-800 dark:text-slate-200">
+                    {lang === 'vi' ? 'Mã xác nhận báo cáo' : 'Report Verification Code'}
                   </div>
-                )}
+                  <div className="text-slate-500 dark:text-slate-400 text-[11px] leading-relaxed">
+                    {lang === 'vi'
+                      ? 'Quét mã để mở lại báo cáo gốc trực tiếp trên CITRA'
+                      : 'Scan to open and confirm the original report directly on CITRA'}
+                  </div>
+                </div>
               </div>
+              {report.signature_prefix && (
+                <div
+                  data-testid="shared-verification-id"
+                  className="pt-2.5 border-t border-slate-200/80 dark:border-slate-700/80 flex items-center justify-between gap-2 text-[11px]"
+                >
+                  <span className="font-medium text-slate-500 dark:text-slate-400 shrink-0">
+                    {lang === 'vi' ? 'Mã xác nhận:' : 'Verification ID:'}
+                  </span>
+                  <span className="font-mono font-semibold text-indigo-600 dark:text-indigo-400 break-all text-right">
+                    {report.signature_prefix}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
         </section>
@@ -1106,8 +1116,8 @@ export function SharedReportPage() {
                                       : '🔒 Paywalled / login required'
                                     : urlStatus === 'archived_alive'
                                       ? lang === 'vi'
-                                        ? '🏛️ Bản lưu Wayback'
-                                        : '🏛️ Wayback archived'
+                                        ? 'Bản lưu trữ web'
+                                        : 'Web Archive'
                                       : urlStatus === 'dead_link'
                                         ? lang === 'vi'
                                           ? '✕ Đường dẫn không mở được'

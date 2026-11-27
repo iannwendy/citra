@@ -108,7 +108,8 @@ describe('Bilingual Completeness & Runtime Test Hygiene (BUG-10b & BUG-11)', () 
     expect(container.textContent).toContain('Tất cả (1)');
     expect(container.textContent).toContain('✕ Không tìm thấy nguồn (1)');
     expect(container.textContent).not.toContain('Bịa đặt');
-    expect(container.textContent).toContain('Mức độ khớp:');
+    expect(container.textContent).toContain('Cần kiểm tra thủ công');
+    expect(container.textContent).not.toContain('Mức độ khớp:');
     expect(container.textContent).toContain('Trích dẫn trong bài');
     expect(container.textContent).toContain('Dữ liệu gốc tìm được');
     expect(container.textContent).toContain('Không tìm thấy dữ liệu gốc');
@@ -133,6 +134,8 @@ describe('Bilingual Completeness & Runtime Test Hygiene (BUG-10b & BUG-11)', () 
     expect(enContainer.textContent).toContain('Cited in Essay');
     expect(enContainer.textContent).toContain('Published Record');
     expect(enContainer.textContent).toContain('No published record found');
+    expect(enContainer.textContent).toContain('Manual check recommended');
+    expect(enContainer.textContent).not.toContain('Match Confidence:');
     expect(enContainer.textContent).not.toContain('Canonical Retrieved');
   });
 

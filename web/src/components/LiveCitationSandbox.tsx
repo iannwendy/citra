@@ -822,7 +822,7 @@ export function LiveCitationSandbox({
                 {/* Editable List of 10-20 Sampled ACL Papers */}
                 <div
                   data-testid="sandbox-acl-items-list"
-                  className="max-h-[460px] overflow-y-auto space-y-3 pr-1"
+                  className="max-h-[460px] overflow-y-auto space-y-3 pr-1 pb-4"
                 >
                   {items.map((it, idx) => (
                     <div
@@ -1437,7 +1437,13 @@ export function LiveCitationSandbox({
                           )}
                         </div>
 
-                        <div className="grid grid-cols-1 gap-2 max-h-96 overflow-y-auto pr-1">
+                        <div
+                          className={
+                            resultsList.length > 5
+                              ? 'grid grid-cols-1 gap-2.5 max-h-[720px] overflow-y-auto pr-1 pb-6'
+                              : 'grid grid-cols-1 gap-2.5 pb-2'
+                          }
+                        >
                           {resultsList.map((r, rIdx) => {
                             const cardKey = `${r.index}-${rIdx}`;
                             const isInvalid = Boolean(r.is_invalid_input);
@@ -1744,21 +1750,28 @@ export function LiveCitationSandbox({
                                 {!isInvalid && isTechExpanded && rulesList.length > 0 && (
                                   <div
                                     data-testid={`sandbox-tech-panel-${r.index}`}
-                                    className="mt-1.5 pt-2 border-t border-slate-200/80 dark:border-slate-800 space-y-1 text-[11px]"
+                                    className="mt-1.5 pt-2 border-t border-slate-200/80 dark:border-slate-800 space-y-1.5 text-[11px]"
                                   >
-                                    <div className="font-mono text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                                      {isVi ? 'Quy tắc đối chiếu đã kích hoạt' : 'Triggered Verification Rules'}
+                                    <div className="font-semibold text-[10.5px] uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                                      {isVi ? 'Chi tiết các bước đối chiếu' : 'Verification Checks Applied'}
                                     </div>
                                     <ul className="space-y-1">
-                                      {rulesList.map((rule) => (
+                                      {Array.from(
+                                        new Set(
+                                          rulesList
+                                            .map((rule) => getRuleDisplayName(rule, lang))
+                                            .filter(Boolean),
+                                        ),
+                                      ).map((ruleLabel) => (
                                         <li
-                                          key={rule}
-                                          className="flex flex-wrap items-baseline gap-1.5 text-slate-600 dark:text-slate-300"
+                                          key={ruleLabel}
+                                          className="flex items-start gap-2 text-slate-600 dark:text-slate-300 leading-relaxed"
                                         >
-                                          <code className="px-1.5 py-0.5 rounded bg-slate-200/80 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-mono text-[10px]">
-                                            {rule}
-                                          </code>
-                                          <span>{getRuleDisplayName(rule, lang)}</span>
+                                          <span
+                                            aria-hidden="true"
+                                            className="mt-1.5 h-1.5 w-1.5 rounded-full bg-indigo-500/80 dark:bg-indigo-400/80 shrink-0"
+                                          />
+                                          <span>{ruleLabel}</span>
                                         </li>
                                       ))}
                                     </ul>

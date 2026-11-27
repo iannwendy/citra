@@ -58,6 +58,27 @@ function LegacyEssayRedirect() {
   return <Navigate to={`/verification/report/${id}`} replace />;
 }
 
+// Normalize legacy report sub-routes onto canonical /verification/report/:id query state
+// so all 4 workspace views stay mounted inside EssayPage with smooth sliding transitions.
+export function LegacyReportSubrouteRedirect({
+  target,
+}: {
+  target: 'issues' | 'trace' | 'document' | 'consistency';
+}) {
+  const { id } = useParams();
+  const location = useLocation();
+  const params = new URLSearchParams(location.search);
+  if (target === 'issues') {
+    params.set('filter', 'issues');
+  } else if (target === 'trace') {
+    params.set('drawer', 'trace');
+  } else {
+    params.set('view', target);
+  }
+  const qs = params.toString();
+  return <Navigate to={`/verification/report/${id}${qs ? `?${qs}` : ''}`} replace />;
+}
+
 // Secondary and authenticated pages are code-split with lazyWithRetry so that the
 // landing page initial bundle stays lean and transient chunk errors recover automatically.
 const AppLayout = lazyWithRetry(() => import('./components/AppLayout').then((m) => ({ default: m.AppLayout })));
@@ -70,8 +91,6 @@ const SandboxPage = lazyWithRetry(() => import('./pages/SandboxPage').then((m) =
 const BatchUploadPage = lazyWithRetry(() => import('./pages/BatchUploadPage').then((m) => ({ default: m.BatchUploadPage })));
 const ProcessingPage = lazyWithRetry(() => import('./pages/ProcessingPage').then((m) => ({ default: m.ProcessingPage })));
 const EssayPage = lazyWithRetry(() => import('./pages/EssayPage').then((m) => ({ default: m.EssayPage })));
-const IssuesPage = lazyWithRetry(() => import('./pages/IssuesPage').then((m) => ({ default: m.IssuesPage })));
-const LogicTracePage = lazyWithRetry(() => import('./pages/LogicTracePage').then((m) => ({ default: m.LogicTracePage })));
 const HistoryPage = lazyWithRetry(() => import('./pages/HistoryPage').then((m) => ({ default: m.HistoryPage })));
 const ProfilePage = lazyWithRetry(() => import('./pages/ProfilePage').then((m) => ({ default: m.ProfilePage })));
 const AccountManagementPage = lazyWithRetry(() => import('./pages/AccountManagementPage').then((m) => ({ default: m.AccountManagementPage })));
@@ -212,7 +231,7 @@ const PAGE_TITLE_ROUTES: Array<{ pattern: string; title: string; titleVi: string
   { pattern: '/verification/processing/:id', title: 'Processing', titleVi: 'Đang xử lý' },
   { pattern: '/verification/report/:id', title: 'Verification Report', titleVi: 'Báo cáo xác minh' },
   { pattern: '/verification/report/:id/issues', title: 'Issues', titleVi: 'Danh mục vấn đề' },
-  { pattern: '/verification/report/:id/trace', title: 'Logic Trace', titleVi: 'Truy vết suy diễn' },
+  { pattern: '/verification/report/:id/trace', title: 'Check Details', titleVi: 'Chi tiết kiểm tra' },
   { pattern: '/verification/report/:id/document', title: 'Document Inspector', titleVi: 'Xem trong bài viết' },
   { pattern: '/verification/report/:id/consistency', title: 'Consistency', titleVi: 'Nhất quán trích dẫn' },
   { pattern: '/history', title: 'History', titleVi: 'Lịch sử báo cáo' },
@@ -373,14 +392,15 @@ export const appRoutes: RouteObject[] = [
           { path: '/verification/processing', element: withSuspense(ProcessingPage) },
           { path: '/verification/processing/:id', element: withSuspense(ProcessingPage) },
           { path: '/verification/report/:id', element: withSuspense(EssayPage) },
-          { path: '/verification/report/:id/issues', element: withSuspense(IssuesPage) },
+          {
+            path: '/verification/report/:id/issues',
+            element: <LegacyReportSubrouteRedirect target="issues" />,
+          },
           {
             path: '/verification/report/:id/trace',
             element: (
               <ProtectedRoute requiredCapabilities={['view_logic_trace']}>
-                <Suspense fallback={<PageSkeleton />}>
-                  <LogicTracePage />
-                </Suspense>
+                <LegacyReportSubrouteRedirect target="trace" />
               </ProtectedRoute>
             ),
           },
@@ -388,9 +408,7 @@ export const appRoutes: RouteObject[] = [
             path: '/verification/report/:id/document',
             element: (
               <ProtectedRoute requiredCapabilities={['view_document_inspector']}>
-                <Suspense fallback={<PageSkeleton />}>
-                  <EssayPage />
-                </Suspense>
+                <LegacyReportSubrouteRedirect target="document" />
               </ProtectedRoute>
             ),
           },
@@ -398,9 +416,7 @@ export const appRoutes: RouteObject[] = [
             path: '/verification/report/:id/consistency',
             element: (
               <ProtectedRoute requiredCapabilities={['view_orphan_detection']}>
-                <Suspense fallback={<PageSkeleton />}>
-                  <EssayPage />
-                </Suspense>
+                <LegacyReportSubrouteRedirect target="consistency" />
               </ProtectedRoute>
             ),
           },

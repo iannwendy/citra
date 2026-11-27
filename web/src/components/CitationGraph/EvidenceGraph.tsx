@@ -45,6 +45,7 @@ interface CandidateInfo {
   external_ids?: Record<string, string>;
   venue?: string | null;
   title?: string | null;
+  confidence?: number;
 }
 
 const CORE_EXTERNAL_DBS = [
@@ -194,6 +195,7 @@ export function buildEvidenceGraph(
       external_ids: source.external_ids,
       venue: source.venue,
       title: source.title,
+      confidence: typeof source.confidence === 'number' ? source.confidence : undefined,
     };
     if (sourcesByDatabase[dbKey]) {
       sourcesByDatabase[dbKey].push(entry);
@@ -339,15 +341,28 @@ export function buildEvidenceGraph(
           : null;
       const metaRawPass =
         (f.author_jaccard ?? 0) >= 0.65 && (validYearDist === null || validYearDist <= 1);
+      const isVerifiedAbbreviatedAuthors =
+        verdict.label === 'verified' &&
+        !metaRawPass &&
+        (validYearDist === null || validYearDist <= 1);
       const metaStatus: GraphNode['status'] = isSourceNotFound
         ? (f.author_jaccard ?? 0) >= 0.4
           ? 'warning'
           : 'error'
-        : metaRawPass
-          ? 'success'
-          : (f.author_jaccard ?? 0) >= 0.4
-            ? 'warning'
-            : 'error';
+        : isVerifiedAbbreviatedAuthors
+          ? 'neutral'
+          : metaRawPass
+            ? 'success'
+            : (f.author_jaccard ?? 0) >= 0.4
+              ? 'warning'
+              : 'error';
+      const authorDetailPart = isVerifiedAbbreviatedAuthors
+        ? isVi
+          ? 'Danh sách tác giả rút gọn trong bản ghi'
+          : 'Abbreviated author list in record'
+        : isVi
+          ? `Độ khớp tác giả: ${authPct}%`
+          : `Author match: ${authPct}%`;
       similarityChildren.push({
         id: 'sim-meta',
         label: isVi
@@ -361,12 +376,8 @@ export function buildEvidenceGraph(
         status: metaStatus,
         detail:
           yearPart !== null
-            ? isVi
-              ? `Độ khớp tác giả: ${authPct}% · ${yearPart}`
-              : `Author match: ${authPct}% · ${yearPart}`
-            : isVi
-              ? `Độ khớp tác giả: ${authPct}%`
-              : `Author match: ${authPct}%`,
+            ? `${authorDetailPart} · ${yearPart}`
+            : authorDetailPart,
       });
     }
     if (f.html_meta_title_sim !== undefined && f.html_meta_title_sim !== null) {
@@ -561,7 +572,17 @@ export function buildEvidenceGraph(
     });
   }
 
-  const candidateNodes: GraphNode[] = [
+  const isUnconfirmedVerdict =
+    isSourceNotFound || verdict.label === 'unresolved';
+
+  interface RankedCandidateNode {
+    node: GraphNode;
+    confidence: number;
+    fieldsCount: number;
+    hasLink: boolean;
+  }
+
+  const rawCandidateEntries: RankedCandidateNode[] = [
     ...databasesWithResults.flatMap(([db, candidates]) => {
       const config = SOURCE_CONFIG[db] ?? SOURCE_CONFIG.crossref;
       return candidates.map((c, idx) => {
@@ -591,7 +612,7 @@ export function buildEvidenceGraph(
         const isWebMetaMismatch =
           isUrlContentMismatch &&
           (db === 'web_html_meta' || db === 'wayback_html_meta');
-        const isHallucinationCandidate = isSourceNotFound && c.matched;
+        const isHallucinationCandidate = isUnconfirmedVerdict && c.matched;
         const obsPageTitle = c.title || observedWeb?.title || null;
 
         const candidateStatus: GraphNode['status'] =
@@ -611,8 +632,8 @@ export function buildEvidenceGraph(
               : 'Web page details do not match the cited title.'
           : isHallucinationCandidate
             ? isVi
-              ? `Tài liệu gần giống nhất (chỉ trùng: ${cleanedFields || 'một phần'}) — chưa đủ để xác nhận nguồn trích dẫn.`
-              : `Closest similar work (overlap: ${cleanedFields || 'partial'}) — does not verify cited work.`
+              ? `Tài liệu gần giống nhất (Thông tin bản ghi: ${cleanedFields || 'một phần'}) — chưa đủ để xác nhận nguồn trích dẫn.`
+              : `Closest similar work (Record fields: ${cleanedFields || 'partial'}) — does not verify cited work.`
             : c.matched
               ? isVi
                 ? `Thông tin khớp: ${cleanedFields || 'thông tin sẵn có'}.`
@@ -621,7 +642,7 @@ export function buildEvidenceGraph(
                 ? 'Không tìm thấy bản ghi khớp'
                 : 'No match found';
 
-        return {
+        const node: GraphNode = {
           id: `${db}-${idx}`,
           label: candidateLabel,
           type: 'candidate' as const,
@@ -668,23 +689,81 @@ export function buildEvidenceGraph(
                 ]
               : undefined,
         };
+
+        return {
+          node,
+          confidence: c.confidence ?? 0,
+          fieldsCount: (c.fields || []).length,
+          hasLink: Boolean(c.matched && c.url),
+        };
       });
     }),
     ...databasesWithoutResults.map(([db]) => {
       const config = SOURCE_CONFIG[db] ?? SOURCE_CONFIG.crossref;
       return {
-        id: `no-${db}`,
-        label: config.label,
-        type: 'candidate' as const,
-        sourceKey: db,
-        status: 'no_match' as GraphNode['status'],
-        detail: isVi ? 'Không có kết quả' : 'No results',
+        node: {
+          id: `no-${db}`,
+          label: config.label,
+          type: 'candidate' as const,
+          sourceKey: db,
+          status: 'no_match' as GraphNode['status'],
+          detail: isVi ? 'Không có kết quả' : 'No results',
+        },
+        confidence: 0,
+        fieldsCount: 0,
+        hasLink: false,
       };
     }),
   ];
 
+  // Deduplicate child nodes with identical display label, keeping the stronger match
+  const statusRank: Record<GraphNode['status'], number> = {
+    success: 4,
+    warning: 3,
+    neutral: 2,
+    error: 1,
+    no_match: 0,
+  };
+  const dedupedCandidateEntries: RankedCandidateNode[] = [];
+  const candidateIdxByLabel = new Map<string, number>();
+  for (const entry of rawCandidateEntries) {
+    const labelKey = entry.node.label.trim().toLowerCase();
+    const existingIdx = candidateIdxByLabel.get(labelKey);
+    if (existingIdx === undefined) {
+      candidateIdxByLabel.set(labelKey, dedupedCandidateEntries.length);
+      dedupedCandidateEntries.push(entry);
+    } else {
+      const existing = dedupedCandidateEntries[existingIdx];
+      const entryStatusRank = statusRank[entry.node.status];
+      const existingStatusRank = statusRank[existing.node.status];
+      const entryIsStronger =
+        entryStatusRank > existingStatusRank ||
+        (entryStatusRank === existingStatusRank &&
+          (entry.confidence > existing.confidence ||
+            (entry.confidence === existing.confidence &&
+              (entry.fieldsCount > existing.fieldsCount ||
+                (entry.fieldsCount === existing.fieldsCount &&
+                  Number(entry.hasLink) > Number(existing.hasLink))))));
+      const winner = entryIsStronger ? entry : existing;
+      const loser = entryIsStronger ? existing : entry;
+      dedupedCandidateEntries[existingIdx] = {
+        ...winner,
+        node: {
+          ...winner.node,
+          children:
+            winner.node.children ??
+            (loser.node.status !== 'no_match' ? loser.node.children : undefined),
+        },
+      };
+    }
+  }
+  const candidateNodes: GraphNode[] = dedupedCandidateEntries.map((e) => e.node);
+  const uniqueMatchedSourcesCount = candidateNodes.filter(
+    (n) => n.status !== 'no_match',
+  ).length;
+
   const hasPassingCandidate =
-    !isSourceNotFound && candidateNodes.some((n) => n.status === 'success');
+    !isUnconfirmedVerdict && candidateNodes.some((n) => n.status === 'success');
   const hasWarningCandidate = candidateNodes.some((n) => n.status === 'warning');
   const sourcesNodeStatus: GraphNode['status'] = hasPassingCandidate
     ? 'success'
@@ -776,8 +855,8 @@ export function buildEvidenceGraph(
                 ? `Đã tra cứu ${databasesWithoutResults.length} thư viện — không tìm thấy bản ghi khớp`
                 : `Checked ${databasesWithoutResults.length} academic libraries — no matching record`
               : isVi
-                ? `${databasesWithResults.length} thư viện có dữ liệu đối chiếu`
-                : `${databasesWithResults.length} ${databasesWithResults.length === 1 ? 'source checked' : 'sources checked'}`,
+                ? `${uniqueMatchedSourcesCount} thư viện có dữ liệu đối chiếu`
+                : `${uniqueMatchedSourcesCount} ${uniqueMatchedSourcesCount === 1 ? 'source checked' : 'sources checked'}`,
         children: candidateNodes,
       },
       {
@@ -891,10 +970,12 @@ export function EvidenceGraph({ verdict, onClose }: EvidenceGraphProps) {
   const verdictTitle = getVerdictNodeTitle(verdict, isVi);
   const Icon = verdictConfig.icon;
   const isNotFoundVerdict = verdict.label === 'suspected_hallucination';
+  const sourcesChildNodes =
+    graphData.children?.find((c) => c.id === 'sources')?.children ?? [];
   const matchedSourcesCount = isNotFoundVerdict
     ? 0
-    : (verdict.matched_sources ?? []).filter(
-        (s) => s.matched_fields && s.matched_fields.length > 0,
+    : sourcesChildNodes.filter(
+        (n) => n.status === 'success' || n.status === 'warning',
       ).length;
   const fExt = verdict.features as CrossLingualFeaturesExt | undefined;
   const featureMatchPct = Math.round(

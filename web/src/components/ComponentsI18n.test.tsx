@@ -756,7 +756,7 @@ describe('Task 2.3 — Non-Tech Verdict Clarity, Mapping Case-Insensitivity & Up
       { user: makeUser('admin', 'ultra'), initialRoute: '/dashboard' },
     );
     const auditLinkVi = viLayout.querySelector('aside a[href="/admin/audit"]');
-    expect(auditLinkVi?.textContent).toBe('Nhật ký duyệt trích dẫn');
+    expect(auditLinkVi?.textContent).toBe('Nhật ký duyệt bài');
     uViLayout();
 
     // 4. AppLayout EN admin sidebar keeps "Citation Review Log"

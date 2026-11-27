@@ -807,14 +807,14 @@ export function getVerdictExplanation(verdict: Verdict, lang?: 'en' | 'vi'): str
 
     if (verdict.label === 'resource' && isLegalStatuteVerdict(verdict)) {
       const cleanLegalRaw = verdict.citation_raw.replace(/^\[\d+[a-z]?\]\s*/i, '').replace(/\.$/, '');
-      return `Nhận diện văn bản quy phạm pháp luật Việt Nam hợp lệ (${cleanLegalRaw}). Văn bản pháp luật được phân loại là nguồn quy phạm chính thức và không trừ điểm CIS học thuật.${linkNoteVi}${retractionNoteVi}`;
+      return `Nhận diện văn bản quy phạm pháp luật Việt Nam hợp lệ (${cleanLegalRaw}). Văn bản pháp luật được phân loại là nguồn quy phạm chính thức và không ảnh hưởng điểm trích dẫn.${linkNoteVi}${retractionNoteVi}`;
     }
 
     if (isUrlResource(verdict)) {
       const resolvedMetaVi = observedWeb?.title
         ? ` Tiêu đề trang web: "${observedWeb.title}"${observedWeb.venue ? ` (${observedWeb.venue})` : ''}.`
         : '';
-      return `Phát hiện nguồn trang web: ${verdict.citation_raw}. Đây không phải trích dẫn bài báo học thuật và không tính điểm trừ CIS.${resolvedMetaVi}${linkNoteVi}${retractionNoteVi}`;
+      return `Phát hiện nguồn trang web: ${verdict.citation_raw}. Đây không phải trích dẫn bài báo học thuật và không ảnh hưởng điểm trích dẫn.${resolvedMetaVi}${linkNoteVi}${retractionNoteVi}`;
     }
 
     if (verdict.mapping_status === 'missing_reference') {
@@ -931,14 +931,14 @@ export function getVerdictExplanation(verdict: Verdict, lang?: 'en' | 'vi'): str
 
   if (verdict.label === 'resource' && isLegalStatuteVerdict(verdict)) {
     const cleanLegalRawEn = verdict.citation_raw.replace(/^\[\d+[a-z]?\]\s*/i, '').replace(/\.$/, '');
-    return `Recognized official Vietnamese statutory or government legal document (${cleanLegalRawEn}). Statutory sources are classified as official legal references and excluded from scholarly CIS penalties.${linkNote}${retractionNote}`;
+    return `Recognized official Vietnamese statutory or government legal document (${cleanLegalRawEn}). Statutory sources are classified as official legal references and excluded from citation score deductions.${linkNote}${retractionNote}`;
   }
 
   if (isUrlResource(verdict)) {
     const resolvedMetaEn = observedWebEn?.title
       ? ` Web page title: "${observedWebEn.title}"${observedWebEn.venue ? ` (${observedWebEn.venue})` : ''}.`
       : '';
-    return `Web resource detected: ${verdict.citation_raw}. This is not an academic citation and is excluded from the CIS score.${resolvedMetaEn}${linkNote}${retractionNote}`;
+    return `Web resource detected: ${verdict.citation_raw}. This is not an academic citation and is excluded from the citation score.${resolvedMetaEn}${linkNote}${retractionNote}`;
   }
 
   if (verdict.mapping_status === 'missing_reference') {

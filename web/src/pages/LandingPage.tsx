@@ -4628,7 +4628,7 @@ function SolvaTaxonomyPricingSection({
                 >
                   {/* Row 1: Top Architectural / Floral Gallery Header Band (`min-h-[104px]`) */}
                   <div
-                    className={`relative min-h-[100px] sm:min-h-[104px] rounded-t-[11px] overflow-hidden px-4 sm:px-5 py-3.5 flex flex-col justify-between ${
+                    className={`relative min-h-[100px] sm:min-h-[104px] rounded-t-[11px] overflow-hidden px-3 sm:px-4 py-3.5 flex flex-col justify-between ${
                       tier.featured
                         ? ''
                         : idx === 0
@@ -4655,13 +4655,13 @@ function SolvaTaxonomyPricingSection({
                       </>
                     )}
 
-                    <div className="relative z-10 flex items-start justify-between gap-x-2 gap-y-2 flex-wrap">
+                    <div className="relative z-10 flex items-center justify-between gap-x-1.5 gap-y-2 flex-nowrap min-w-0">
                       {tier.featured ? (
                         <span
                           style={{ backgroundColor: '#1C1A15', color: '#FBFAF6' }}
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[6px] border border-white/15 shadow-sm font-mono text-[11px] font-semibold leading-none tracking-wide whitespace-nowrap shrink-0"
+                          className="inline-flex items-center gap-1 px-2 py-1 rounded-[6px] border border-white/15 shadow-sm font-solva-sans text-[10px] lg:text-[9.5px] xl:text-[10.5px] font-semibold leading-none tracking-tight whitespace-nowrap shrink-0"
                         >
-                          <Sparkles className="w-3 h-3 shrink-0" />
+                          <Sparkles className="w-2.5 h-2.5 shrink-0" />
                           <span>{tier.headerTag}</span>
                         </span>
                       ) : (
@@ -4671,14 +4671,14 @@ function SolvaTaxonomyPricingSection({
                             borderColor: 'var(--solva-border)',
                             color: 'var(--solva-muted)',
                           }}
-                          className="inline-flex items-center px-2.5 py-1 rounded-[6px] border font-mono text-[11px] font-medium leading-none whitespace-nowrap shrink-0"
+                          className="inline-flex items-center px-2 py-1 rounded-[6px] border font-solva-sans text-[10px] lg:text-[9.5px] xl:text-[10.5px] font-medium leading-none tracking-tight whitespace-nowrap shrink-0"
                         >
                           {tier.headerTag}
                         </span>
                       )}
 
                       {tier.savingsBadge && (
-                        <span className="inline-flex items-center px-2.5 py-1 rounded-[6px] bg-[#FBFAF6] text-emerald-800 border border-emerald-700/25 dark:bg-[#141310] dark:text-emerald-300 dark:border-emerald-400/30 shadow-sm font-mono text-[11px] font-semibold leading-none whitespace-nowrap shrink-0">
+                        <span className="inline-flex items-center px-2 py-1 rounded-[6px] bg-[#FBFAF6] text-emerald-800 border border-emerald-700/25 dark:bg-[#141310] dark:text-emerald-300 dark:border-emerald-400/30 shadow-sm font-solva-sans tabular-nums text-[10px] lg:text-[9.5px] xl:text-[10.5px] font-semibold leading-none tracking-tight whitespace-nowrap shrink-0">
                           {tier.savingsBadge}
                         </span>
                       )}
@@ -4879,8 +4879,8 @@ function SolvaTaxonomyPricingSection({
                 className="font-solva-sans text-[14px]"
               >
                 {lang === 'vi'
-                  ? 'Thanh toán bảo mật quốc tế qua Stripe & nội địa VNPay (chuẩn PCI-DSS) · Đối chiếu trực tiếp với hơn 200 triệu ấn phẩm khoa học từ 15+ cơ sở dữ liệu quốc tế'
-                  : 'PCI-DSS encrypted checkout via Stripe & VNPay · Cross-referencing 200M+ canonical works across 15+ global scholarly indexes'}
+                  ? 'Thanh toán bảo mật quốc tế qua Stripe & nội địa VNPay · Đối chiếu trực tiếp hơn 200 triệu ấn phẩm khoa học từ 15+ thư viện học thuật quốc tế'
+                  : 'Encrypted checkout via Stripe & VNPay · Cross-referencing 200M+ published works across 15+ global academic libraries'}
               </p>
             </div>
           </SolvaScrollReveal>
@@ -4966,7 +4966,7 @@ function SolvaClientResultsSection({ lang }: { lang: Lang }) {
                   >
                     {lang === 'vi'
                       ? 'PGS.TS. Nguyễn Minh Châu'
-                      : 'Dr. Elena Rostova'}
+                      : 'Prof. Minh-Chau Nguyen'}
                   </div>
                   <div
                     style={{ color: 'var(--solva-muted)' }}

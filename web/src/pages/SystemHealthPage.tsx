@@ -174,7 +174,10 @@ const UPSTREAM_PROVIDER_LABELS: Record<
     en: 'Confirmed No Match',
     vi: 'Đã kiểm tra — không tìm thấy bản ghi',
   },
-  serpapi: 'SerpAPI (Google Scholar)',
+  serpapi: {
+    en: 'Google Scholar (supplemental index)',
+    vi: 'Google Scholar (chỉ mục bổ sung)',
+  },
   acl: 'ACL Anthology',
   coreapi: 'CORE',
   vn_registry: {

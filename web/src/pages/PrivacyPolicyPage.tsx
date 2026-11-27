@@ -474,7 +474,7 @@ function getPolicySectionLinks(lang: Lang) {
           icon: FileText,
         },
         {
-          shortLabel: '02 · Dữ liệu chúng tôi xử lý',
+          shortLabel: '02 · Dữ liệu xử lý',
           title: '2. Dữ liệu chúng tôi xử lý',
           href: '#data-collected',
           icon: Database,
@@ -486,13 +486,13 @@ function getPolicySectionLinks(lang: Lang) {
           icon: Lock,
         },
         {
-          shortLabel: '04 · Tra cứu học thuật quốc tế',
+          shortLabel: '04 · Tra cứu quốc tế',
           title: '4. Tra cứu dữ liệu học thuật quốc tế',
           href: '#third-parties',
           icon: Globe,
         },
         {
-          shortLabel: '05 · Quyền & Thời gian phản hồi',
+          shortLabel: '05 · Quyền & Phản hồi',
           title: '5. Quyền dữ liệu & Thời gian phản hồi',
           href: '#rights',
           icon: UserCheck,
@@ -864,8 +864,8 @@ function PrivacySectionSubnav({ lang }: { lang: Lang }) {
       }}
       className="sticky top-[64px] lg:top-[76px] z-40 border-b backdrop-blur-md"
     >
-      <div className="max-w-[1280px] mx-auto px-5 sm:px-6 lg:px-8 xl:px-[40px] h-[42px] flex items-center justify-between gap-3 overflow-x-auto scrollbar-none">
-        <div className="flex items-center flex-nowrap gap-1 sm:gap-1.5 min-w-max pr-5 sm:pr-0">
+      <div className="max-w-[1280px] mx-auto px-5 sm:px-6 lg:px-8 xl:px-[40px] h-[42px] flex items-center justify-between gap-3">
+        <div className="flex items-center flex-nowrap gap-1 sm:gap-1.5 min-w-0 flex-1 overflow-x-auto scrollbar-none pr-3 xl:pr-0">
           {sectionLinks.map((item) => {
             const Icon = item.icon;
             return (
@@ -885,11 +885,11 @@ function PrivacySectionSubnav({ lang }: { lang: Lang }) {
           style={{ color: 'var(--solva-muted)' }}
           className="hidden xl:inline-flex items-center gap-1.5 font-mono text-[11px] whitespace-nowrap shrink-0"
         >
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-          <span>
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+          <span className="whitespace-nowrap">
             {isVi
-              ? `Luật 91/2025/QH15 · NĐ 356/2025/NĐ-CP · v${PRIVACY_POLICY_VERSION}`
-              : `Law 91/2025/QH15 · Decree 356 · v${PRIVACY_POLICY_VERSION}`}
+              ? 'Luật 91/2025 · NĐ 356/2025'
+              : 'Law 91/2025 · Decree 356/2025'}
           </span>
         </span>
       </div>
@@ -1130,8 +1130,8 @@ function PrivacyRightsAccordion({ lang }: { lang: Lang }) {
           : 'How do I withdraw consent and permanently delete my account?',
       a:
         lang === 'vi'
-          ? 'Mở trang Cài đặt → mục 05 "Bảo vệ dữ liệu cá nhân & Quyền chủ thể dữ liệu" → bấm "Xóa tài khoản & toàn bộ dữ liệu". Sau khi xác nhận mật khẩu (hoặc tên tài khoản với đăng nhập Google), hệ thống lập tức thu hồi phiên đăng nhập, xóa hồ sơ, ảnh đại diện và toàn bộ tệp bài viết (.pdf, .docx, .bib, .ris) khỏi kho lưu trữ.'
-          : 'Open Settings → Section 05 "Personal Data Protection & Data Subject Rights" → select "Delete Account & All Data". Confirm your password (or exact username for Google-only accounts) to immediately remove your profile, photos, citation records, and uploaded paper files.',
+          ? 'Mở trang Cài đặt → mục "Quyền riêng tư & Xóa tài khoản" → bấm "Xóa tài khoản & toàn bộ dữ liệu". Sau khi xác nhận mật khẩu (hoặc tên tài khoản với đăng nhập Google), hệ thống lập tức thu hồi phiên đăng nhập, xóa hồ sơ, ảnh đại diện và toàn bộ tệp bài viết (.pdf, .docx, .bib, .ris) khỏi kho lưu trữ.'
+          : 'Open Settings → "Privacy & Account Deletion" → select "Delete Account & All Data". Confirm your password (or exact username for Google-only accounts) to immediately remove your profile, photos, citation records, and uploaded paper files.',
     },
     {
       id: 'pfaq-1',
@@ -1875,8 +1875,8 @@ export function PrivacyPolicyPage(): JSX.Element {
                     className="rounded-[10px] border px-3.5 py-3 font-solva-sans text-[14px] sm:text-[15px] font-medium leading-relaxed"
                   >
                     {isVi
-                      ? 'Trường Đại học Tôn Đức Thắng (TDTU)'
-                      : 'Ton Duc Thang University (TDTU)'}
+                      ? 'Trường Đại học Tôn Đức Thắng'
+                      : 'Ton Duc Thang University'}
                   </div>
                 </div>
               </SolvaScrollReveal>
