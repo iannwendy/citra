@@ -7,6 +7,15 @@ import { makeReport, makeVerdict } from '@/test-fixtures';
 import { EssayHeader } from './essay/EssayHeader';
 import { EssayActionBar } from './essay/EssayActionBar';
 import { EssayPage } from './EssayPage';
+import { IssuesPage } from './IssuesPage';
+import { LogicTracePage } from './LogicTracePage';
+import { DocumentInspectorPage } from './DocumentInspectorPage';
+import { OrphanDetectionPage } from './OrphanDetectionPage';
+import {
+  InteractiveDecisionFlowBoard,
+  extractCleanCitationIdentity,
+} from '@/components/CitationGraph/InteractiveDecisionFlowBoard';
+import { deduplicateRepeatedVenue } from '@/components/BibliographyRemediationModal';
 
 describe('Report Page UI/UX Redesign (Non-Tech Clarity & Progressive Disclosure)', () => {
   beforeEach(async () => {
@@ -817,6 +826,303 @@ describe('Report Page UI/UX Redesign (Non-Tech Clarity & Progressive Disclosure)
       for (const lbl of step0Labels) {
         expect(lbl.className).toContain('shrink-0');
       }
+    });
+  });
+
+  describe('Phase 2 Agent D Regression Coverage (BUG-02..BUG-59)', () => {
+    it('BUG-02/03/19: enforces single-definition counts across L1-L5 (resource separate from verified, excluded from L2 issues, zero dropped L5 entries, ambiguous_mapping blue badge)', async () => {
+      await i18n.changeLanguage('en');
+      const mixedReport = makeReport({
+        essay_id: 401,
+        filename: 'thesis_mixed.docx',
+        num_pages: 10,
+        num_citations: 5,
+        verdicts: [
+          makeVerdict({
+            citation_id: 'v-ver',
+            numeric_index: 1,
+            citation_raw: '[1] Vaswani, A. (2017). Attention Is All You Need. NeurIPS.',
+            label: 'verified',
+            mapping_status: 'matched',
+          }),
+          makeVerdict({
+            citation_id: 'v-res',
+            numeric_index: 2,
+            citation_raw: '[2] Official Python Docs. https://docs.python.org/3/',
+            label: 'resource',
+            mapping_status: 'matched',
+            url_status: 'restricted_alive',
+            url_status_code: 403,
+            triggered_rules: ['R-URL-RESOURCE'],
+          }),
+          makeVerdict({
+            citation_id: 'v-hallu',
+            numeric_index: 3,
+            citation_raw: '[3] Phantom, X. (2025). Nonexistent Paper Title.',
+            label: 'suspected_hallucination',
+            mapping_status: 'ambiguous_mapping',
+            matched_sources: [],
+            triggered_rules: ['R-ZERO-MATCH'],
+          }),
+          makeVerdict({
+            citation_id: 'v-dup',
+            numeric_index: 4,
+            citation_raw: '[4] Duplicate Entry (2022). Same Paper.',
+            label: 'verified',
+            mapping_status: 'duplicate_reference',
+          }),
+          makeVerdict({
+            citation_id: 'v-style',
+            numeric_index: 5,
+            citation_raw: '[5] Mixed Style Entry (2021). Another Paper.',
+            label: 'verified',
+            mapping_status: 'style_inconsistent',
+          }),
+        ],
+      });
+      vi.spyOn(api, 'getEssay').mockResolvedValue(mixedReport);
+
+      // L2 IssuesPage: excludes valid web resource from actionable issues & provides direct Inspect Citation link
+      const { container: l2Container, unmount: unmountL2 } = renderWithProviders(
+        <Routes>
+          <Route path="/verification/report/:id/issues" element={<IssuesPage />} />
+        </Routes>,
+        { user: makeUser('teacher', 'pro'), initialRoute: '/verification/report/401/issues' },
+      );
+      await waitFor(() =>
+        expect(screen.getByTestId('decision-support-banner')).toBeDefined(),
+      );
+      expect(l2Container.textContent).not.toContain('Official Python Docs');
+      expect(l2Container.textContent).toContain('Nonexistent Paper Title');
+      const expandBtns = screen.getAllByLabelText('Expand details');
+      fireEvent.click(expandBtns[0]);
+      expect(screen.getByTestId('issue-inspect-citation-link').getAttribute('href')).toContain(
+        '/verification/report/401?citation=v-hallu',
+      );
+      unmountL2();
+
+      // L3 LogicTracePage: separates verified (3) from resource (1) and mounts DecisionSupportBanner
+      const { container: l3Container, unmount: unmountL3 } = renderWithProviders(
+        <Routes>
+          <Route path="/verification/report/:id/trace" element={<LogicTracePage />} />
+        </Routes>,
+        { user: makeUser('teacher', 'pro'), initialRoute: '/verification/report/401/trace' },
+      );
+      await waitFor(() =>
+        expect(screen.getByTestId('decision-support-banner')).toBeDefined(),
+      );
+      expect(l3Container.textContent).toContain('Web / Legal Source');
+      expect(l3Container.textContent).not.toContain('symbolic_verifier.py');
+      expect(l3Container.textContent).not.toContain('HTTP 403 OK');
+      unmountL3();
+
+      // L5 OrphanDetectionPage: All (5) renders ALL 5 cards (zero dropped duplicate/style entries) & ambiguous_mapping wears Ambiguous badge (not Missing Ref)
+      const { container: l5Container, unmount: unmountL5 } = renderWithProviders(
+        <Routes>
+          <Route path="/verification/orphans/:id" element={<OrphanDetectionPage />} />
+        </Routes>,
+        { user: makeUser('teacher', 'pro'), initialRoute: '/verification/orphans/401' },
+      );
+      await waitFor(() =>
+        expect(screen.getAllByTestId('consistency-entry-card')).toHaveLength(5),
+      );
+      expect(screen.getByTestId('decision-support-banner')).toBeDefined();
+      const ambCard = l5Container.querySelector('[data-mapping-status="ambiguous_mapping"]');
+      expect(ambCard?.textContent).toContain('Ambiguous');
+      expect(ambCard?.textContent).not.toContain('No Reference');
+      expect(l5Container.textContent).toContain('Duplicate Entry');
+      expect(l5Container.textContent).toContain('Mixed Style Entry');
+      unmountL5();
+    });
+
+    it('BUG-04/05/07/16/21: handles mobile detail sheet, unmatched Google Scholar + disabled Copy + neutral diff + 403 Restricted Access, EN scanned PDF N/A badge, and friendly 404', async () => {
+      await i18n.changeLanguage('en');
+
+      // 1. Friendly 404 error card (zero raw JSON)
+      vi.spyOn(api, 'getEssay').mockRejectedValueOnce(
+        new Error('API 404: {"detail":"Essay not found"}'),
+      );
+      const { container: errContainer, unmount: unmountErr } = renderWithProviders(
+        <Routes>
+          <Route path="/verification/report/:id" element={<EssayPage />} />
+        </Routes>,
+        { user: makeUser('teacher', 'pro'), initialRoute: '/verification/report/999999' },
+      );
+      await waitFor(() => expect(screen.getByTestId('essay-error-card')).toBeDefined());
+      expect(errContainer.textContent).not.toContain('{"detail"');
+      expect(errContainer.textContent).toContain('Report not found');
+      unmountErr();
+
+      // 2. Scanned PDF in EN -> English notice + N/A Not Scannable (never Vietnamese leak or 0.0% High Risk)
+      vi.spyOn(api, 'getEssay').mockResolvedValueOnce(
+        makeReport({
+          essay_id: 402,
+          filename: 'scanned_thesis.pdf',
+          num_pages: 12,
+          num_citations: 0,
+          cis: {
+            score: 0,
+            is_unscannable: true,
+            components: {},
+            weights_used: {},
+            num_citations: 0,
+            num_unresolved: 0,
+            disclaimer: '',
+          } as never,
+          document_diagnostics: {
+            is_scanned_pdf: true,
+            scanned_pages_count: 12,
+            total_extractable_chars: 0,
+            avg_chars_per_page: 0,
+            warning_message: 'Cảnh báo tiếng Việt từ backend',
+          },
+          verdicts: [],
+        }),
+      );
+      const { container: scanContainer, unmount: unmountScan } = renderWithProviders(
+        <Routes>
+          <Route path="/verification/report/:id" element={<EssayPage />} />
+        </Routes>,
+        { user: makeUser('teacher', 'pro'), initialRoute: '/verification/report/402' },
+      );
+      await waitFor(() =>
+        expect(screen.getByTestId('scanned-pdf-guardrail-banner')).toBeDefined(),
+      );
+      expect(scanContainer.textContent).not.toContain('Cảnh báo tiếng Việt');
+      expect(scanContainer.textContent).toContain('Not Scannable');
+      unmountScan();
+
+      // 3. Unmatched citation + restricted 403 + self-bridge + mobile detail sheet
+      const originalMatchMedia = window.matchMedia;
+      window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+        matches: query === '(max-width: 1023px)',
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      }));
+      try {
+        vi.spyOn(api, 'getEssay').mockResolvedValueOnce(
+          makeReport({
+            essay_id: 403,
+            verdicts: [
+              makeVerdict({
+                citation_id: 'v-unmatched',
+                numeric_index: 1,
+                citation_raw: '[1] Unknown, Z. (2025). Mystery Unindexed Study.',
+                label: 'suspected_hallucination',
+                matched_sources: [],
+                mismatched_fields: ['title', 'authors', 'year'],
+                url_status: 'restricted_alive',
+                url_status_code: 403,
+                features: {
+                  bridged_concepts: ['SENTENCE-BERT ↔ SENTENCE-BERT'],
+                },
+              }),
+            ],
+          }),
+        );
+        const { container: mobContainer, unmount: unmountMob } = renderWithProviders(
+          <Routes>
+            <Route path="/verification/report/:id" element={<EssayPage />} />
+          </Routes>,
+          { user: makeUser('teacher', 'pro'), initialRoute: '/verification/report/403' },
+        );
+        await waitFor(() =>
+          expect(mobContainer.querySelector('[data-citation-id="v-unmatched"]')).not.toBeNull(),
+        );
+        // Tap card on mobile -> opens Mobile Detail Sheet
+        fireEvent.click(mobContainer.querySelector('[data-citation-id="v-unmatched"]')!);
+        const sheet = await screen.findByTestId('mobile-citation-detail-sheet');
+        expect(sheet.textContent).toContain('Search on Google Scholar');
+        expect(sheet.textContent).toContain('Not matched');
+        expect(sheet.textContent).not.toContain('HTTP 403 OK');
+        expect(sheet.textContent).toContain('Restricted Access (HTTP 403)');
+        expect(sheet.textContent).not.toContain('SENTENCE-BERT ↔ SENTENCE-BERT');
+        const copyBtn = sheet.querySelector('button[disabled]');
+        expect(copyBtn).not.toBeNull();
+        unmountMob();
+      } finally {
+        window.matchMedia = originalMatchMedia;
+      }
+    });
+
+    it('BUG-06/45/56: fixes local_db routing & Reimers surname parsing, DOCX inspector controls, and repeated venue deduplication', async () => {
+      await i18n.changeLanguage('en');
+
+      // BUG-06a: Surname parser handles initials cleanly ("N. Reimers and I. Gurevych" -> "Reimers & Gurevych", NEVER "N")
+      const identity = extractCleanCitationIdentity(
+        '[1] N. Reimers and I. Gurevych, "Sentence-BERT: Sentence Embeddings using Siamese BERT-Networks," EMNLP, 2019.',
+        null,
+      );
+      expect(identity.authorOnly).toContain('Reimers');
+      expect(identity.authorOnly).not.toBe('N');
+      expect(identity.citedYear).toBe('2019');
+
+      // BUG-06b: local_db routes to Local Scholarly Library (local_scholarly), NEVER vnlegal (Pháp luật · TCVN)
+      const localDbVerdict = makeVerdict({
+        citation_id: 'v-sbert',
+        numeric_index: 1,
+        citation_raw:
+          '[1] N. Reimers and I. Gurevych, "Sentence-BERT: Sentence Embeddings using Siamese BERT-Networks," EMNLP, 2019.',
+        label: 'verified',
+        triggered_rules: ['R-LOCAL_DB_VERIFIED'],
+        matched_sources: [
+          {
+            source: 'local_db',
+            title: 'Sentence-BERT: Sentence Embeddings using Siamese BERT-Networks',
+            authors: ['Nils Reimers', 'Iryna Gurevych'],
+            year: '2019',
+            venue: 'EMNLP',
+            confidence: 0.99,
+            matched_fields: ['title', 'authors', 'year'],
+            checked_at: '2026-11-27T00:00:00Z',
+          },
+        ],
+      });
+      await i18n.changeLanguage('vi');
+      const { unmount: unmountBoard } = renderWithProviders(
+        <InteractiveDecisionFlowBoard verdict={localDbVerdict} />,
+      );
+      expect(screen.getByTestId('flow-sat-local_scholarly').getAttribute('data-matched')).toBe(
+        'true',
+      );
+      expect(screen.getByTestId('flow-sat-vnlegal').getAttribute('data-matched')).toBe('false');
+      expect(screen.getByTestId('flow-central-hub').textContent).toContain('Reimers');
+      expect(screen.getByTestId('flow-central-hub').textContent).not.toContain('[1] N (2019)');
+      unmountBoard();
+      await i18n.changeLanguage('en');
+
+      // BUG-45: DocumentInspectorPage shows Highlight Legend & DOCX Document Page Preview label
+      vi.spyOn(api, 'getEssay').mockResolvedValueOnce(
+        makeReport({
+          essay_id: 405,
+          filename: 'seminar_paper.docx',
+          verdicts: [localDbVerdict],
+        }),
+      );
+      const { unmount: unmountDocx } = renderWithProviders(
+        <Routes>
+          <Route path="/verification/inspector/:id" element={<DocumentInspectorPage />} />
+        </Routes>,
+        { user: makeUser('teacher', 'pro'), initialRoute: '/verification/inspector/405' },
+      );
+      await waitFor(() =>
+        expect(screen.getByTestId('inspector-highlight-legend')).toBeDefined(),
+      );
+      expect(screen.getByTestId('toggle-pdf-page-preview').textContent).toContain(
+        'Document Page Preview',
+      );
+      unmountDocx();
+
+      // BUG-56: Repeated venue deduplication
+      expect(deduplicateRepeatedVenue('He, K. (2016). ResNet. CVPR - CVPR.')).toBe(
+        'He, K. (2016). ResNet. CVPR.',
+      );
+      expect(deduplicateRepeatedVenue('NeurIPS, NeurIPS 2020')).toBe('NeurIPS 2020');
     });
   });
 });

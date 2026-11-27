@@ -12,11 +12,21 @@ import {
 import { useModalA11y } from '@/hooks/useModalA11y';
 import { VerdictBadge } from '@/components/VerdictBadge';
 import { MappingStatusBadge } from '@/components/MappingStatusBadge';
+import { DecisionSupportBanner } from '@/components/DecisionSupportBanner';
 import {
   getCitationMarkerLabel,
+  getFieldDisplayName,
   getVerdictExplanation,
   isUrlResource,
 } from '@/lib/verdictExplanation';
+import {
+  formatIntentLabel,
+  formatStanceLabel,
+  formatUserError,
+  getVerdictDisplay,
+  normalizeVerdictKey,
+} from '@/lib/academicTaxonomy';
+import { isDocxFilename } from '@/lib/fileKind';
 import { useEssayPolling } from '@/hooks/useEssayPolling';
 import { EssayHeader } from './essay/EssayHeader';
 import { EssayActionBar } from './essay/EssayActionBar';
@@ -32,24 +42,41 @@ import {
   CheckCircle,
   XCircle,
   Link2,
-  Terminal,
   Filter,
   Brain,
   Sparkles,
   Eye,
   ChevronLeft,
   ChevronRight,
+  ZoomIn,
+  ZoomOut,
+  Maximize2,
+  X,
+  ArrowLeft,
 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { Separator } from '@/components/ui/separator';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 /* ============================================================
-   SourceLogic — Document Inspector Page (Scholarly Precision v2.0)
-   Interactive Citation Debugger IDE — Inline Context Stream
+   SourceLogic — Document Inspector Page (L4)
+   Inline Context Stream & Page Preview
    ============================================================ */
+
+function filterValidBridgedConcepts(concepts?: string[] | null): string[] {
+  if (!concepts || concepts.length === 0) return [];
+  return concepts.filter((item) => {
+    const trimmed = item.trim();
+    if (!trimmed) return false;
+    const parts = trimmed.split(/\s*(?:↔|<->|->|→|=)\s*/);
+    if (parts.length === 2) {
+      const left = parts[0].trim().toLowerCase();
+      const right = parts[1].trim().toLowerCase();
+      if (left && right && left === right) return false;
+    }
+    return true;
+  });
+}
 
 const _UNDERLINE_COLORS = {
   verified: 'border-emerald-500 dark:border-emerald-400',
@@ -214,7 +241,7 @@ function buildInlineCitations(
       refNum: resolvedRefNum,
       subIndex: resolvedSubIndex || undefined,
       markerLabel,
-      label: isUrlResource(v) ? 'resource' : v.label,
+      label: isUrlResource(v) ? 'resource' : normalizeVerdictKey(v.label),
       mapping_status: v.mapping_status,
       page: resolvedPage,
       line: v.citation_raw,
@@ -260,47 +287,49 @@ function buildInlineCitations(
 
 function getInlineStatusBadge(
   label: string,
-  t: (key: string) => string,
+  lang: 'vi' | 'en',
 ): {
   bg: string;
   text: string;
   label: string;
   icon: React.ReactNode;
 } {
-  switch (label) {
+  const norm = normalizeVerdictKey(label);
+  const display = getVerdictDisplay(norm, lang);
+  switch (norm) {
     case 'verified':
       return {
         bg: 'bg-emerald-100/90 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/80',
         text: 'text-emerald-700 dark:text-emerald-300',
-        label: t('inspector.verified'),
+        label: display.label,
         icon: <CheckCircle className="h-3 w-3" />,
       };
     case 'metadata_error':
       return {
         bg: 'bg-amber-100/90 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 border border-amber-200/80 dark:border-amber-800/80',
         text: 'text-amber-700 dark:text-amber-300',
-        label: t('inspector.metaError'),
+        label: display.label,
         icon: <AlertTriangle className="h-3 w-3" />,
       };
     case 'suspected_hallucination':
       return {
         bg: 'bg-red-100/90 dark:bg-red-950/80 text-red-700 dark:text-red-300 border border-red-200/80 dark:border-red-800/80',
         text: 'text-red-700 dark:text-red-300',
-        label: t('inspector.suspected'),
+        label: display.label,
         icon: <XCircle className="h-3 w-3" />,
       };
     case 'resource':
       return {
         bg: 'bg-violet-100/90 dark:bg-violet-950/80 text-violet-700 dark:text-violet-300 border border-violet-200/80 dark:border-violet-800/80',
         text: 'text-violet-700 dark:text-violet-300',
-        label: t('inspector.urlResource'),
+        label: display.label,
         icon: <Link2 className="h-3 w-3" />,
       };
     default:
       return {
         bg: 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700',
         text: 'text-slate-700 dark:text-slate-300',
-        label: t('inspector.unverifiable'),
+        label: display.label,
         icon: <AlertTriangle className="h-3 w-3" />,
       };
   }
@@ -313,8 +342,9 @@ function InlineCitationMarker({
   citation: InlineCitation;
   onClick?: () => void;
 }) {
-  const { t } = useTranslation();
-  const status = getInlineStatusBadge(citation.label, t);
+  const { i18n } = useTranslation();
+  const lang: 'vi' | 'en' = i18n.language?.startsWith('vi') ? 'vi' : 'en';
+  const status = getInlineStatusBadge(citation.label, lang);
   const isFlaggedRed =
     citation.label === 'suspected_hallucination' ||
     citation.label === 'metadata_error';
@@ -327,7 +357,7 @@ function InlineCitationMarker({
           ? 'text-red-600 dark:text-red-400 underline decoration-red-500/70'
           : `${status.text} underline`
       }`}
-      title={`[${citation.label}] ${citation.raw}`}
+      title={`${status.label}: ${citation.raw}`}
     >
       <span className="max-w-[160px] truncate">{citation.raw}</span>
       <span className="shrink-0">{status.icon}</span>
@@ -339,19 +369,18 @@ function CitationPopup({
   essayId,
   citation,
   verdict,
-  embedded = false,
   onSelectVerdictInCitations,
   onClose,
 }: {
   essayId: string;
   citation: InlineCitation;
   verdict: Verdict | null;
-  embedded?: boolean;
   onSelectVerdictInCitations?: (citationId: string) => void;
   onClose: () => void;
 }) {
-  const { t } = useTranslation();
-  const status = getInlineStatusBadge(citation.label, t);
+  const { t, i18n } = useTranslation();
+  const lang: 'vi' | 'en' = i18n.language?.startsWith('vi') ? 'vi' : 'en';
+  const status = getInlineStatusBadge(citation.label, lang);
   const { dialogProps, titleId } = useModalA11y<HTMLDivElement>(true, onClose);
 
   return createPortal(
@@ -366,19 +395,9 @@ function CitationPopup({
       >
         <div className="flex items-center justify-between px-5 py-3.5 bg-slate-50/90 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800">
           <div className="flex items-center gap-2.5">
-            {!embedded && (
-              <>
-                <div className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-red-400/80" />
-                  <span className="w-2.5 h-2.5 rounded-full bg-amber-400/80" />
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-400/80" />
-                </div>
-                <Separator orientation="vertical" className="h-4" />
-              </>
-            )}
             <Quote className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
             <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">
-              {embedded ? t('inspector.citationDetail') : 'citation_inspector.modal'}
+              {lang === 'vi' ? 'Trình xem trích dẫn' : 'Citation Inspector'}
             </span>
           </div>
           <button
@@ -387,7 +406,7 @@ function CitationPopup({
             className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
             aria-label={t('inspector.closeModalAria')}
           >
-            <XCircle className="h-4 w-4" />
+            <X className="h-4 w-4" />
           </button>
         </div>
 
@@ -403,7 +422,7 @@ function CitationPopup({
               </div>
             </div>
             <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-white/60 dark:bg-slate-900/60 text-slate-700 dark:text-slate-300">
-              ID: {citation.id}
+              {citation.markerLabel}
             </span>
           </div>
         </div>
@@ -478,16 +497,26 @@ function CitationPopup({
                       }`}
                     >
                       {isWrongPage
-                        ? `⚠ HTTP ${code || 200} · Wrong Page`
+                        ? lang === 'vi'
+                          ? `⚠ HTTP ${code || 200} · Sai nội dung trang`
+                          : `⚠ HTTP ${code || 200} · Wrong Page`
                         : st === 'alive'
                           ? `✓ HTTP ${code || 200} OK`
                           : st === 'restricted_alive'
-                            ? `🔒 HTTP ${code || 403} OK`
+                            ? lang === 'vi'
+                              ? `🔒 Truy cập hạn chế (HTTP ${code || 403})`
+                              : `🔒 Restricted Access (HTTP ${code || 403})`
                             : st === 'archived_alive'
-                              ? '🏛️ WAYBACK ARCHIVED'
+                              ? lang === 'vi'
+                                ? '🏛️ Lưu trữ Wayback'
+                                : '🏛️ Wayback Archived'
                               : st === 'dead_link'
-                                ? `✕ HTTP ${code || 404} DEAD`
-                                : '✕ FAKE URL'}
+                                ? lang === 'vi'
+                                  ? `✕ Liên kết lỗi (HTTP ${code || 404})`
+                                  : `✕ Broken Link (HTTP ${code || 404})`
+                                : lang === 'vi'
+                                  ? '✕ URL không hợp lệ'
+                                  : '✕ Invalid URL'}
                     </span>
                   </div>
                 </div>
@@ -502,7 +531,7 @@ function CitationPopup({
                   {t('inspector.whatWeFound')}
                 </label>
                 <p className="mt-1 text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
-                  {getVerdictExplanation(verdict)}
+                  {getVerdictExplanation(verdict, lang)}
                 </p>
               </div>
 
@@ -547,9 +576,11 @@ function CitationPopup({
                       f.cross_lingual_title_sim ?? 0,
                     )
                   : 0;
-                const bridgedConcepts = f.cross_lingual_bridged_concepts?.length
-                  ? f.cross_lingual_bridged_concepts
-                  : (f.bridged_concepts ?? []);
+                const bridgedConcepts = filterValidBridgedConcepts(
+                  f.cross_lingual_bridged_concepts?.length
+                    ? f.cross_lingual_bridged_concepts
+                    : f.bridged_concepts,
+                );
                 const isCrossLingual =
                   bridgedConcepts.length > 0 ||
                   Boolean(f.cross_lingual_detected) ||
@@ -574,28 +605,28 @@ function CitationPopup({
                 return (
                   <div className="rounded-xl border border-indigo-200/80 dark:border-indigo-900/70 bg-indigo-50/40 dark:bg-indigo-950/25 p-3.5 space-y-2.5">
                     <div className="flex items-center justify-between gap-2 flex-wrap">
-                      <span className="inline-flex items-center gap-1.5 text-[11px] font-mono font-bold text-indigo-900 dark:text-indigo-200 uppercase tracking-wider">
+                      <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-indigo-900 dark:text-indigo-200 uppercase tracking-wider">
                         <Brain className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
                         {t('inspector.neuralSemanticMatch')}
                       </span>
                       <div className="flex items-center gap-1.5 flex-wrap">
                         {f.citation_intent && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-indigo-100/90 text-indigo-700 dark:bg-indigo-900/80 dark:text-indigo-300">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-indigo-100/90 text-indigo-700 dark:bg-indigo-900/80 dark:text-indigo-300">
                             <Sparkles className="h-2.5 w-2.5" />
-                            {f.citation_intent}
+                            {formatIntentLabel(f.citation_intent, lang)}
                           </span>
                         )}
                         {f.stance_label && (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-emerald-100/80 text-emerald-700 dark:bg-emerald-900/70 dark:text-emerald-300">
-                            {f.stance_label}
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-100/80 text-emerald-700 dark:bg-emerald-900/70 dark:text-emerald-300">
+                            {formatStanceLabel(f.stance_label, lang)}
                           </span>
                         )}
                         {isCrossLingual && (
                           <span
                             data-testid="inspector-cross-lingual-pill"
-                            className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-teal-100/80 text-teal-800 dark:bg-teal-900/70 dark:text-teal-300"
+                            className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-teal-100/80 text-teal-800 dark:bg-teal-900/70 dark:text-teal-300"
                           >
-                            VI↔EN ONNX
+                            {lang === 'vi' ? 'Đối chiếu Việt ↔ Anh' : 'VI ↔ EN Match'}
                             {bestTitleSim > 0 ? ` · ${Math.round(bestTitleSim * 100)}%` : ''}
                           </span>
                         )}
@@ -644,9 +675,9 @@ function CitationPopup({
                       <Badge
                         key={field}
                         variant="metadata_error"
-                        className="px-2 py-0.5 rounded text-xs font-mono"
+                        className="px-2 py-0.5 rounded text-xs"
                       >
-                        {field}
+                        {getFieldDisplayName(field, lang).replace(/^the\s+/i, '')}
                       </Badge>
                     ))}
                   </div>
@@ -689,8 +720,8 @@ function CitationPopup({
               </button>
             ) : (
               <Link
-                to={`/verification/report/${essayId}`}
-                className="inline-flex items-center gap-1.5 text-xs font-mono font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
+                to={`/verification/report/${essayId}?citation=${encodeURIComponent(citation.id)}`}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
               >
                 <ExternalLink className="h-3.5 w-3.5" />
                 {t('inspector.viewFullReport')}
@@ -698,7 +729,7 @@ function CitationPopup({
             )}
             <button
               onClick={onClose}
-              className="px-3 py-1.5 rounded-lg text-xs font-mono font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer"
             >
               {t('inspector.close')}
             </button>
@@ -722,6 +753,8 @@ export function DocumentInspectorWorkspace({
   onSelectVerdictInCitations?: (citationId: string) => void;
 }) {
   const { t, i18n } = useTranslation();
+  const lang: 'vi' | 'en' = i18n.language?.startsWith('vi') ? 'vi' : 'en';
+  const isDocx = isDocxFilename(report.filename);
   const [selectedCitation, setSelectedCitation] = useState<InlineCitation | null>(null);
   const [selectedVerdict, setSelectedVerdict] = useState<Verdict | null>(null);
   const [filterLabel, setFilterLabel] = useState<string>('all');
@@ -730,6 +763,8 @@ export function DocumentInspectorWorkspace({
   const [previewHighlight, setPreviewHighlight] = useState<string>('');
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState<boolean>(false);
+  const [previewZoom, setPreviewZoom] = useState<100 | 150>(100);
+  const [lightboxOpen, setLightboxOpen] = useState<boolean>(false);
 
   const numericId = essayId ? parseInt(essayId, 10) : report.essay_id;
   const { containerRef: viewModePillRef, pillStyle: viewModePill } =
@@ -741,14 +776,11 @@ export function DocumentInspectorWorkspace({
     report.references,
   );
 
+  // Single-definition buckets: NEVER merge resource into verified (BUG-02)
   const filteredCitations =
     filterLabel === 'all'
       ? inlineCitations
-      : inlineCitations.filter((c) =>
-          filterLabel === 'verified'
-            ? c.label === 'verified' || c.label === 'resource'
-            : c.label === filterLabel,
-        );
+      : inlineCitations.filter((c) => c.label === filterLabel);
 
   useEffect(() => {
     if (selectedCitation) {
@@ -793,34 +825,35 @@ export function DocumentInspectorWorkspace({
   }, [docViewMode, numericId, previewPage, previewHighlight]);
 
   const statusCounts = {
-    verified: inlineCitations.filter((c) => c.label === 'verified' || c.label === 'resource').length,
+    verified: inlineCitations.filter((c) => c.label === 'verified').length,
     metadata_error: inlineCitations.filter((c) => c.label === 'metadata_error').length,
     suspected_hallucination: inlineCitations.filter((c) => c.label === 'suspected_hallucination').length,
     unresolved: inlineCitations.filter((c) => c.label === 'unresolved').length,
+    ...(inlineCitations.some((c) => c.label === 'resource')
+      ? { resource: inlineCitations.filter((c) => c.label === 'resource').length }
+      : {}),
   };
 
   const statusLabelByKey: Record<string, string> = {
-    verified: t('inspector.verified'),
-    metadata_error: t('inspector.metaError'),
-    suspected_hallucination: t('inspector.suspected'),
-    unresolved: t('inspector.unverifiable'),
+    verified: getVerdictDisplay('verified', lang).label,
+    metadata_error: getVerdictDisplay('metadata_error', lang).label,
+    suspected_hallucination: getVerdictDisplay('suspected_hallucination', lang).label,
+    unresolved: getVerdictDisplay('unresolved', lang).label,
+    resource: getVerdictDisplay('resource', lang).label,
   };
 
   return (
     <div className={embedded ? 'space-y-4' : 'space-y-6'}>
       {!embedded && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className={`grid grid-cols-2 ${'resource' in statusCounts ? 'sm:grid-cols-5' : 'sm:grid-cols-4'} gap-4`}>
           <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm">
             <div className="flex items-center justify-between mb-1.5">
               <div className="flex items-center gap-2">
                 <div className="w-3 h-1 rounded-full bg-emerald-500" />
                 <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
-                  {t('inspector.verified')} ({statusCounts.verified})
+                  {statusLabelByKey.verified} ({statusCounts.verified})
                 </span>
               </div>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/80 text-emerald-600 dark:text-emerald-400">
-                01
-              </span>
             </div>
             <p className="text-2xl font-bold font-mono tabular-nums text-emerald-600 dark:text-emerald-400">
               {statusCounts.verified}
@@ -832,12 +865,9 @@ export function DocumentInspectorWorkspace({
               <div className="flex items-center gap-2">
                 <div className="w-3 h-1 rounded-full bg-amber-500" />
                 <span className="text-xs font-medium text-amber-600 dark:text-amber-400">
-                  {t('inspector.metaError')} ({statusCounts.metadata_error})
+                  {statusLabelByKey.metadata_error} ({statusCounts.metadata_error})
                 </span>
               </div>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-50 dark:bg-amber-950/80 text-amber-600 dark:text-amber-400">
-                02
-              </span>
             </div>
             <p className="text-2xl font-bold font-mono tabular-nums text-amber-600 dark:text-amber-400">
               {statusCounts.metadata_error}
@@ -849,12 +879,9 @@ export function DocumentInspectorWorkspace({
               <div className="flex items-center gap-2">
                 <div className="w-3 h-1 rounded-full bg-red-500" />
                 <span className="text-xs font-medium text-red-600 dark:text-red-400">
-                  {t('inspector.suspected')} ({statusCounts.suspected_hallucination})
+                  {statusLabelByKey.suspected_hallucination} ({statusCounts.suspected_hallucination})
                 </span>
               </div>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-red-50 dark:bg-red-950/80 text-red-600 dark:text-red-400">
-                03
-              </span>
             </div>
             <p className="text-2xl font-bold font-mono tabular-nums text-red-600 dark:text-red-400">
               {statusCounts.suspected_hallucination}
@@ -866,54 +893,50 @@ export function DocumentInspectorWorkspace({
               <div className="flex items-center gap-2">
                 <div className="w-3 h-1 rounded-full bg-slate-400" />
                 <span className="text-xs font-medium text-slate-600 dark:text-slate-300">
-                  {t('inspector.unverifiable')} ({statusCounts.unresolved})
+                  {statusLabelByKey.unresolved} ({statusCounts.unresolved})
                 </span>
               </div>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                04
-              </span>
             </div>
             <p className="text-2xl font-bold font-mono tabular-nums text-slate-700 dark:text-slate-200">
               {statusCounts.unresolved}
             </p>
           </Card>
+
+          {'resource' in statusCounts && (
+            <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm">
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-1 rounded-full bg-violet-500" />
+                  <span className="text-xs font-medium text-violet-600 dark:text-violet-400">
+                    {statusLabelByKey.resource} ({statusCounts.resource})
+                  </span>
+                </div>
+              </div>
+              <p className="text-2xl font-bold font-mono tabular-nums text-violet-600 dark:text-violet-400">
+                {statusCounts.resource}
+              </p>
+            </Card>
+          )}
         </div>
       )}
 
       {/* Main Document Context Container */}
       <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
-        {/* Top Filter Bar (Clean Editorial in embedded mode, Legacy Chrome in standalone test mode) */}
+        {/* Top Filter Bar */}
         <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 bg-slate-50/90 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800">
-          {embedded ? (
-            <div className="flex items-center gap-2 text-xs font-medium text-slate-600 dark:text-slate-300">
-              <BookOpen className="h-4 w-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
-              <span>
-                {t('inspector.summaryBar', {
-                  pages: report.num_pages,
-                  citations: inlineCitations.length,
-                })}
-              </span>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2.5">
-              <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-red-400/80" />
-                <span className="w-2.5 h-2.5 rounded-full bg-amber-400/80" />
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400/80" />
-              </div>
-              <Separator orientation="vertical" className="h-4" />
-              <Terminal className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
-              <span className="text-xs font-mono font-semibold text-slate-700 dark:text-slate-200">
-                {report.filename?.toLowerCase().endsWith('.docx')
-                  ? 'document_inspector.docx'
-                  : report.filename?.toLowerCase().endsWith('.bib')
-                    ? 'document_inspector.bib'
-                    : report.filename?.toLowerCase().endsWith('.ris')
-                      ? 'document_inspector.ris'
-                      : 'document_inspector.tei'}
-              </span>
-            </div>
-          )}
+          <div className="flex items-center gap-2 text-xs font-medium text-slate-600 dark:text-slate-300">
+            <BookOpen className="h-4 w-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+            <span>
+              {embedded
+                ? t('inspector.summaryBar', {
+                    pages: report.num_pages,
+                    citations: inlineCitations.length,
+                  })
+                : lang === 'vi'
+                  ? 'Trích dẫn trong ngữ cảnh văn bản'
+                  : 'Inline Citations in Context'}
+            </span>
+          </div>
 
           {/* Filter controls */}
           <div className="flex flex-wrap items-center gap-1.5">
@@ -950,7 +973,7 @@ export function DocumentInspectorWorkspace({
         <div className="grid grid-cols-1 lg:grid-cols-12 divide-y lg:divide-y-0 lg:divide-x divide-slate-200/80 dark:divide-slate-800">
           {/* Document panel */}
           <div className="citra-cq-doc-left lg:col-span-7 min-w-0 p-4 sm:p-6">
-            <div className="flex flex-wrap items-center justify-between gap-2 mb-4 pb-3 border-b border-slate-100 dark:border-slate-800/80">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-3 pb-3 border-b border-slate-100 dark:border-slate-800/80">
               <div className="flex items-center gap-2">
                 <FileText className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
                 <h3 className="font-sans text-base font-semibold text-slate-900 dark:text-slate-100">
@@ -1005,10 +1028,39 @@ export function DocumentInspectorWorkspace({
                     }`}
                   >
                     <Eye className="h-3 w-3 text-indigo-500" />
-                    <span>{t('inspector.pdfPagePreview')}</span>
+                    <span>
+                      {isDocx
+                        ? lang === 'vi'
+                          ? 'Xem trước trang tài liệu'
+                          : 'Document Page Preview'
+                        : t('inspector.pdfPagePreview')}
+                    </span>
                   </button>
                 </div>
               </div>
+            </div>
+
+            {/* Color-Coded Highlight Legend (BUG-45) */}
+            <div
+              data-testid="inspector-highlight-legend"
+              className="flex flex-wrap items-center gap-x-3.5 gap-y-1 text-[11px] text-slate-600 dark:text-slate-400 mb-3 px-1"
+            >
+              <span className="inline-flex items-center gap-1.5">
+                <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 inline-block" />
+                {statusLabelByKey.verified}
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="h-2.5 w-2.5 rounded-full bg-amber-500 inline-block" />
+                {statusLabelByKey.metadata_error}
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="h-2.5 w-2.5 rounded-full bg-red-500 inline-block" />
+                {statusLabelByKey.suspected_hallucination}
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="h-2.5 w-2.5 rounded-full bg-violet-500 inline-block" />
+                {statusLabelByKey.resource}
+              </span>
             </div>
 
             <DirectionalStageSlide
@@ -1017,7 +1069,7 @@ export function DocumentInspectorWorkspace({
             >
               {docViewMode === 'pdf' ? (
                 <div className="space-y-3" data-testid="pdf-page-preview-pane">
-                  {/* Page Switcher & Active Highlight Banner */}
+                  {/* Page Switcher, Zoom & Lightbox Controls + Responsive Highlight Hint */}
                   <div className="flex flex-wrap items-center justify-between gap-2 px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-800">
                     <div className="flex items-center gap-2">
                       <button
@@ -1048,6 +1100,36 @@ export function DocumentInspectorWorkspace({
                       >
                         <ChevronRight className="h-3.5 w-3.5" />
                       </button>
+
+                      {/* Zoom Toggle 100% / 150% + Lightbox Fullscreen (BUG-45) */}
+                      <button
+                        type="button"
+                        data-testid="pdf-zoom-toggle"
+                        onClick={() => setPreviewZoom((z) => (z === 100 ? 150 : 100))}
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-mono font-semibold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:border-indigo-400 transition-colors cursor-pointer"
+                        title={lang === 'vi' ? 'Thu phóng trang xem trước' : 'Toggle preview zoom'}
+                      >
+                        {previewZoom === 100 ? (
+                          <ZoomIn className="h-3 w-3" />
+                        ) : (
+                          <ZoomOut className="h-3 w-3" />
+                        )}
+                        <span>{previewZoom}%</span>
+                      </button>
+                      {previewUrl && (
+                        <button
+                          type="button"
+                          data-testid="pdf-lightbox-btn"
+                          onClick={() => setLightboxOpen(true)}
+                          className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:border-indigo-400 transition-colors cursor-pointer"
+                          aria-label={lang === 'vi' ? 'Xem toàn màn hình' : 'Open fullscreen preview'}
+                        >
+                          <Maximize2 className="h-3 w-3" />
+                          <span className="hidden sm:inline">
+                            {lang === 'vi' ? 'Phóng to' : 'Expand'}
+                          </span>
+                        </button>
+                      )}
                     </div>
 
                     {previewHighlight ? (
@@ -1058,14 +1140,23 @@ export function DocumentInspectorWorkspace({
                         </span>
                       </div>
                     ) : (
-                      <span className="text-[11px] font-mono text-slate-400">
-                        {t('inspector.clickCitationToHighlight')}
+                      <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                        <span className="lg:hidden">
+                          {lang === 'vi'
+                            ? 'Chọn trích dẫn bên dưới để đánh dấu trên trang'
+                            : 'Select a citation below to highlight on page'}
+                        </span>
+                        <span className="hidden lg:inline">
+                          {lang === 'vi'
+                            ? 'Chọn trích dẫn bên phải để đánh dấu trên trang'
+                            : 'Select a citation on the right to highlight on page'}
+                        </span>
                       </span>
                     )}
                   </div>
 
                   {/* Rendered Page Image */}
-                  <div className="relative rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100/70 dark:bg-slate-950 min-h-[480px] max-h-[560px] overflow-y-auto flex items-start justify-center p-3">
+                  <div className="relative rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100/70 dark:bg-slate-950 min-h-[480px] max-h-[560px] overflow-auto flex items-start justify-center p-3">
                     {previewLoading ? (
                       <div className="flex flex-col items-center justify-center py-24 gap-2">
                         <Loader2 className="h-7 w-7 animate-spin text-indigo-600 dark:text-indigo-400" />
@@ -1081,7 +1172,11 @@ export function DocumentInspectorWorkspace({
                           total: Math.max(1, report.num_pages || 1),
                         })}
                         data-testid="pdf-page-preview-img"
-                        className="w-full h-auto rounded-lg shadow-md border border-slate-200/90 dark:border-slate-800 bg-white"
+                        style={{
+                          width: previewZoom === 150 ? '150%' : '100%',
+                          maxWidth: previewZoom === 150 ? 'none' : '100%',
+                        }}
+                        className="h-auto rounded-lg shadow-md border border-slate-200/90 dark:border-slate-800 bg-white transition-all"
                       />
                     ) : (
                       <div className="py-20 text-center text-xs font-mono text-slate-500">
@@ -1089,6 +1184,50 @@ export function DocumentInspectorWorkspace({
                       </div>
                     )}
                   </div>
+
+                  {lightboxOpen && previewUrl && createPortal(
+                    <div
+                      data-testid="pdf-lightbox-modal"
+                      role="dialog"
+                      aria-modal="true"
+                      className="fixed inset-0 z-[110] bg-slate-950/85 backdrop-blur-sm flex flex-col p-4"
+                      onClick={() => setLightboxOpen(false)}
+                    >
+                      <div
+                        className="flex items-center justify-between text-white pb-3"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <span className="text-sm font-semibold">
+                          {t('inspector.pageOf', {
+                            current: previewPage,
+                            total: Math.max(1, report.num_pages || 1),
+                          })}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setLightboxOpen(false)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-semibold cursor-pointer"
+                        >
+                          <X className="h-4 w-4" />
+                          <span>{lang === 'vi' ? 'Đóng' : 'Close'}</span>
+                        </button>
+                      </div>
+                      <div
+                        className="flex-1 overflow-auto flex items-start justify-center"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <img
+                          src={previewUrl}
+                          alt={t('inspector.pageOf', {
+                            current: previewPage,
+                            total: Math.max(1, report.num_pages || 1),
+                          })}
+                          className="max-w-4xl w-full h-auto rounded-xl bg-white shadow-2xl"
+                        />
+                      </div>
+                    </div>,
+                    document.body,
+                  )}
                 </div>
               ) : (
                 <div className="prose prose-slate dark:prose-invert max-w-none">
@@ -1186,7 +1325,7 @@ export function DocumentInspectorWorkspace({
 
             <div className="space-y-2.5 max-h-[540px] overflow-y-auto pr-1">
               {filteredCitations.map((citation, index) => {
-                const status = getInlineStatusBadge(citation.label, t);
+                const status = getInlineStatusBadge(citation.label, lang);
                 const isFlaggedRed =
                   citation.label === 'suspected_hallucination' ||
                   citation.label === 'metadata_error';
@@ -1236,7 +1375,7 @@ export function DocumentInspectorWorkspace({
                         </p>
                         <div className="flex items-center gap-2 mt-2 flex-wrap">
                           <span
-                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-mono font-medium ${status.bg}`}
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium ${status.bg}`}
                           >
                             {status.icon}
                             {status.label}
@@ -1248,9 +1387,9 @@ export function DocumentInspectorWorkspace({
                           {citation.isCrossLingual && (
                             <span
                               data-testid={`inspector-list-cross-lingual-${index}`}
-                              className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold bg-teal-50 dark:bg-teal-950/70 text-teal-800 dark:text-teal-300 border border-teal-200/80 dark:border-teal-800"
+                              className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold bg-teal-50 dark:bg-teal-950/70 text-teal-800 dark:text-teal-300 border border-teal-200/80 dark:border-teal-800"
                             >
-                              VI↔EN ONNX
+                              {lang === 'vi' ? 'Đối chiếu Việt ↔ Anh' : 'VI ↔ EN Match'}
                               {citation.crossLingualSim && citation.crossLingualSim > 0
                                 ? ` · ${Math.round(citation.crossLingualSim * 100)}%`
                                 : ''}
@@ -1258,11 +1397,11 @@ export function DocumentInspectorWorkspace({
                           )}
                           {citation.alignmentScore !== undefined &&
                             citation.alignmentScore > 0 && (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold bg-indigo-50 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-indigo-50 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800">
                                 <Brain className="h-2.5 w-2.5" />
                                 {Math.round(citation.alignmentScore * 100)}%
                                 {citation.citationIntent
-                                  ? ` · ${citation.citationIntent}`
+                                  ? ` · ${formatIntentLabel(citation.citationIntent, lang)}`
                                   : ''}
                               </span>
                             )}
@@ -1282,7 +1421,6 @@ export function DocumentInspectorWorkspace({
           essayId={essayId}
           citation={selectedCitation}
           verdict={selectedVerdict}
-          embedded={embedded}
           onSelectVerdictInCitations={onSelectVerdictInCitations}
           onClose={() => {
             setSelectedCitation(null);
@@ -1301,7 +1439,8 @@ export function DocumentInspectorWorkspace({
 export function DocumentInspectorPage() {
   const { id } = useParams<{ id: string }>();
   const { t, i18n } = useTranslation();
-  const isVi = i18n.language?.startsWith('vi');
+  const isVi = Boolean(i18n.language?.startsWith('vi'));
+  const lang: 'vi' | 'en' = isVi ? 'vi' : 'en';
 
   const numericId = id ? parseInt(id, 10) : null;
   const { report, error } = useEssayPolling(
@@ -1311,20 +1450,33 @@ export function DocumentInspectorPage() {
 
   if (error) {
     return (
-      <Alert variant="destructive" className="card p-6 rounded-2xl">
-        <AlertCircle className="h-5 w-5" />
-        <AlertTitle className="font-medium">
-          {t('common.error')}: {error}
-        </AlertTitle>
-        <AlertDescription>
-          <Link
-            to="/history"
-            className="text-indigo-600 dark:text-indigo-400 hover:underline mt-2 inline-block"
-          >
-            {t('inspector.backToReports')}
-          </Link>
-        </AlertDescription>
-      </Alert>
+      <div
+        data-testid="inspector-error-card"
+        className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 sm:p-8 shadow-sm max-w-2xl mx-auto my-8"
+      >
+        <div className="flex items-start gap-4">
+          <div className="h-12 w-12 rounded-2xl bg-amber-50 dark:bg-amber-950/70 border border-amber-200 dark:border-amber-800 flex items-center justify-center shrink-0">
+            <AlertCircle className="h-6 w-6 text-amber-600 dark:text-amber-400" />
+          </div>
+          <div className="space-y-3 flex-1 min-w-0">
+            <h2 className="font-display text-lg font-bold text-slate-900 dark:text-slate-100">
+              {isVi ? 'Không thể mở trình xem tài liệu' : 'Unable to Open Document Inspector'}
+            </h2>
+            <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed break-words">
+              {formatUserError(error, lang)}
+            </p>
+            <div className="pt-1">
+              <Link
+                to="/history"
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white transition-colors"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                {isVi ? 'Về lịch sử báo cáo' : 'Back to History'}
+              </Link>
+            </div>
+          </div>
+        </div>
+      </div>
     );
   }
 
@@ -1346,7 +1498,7 @@ export function DocumentInspectorPage() {
   ).length;
 
   return (
-    <div className="space-y-6 pb-10">
+    <div className="space-y-4 pb-10">
       {/* Shared Report Header */}
       <EssayHeader
         essayId={report.essay_id}
@@ -1393,19 +1545,39 @@ export function DocumentInspectorPage() {
         </div>
       )}
 
-      {/* Shared Multi-Tab Diagnostic Navigation */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
+      {/* Shared Multi-Tab Diagnostic Navigation + Compact CIS Score (BUG-19) */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <EssayActionBar essayId={id ?? ''} filename={report.filename} />
-        <div className="flex items-center gap-2 text-xs font-mono text-slate-500 dark:text-slate-400">
-          <BookOpen className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
-          <span>
-            {t('inspector.summaryBar', {
-              pages: report.num_pages,
-              citations: inlineCitationsCount,
-            })}
-          </span>
+        <div className="flex flex-wrap items-center gap-2.5 text-xs font-mono text-slate-500 dark:text-slate-400">
+          {report.cis && (
+            <span
+              data-testid="inspector-cis-pill"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/80 font-semibold"
+            >
+              <span>CIS:</span>
+              <span>
+                {report.cis.is_unscannable
+                  ? isVi
+                    ? 'N/A · Không thể quét'
+                    : 'N/A · Not Scannable'
+                  : `${Number(report.cis.score ?? 0).toFixed(1)} / 100`}
+              </span>
+            </span>
+          )}
+          <div className="flex items-center gap-2">
+            <BookOpen className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+            <span>
+              {t('inspector.summaryBar', {
+                pages: report.num_pages,
+                citations: inlineCitationsCount,
+              })}
+            </span>
+          </div>
         </div>
       </div>
+
+      {/* Non-Accusatory Academic Decision-Support Disclaimer (BUG-03) */}
+      <DecisionSupportBanner variant="compact" lang={lang} />
 
       <DocumentInspectorWorkspace
         essayId={id ?? ''}

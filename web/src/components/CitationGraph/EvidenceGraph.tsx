@@ -23,6 +23,10 @@ import {
   getSourceDisplayName,
   getVerdictExplanation,
 } from '@/lib/verdictExplanation';
+import {
+  formatIntentLabel,
+  formatStanceLabel,
+} from '@/lib/academicTaxonomy';
 import { EvidenceGraphNode } from './EvidenceGraphNode';
 import type { GraphNode } from './types';
 import { SOURCE_CONFIG } from './types';
@@ -91,6 +95,21 @@ type CrossLingualFeaturesExt = NonNullable<Verdict['features']> & {
   cross_lingual_alignment?: boolean | number;
   semantic_similarity?: number;
 };
+
+function filterValidBridgedConcepts(concepts?: string[] | null): string[] {
+  if (!concepts || concepts.length === 0) return [];
+  return concepts.filter((item) => {
+    const trimmed = item.trim();
+    if (!trimmed) return false;
+    const parts = trimmed.split(/\s*(?:↔|<->|->|→|=)\s*/);
+    if (parts.length === 2) {
+      const left = parts[0].trim().toLowerCase();
+      const right = parts[1].trim().toLowerCase();
+      if (left && right && left === right) return false;
+    }
+    return true;
+  });
+}
 
 function resolveGraphUrlStatus(verdict: Verdict): {
   status: 'alive' | 'restricted_alive' | 'archived_alive' | 'dead_link' | 'fake_domain' | null;
@@ -244,10 +263,11 @@ export function buildEvidenceGraph(
   // Build optional child nodes under Semantic Matching when features exist
   const similarityChildren: GraphNode[] = [];
   const f = verdict.features as CrossLingualFeaturesExt | undefined;
-  const bridgedConcepts =
-    (f?.bridged_concepts && f.bridged_concepts.length > 0
+  const bridgedConcepts = filterValidBridgedConcepts(
+    f?.bridged_concepts && f.bridged_concepts.length > 0
       ? f.bridged_concepts
-      : f?.cross_lingual_bridged_concepts) ?? [];
+      : f?.cross_lingual_bridged_concepts,
+  );
   const hasCrossLingual =
     bridgedConcepts.length > 0 ||
     Boolean(f?.cross_lingual_detected) ||
@@ -430,12 +450,16 @@ export function buildEvidenceGraph(
               ? 'warning'
               : 'success',
         detail: [
-          f.citation_intent ? `Intent: ${f.citation_intent.toUpperCase()}` : null,
-          `Stance: ${stance.toUpperCase()}`,
+          f.citation_intent
+            ? `${isVi ? 'Mục đích' : 'Intent'}: ${formatIntentLabel(f.citation_intent, resolvedLang)}`
+            : null,
+          `${isVi ? 'Quan điểm' : 'Stance'}: ${formatStanceLabel(stance, resolvedLang)}`,
           hasCrossLingual
             ? bridgedConcepts.length > 0
-              ? `Bridge (VI↔EN): ${bridgedConcepts.slice(0, 3).join('; ')}`
-              : 'Bridge: VI ↔ EN ONNX INT8 Active'
+              ? `${isVi ? 'Cầu nối (Việt ↔ Anh)' : 'Bridge (VI↔EN)'}: ${bridgedConcepts.slice(0, 3).join('; ')}`
+              : isVi
+                ? 'Cầu nối: Đối chiếu đa ngôn ngữ Việt ↔ Anh'
+                : 'Bridge: VI ↔ EN Cross-Lingual Active'
             : null,
         ]
           .filter(Boolean)
@@ -464,8 +488,8 @@ export function buildEvidenceGraph(
           : `URL Link Check: HTTP ${effectiveUrlCode || 200} OK`
         : effectiveUrlStatus === 'restricted_alive'
           ? isVi
-            ? `Kiểm tra URL: HTTP ${effectiveUrlCode || 403} (Chặn bot — Liên kết sống)`
-            : `URL Link Check: HTTP ${effectiveUrlCode || 403} (Bot-Protected / Alive)`
+            ? `Kiểm tra URL: Truy cập hạn chế (HTTP ${effectiveUrlCode || 403})`
+            : `URL Link Check: Restricted Access (HTTP ${effectiveUrlCode || 403})`
           : effectiveUrlStatus === 'archived_alive'
             ? isVi
               ? 'Kiểm tra URL: Bản lưu Wayback Machine đã xác thực'
@@ -799,7 +823,11 @@ export function EvidenceGraph({ verdict, onClose }: EvidenceGraphProps) {
     Boolean(fExt?.cross_lingual_alignment) ||
     Boolean(fExt?.cross_lingual_title_detected) ||
     (fExt?.cross_lingual_title_sim ?? 0) >= 0.5 ||
-    (fExt?.bridged_concepts?.length ?? fExt?.cross_lingual_bridged_concepts?.length ?? 0) > 0 ||
+    filterValidBridgedConcepts(
+      fExt?.bridged_concepts?.length
+        ? fExt.bridged_concepts
+        : fExt?.cross_lingual_bridged_concepts,
+    ).length > 0 ||
     (verdict.triggered_rules ?? []).some(
       (r) =>
         r === 'R-CROSS-LINGUAL-ALIGNMENT' || r === 'R-CROSS-LINGUAL-TITLE-MATCH',
@@ -898,7 +926,7 @@ export function EvidenceGraph({ verdict, onClose }: EvidenceGraphProps) {
             <p className="text-[11px] sm:text-xs font-bold font-mono text-slate-900 dark:text-white mt-0.5 truncate">
               {isVi ? 'Tương đồng:' : 'Sim:'} {neuralPct}%
               {verdict.features?.citation_intent
-                ? ` · ${verdict.features.citation_intent}`
+                ? ` · ${formatIntentLabel(verdict.features.citation_intent, lang)}`
                 : ''}
             </p>
           </div>
@@ -964,16 +992,20 @@ export function EvidenceGraph({ verdict, onClose }: EvidenceGraphProps) {
                   : bannerUrlStatus === 'alive'
                     ? `HTTP ${bannerUrlCode || 200} OK`
                     : bannerUrlStatus === 'restricted_alive'
-                      ? `HTTP ${bannerUrlCode || 403} OK`
+                      ? isVi
+                        ? `Truy cập hạn chế (HTTP ${bannerUrlCode || 403})`
+                        : `Restricted Access (HTTP ${bannerUrlCode || 403})`
                       : bannerUrlStatus === 'archived_alive'
                         ? isVi
                           ? 'Bản lưu Wayback'
                           : 'Wayback Archived'
                         : bannerUrlStatus === 'dead_link'
-                          ? `HTTP ${bannerUrlCode || 404} Dead`
+                          ? isVi
+                            ? `Liên kết lỗi (HTTP ${bannerUrlCode || 404})`
+                            : `Broken Link (HTTP ${bannerUrlCode || 404})`
                           : isVi
-                            ? 'URL giả'
-                            : 'Fake URL'}
+                            ? 'URL không hợp lệ'
+                            : 'Invalid URL'}
               </span>
             )}
             {hasCrossLingualBanner && (

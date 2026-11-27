@@ -123,6 +123,10 @@ export function EssayHeader({
     try {
       await fn();
       setExportMenuOpen(false);
+      toast.success(
+        isVi ? `Đã tải báo cáo (${label})` : `Downloaded ${label} report`,
+        filename,
+      );
     } catch (err) {
       const detail = err instanceof Error ? err.message : '';
       toast.error(
@@ -431,9 +435,13 @@ export function EssayHeader({
                           : t('essay.export.healedDocx')}
                       </span>
                       <span className="text-[11px] text-slate-500 dark:text-slate-400 block">
-                        {isVi
-                          ? 'Tự cập nhật trích dẫn đúng ngay trên file gốc'
-                          : 'Auto-applies verified citations to .docx'}
+                        {!isDocxSource
+                          ? isVi
+                            ? 'Chỉ khả dụng cho tệp Word (.docx)'
+                            : 'Available for Word (.docx) files only'
+                          : isVi
+                            ? 'Tự cập nhật trích dẫn đúng ngay trên file gốc'
+                            : 'Auto-applies verified citations to .docx'}
                       </span>
                     </div>
                   </div>

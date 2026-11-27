@@ -3,17 +3,29 @@ import { useParams, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { type Verdict, type ValidationLabel } from '@/api/client';
 import { VerdictBadge } from '@/components/VerdictBadge';
+import { DecisionSupportBanner } from '@/components/DecisionSupportBanner';
+import { UpgradeModal } from '@/components/UpgradeModal';
 import {
   extractObservedWebMeta,
   getCitationMarkerLabel,
+  getFieldDisplayName,
   getSourceDisplayName,
   getVerdictExplanation,
   isUrlResource,
 } from '@/lib/verdictExplanation';
+import {
+  formatUserError,
+  getMappingStatusDisplay,
+  getVerdictDisplay,
+} from '@/lib/academicTaxonomy';
 import { useEssayPolling } from '@/hooks/useEssayPolling';
 import { useRole } from '@/hooks/useRole';
 import { EssayHeader } from './essay/EssayHeader';
-import { EssayActionBar } from './essay/EssayActionBar';
+import {
+  ReportSummaryAndNavBar,
+  getEffectiveVerdictKey,
+  isActionableIssueVerdict,
+} from './EssayPage';
 import {
   AlertTriangle,
   AlertCircle,
@@ -27,29 +39,34 @@ import {
   Scale,
   Lock,
   Globe,
+  ArrowRight,
+  ArrowLeft,
 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { Separator } from '@/components/ui/separator';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 /* ============================================================
-   SourceLogic — Issues Page Component (Scholarly Precision v2.0)
-   Shows all verification issues grouped by severity
+   SourceLogic — Issues Page Component
+   Shows all actionable verification issues grouped by severity
    ============================================================ */
 
 type Severity = 'critical' | 'warning' | 'info';
 
-function getSeverity(label: ValidationLabel): Severity {
-  switch (label) {
+function getSeverity(v: Verdict): Severity {
+  const effective: ValidationLabel = getEffectiveVerdictKey(v);
+  switch (effective) {
     case 'suspected_hallucination':
       return 'critical';
     case 'metadata_error':
       return 'warning';
-    case 'unresolved':
+    case 'resource': {
+      const urlSt = v.url_status ?? v.features?.url_status;
+      if (urlSt === 'dead_link' || urlSt === 'fake_domain') return 'warning';
+      if ((v.triggered_rules ?? []).includes('R-URL-CONTENT-MISMATCH')) return 'warning';
       return 'info';
-    case 'resource':
+    }
+    case 'verified':
       return 'info';
     default:
       return 'info';
@@ -58,9 +75,9 @@ function getSeverity(label: ValidationLabel): Severity {
 
 const severityConfig = {
   critical: {
-    labelEn: 'Critical (Suspected Hallucination)',
-    labelVi: 'Nghiêm trọng (Nghi ngờ Bịa đặt)',
-    shortLabel: 'Critical',
+    labelEn: 'High Priority (Source Not Found)',
+    labelVi: 'Cần ưu tiên kiểm tra (Không tìm thấy nguồn)',
+    shortLabel: 'High Priority',
     bgClass: 'bg-red-50 dark:bg-red-950/70',
     borderClass: 'border-red-200 dark:border-red-800/80',
     icon: <XCircle className="h-4 w-4" />,
@@ -70,8 +87,8 @@ const severityConfig = {
     borderCard: 'border-red-200/80 dark:border-red-900/70',
   },
   warning: {
-    labelEn: 'Warning (Metadata Drift)',
-    labelVi: 'Cảnh báo (Sai lệch Metadata)',
+    labelEn: 'Warning (Details Mismatch)',
+    labelVi: 'Cảnh báo (Sai lệch thông tin)',
     shortLabel: 'Warning',
     bgClass: 'bg-amber-50 dark:bg-amber-950/70',
     borderClass: 'border-amber-200 dark:border-amber-800/80',
@@ -82,8 +99,8 @@ const severityConfig = {
     borderCard: 'border-amber-200/80 dark:border-amber-900/70',
   },
   info: {
-    labelEn: 'Info (Unresolved / Web Resource)',
-    labelVi: 'Thông tin (Chưa xác định / Liên kết Web)',
+    labelEn: 'Info (Unverified & Linking)',
+    labelVi: 'Thông tin (Chưa đủ dữ liệu & Liên kết)',
     shortLabel: 'Info',
     bgClass: 'bg-slate-100 dark:bg-slate-800',
     borderClass: 'border-slate-200 dark:border-slate-700',
@@ -118,18 +135,20 @@ function SourceIcon({ source }: { source: string }) {
 
 function IssueCard({
   verdict,
+  essayId,
   index,
   lang,
   canViewDeep,
 }: {
   verdict: Verdict;
+  essayId: number;
   index?: number;
   lang: 'vi' | 'en';
   /** Pro/Ultra plans, teachers and admins (`view_logic_trace` capability). */
   canViewDeep: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const severity = getSeverity(verdict.label);
+  const severity = getSeverity(verdict);
   const config = severityConfig[severity];
 
   const resolvedMarker = getCitationMarkerLabel(verdict);
@@ -279,19 +298,31 @@ function IssueCard({
                   : urlStatus === 'alive'
                     ? `✓ HTTP ${urlStatusCode ?? 200} OK`
                     : urlStatus === 'restricted_alive'
-                      ? `🔒 HTTP ${urlStatusCode ?? 403} OK`
+                      ? lang === 'vi'
+                        ? `🔒 Truy cập hạn chế (HTTP ${urlStatusCode ?? 403})`
+                        : `🔒 Restricted Access (HTTP ${urlStatusCode ?? 403})`
                       : urlStatus === 'archived_alive'
                         ? lang === 'vi'
                           ? '🏛️ Bản lưu Wayback'
                           : '🏛️ Wayback Archived'
                         : urlStatus === 'dead_link'
-                          ? `✕ HTTP ${urlStatusCode ?? 404} Dead`
-                          : '✕ Fake URL'}
+                          ? lang === 'vi'
+                            ? `✕ Liên kết lỗi (HTTP ${urlStatusCode ?? 404})`
+                            : `✕ Broken Link (HTTP ${urlStatusCode ?? 404})`
+                          : lang === 'vi'
+                            ? '✕ URL không hợp lệ'
+                            : '✕ Invalid URL'}
+              </span>
+            )}
+            {verdict.mapping_status && verdict.mapping_status !== 'matched' && (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-orange-50 dark:bg-orange-950/60 text-orange-700 dark:text-orange-300 border border-orange-200 dark:border-orange-800">
+                {getMappingStatusDisplay(verdict.mapping_status, lang).label}
               </span>
             )}
             {canViewDeep && (
               <span className="text-xs font-mono text-slate-500 dark:text-slate-400">
-                Conf: <strong>{Math.round(verdict.confidence * 100)}%</strong>
+                {lang === 'vi' ? 'Độ tin cậy:' : 'Confidence:'}{' '}
+                <strong>{Math.round(verdict.confidence * 100)}%</strong>
               </span>
             )}
           </div>
@@ -343,7 +374,15 @@ function IssueCard({
         <button
           onClick={() => setExpanded(!expanded)}
           className={`p-2 rounded-xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800 hover:bg-white dark:hover:bg-slate-800 transition-colors ${config.iconColor}`}
-          aria-label={expanded ? 'Collapse details' : 'Expand details'}
+          aria-label={
+            lang === 'vi'
+              ? expanded
+                ? 'Thu gọn chi tiết'
+                : 'Mở rộng chi tiết'
+              : expanded
+                ? 'Collapse details'
+                : 'Expand details'
+          }
         >
           {expanded ? (
             <ChevronUp className="h-4 w-4" />
@@ -363,7 +402,7 @@ function IssueCard({
               <span className="flex items-center gap-2">
                 <Lock className="h-3.5 w-3.5 shrink-0" />
                 {lang === 'vi'
-                  ? 'Giải thích suy diễn, luật kích hoạt, độ tin cậy và nguồn đối chiếu có trong gói Pro / Ultra.'
+                  ? 'Giải thích suy diễn, tiêu chí kiểm tra, độ tin cậy và nguồn đối chiếu có trong gói Pro / Ultra.'
                   : 'Reasoning explanations, triggered rules, confidence and source lookups are available on Pro / Ultra.'}
               </span>
               <Link
@@ -379,7 +418,7 @@ function IssueCard({
               <Scale className="h-4 w-4 text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5" />
               <div>
                 <h4 className="text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-0.5">
-                  {lang === 'vi' ? 'Giải thích Suy diễn' : 'What this means'}
+                  {lang === 'vi' ? 'Giải thích kiểm tra' : 'What this means'}
                 </h4>
                 <p className="text-xs sm:text-sm text-slate-700 dark:text-slate-300">
                   {getVerdictExplanation(verdict, lang)}
@@ -392,16 +431,16 @@ function IssueCard({
             {verdict.mismatched_fields.length > 0 && (
               <div>
                 <h4 className="text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
-                  {lang === 'vi' ? 'Trường Không Khớp' : 'Mismatched Fields'}
+                  {lang === 'vi' ? 'Trường sai lệch' : 'Mismatched Fields'}
                 </h4>
                 <div className="flex flex-wrap gap-1.5">
                   {verdict.mismatched_fields.map((field) => (
                     <Badge
                       key={field}
                       variant="metadata_error"
-                      className="px-2 py-0.5 rounded-md text-xs font-mono"
+                      className="px-2 py-0.5 rounded-md text-xs"
                     >
-                      {field}
+                      {getFieldDisplayName(field, lang).replace(/^the\s+/i, '')}
                     </Badge>
                   ))}
                 </div>
@@ -411,7 +450,7 @@ function IssueCard({
             {canViewDeep && verdict.triggered_rules.length > 0 && (
               <div>
                 <h4 className="text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
-                  {lang === 'vi' ? 'Luật Kích Hoạt' : 'Triggered Rules'}
+                  {lang === 'vi' ? 'Tiêu chí kích hoạt' : 'Triggered Rules'}
                 </h4>
                 <div className="flex flex-wrap gap-1.5">
                   {verdict.triggered_rules.map((rule) => (
@@ -431,7 +470,7 @@ function IssueCard({
           {canViewDeep && sourceResults.length > 0 && (
             <div>
               <h4 className="text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
-                {lang === 'vi' ? 'Nguồn Đối Chiếu' : 'Source Lookup'}
+                {lang === 'vi' ? 'Nguồn đối chiếu' : 'Source Lookup'}
               </h4>
               <div className="grid sm:grid-cols-2 gap-2">
                 {sourceResults.map((source, idx) => (
@@ -466,15 +505,15 @@ function IssueCard({
                         (conf !== null && conf < 0.6);
                       if (isHighMatch) {
                         return (
-                          <span className="font-mono text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">
-                            MATCH
+                          <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">
+                            {lang === 'vi' ? 'Khớp nguồn' : 'Matched'}
                           </span>
                         );
                       }
                       return (
                         <span
                           data-testid="issue-source-candidate-badge"
-                          className={`font-mono text-[11px] font-semibold px-1.5 py-0.5 rounded ${
+                          className={`text-[11px] font-semibold px-1.5 py-0.5 rounded ${
                             isLowCandidate
                               ? 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
                               : 'bg-amber-50 dark:bg-amber-950/70 text-amber-700 dark:text-amber-300'
@@ -482,9 +521,15 @@ function IssueCard({
                         >
                           {isLowCandidate
                             ? conf !== null
-                              ? `LOW CONFIDENCE (${Math.round(conf * 100)}%)`
-                              : 'CANDIDATE'
-                            : 'PARTIAL MATCH'}
+                              ? lang === 'vi'
+                                ? `Độ tin cậy thấp (${Math.round(conf * 100)}%)`
+                                : `Low Confidence (${Math.round(conf * 100)}%)`
+                              : lang === 'vi'
+                                ? 'Ứng viên'
+                                : 'Candidate'
+                            : lang === 'vi'
+                              ? 'Khớp một phần'
+                              : 'Partial Match'}
                         </span>
                       );
                     })()}
@@ -517,6 +562,22 @@ function IssueCard({
               </div>
             </div>
           )}
+
+          {/* Direct Action Link back into L1 Citation Inspector (BUG-29) */}
+          <div className="flex justify-end pt-1">
+            <Link
+              data-testid="issue-inspect-citation-link"
+              to={`/verification/report/${essayId}?citation=${encodeURIComponent(
+                verdict.citation_id,
+              )}`}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm transition-colors"
+            >
+              <span>
+                {lang === 'vi' ? 'Xem chi tiết trích dẫn' : 'Inspect Citation'}
+              </span>
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
         </div>
       )}
     </Card>
@@ -525,11 +586,13 @@ function IssueCard({
 
 function SeveritySection({
   severity,
+  essayId,
   verdicts,
   lang,
   canViewDeep,
 }: {
   severity: Severity;
+  essayId: number;
   verdicts: Verdict[];
   lang: 'vi' | 'en';
   canViewDeep: boolean;
@@ -581,7 +644,14 @@ function SeveritySection({
       {isOpen && (
         <div className="space-y-2.5 pl-1">
           {verdicts.map((verdict, idx) => (
-            <IssueCard key={verdict.citation_id} verdict={verdict} index={idx} lang={lang} canViewDeep={canViewDeep} />
+            <IssueCard
+              key={verdict.citation_id}
+              verdict={verdict}
+              essayId={essayId}
+              index={idx}
+              lang={lang}
+              canViewDeep={canViewDeep}
+            />
           ))}
         </div>
       )}
@@ -596,19 +666,22 @@ export function IssuesPage() {
   const canViewDeep = has('view_logic_trace');
   const lang: 'vi' | 'en' = i18n.language?.startsWith('vi') ? 'vi' : 'en';
   const [filter, setFilter] = useState<'all' | 'critical' | 'warning' | 'info'>('all');
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const [lockedFeatureName, setLockedFeatureName] = useState('');
 
   const numericId = id ? parseInt(id, 10) : null;
   const { report, error } = useEssayPolling(
     numericId !== null && !Number.isNaN(numericId) && numericId > 0 ? numericId : null
   );
 
+  // Exclude valid web/legal resources (no broken URL or mapping error) from actionable issues (BUG-02)
   const issuesBySeverity = useMemo(() => {
     if (!report) return { critical: [], warning: [], info: [] };
-    const issues = report.verdicts.filter((v) => v.label !== 'verified');
+    const issues = report.verdicts.filter(isActionableIssueVerdict);
     return {
-      critical: issues.filter((v) => getSeverity(v.label) === 'critical'),
-      warning: issues.filter((v) => getSeverity(v.label) === 'warning'),
-      info: issues.filter((v) => getSeverity(v.label) === 'info'),
+      critical: issues.filter((v) => getSeverity(v) === 'critical'),
+      warning: issues.filter((v) => getSeverity(v) === 'warning'),
+      info: issues.filter((v) => getSeverity(v) === 'info'),
     };
   }, [report]);
 
@@ -635,21 +708,35 @@ export function IssuesPage() {
 
   if (error) {
     return (
-      <Alert variant="destructive" className="card p-6 rounded-2xl">
-        <AlertCircle className="h-5 w-5" />
-        <AlertTitle className="font-medium">
-          {lang === 'vi' ? 'Không thể tải danh mục vấn đề' : 'Error loading issues'}
-        </AlertTitle>
-        <AlertDescription>
-          <p className="text-sm mt-1">{error}</p>
-          <Link
-            to="/history"
-            className="text-indigo-600 dark:text-indigo-400 hover:underline mt-2 inline-block"
-          >
-            {lang === 'vi' ? '← Quay lại danh sách báo cáo' : '← Back to Reports'}
-          </Link>
-        </AlertDescription>
-      </Alert>
+      <div
+        data-testid="issues-error-card"
+        className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 sm:p-8 shadow-sm max-w-2xl mx-auto my-8"
+      >
+        <div className="flex items-start gap-4">
+          <div className="h-12 w-12 rounded-2xl bg-amber-50 dark:bg-amber-950/70 border border-amber-200 dark:border-amber-800 flex items-center justify-center shrink-0">
+            <AlertCircle className="h-6 w-6 text-amber-600 dark:text-amber-400" />
+          </div>
+          <div className="space-y-3 flex-1 min-w-0">
+            <h2 className="font-display text-lg font-bold text-slate-900 dark:text-slate-100">
+              {lang === 'vi'
+                ? 'Không thể tải danh mục vấn đề'
+                : 'Unable to Load Issues'}
+            </h2>
+            <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed break-words">
+              {formatUserError(error, lang)}
+            </p>
+            <div className="pt-1">
+              <Link
+                to="/history"
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white transition-colors"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                {lang === 'vi' ? 'Về lịch sử báo cáo' : 'Back to History'}
+              </Link>
+            </div>
+          </div>
+        </div>
+      </div>
     );
   }
 
@@ -665,7 +752,7 @@ export function IssuesPage() {
   }
 
   return (
-    <div className="space-y-6 pb-10">
+    <div className="space-y-4 pb-10">
       {/* Shared Report Header */}
       <EssayHeader
         essayId={report.essay_id}
@@ -676,20 +763,19 @@ export function IssuesPage() {
         styleName={report.style_profile?.style}
       />
 
-      {/* Shared Multi-Tab Diagnostic Navigation */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <EssayActionBar essayId={id ?? ''} filename={report.filename} />
-        <div className="text-xs font-mono text-slate-500 dark:text-slate-400">
-          {lang === 'vi' ? 'Tổng vấn đề phát hiện:' : 'Total Flagged Issues:'}{' '}
-          <strong className="text-amber-600 dark:text-amber-400">{totalIssues}</strong> /{' '}
-          {report.verdicts.length}{' '}
-          {lang === 'vi'
-            ? 'trích dẫn'
-            : report.verdicts.length === 1
-              ? 'citation'
-              : 'citations'}
-        </div>
-      </div>
+      {/* Unified Persistent 5-Layer Score Summary & Navigation Bar (BUG-19) */}
+      <ReportSummaryAndNavBar
+        essayId={id ?? String(report.essay_id)}
+        report={report}
+        activeLayer="issues"
+        onOpenLockedFeature={(featureName) => {
+          setLockedFeatureName(featureName);
+          setUpgradeOpen(true);
+        }}
+      />
+
+      {/* Non-Accusatory Academic Decision-Support Disclaimer (BUG-03) */}
+      <DecisionSupportBanner variant="compact" lang={lang} />
 
       {/* 4 Summary Metric Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -710,7 +796,7 @@ export function IssuesPage() {
         <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-red-200/80 dark:border-red-900/70 shadow-sm">
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-xs font-medium text-red-600 dark:text-red-400">
-              {lang === 'vi' ? 'Nghiêm trọng' : 'Critical'}
+              {getVerdictDisplay('suspected_hallucination', lang).label}
             </span>
             <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-red-50 dark:bg-red-950 text-red-700 dark:text-red-300">
               02
@@ -724,7 +810,7 @@ export function IssuesPage() {
         <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-amber-200/80 dark:border-amber-900/70 shadow-sm">
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-xs font-medium text-amber-600 dark:text-amber-400">
-              {lang === 'vi' ? 'Cảnh báo' : 'Warning'}
+              {getVerdictDisplay('metadata_error', lang).label}
             </span>
             <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300">
               03
@@ -738,7 +824,7 @@ export function IssuesPage() {
         <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm">
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-              {lang === 'vi' ? 'Thông tin' : 'Info'}
+              {lang === 'vi' ? 'Chưa đủ dữ liệu & Liên kết' : 'Unverified & Linking'}
             </span>
             <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
               04
@@ -750,35 +836,24 @@ export function IssuesPage() {
         </Card>
       </div>
 
-      {/* IDE Window Container for Issues List */}
+      {/* Clean Container for Issues List */}
       <Card className="p-0 overflow-hidden rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
-        {/* Top Window Chrome */}
         <div className="px-4 sm:px-6 py-3.5 bg-slate-50/80 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800 flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-red-400/80 inline-block" />
-              <span className="w-2.5 h-2.5 rounded-full bg-amber-400/80 inline-block" />
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400/80 inline-block" />
-            </div>
-            <Separator orientation="vertical" className="h-4" />
-            <span className="font-mono text-xs font-semibold text-slate-700 dark:text-slate-300">
-              {!canViewDeep
-                ? lang === 'vi'
-                  ? 'Danh mục Vấn đề'
-                  : 'Issues List'
-                : lang === 'vi'
-                  ? 'Danh mục Vấn đề Chẩn đoán'
-                  : 'Diagnostic Issues'}
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
+            <span className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200">
+              {lang === 'vi'
+                ? `Danh mục vấn đề cần rà soát (${totalIssues})`
+                : `Issues Requiring Review (${totalIssues})`}
             </span>
           </div>
 
-          {/* Filter tabs inside Chrome Bar */}
           <div
             role="group"
             aria-label={
               lang === 'vi'
-                ? 'Lọc vấn đề theo mức độ nghiêm trọng'
-                : 'Filter issues by severity'
+                ? 'Lọc vấn đề theo mức độ ưu tiên'
+                : 'Filter issues by priority'
             }
             className="flex gap-1.5 flex-wrap"
           >
@@ -786,9 +861,9 @@ export function IssuesPage() {
               const isActive = filter === f;
               const filterLabels: Record<typeof f, { en: string; vi: string }> = {
                 all: { en: 'All', vi: 'Tất cả' },
-                critical: { en: 'Critical', vi: 'Nghiêm trọng' },
-                warning: { en: 'Warning', vi: 'Cảnh báo' },
-                info: { en: 'Info', vi: 'Thông tin' },
+                critical: { en: 'Source Not Found', vi: 'Không tìm thấy nguồn' },
+                warning: { en: 'Details Mismatch', vi: 'Sai lệch thông tin' },
+                info: { en: 'Unverified / Linking', vi: 'Chưa đủ dữ liệu' },
               };
               return (
                 <button
@@ -796,7 +871,7 @@ export function IssuesPage() {
                   type="button"
                   onClick={() => setFilter(f)}
                   aria-pressed={isActive}
-                  className={`px-3 py-1 rounded-lg text-xs font-mono font-semibold transition-all border ${
+                  className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all border cursor-pointer ${
                     isActive
                       ? 'bg-indigo-600 text-white border-indigo-600'
                       : 'bg-white dark:bg-slate-950 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:border-slate-300'
@@ -828,7 +903,7 @@ export function IssuesPage() {
               <p className="text-sm text-slate-600 dark:text-slate-400 max-w-md mx-auto">
                 {lang === 'vi'
                   ? 'Tất cả trích dẫn và tài liệu tham khảo đã được xác minh hợp lệ qua cơ sở dữ liệu học thuật.'
-                  : 'All citations and references have been verified successfully. No critical, warning, or info issues detected.'}
+                  : 'All citations and references have been verified successfully. No issues detected.'}
               </p>
             </div>
           ) : (
@@ -837,6 +912,7 @@ export function IssuesPage() {
                 <SeveritySection
                   key={severity}
                   severity={severity}
+                  essayId={report.essay_id}
                   verdicts={data}
                   lang={lang}
                   canViewDeep={canViewDeep}
@@ -846,6 +922,12 @@ export function IssuesPage() {
           )}
         </div>
       </Card>
+
+      <UpgradeModal
+        open={upgradeOpen}
+        onOpenChange={setUpgradeOpen}
+        featureName={lockedFeatureName}
+      />
     </div>
   );
 }

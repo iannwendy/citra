@@ -22,12 +22,15 @@ import {
   Check,
   HelpCircle,
   X,
+  Database,
+  Search,
 } from 'lucide-react';
-import type { Verdict } from '@/api/client';
+import type { MatchedSource, Verdict } from '@/api/client';
 import { useTheme } from '@/contexts/ThemeContext';
 import { OverrideControls } from '../OverrideControls';
 import { toSafeDoiHref, toSafeExternalHref } from '../../lib/utils';
 import { DirectionalStageSlide, useSlidingPill } from '@/components/ui/transitions';
+import { getVerdictDisplay } from '@/lib/academicTaxonomy';
 import {
   getCitationMarkerLabel,
   getVerdictExplanation,
@@ -90,7 +93,7 @@ const SATELLITE_CLUSTERS: SatelliteClusterDef[] = [
     domainEn: '250M+ global scholarly works & venues',
     sourceKeys: ['openalex', 'wikidata_opencitations'],
     xPct: 12.5,
-    yPct: 42,
+    yPct: 41,
     side: 'left',
     icon: Library,
   },
@@ -102,7 +105,7 @@ const SATELLITE_CLUSTERS: SatelliteClusterDef[] = [
     domainEn: 'Biomedical, clinical & life-science literature',
     sourceKeys: ['europepmc', 'ncbi_biorxiv'],
     xPct: 13.5,
-    yPct: 66,
+    yPct: 64,
     side: 'left',
     icon: HeartPulse,
   },
@@ -113,10 +116,22 @@ const SATELLITE_CLUSTERS: SatelliteClusterDef[] = [
     domainVi: 'Khoa học máy tính, Toán học & Trí tuệ nhân tạo',
     domainEn: 'Computer science, physics, math & ML',
     sourceKeys: ['arxiv', 'dblp', 'huggingface', 'tech_standard'],
-    xPct: 20.5,
-    yPct: 88,
+    xPct: 19.5,
+    yPct: 86,
     side: 'left',
     icon: Cpu,
+  },
+  {
+    key: 'local_scholarly',
+    nameVi: 'Thư viện Học thuật Cục bộ',
+    nameEn: 'Local Scholarly Library',
+    domainVi: 'Kho ACL Anthology & công trình học thuật chuẩn hóa cục bộ',
+    domainEn: 'Curated local ACL Anthology & canonical scholarly index',
+    sourceKeys: ['local_db', 'acl', 'known_papers'],
+    xPct: 84,
+    yPct: 15,
+    side: 'right',
+    icon: Database,
   },
   {
     key: 'semantic',
@@ -125,8 +140,8 @@ const SATELLITE_CLUSTERS: SatelliteClusterDef[] = [
     domainVi: 'Hiểu nội dung & đối chiếu đa ngôn ngữ Việt ↔ Anh',
     domainEn: 'Deep content & VI ↔ EN cross-lingual matching',
     sourceKeys: ['semantic_scholar'],
-    xPct: 86,
-    yPct: 18,
+    xPct: 86.5,
+    yPct: 33,
     side: 'right',
     icon: Sparkles,
   },
@@ -137,27 +152,25 @@ const SATELLITE_CLUSTERS: SatelliteClusterDef[] = [
     domainVi: 'Tạp chí truy cập mở & Kho lưu trữ châu Âu',
     domainEn: 'Open-access journals & institutional repositories',
     sourceKeys: ['doaj', 'openaire_hal', 'serpapi'],
-    xPct: 87.5,
-    yPct: 42,
+    xPct: 87,
+    yPct: 51,
     side: 'right',
     icon: BookOpen,
   },
   {
     key: 'vnlegal',
-    nameVi: 'Pháp luật · TCVN · Sách',
-    nameEn: 'Statutes · Standards · Books',
-    domainVi: 'Văn bản pháp quy VN, Tiêu chuẩn & Sách chuyên khảo',
-    domainEn: 'VN legal statutes, technical standards & books',
+    nameVi: 'Pháp luật · TCVN',
+    nameEn: 'Legal · Standards',
+    domainVi: 'Văn bản pháp quy VN, Tiêu chuẩn TCVN & Sách chuyên khảo',
+    domainEn: 'VN legal statutes, TCVN standards & books',
     sourceKeys: [
       'vn_legal_registry',
       'vn_tech_standard',
       'vn_textbook_registry',
       'openlibrary',
-      'local_db',
-      'known_papers',
     ],
     xPct: 86.5,
-    yPct: 66,
+    yPct: 69,
     side: 'right',
     icon: Scale,
   },
@@ -168,14 +181,129 @@ const SATELLITE_CLUSTERS: SatelliteClusterDef[] = [
     domainVi: 'Kiểm tra đường dẫn trực tuyến & Lưu trữ số',
     domainEn: 'Live URL verification & Wayback digital archive',
     sourceKeys: ['web_html_meta', 'wayback_html_meta'],
-    xPct: 79.5,
-    yPct: 88,
+    xPct: 81.5,
+    yPct: 87,
     side: 'right',
     icon: Link2,
   },
 ];
 
-function extractCleanCitationIdentity(raw: string): {
+const SURNAME_PARTICLES = new Set([
+  'de',
+  'del',
+  'della',
+  'di',
+  'da',
+  'van',
+  'von',
+  'der',
+  'den',
+  'le',
+  'la',
+  'du',
+  'st',
+  'st.',
+]);
+
+function extractSurname(rawAuthor: string): string {
+  const cleaned = rawAuthor
+    .replace(/\bet\s+al\.?/gi, '')
+    .replace(/^[\s,;:.&]+|[\s,;:.&]+$/g, '')
+    .trim();
+  if (!cleaned) return '';
+
+  // APA / Last, F. M. format (e.g. "De Choudhury, M." or "Vaswani, A.")
+  if (cleaned.includes(',')) {
+    const beforeComma = cleaned.split(',')[0].trim();
+    if (beforeComma.length >= 2 && !/^[A-ZÀ-Ỹ]\.?$/.test(beforeComma)) {
+      return beforeComma;
+    }
+  }
+
+  // Strip leading initials such as "N. ", "J. Q. ", "A.-B. "
+  const withoutInitials = cleaned
+    .replace(/^(?:[A-ZÀ-Ỹ](?:\.-?[A-ZÀ-Ỹ])?\.\s*)+/, '')
+    .trim();
+
+  const words = (withoutInitials || cleaned)
+    .split(/\s+/)
+    .map((w) => w.replace(/^[.,;:]+|[.,;:]+$/g, ''))
+    .filter((w) => w.length > 0 && !/^[A-ZÀ-Ỹ]\.?$/.test(w));
+
+  if (words.length === 0) return withoutInitials || cleaned;
+  if (words.length === 1) return words[0];
+
+  // Preserve compound surname particles (e.g. "De Choudhury", "van der Maaten")
+  if (words.length >= 2 && SURNAME_PARTICLES.has(words[words.length - 2].toLowerCase())) {
+    return `${words[words.length - 2]} ${words[words.length - 1]}`;
+  }
+  // Keep multi-word institutional / Vietnamese author names if <= 3 words and no initials stripped
+  if (withoutInitials === cleaned && words.length <= 3 && /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i.test(cleaned)) {
+    return cleaned;
+  }
+  return words[words.length - 1];
+}
+
+function formatAuthorSummary(rawAuthors: string, fallbackMatchedAuthors?: string[]): string {
+  const trimmed = rawAuthors.trim().replace(/[.,;:]+$/, '');
+  const hasEtAl = /\bet\s+al\.?/i.test(trimmed);
+
+  // Split by ";", " & ", " and ", or comma NOT followed by just an initial like "M."
+  const splitAuthors = trimmed
+    .replace(/\bet\s+al\.?/gi, '')
+    .split(/\s*(?:;|\s+&\s+|\s+and\s+|\s+và\s+)\s*/i)
+    .flatMap((chunk) => {
+      // Handle "A. Vaswani, N. Shazeer" vs "Vaswani, A., Shazeer, N."
+      const commaParts = chunk.split(/,\s*/).filter(Boolean);
+      if (commaParts.length <= 1) return [chunk];
+      // If second token looks like initials ("M." or "A. B."), pair it with the surname before it
+      const grouped: string[] = [];
+      for (let i = 0; i < commaParts.length; i++) {
+        const cur = commaParts[i].trim();
+        const next = commaParts[i + 1]?.trim();
+        if (next && /^(?:[A-ZÀ-Ỹ]\.(?:\s*-?[A-ZÀ-Ỹ]\.)*|[A-Z]{1,3})$/.test(next)) {
+          grouped.push(`${cur}, ${next}`);
+          i += 1;
+        } else {
+          grouped.push(cur);
+        }
+      }
+      return grouped;
+    })
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  const firstSurname = extractSurname(splitAuthors[0] || '');
+  const resolvedFirst =
+    firstSurname && firstSurname.length >= 2 && !/^[A-ZÀ-Ỹ]\.?$/.test(firstSurname)
+      ? firstSurname
+      : fallbackMatchedAuthors?.[0]
+        ? extractSurname(fallbackMatchedAuthors[0])
+        : firstSurname;
+
+  if (!resolvedFirst) return '';
+  const capped = resolvedFirst.length > 26 ? `${resolvedFirst.slice(0, 24)}…` : resolvedFirst;
+  if (hasEtAl || splitAuthors.length >= 3) {
+    return `${capped} et al.`;
+  }
+  if (splitAuthors.length === 2) {
+    const secondSurname = extractSurname(splitAuthors[1]);
+    if (
+      secondSurname &&
+      secondSurname.length >= 2 &&
+      `${capped} & ${secondSurname}`.length <= 24
+    ) {
+      return `${capped} & ${secondSurname}`;
+    }
+    return `${capped} et al.`;
+  }
+  return capped;
+}
+
+export function extractCleanCitationIdentity(
+  raw: string,
+  primaryMatched?: Pick<MatchedSource, 'authors' | 'title' | 'year'> | null,
+): {
   shortHeader: string;
   authorOnly: string;
   citedYear: string;
@@ -187,14 +315,12 @@ function extractCleanCitationIdentity(raw: string): {
   const yearMatch = stripped.match(/\b(19\d{2}|20\d{2})[a-z]?\b/);
   const citedYear = yearMatch ? yearMatch[1] : '';
 
+  // 1. APA style: Authors (Year). Title...
   const apaMatch = stripped.match(/^(.+?)\s*\((?:19|20)\d{2}[a-z]?\)[.,:\s]+(.+)$/);
   if (apaMatch) {
-    const rawAuthor = apaMatch[1].trim().replace(/[.,]+$/, '');
-    const firstAuthor = rawAuthor.split(/,|&|\band\b/i)[0].trim();
-    const hasMore = rawAuthor.includes(',') || /&|\band\b|\bet\s+al/i.test(rawAuthor);
-    const authorLabel =
-      firstAuthor.length > 28 ? `${firstAuthor.slice(0, 26)}…` : firstAuthor;
-    const authorOnly = `${authorLabel}${hasMore && !/et\s+al/i.test(authorLabel) ? ' et al.' : ''}`;
+    const authorOnly =
+      formatAuthorSummary(apaMatch[1], primaryMatched?.authors) ||
+      apaMatch[1].trim().slice(0, 28);
     const shortHeader = `${authorOnly}${citedYear ? ` (${citedYear})` : ''}`;
     const restTitle = apaMatch[2].split(/\.\s+/)[0]?.trim() || apaMatch[2].trim();
     return {
@@ -205,11 +331,31 @@ function extractCleanCitationIdentity(raw: string): {
     };
   }
 
-  const parts = stripped.split(/\.\s+/).filter(Boolean);
-  if (parts.length >= 2) {
-    const firstPart = parts[0].trim();
+  // 2. IEEE / Quoted-title style: N. Reimers and I. Gurevych, "Sentence-BERT: ...", EMNLP 2019.
+  const ieeeQuotedMatch = stripped.match(/^(.+?)[,.:]\s*[“"]([^”"]{4,260})[”"][,.\s]*(.*)$/);
+  if (ieeeQuotedMatch) {
     const authorOnly =
-      firstPart.length > 32 ? `${firstPart.slice(0, 30)}…` : firstPart;
+      formatAuthorSummary(ieeeQuotedMatch[1], primaryMatched?.authors) ||
+      ieeeQuotedMatch[1].trim().slice(0, 28);
+    const shortHeader = `${authorOnly}${citedYear ? ` (${citedYear})` : ''}`;
+    return {
+      shortHeader,
+      authorOnly,
+      citedYear,
+      cleanTitle: ieeeQuotedMatch[2].replace(/^[“"]|[”".,]+$/g, '').trim(),
+    };
+  }
+
+  // 3. Sentence-delimited fallback — NEVER split on single-letter author initials like "N. Reimers"!
+  const sentenceParts = stripped
+    .split(/(?<![A-ZÀ-Ỹ])\.\s+/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  if (sentenceParts.length >= 2) {
+    const firstPart = sentenceParts[0];
+    const authorOnly =
+      formatAuthorSummary(firstPart, primaryMatched?.authors) ||
+      (firstPart.length > 32 ? `${firstPart.slice(0, 30)}…` : firstPart);
     return {
       shortHeader:
         citedYear && !authorOnly.includes(citedYear)
@@ -217,13 +363,21 @@ function extractCleanCitationIdentity(raw: string): {
           : authorOnly,
       authorOnly,
       citedYear,
-      cleanTitle: parts[1].replace(/^[“"]|[”".,]+$/g, '').trim(),
+      cleanTitle: sentenceParts[1].replace(/^[“"]|[”".,]+$/g, '').trim(),
     };
   }
 
+  // 4. Fallback to primary matched author if available
+  const fallbackAuthor =
+    primaryMatched?.authors && primaryMatched.authors.length > 0
+      ? formatAuthorSummary(primaryMatched.authors.join(' and '))
+      : '';
+  const fallbackHeader = fallbackAuthor
+    ? `${fallbackAuthor}${citedYear ? ` (${citedYear})` : ''}`
+    : stripped.slice(0, 44) || 'Reference';
   return {
-    shortHeader: stripped.slice(0, 44) || 'Reference',
-    authorOnly: stripped.slice(0, 28) || 'Reference',
+    shortHeader: fallbackHeader,
+    authorOnly: fallbackAuthor || stripped.slice(0, 28) || 'Reference',
     citedYear,
     cleanTitle: stripped,
   };
@@ -310,7 +464,10 @@ export function InteractiveDecisionFlowBoard({
 
   const identity = useMemo(() => {
     const primaryMatched = verdict.matched_sources?.[0];
-    const parsed = extractCleanCitationIdentity(verdict.citation_raw);
+    const parsed = extractCleanCitationIdentity(
+      verdict.citation_raw,
+      primaryMatched,
+    );
     return {
       shortHeader: parsed.shortHeader,
       authorOnly: parsed.authorOnly,
@@ -324,11 +481,26 @@ export function InteractiveDecisionFlowBoard({
     };
   }, [verdict.citation_raw, verdict.matched_sources, effectiveLabel]);
 
-  // Evaluate each of the 8 satellite clusters against live Verdict data
+  // Evaluate each satellite cluster against live Verdict data
   const evaluatedSatellites = useMemo(() => {
     const matchedList = verdict.matched_sources ?? [];
     const rules = verdict.triggered_rules ?? [];
     const urlSt = verdict.url_status ?? verdict.features?.url_status ?? null;
+    const sourceUsed = (verdict.features?.source_used ?? '').toLowerCase();
+    const hasLocalScholarlyHit =
+      ['local_db', 'acl', 'known_papers'].includes(sourceUsed) ||
+      rules.some(
+        (r) => r.startsWith('R-LOCAL_DB') || r.startsWith('R-KNOWN-PAPER'),
+      );
+    const hasVnLegalRuleHit =
+      isLegal ||
+      rules.some(
+        (r) =>
+          r.startsWith('R-VN-LEGAL') ||
+          r === 'R-LEGAL-DOCUMENT' ||
+          r === 'R-VN-STANDARD-VERIFIED' ||
+          r === 'R-VN-TEXTBOOK-VERIFIED',
+      );
     const hasSemanticHit =
       (verdict.features?.content_alignment_score ?? 0) >= 0.45 ||
       Boolean(verdict.features?.cross_lingual_detected) ||
@@ -368,7 +540,55 @@ export function InteractiveDecisionFlowBoard({
         externalUrl = toSafeExternalHref(bestRec.url) ?? toSafeDoiHref(rawDoi);
       }
 
-      if (cluster.key === 'semantic' && hasSemanticHit) {
+      if (cluster.key === 'local_scholarly' && (isMatched || hasLocalScholarlyHit)) {
+        isMatched = true;
+        satTone = effectiveLabel === 'metadata_error' ? 'amber' : 'emerald';
+        const mismatched = verdict.mismatched_fields ?? [];
+        statusLine =
+          mismatched.length > 0 && effectiveLabel === 'metadata_error'
+            ? isVi
+              ? `⚠ Lệch ${humanizeField(mismatched[0], true).toLowerCase()}`
+              : `⚠ ${humanizeField(mismatched[0], false)} differs`
+            : isVi
+              ? '✓ Tìm thấy bản gốc'
+              : '✓ Source matched';
+        const venueNote = bestRec?.venue
+          ? ` (${bestRec.venue}${bestRec.year ? `, ${bestRec.year}` : ''})`
+          : bestRec?.year
+            ? ` (${bestRec.year})`
+            : '';
+        storyTitle = isVi
+          ? `${cluster.nameVi} — Đã tìm thấy công trình đối chứng`
+          : `${cluster.nameEn} — Canonical Record Found`;
+        storyBody =
+          mismatched.length > 0 && effectiveLabel === 'metadata_error'
+            ? isVi
+              ? `Tìm thấy hồ sơ gốc "${bestRec?.title || identity.cleanTitle}"${venueNote} trong ${cluster.nameVi}, nhưng phát hiện sai lệch ở trường: ${mismatched.map((f) => humanizeField(f, true)).join(', ')}.`
+              : `Found canonical record "${bestRec?.title || identity.cleanTitle}"${venueNote} in ${cluster.nameEn}, with discrepancy in: ${mismatched.map((f) => humanizeField(f, false)).join(', ')}.`
+            : isVi
+              ? `Xác nhận công trình "${bestRec?.title || identity.cleanTitle}"${venueNote} tồn tại trong ${cluster.nameVi} (chỉ mục bài báo hội nghị/tạp chí chuẩn đã lập chỉ mục cục bộ) với thông tin trùng khớp.`
+              : `Confirmed "${bestRec?.title || identity.cleanTitle}"${venueNote} in the ${cluster.nameEn} (locally indexed conference & journal registry) with consistent metadata.`;
+      } else if (cluster.key === 'vnlegal' && (isMatched || hasVnLegalRuleHit)) {
+        isMatched = true;
+        satTone = isLegal
+          ? 'violet'
+          : effectiveLabel === 'metadata_error'
+            ? 'amber'
+            : 'emerald';
+        statusLine = isLegal
+          ? isVi
+            ? '⚖ Khớp danh mục pháp quy'
+            : '⚖ Legal registry matched'
+          : isVi
+            ? '✓ Tìm thấy bản gốc'
+            : '✓ Source matched';
+        storyTitle = isVi
+          ? `${cluster.nameVi} — Đã đối chứng hợp lệ`
+          : `${cluster.nameEn} — Authoritative Registry Hit`;
+        storyBody = isVi
+          ? `Xác nhận văn bản/tiêu chuẩn "${bestRec?.title || identity.cleanTitle}" tồn tại trong ${cluster.nameVi}.`
+          : `Confirmed "${bestRec?.title || identity.cleanTitle}" against ${cluster.nameEn}.`;
+      } else if (cluster.key === 'semantic' && hasSemanticHit) {
         isMatched = true;
         const isCross =
           Boolean(verdict.features?.cross_lingual_detected) ||
@@ -590,10 +810,8 @@ export function InteractiveDecisionFlowBoard({
           ? isVi
             ? '⚠ Có bài thật · Cần sửa thông tin'
             : '⚠ Real paper · Fix metadata'
-          : effectiveLabel === 'suspected_hallucination'
-            ? isVi
-              ? '✕ Nghi vấn trích dẫn không có thật'
-              : '✕ Suspected non-existent source'
+        : effectiveLabel === 'suspected_hallucination'
+          ? `✕ ${getVerdictDisplay('suspected_hallucination', lang).label}`
             : effectiveLabel === 'resource'
               ? isLegal
                 ? isVi
@@ -1236,7 +1454,7 @@ export function InteractiveDecisionFlowBoard({
               data-active={isStepSelected ? 'true' : 'false'}
               data-pill-active={isStepSelected ? 'true' : 'false'}
               onClick={() => handleManualStepClick(stepIdx)}
-              className={`t-tab group text-left px-3 py-2 rounded-xl border transition-all duration-200 cursor-pointer ${borderTone} ${
+              className={`t-tab group min-w-0 text-left px-3 py-2 rounded-xl border transition-all duration-200 cursor-pointer ${borderTone} ${
                 focus.kind === 'step' && !isStepSelected && !isPastStep
                   ? 'opacity-55'
                   : 'opacity-100'
@@ -1259,14 +1477,15 @@ export function InteractiveDecisionFlowBoard({
                 <span className={`h-2 w-2 rounded-full shrink-0 ${toneDotClass(st.tone)}`} />
               </div>
               <div
-                className={`text-xs sm:text-[13px] font-bold leading-snug ${
+                className={`text-xs sm:text-[13px] font-bold leading-snug break-words ${
                   isDarkSurface ? 'text-white' : 'text-slate-900'
                 }`}
               >
                 {st.title}
               </div>
               <div
-                className={`text-[11px] mt-0.5 truncate ${
+                title={st.sub}
+                className={`text-[11px] mt-0.5 leading-snug line-clamp-2 break-words ${
                   st.tone === 'amber'
                     ? isDarkSurface
                       ? 'text-amber-300 font-medium'
@@ -1290,7 +1509,7 @@ export function InteractiveDecisionFlowBoard({
       {/* =================================================================
           LAYER 2: THE MAIN BOARD STAGE — PHYSICALLY CHOREOGRAPHED PER STEP!
           ================================================================= */}
-      <div className="citra-cq-flow-stage relative z-10 hidden md:block h-[410px] w-full select-none transition-[height] duration-300">
+      <div className="citra-cq-flow-stage relative z-10 hidden md:block h-[440px] w-full select-none transition-[height] duration-300">
         {/* LIVE MAIN-BOARD STAGE HUD BANNER (Right where the user's eyes look!) */}
         {activeStepIndex !== null && stages[activeStepIndex] && (
           <div
@@ -1366,14 +1585,14 @@ export function InteractiveDecisionFlowBoard({
 
         <svg
           className="pointer-events-none absolute inset-0 h-full w-full"
-          viewBox="0 0 800 410"
+          viewBox="0 0 800 440"
           preserveAspectRatio="none"
           aria-hidden="true"
         >
-          {/* Subtle Orbital Radar Rings Around Center Hub (400, 212) */}
+          {/* Subtle Orbital Radar Rings Around Center Hub (400, 226) */}
           <circle
             cx="400"
-            cy="212"
+            cy="226"
             r="98"
             fill="none"
             stroke={isDarkSurface ? 'rgba(255,255,255,0.05)' : 'rgba(15,23,42,0.05)'}
@@ -1382,7 +1601,7 @@ export function InteractiveDecisionFlowBoard({
           />
           <circle
             cx="400"
-            cy="212"
+            cy="226"
             r="180"
             fill="none"
             stroke={isDarkSurface ? 'rgba(255,255,255,0.04)' : 'rgba(15,23,42,0.04)'}
@@ -1391,7 +1610,7 @@ export function InteractiveDecisionFlowBoard({
           />
           <circle
             cx="400"
-            cy="212"
+            cy="226"
             r="268"
             fill="none"
             stroke={isDarkSurface ? 'rgba(255,255,255,0.03)' : 'rgba(15,23,42,0.03)'}
@@ -1405,7 +1624,7 @@ export function InteractiveDecisionFlowBoard({
                 x1="400"
                 y1="78"
                 x2="400"
-                y2="138"
+                y2="144"
                 stroke="#8B5CF6"
                 strokeWidth="2.5"
                 strokeDasharray="4 4"
@@ -1414,18 +1633,18 @@ export function InteractiveDecisionFlowBoard({
                 <animateMotion
                   dur="0.9s"
                   repeatCount="indefinite"
-                  path="M 400 78 L 400 138"
+                  path="M 400 78 L 400 144"
                 />
               </circle>
             </g>
           )}
 
-          {/* ACT 2 ("step-1"): Expanding Sonar Radar Waves Radiating Across All 8 Libraries */}
+          {/* ACT 2 ("step-1"): Expanding Sonar Radar Waves Radiating Across All Libraries */}
           {boardPhase === 'step-1' && (
             <g>
               <circle
                 cx="400"
-                cy="212"
+                cy="226"
                 r="60"
                 fill="none"
                 stroke="#38BDF8"
@@ -1448,7 +1667,7 @@ export function InteractiveDecisionFlowBoard({
               </circle>
               <circle
                 cx="400"
-                cy="212"
+                cy="226"
                 r="60"
                 fill="none"
                 stroke="#10B981"
@@ -1478,7 +1697,7 @@ export function InteractiveDecisionFlowBoard({
           {boardPhase === 'step-3' && (
             <circle
               cx="400"
-              cy="212"
+              cy="226"
               r="138"
               fill="none"
               stroke={hubAccentHex}
@@ -1503,11 +1722,11 @@ export function InteractiveDecisionFlowBoard({
           {/* Bezier Conduits + Step-Aware Signal Choreography */}
           {evaluatedSatellites.map((sat, idx) => {
             const sx = (sat.xPct / 100) * 800;
-            const sy = (sat.yPct / 100) * 410;
+            const sy = (sat.yPct / 100) * 440;
             const hubHalfW = boardPhase === 'step-2' ? 148 : 122;
-            const startX = sat.side === 'left' ? sx + 76 : sx - 76;
+            const startX = sat.side === 'left' ? sx + 78 : sx - 78;
             const endX = sat.side === 'left' ? 400 - hubHalfW : 400 + hubHalfW;
-            const endY = 212 + (sy - 212) * 0.24;
+            const endY = 226 + (sy - 226) * 0.24;
             const midX = (startX + endX) / 2;
             const d = `M ${startX.toFixed(1)} ${sy.toFixed(1)} C ${midX.toFixed(1)} ${sy.toFixed(1)}, ${midX.toFixed(1)} ${endY.toFixed(1)}, ${endX.toFixed(1)} ${endY.toFixed(1)}`;
             const isSatFocused = focus.kind === 'sat' && focus.key === sat.key;
@@ -1961,7 +2180,7 @@ export function InteractiveDecisionFlowBoard({
                       : `0 10px 22px -8px ${satHex}40`
                     : undefined,
               }}
-              className={`absolute -translate-x-1/2 -translate-y-1/2 z-10 w-[172px] rounded-xl border px-3 py-2 text-left transition-all duration-300 hover:scale-[1.04] cursor-pointer ${visualVisibilityClass} ${
+              className={`absolute -translate-x-1/2 -translate-y-1/2 z-10 w-[184px] rounded-xl border px-3 py-2 text-left transition-all duration-300 hover:scale-[1.04] cursor-pointer ${visualVisibilityClass} ${
                 phaseState === 'hit'
                   ? isDarkSurface
                     ? 'bg-[#0E1D22]/95 text-white'
@@ -1971,9 +2190,9 @@ export function InteractiveDecisionFlowBoard({
                     : 'bg-white/80 border-slate-200/80 text-slate-500 hover:border-slate-300'
               }`}
             >
-              <div className="flex items-center gap-2 min-w-0">
+              <div className="flex items-start gap-2 min-w-0">
                 <span
-                  className={`h-2 w-2 rounded-full shrink-0 ${
+                  className={`mt-1 h-2 w-2 rounded-full shrink-0 ${
                     phaseState === 'hit'
                       ? toneDotClass(sat.satTone)
                       : phaseState === 'scanning'
@@ -1982,7 +2201,7 @@ export function InteractiveDecisionFlowBoard({
                   }`}
                 />
                 <SatIcon
-                  className={`h-3.5 w-3.5 shrink-0 ${
+                  className={`mt-0.5 h-3.5 w-3.5 shrink-0 ${
                     phaseState === 'hit'
                       ? sat.satTone === 'amber'
                         ? 'text-amber-500'
@@ -1996,11 +2215,15 @@ export function InteractiveDecisionFlowBoard({
                         : 'opacity-60'
                   }`}
                 />
-                <span className="text-xs font-bold truncate">
+                <span
+                  title={isVi ? sat.nameVi : sat.nameEn}
+                  className="text-[11.5px] font-bold leading-tight line-clamp-2 break-words"
+                >
                   {isVi ? sat.nameVi : sat.nameEn}
                 </span>
               </div>
               <div
+                title={dynamicStatusText}
                 className={`text-[10.5px] mt-0.5 pl-4 truncate ${
                   phaseState === 'hit'
                     ? sat.satTone === 'amber'
@@ -2154,7 +2377,26 @@ export function InteractiveDecisionFlowBoard({
           </div>
 
           <div className="flex flex-wrap items-center gap-2 shrink-0">
-            {safeStoryUrl ? (
+            {effectiveLabel === 'suspected_hallucination' ||
+            effectiveLabel === 'unresolved' ? (
+              <a
+                data-testid="flow-google-scholar-link"
+                href={`https://scholar.google.com/scholar?q=${encodeURIComponent(
+                  identity.cleanTitle || verdict.citation_raw || '',
+                )}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white shadow-sm transition-colors"
+              >
+                <Search className="h-3.5 w-3.5" />
+                <span>
+                  {isVi
+                    ? 'Tìm thử trên Google Scholar'
+                    : 'Search on Google Scholar'}
+                </span>
+                <ExternalLink className="h-3 w-3" />
+              </a>
+            ) : safeStoryUrl ? (
               <a
                 href={safeStoryUrl}
                 target="_blank"

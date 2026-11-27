@@ -126,8 +126,10 @@ describe('BibliographyRemediationModal Auto-Healed .DOCX', () => {
     const btn = (await screen.findByTestId('download-auto-healed-docx-btn')) as HTMLButtonElement;
     expect(btn.disabled).toBe(false);
     fireEvent.click(btn);
-    await waitFor(() =>
-      expect(screen.getByTestId('auto-healed-docx-error').textContent).toMatch(/API 400/),
-    );
+    await waitFor(() => {
+      const errorText = screen.getByTestId('auto-healed-docx-error').textContent ?? '';
+      expect(errorText).toMatch(/Could not export the auto-healed Word file\..*nope/i);
+      expect(errorText).not.toMatch(/API 400/);
+    });
   });
 });

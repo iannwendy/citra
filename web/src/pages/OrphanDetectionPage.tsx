@@ -10,6 +10,11 @@ import {
 import { VerdictBadge } from '@/components/VerdictBadge';
 import { getCitationMarkerLabel, isUrlResource } from '@/lib/verdictExplanation';
 import { MappingStatusBadge } from '@/components/MappingStatusBadge';
+import { DecisionSupportBanner } from '@/components/DecisionSupportBanner';
+import {
+  formatUserError,
+  getMappingStatusDisplay,
+} from '@/lib/academicTaxonomy';
 import { useOrphanReport } from '@/hooks/useOrphanReport';
 import { EssayHeader } from './essay/EssayHeader';
 import { EssayActionBar } from './essay/EssayActionBar';
@@ -21,16 +26,16 @@ import {
   FileText,
   CheckCircle,
   HelpCircle,
-  Terminal,
   GitCompare,
+  Copy,
+  AlertTriangle,
+  ArrowLeft,
 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 /* ============================================================
-   SourceLogic — Orphan Detection Page (Scholarly Precision v2.0)
+   SourceLogic — Orphan Detection Page (L5)
    Bipartite Citation ↔ Bibliography Consistency Analyzer
    ============================================================ */
 
@@ -120,27 +125,60 @@ function getOrphanStats(
     })),
     ...extraUncitedFromRefs,
   ];
-  const correctlyLinked = verdicts.filter(
-    (v) => v.mapping_status === 'matched'
-  );
+
+  // Bucket EVERY remaining verdict so ZERO entries are silently dropped (BUG-02)
   const ambiguousMappings = verdicts.filter(
     (v) => v.mapping_status === 'ambiguous_mapping'
   );
+  const duplicateReferences = verdicts.filter(
+    (v) => v.mapping_status === 'duplicate_reference'
+  );
+  const styleInconsistent = verdicts.filter(
+    (v) => v.mapping_status === 'style_inconsistent'
+  );
+  const correctlyLinked = verdicts.filter(
+    (v) => v.mapping_status === 'matched'
+  );
+  const otherUnresolved = verdicts.filter(
+    (v) =>
+      v.mapping_status !== 'matched' &&
+      v.mapping_status !== 'missing_reference' &&
+      v.mapping_status !== 'in_text_mismatch' &&
+      v.mapping_status !== 'uncited_reference' &&
+      v.mapping_status !== 'ambiguous_mapping' &&
+      v.mapping_status !== 'duplicate_reference' &&
+      v.mapping_status !== 'style_inconsistent'
+  );
+
+  const renderedTotal =
+    citationsWithoutReference.length +
+    uncitedReferences.length +
+    ambiguousMappings.length +
+    duplicateReferences.length +
+    styleInconsistent.length +
+    otherUnresolved.length +
+    correctlyLinked.length;
 
   return {
     citationsWithoutReference,
     uncitedReferences,
     correctlyLinked,
     ambiguousMappings,
-    total: verdicts.length,
+    duplicateReferences,
+    styleInconsistent,
+    otherUnresolved,
+    total: renderedTotal,
     correctlyLinkedCount: correctlyLinked.length,
     orphanCount: citationsWithoutReference.length,
     uncitedCount: uncitedReferences.length,
     ambiguousCount: ambiguousMappings.length,
+    duplicateCount: duplicateReferences.length,
+    styleCount: styleInconsistent.length,
+    otherUnresolvedCount: otherUnresolved.length,
   };
 }
 
-function OrphanCitationCard({
+function MappingIssueCard({
   citation,
   index,
   isVi,
@@ -149,26 +187,71 @@ function OrphanCitationCard({
   index: number;
   isVi: boolean;
 }) {
+  const lang: 'vi' | 'en' = isVi ? 'vi' : 'en';
   const markerLabel = getCitationMarkerLabel(citation, index);
   const displayRaw = citation.citation_raw.replace(/^\s*\[\s*\d+[a-z]?\s*\]\s*/i, '');
+  const statusDisplay = getMappingStatusDisplay(citation.mapping_status, lang);
+
+  const isAmbiguous = citation.mapping_status === 'ambiguous_mapping';
+  const isDuplicate = citation.mapping_status === 'duplicate_reference';
+  const isStyleOrOther =
+    citation.mapping_status === 'style_inconsistent' ||
+    citation.mapping_status === 'unresolved';
+
+  const cardTheme = isAmbiguous
+    ? {
+        card: 'border-blue-200/90 dark:border-blue-900/70 bg-blue-50/40 dark:bg-blue-950/25 hover:bg-blue-50/80 dark:hover:bg-blue-950/45',
+        iconBox: 'bg-blue-100/80 dark:bg-blue-900/50 border-blue-200/60 dark:border-blue-800/60 text-blue-600 dark:text-blue-400',
+        pill: 'bg-blue-100/90 dark:bg-blue-950/80 text-blue-800 dark:text-blue-300 border-blue-200 dark:border-blue-800',
+        icon: <HelpCircle className="h-4 w-4" />,
+        pillIcon: <HelpCircle className="h-3 w-3" />,
+      }
+    : isDuplicate
+      ? {
+          card: 'border-violet-200/90 dark:border-violet-900/70 bg-violet-50/40 dark:bg-violet-950/25 hover:bg-violet-50/80 dark:hover:bg-violet-950/45',
+          iconBox: 'bg-violet-100/80 dark:bg-violet-900/50 border-violet-200/60 dark:border-violet-800/60 text-violet-600 dark:text-violet-400',
+          pill: 'bg-violet-100/90 dark:bg-violet-950/80 text-violet-800 dark:text-violet-300 border-violet-200 dark:border-violet-800',
+          icon: <Copy className="h-4 w-4" />,
+          pillIcon: <Copy className="h-3 w-3" />,
+        }
+      : isStyleOrOther
+        ? {
+            card: 'border-amber-200/90 dark:border-amber-900/70 bg-amber-50/40 dark:bg-amber-950/25 hover:bg-amber-50/80 dark:hover:bg-amber-950/45',
+            iconBox: 'bg-amber-100/80 dark:bg-amber-900/50 border-amber-200/60 dark:border-amber-800/60 text-amber-600 dark:text-amber-400',
+            pill: 'bg-amber-100/90 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-800',
+            icon: <AlertTriangle className="h-4 w-4" />,
+            pillIcon: <AlertTriangle className="h-3 w-3" />,
+          }
+        : {
+            card: 'border-red-200/90 dark:border-red-900/70 bg-red-50/40 dark:bg-red-950/25 hover:bg-red-50/80 dark:hover:bg-red-950/45',
+            iconBox: 'bg-red-100/80 dark:bg-red-900/50 border-red-200/60 dark:border-red-800/60 text-red-600 dark:text-red-400',
+            pill: 'bg-red-100/90 dark:bg-red-950/80 text-red-800 dark:text-red-300 border-red-200 dark:border-red-800',
+            icon: <Link2Off className="h-4 w-4" />,
+            pillIcon: <Link2Off className="h-3 w-3" />,
+          };
+
   return (
-    <Card className="rounded-xl border-red-200/90 dark:border-red-900/70 p-4 bg-red-50/40 dark:bg-red-950/25 hover:bg-red-50/80 dark:hover:bg-red-950/45 transition-colors shadow-sm">
+    <Card
+      data-testid="consistency-entry-card"
+      data-mapping-status={citation.mapping_status}
+      className={`rounded-xl p-4 transition-colors shadow-sm ${cardTheme.card}`}
+    >
       <div className="flex items-start gap-3">
-        <div className="p-2 rounded-xl bg-red-100/80 dark:bg-red-900/50 border border-red-200/60 dark:border-red-800/60 shrink-0">
-          <Link2Off className="h-4 w-4 text-red-600 dark:text-red-400" />
+        <div className={`p-2 rounded-xl border shrink-0 ${cardTheme.iconBox}`}>
+          {cardTheme.icon}
         </div>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1.5">
+          <div className="flex items-center gap-2 mb-1.5 flex-wrap">
             <span className="text-xs font-mono font-semibold text-slate-500 dark:text-slate-400">
               {markerLabel}
             </span>
-            <Badge
-              variant="hallucination"
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-mono font-medium"
+            <span
+              data-testid="mapping-issue-primary-badge"
+              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold border ${cardTheme.pill}`}
             >
-              <Link2Off className="h-3 w-3" />
-              {isVi ? 'Thiếu tham khảo' : 'No Reference'}
-            </Badge>
+              {cardTheme.pillIcon}
+              {statusDisplay.label}
+            </span>
           </div>
           <p className="text-sm font-serif text-slate-800 dark:text-slate-200 line-clamp-2 leading-relaxed break-words [overflow-wrap:anywhere]">
             {displayRaw || citation.citation_raw}
@@ -179,7 +262,6 @@ function OrphanCitationCard({
               triggeredRules={citation.triggered_rules}
               size="sm"
             />
-            <MappingStatusBadge status={citation.mapping_status} size="sm" />
           </div>
         </div>
       </div>
@@ -199,7 +281,11 @@ function UncitedReferenceCard({
   const markerLabel = getCitationMarkerLabel(reference, index);
   const displayRaw = reference.raw_text.replace(/^\s*\[\s*\d+[a-z]?\s*\]\s*/i, '');
   return (
-    <Card className="rounded-xl border-amber-200/90 dark:border-amber-900/70 p-4 bg-amber-50/40 dark:bg-amber-950/25 hover:bg-amber-50/80 dark:hover:bg-amber-950/45 transition-colors shadow-sm">
+    <Card
+      data-testid="consistency-entry-card"
+      data-mapping-status="uncited_reference"
+      className="rounded-xl border-amber-200/90 dark:border-amber-900/70 p-4 bg-amber-50/40 dark:bg-amber-950/25 hover:bg-amber-50/80 dark:hover:bg-amber-950/45 transition-colors shadow-sm"
+    >
       <div className="flex items-start gap-3">
         <div className="p-2 rounded-xl bg-amber-100/80 dark:bg-amber-900/50 border border-amber-200/60 dark:border-amber-800/60 shrink-0">
           <FileText className="h-4 w-4 text-amber-600 dark:text-amber-400" />
@@ -304,9 +390,9 @@ export function OrphanConsistencyWorkspace({
 }) {
   const { i18n } = useTranslation();
   const isVi = Boolean(i18n.language?.startsWith('vi'));
-  const [activeTab, setActiveTab] = useState<'orphans' | 'uncited' | 'ambiguous' | 'all'>('all');
-  const { containerRef: filterPillRef, pillStyle: filterPill } =
-    useSlidingPill<HTMLDivElement>(`${activeTab}-${i18n.language}`);
+  const [activeTab, setActiveTab] = useState<
+    'all' | 'orphans' | 'uncited' | 'ambiguous' | 'duplicates' | 'style' | 'other'
+  >('all');
 
   const stats = useMemo(
     () => getOrphanStats(report.verdicts, report.references, report.extracted_citations),
@@ -314,14 +400,30 @@ export function OrphanConsistencyWorkspace({
   );
 
   const hasIssues =
-    stats.orphanCount > 0 || stats.uncitedCount > 0 || stats.ambiguousCount > 0;
+    stats.orphanCount > 0 ||
+    stats.uncitedCount > 0 ||
+    stats.ambiguousCount > 0 ||
+    stats.duplicateCount > 0 ||
+    stats.styleCount > 0 ||
+    stats.otherUnresolvedCount > 0;
 
   const filterTabs = [
     { id: 'all' as const, label: isVi ? 'Tất cả' : 'All', count: stats.total, idx: 0 },
     { id: 'orphans' as const, label: isVi ? 'Thiếu tham khảo' : 'Orphans', count: stats.orphanCount, idx: 1 },
     { id: 'uncited' as const, label: isVi ? 'Chưa trích dẫn' : 'Uncited', count: stats.uncitedCount, idx: 2 },
     { id: 'ambiguous' as const, label: isVi ? 'Mơ hồ' : 'Ambiguous', count: stats.ambiguousCount, idx: 3 },
+    ...(stats.duplicateCount > 0
+      ? [{ id: 'duplicates' as const, label: isVi ? 'Trùng lặp' : 'Duplicates', count: stats.duplicateCount, idx: 4 }]
+      : []),
+    ...(stats.styleCount > 0
+      ? [{ id: 'style' as const, label: isVi ? 'Sai quy cách' : 'Style Issues', count: stats.styleCount, idx: 5 }]
+      : []),
+    ...(stats.otherUnresolvedCount > 0
+      ? [{ id: 'other' as const, label: isVi ? 'Khác' : 'Other', count: stats.otherUnresolvedCount, idx: 6 }]
+      : []),
   ];
+  const { containerRef: filterPillRef, pillStyle: filterPill } =
+    useSlidingPill<HTMLDivElement>(`${activeTab}-${i18n.language}-${filterTabs.length}`);
   const activeStageIdx = filterTabs.find((t) => t.id === activeTab)?.idx ?? 0;
 
   return (
@@ -368,31 +470,15 @@ export function OrphanConsistencyWorkspace({
 
       {/* Consistency Container */}
       <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
-        {/* Top Bar (Clean Editorial in embedded mode, Legacy Chrome in standalone test mode) */}
         <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 bg-slate-50/90 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800">
-          {embedded ? (
-            <div className="flex items-center gap-2 text-xs font-medium text-slate-600 dark:text-slate-300">
-              <GitCompare className="h-4 w-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
-              <span>
-                {isVi
-                  ? `Kiểm tra khớp nối hai chiều · ${stats.total} mục đã phân tích`
-                  : `Two-way citation check · ${stats.total} entries analyzed`}
-              </span>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2.5">
-              <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-red-400/80" />
-                <span className="w-2.5 h-2.5 rounded-full bg-amber-400/80" />
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400/80" />
-              </div>
-              <Separator orientation="vertical" className="h-4" />
-              <Terminal className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
-              <span className="text-xs font-mono font-semibold text-slate-700 dark:text-slate-200">
-                bipartite_consistency.py
-              </span>
-            </div>
-          )}
+          <div className="flex items-center gap-2 text-xs font-medium text-slate-600 dark:text-slate-300">
+            <GitCompare className="h-4 w-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+            <span>
+              {isVi
+                ? `Kiểm tra khớp nối hai chiều · ${stats.total} mục đã phân tích`
+                : `Two-way citation check · ${stats.total} entries analyzed`}
+            </span>
+          </div>
 
           <div
             ref={filterPillRef}
@@ -450,7 +536,10 @@ export function OrphanConsistencyWorkspace({
               (hasIssues || stats.correctlyLinked.length > 0)) ||
             (activeTab === 'orphans' && stats.citationsWithoutReference.length > 0) ||
             (activeTab === 'uncited' && stats.uncitedReferences.length > 0) ||
-            (activeTab === 'ambiguous' && stats.ambiguousMappings.length > 0) ? (
+            (activeTab === 'ambiguous' && stats.ambiguousMappings.length > 0) ||
+            (activeTab === 'duplicates' && stats.duplicateReferences.length > 0) ||
+            (activeTab === 'style' && stats.styleInconsistent.length > 0) ||
+            (activeTab === 'other' && stats.otherUnresolved.length > 0) ? (
               <div className="space-y-8">
                 {(activeTab === 'all' || activeTab === 'orphans') &&
                   stats.citationsWithoutReference.length > 0 && (
@@ -483,7 +572,7 @@ export function OrphanConsistencyWorkspace({
                                 : undefined
                             }
                           >
-                            <OrphanCitationCard
+                            <MappingIssueCard
                               citation={citation}
                               index={index}
                               isVi={isVi}
@@ -535,12 +624,118 @@ export function OrphanConsistencyWorkspace({
                       </p>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
                         {stats.ambiguousMappings.map((citation, index) => (
-                          <OrphanCitationCard
+                          <div
                             key={citation.citation_id}
-                            citation={citation}
-                            index={index}
-                            isVi={isVi}
-                          />
+                            onClick={
+                              onSelectVerdictInCitations
+                                ? () => onSelectVerdictInCitations(citation.citation_id)
+                                : undefined
+                            }
+                            className={onSelectVerdictInCitations ? 'cursor-pointer' : undefined}
+                          >
+                            <MappingIssueCard
+                              citation={citation}
+                              index={index}
+                              isVi={isVi}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                {(activeTab === 'all' || activeTab === 'duplicates') &&
+                  stats.duplicateReferences.length > 0 && (
+                    <div>
+                      <h2 className="font-sans text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100 mb-1.5 flex items-center gap-2">
+                        <Copy className="h-5 w-5 text-violet-600 dark:text-violet-400" />
+                        {isVi ? 'Mục tham khảo trùng lặp' : 'Duplicate References'}
+                      </h2>
+                      <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mb-4">
+                        {isVi
+                          ? 'Các mục tài liệu tham khảo này xuất hiện trùng lặp trong danh mục cuối bài.'
+                          : 'These bibliography entries appear more than once in the reference list.'}
+                      </p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                        {stats.duplicateReferences.map((citation, index) => (
+                          <div
+                            key={citation.citation_id}
+                            onClick={
+                              onSelectVerdictInCitations
+                                ? () => onSelectVerdictInCitations(citation.citation_id)
+                                : undefined
+                            }
+                            className={onSelectVerdictInCitations ? 'cursor-pointer' : undefined}
+                          >
+                            <MappingIssueCard
+                              citation={citation}
+                              index={index}
+                              isVi={isVi}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                {(activeTab === 'all' || activeTab === 'style') &&
+                  stats.styleInconsistent.length > 0 && (
+                    <div>
+                      <h2 className="font-sans text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100 mb-1.5 flex items-center gap-2">
+                        <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                        {isVi ? 'Sai quy cách trích dẫn' : 'Citation Style Inconsistencies'}
+                      </h2>
+                      <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mb-4">
+                        {isVi
+                          ? 'Định dạng các trích dẫn này chưa đồng nhất với chuẩn trích dẫn chung của tài liệu.'
+                          : 'These citations do not match the dominant citation style used across the manuscript.'}
+                      </p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                        {stats.styleInconsistent.map((citation, index) => (
+                          <div
+                            key={citation.citation_id}
+                            onClick={
+                              onSelectVerdictInCitations
+                                ? () => onSelectVerdictInCitations(citation.citation_id)
+                                : undefined
+                            }
+                            className={onSelectVerdictInCitations ? 'cursor-pointer' : undefined}
+                          >
+                            <MappingIssueCard
+                              citation={citation}
+                              index={index}
+                              isVi={isVi}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                {(activeTab === 'all' || activeTab === 'other') &&
+                  stats.otherUnresolved.length > 0 && (
+                    <div>
+                      <h2 className="font-sans text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100 mb-1.5 flex items-center gap-2">
+                        <AlertTriangle className="h-5 w-5 text-slate-500" />
+                        {isVi ? 'Liên kết chưa xác định' : 'Other Unresolved Mappings'}
+                      </h2>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                        {stats.otherUnresolved.map((citation, index) => (
+                          <div
+                            key={citation.citation_id}
+                            onClick={
+                              onSelectVerdictInCitations
+                                ? () => onSelectVerdictInCitations(citation.citation_id)
+                                : undefined
+                            }
+                            className={onSelectVerdictInCitations ? 'cursor-pointer' : undefined}
+                          >
+                            <MappingIssueCard
+                              citation={citation}
+                              index={index}
+                              isVi={isVi}
+                            />
+                          </div>
                         ))}
                       </div>
                     </div>
@@ -569,6 +764,8 @@ export function OrphanConsistencyWorkspace({
                         return (
                           <Card
                             key={v.citation_id}
+                            data-testid="consistency-entry-card"
+                            data-mapping-status={v.mapping_status}
                             onClick={
                               onSelectVerdictInCitations
                                 ? () => onSelectVerdictInCitations(v.citation_id)
@@ -636,7 +833,7 @@ export function OrphanConsistencyWorkspace({
         <Card className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm">
           <h3 className="font-display text-sm font-semibold mb-4 text-slate-900 dark:text-slate-100">
             {isVi
-              ? 'Tổng quan Nhất quán Trích dẫn (Layer 1)'
+              ? 'Tổng quan Nhất quán Trích dẫn'
               : 'Citation Consistency Summary'}
           </h3>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -677,10 +874,10 @@ export function OrphanConsistencyWorkspace({
               <HelpCircle className="h-5 w-5 text-blue-600 dark:text-blue-400 shrink-0" />
               <div>
                 <p className="text-xl font-bold font-mono tabular-nums text-blue-600 dark:text-blue-400">
-                  {stats.ambiguousCount}
+                  {stats.ambiguousCount + stats.duplicateCount + stats.styleCount + stats.otherUnresolvedCount}
                 </p>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  {isVi ? 'Mơ hồ' : 'Ambiguous'}
+                  {isVi ? 'Mơ hồ / Quy cách / Trùng' : 'Ambiguous / Style / Dup'}
                 </p>
               </div>
             </div>
@@ -698,7 +895,8 @@ export function OrphanConsistencyWorkspace({
 export function OrphanDetectionPage() {
   const { id } = useParams<{ id: string }>();
   const { i18n } = useTranslation();
-  const isVi = i18n.language?.startsWith('vi');
+  const isVi = Boolean(i18n.language?.startsWith('vi'));
+  const lang: 'vi' | 'en' = isVi ? 'vi' : 'en';
   const numericId = id ? parseInt(id, 10) : null;
   const essayId =
     numericId !== null && !isNaN(numericId) && numericId > 0 ? numericId : null;
@@ -707,32 +905,41 @@ export function OrphanDetectionPage() {
   const errorMessage =
     essayId === null
       ? isVi
-        ? 'Mã báo cáo không hợp lệ'
-        : 'Invalid essay ID'
+        ? 'Mã báo cáo không hợp lệ.'
+        : 'Invalid essay ID.'
       : error
-      ? error instanceof Error
-        ? error.message
-        : isVi
-        ? 'Không thể tải dữ liệu'
-        : 'Failed'
-      : null;
+        ? formatUserError(error, lang)
+        : null;
 
   if (errorMessage) {
     return (
-      <Alert variant="destructive" className="card p-6 rounded-2xl">
-        <AlertCircle className="h-5 w-5" />
-        <AlertTitle className="font-medium">
-          {isVi ? 'Lỗi' : 'Error'}: {errorMessage}
-        </AlertTitle>
-        <AlertDescription>
-          <Link
-            to="/history"
-            className="text-indigo-600 dark:text-indigo-400 hover:underline mt-2 inline-block"
-          >
-            {isVi ? '← Quay lại danh sách báo cáo' : '← Back to Reports'}
-          </Link>
-        </AlertDescription>
-      </Alert>
+      <div
+        data-testid="consistency-error-card"
+        className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 sm:p-8 shadow-sm max-w-2xl mx-auto my-8"
+      >
+        <div className="flex items-start gap-4">
+          <div className="h-12 w-12 rounded-2xl bg-amber-50 dark:bg-amber-950/70 border border-amber-200 dark:border-amber-800 flex items-center justify-center shrink-0">
+            <AlertCircle className="h-6 w-6 text-amber-600 dark:text-amber-400" />
+          </div>
+          <div className="space-y-3 flex-1 min-w-0">
+            <h2 className="font-display text-lg font-bold text-slate-900 dark:text-slate-100">
+              {isVi ? 'Không thể tải kiểm tra nhất quán' : 'Unable to Load Consistency Check'}
+            </h2>
+            <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed break-words">
+              {errorMessage}
+            </p>
+            <div className="pt-1">
+              <Link
+                to="/history"
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white transition-colors"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                {isVi ? 'Về lịch sử báo cáo' : 'Back to History'}
+              </Link>
+            </div>
+          </div>
+        </div>
+      </div>
     );
   }
 
@@ -748,7 +955,7 @@ export function OrphanDetectionPage() {
   }
 
   return (
-    <div className="space-y-6 pb-10">
+    <div className="space-y-4 pb-10">
       {/* Shared Report Header */}
       <EssayHeader
         essayId={report.essay_id}
@@ -759,18 +966,38 @@ export function OrphanDetectionPage() {
         styleName={report.style_profile?.style}
       />
 
-      {/* Shared Multi-Tab Diagnostic Navigation */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
+      {/* Shared Multi-Tab Diagnostic Navigation + Compact CIS Score (BUG-19) */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <EssayActionBar essayId={id ?? ''} filename={report.filename} />
-        <div className="flex items-center gap-2 text-xs font-mono text-slate-500 dark:text-slate-400">
-          <GitCompare className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
-          <span>
-            {isVi
-              ? `Nhất quán Trích dẫn · ${report.verdicts.length} mục đã phân tích`
-              : `Citation Consistency · ${report.verdicts.length} entries analyzed`}
-          </span>
+        <div className="flex flex-wrap items-center gap-2.5 text-xs font-mono text-slate-500 dark:text-slate-400">
+          {report.cis && (
+            <span
+              data-testid="consistency-cis-pill"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/80 font-semibold"
+            >
+              <span>CIS:</span>
+              <span>
+                {report.cis.is_unscannable
+                  ? isVi
+                    ? 'N/A · Không thể quét'
+                    : 'N/A · Not Scannable'
+                  : `${Number(report.cis.score ?? 0).toFixed(1)} / 100`}
+              </span>
+            </span>
+          )}
+          <div className="flex items-center gap-2">
+            <GitCompare className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+            <span>
+              {isVi
+                ? `Nhất quán Trích dẫn · ${report.verdicts.length} mục đã phân tích`
+                : `Citation Consistency · ${report.verdicts.length} entries analyzed`}
+            </span>
+          </div>
         </div>
       </div>
+
+      {/* Non-Accusatory Academic Decision-Support Disclaimer (BUG-03) */}
+      <DecisionSupportBanner variant="compact" lang={lang} />
 
       <OrphanConsistencyWorkspace report={report} embedded={false} />
     </div>

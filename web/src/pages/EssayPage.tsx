@@ -1,15 +1,17 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect, useRef, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams, Link, useLocation, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   api,
+  type AnalysisReport,
   type Verdict,
   type Citation,
   type ValidationLabel,
   type RevisionDiffData,
 } from '@/api/client';
 import { EssayHeader } from './essay/EssayHeader';
-import { EssayActionBar, type ReportWorkspaceMode } from './essay/EssayActionBar';
+import { type ReportWorkspaceMode } from './essay/EssayActionBar';
 import { DocumentInspectorWorkspace } from './DocumentInspectorPage';
 import { OrphanConsistencyWorkspace } from './OrphanDetectionPage';
 import { OverrideControls } from '@/components/OverrideControls';
@@ -17,6 +19,7 @@ import { CitationGraphView, EvidenceGraph } from '@/components/CitationGraph';
 import { UpgradeModal } from '@/components/UpgradeModal';
 import { BibliographyRemediationModal } from '@/components/BibliographyRemediationModal';
 import { RULE_DEFINITIONS } from '@/components/RuleInspector';
+import { DecisionSupportBanner } from '@/components/DecisionSupportBanner';
 import { useEssayReport, useOverrideVerdict } from '@/hooks/useEssayReport';
 import { useToast } from '@/contexts/ToastContext';
 import { copyTextToClipboard } from '@/lib/clipboard';
@@ -28,6 +31,13 @@ import {
   isLegalStatuteVerdict,
   isUrlResource,
 } from '@/lib/verdictExplanation';
+import {
+  normalizeVerdictKey,
+  getVerdictDisplay,
+  getMappingStatusDisplay,
+  formatUserError,
+  getScannedPdfNotice,
+} from '@/lib/academicTaxonomy';
 import { SYMBOLIC_RULES_COUNT } from '@/lib/productFacts';
 import { useRole } from '@/hooks/useRole';
 import {
@@ -46,8 +56,13 @@ import {
   FileText,
   Copy,
   Microscope,
+  Lock,
+  ListChecks,
+  Layers,
+  X,
+  ArrowLeft,
+  ArrowUpDown,
 } from 'lucide-react';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
   AccordionExpand,
@@ -59,6 +74,576 @@ import {
   DirectionalStageSlide,
   useSlidingPill,
 } from '@/components/ui/transitions';
+
+/* ============================================================
+   Shared Single-Definition Bucket Counters & Persistent Report Nav (BUG-02, BUG-19, BUG-21)
+   ============================================================ */
+
+export type ReportNavLayer =
+  | 'debugger'
+  | 'issues'
+  | 'document'
+  | 'consistency'
+  | 'graph'
+  | 'trace';
+
+export function getEffectiveVerdictKey(v: Verdict): ValidationLabel {
+  if (isUrlResource(v)) return 'resource';
+  return normalizeVerdictKey(v.label) as ValidationLabel;
+}
+
+export function isActionableIssueVerdict(v: Verdict): boolean {
+  const key = getEffectiveVerdictKey(v);
+  const rules = v.triggered_rules ?? [];
+  const urlSt = v.url_status ?? v.features?.url_status ?? null;
+  const hasUrlError =
+    urlSt === 'dead_link' ||
+    urlSt === 'fake_domain' ||
+    rules.includes('R-URL-CONTENT-MISMATCH') ||
+    rules.includes('R-DEAD-URL') ||
+    rules.includes('R-BROKEN-LINK') ||
+    rules.includes('R-FAKE-URL');
+  const hasMappingIssue =
+    Boolean(v.mapping_status) && v.mapping_status !== 'matched';
+
+  if (key === 'resource') {
+    return hasUrlError || hasMappingIssue;
+  }
+  if (key === 'verified') {
+    return hasUrlError || hasMappingIssue;
+  }
+  // suspected_hallucination, metadata_error, unresolved
+  return true;
+}
+
+export function computeReportBucketCounts(verdicts: Verdict[]) {
+  let verified = 0;
+  let metadata_error = 0;
+  let suspected_hallucination = 0;
+  let unresolved = 0;
+  let resource = 0;
+  let actionableIssues = 0;
+
+  for (const v of verdicts) {
+    const key = getEffectiveVerdictKey(v);
+    if (key === 'verified') verified += 1;
+    else if (key === 'metadata_error') metadata_error += 1;
+    else if (key === 'suspected_hallucination') suspected_hallucination += 1;
+    else if (key === 'resource') resource += 1;
+    else unresolved += 1;
+
+    if (isActionableIssueVerdict(v)) {
+      actionableIssues += 1;
+    }
+  }
+
+  return {
+    all: verdicts.length,
+    verified,
+    metadata_error,
+    suspected_hallucination,
+    unresolved,
+    resource,
+    attentionCount: metadata_error + suspected_hallucination + unresolved,
+    actionableIssues,
+  };
+}
+
+export function isReportUnscannable(report: AnalysisReport): boolean {
+  const diag = report.document_diagnostics;
+  return Boolean(
+    report.cis?.is_unscannable ||
+      (diag?.is_scanned_pdf && report.verdicts.length === 0) ||
+      (!report.filename.toLowerCase().endsWith('.docx') &&
+        report.num_pages > 0 &&
+        report.verdicts.length === 0 &&
+        (report.extracted_citations?.length ?? 0) === 0),
+  );
+}
+
+function filterValidBridgedConcepts(concepts?: string[] | null): string[] {
+  if (!concepts || concepts.length === 0) return [];
+  return concepts.filter((item) => {
+    const trimmed = item.trim();
+    if (!trimmed) return false;
+    const parts = trimmed.split(/\s*(?:↔|<->|->|→|=)\s*/);
+    if (parts.length === 2) {
+      const left = parts[0].trim().toLowerCase();
+      const right = parts[1].trim().toLowerCase();
+      if (left && right && left === right) return false;
+    }
+    return true;
+  });
+}
+
+function useIsBelowLg(): boolean {
+  const [below, setBelow] = useState<boolean>(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      return false;
+    }
+    return window.matchMedia('(max-width: 1023px)').matches;
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      return;
+    }
+    const mql = window.matchMedia('(max-width: 1023px)');
+    const onChange = (ev: MediaQueryListEvent) => setBelow(ev.matches);
+    setBelow(mql.matches);
+    if (typeof mql.addEventListener === 'function') {
+      mql.addEventListener('change', onChange);
+      return () => mql.removeEventListener('change', onChange);
+    }
+    return undefined;
+  }, []);
+
+  return below;
+}
+
+export interface ReportSummaryAndNavBarProps {
+  essayId: string;
+  report: AnalysisReport;
+  activeLayer: ReportNavLayer;
+  onChangeWorkspaceMode?: (mode: ReportWorkspaceMode) => void;
+  onOpenLockedFeature?: (featureName: string) => void;
+  quietRevisionSlot?: ReactNode;
+}
+
+export function ReportSummaryAndNavBar({
+  essayId,
+  report,
+  activeLayer,
+  onChangeWorkspaceMode,
+  onOpenLockedFeature,
+  quietRevisionSlot,
+}: ReportSummaryAndNavBarProps) {
+  const { i18n } = useTranslation();
+  const { has } = useRole();
+  const lang: 'vi' | 'en' = i18n.language?.startsWith('vi') ? 'vi' : 'en';
+
+  const canDocument = has('view_document_inspector');
+  const canConsistency = has('view_orphan_detection');
+  const canTrace = has('view_logic_trace');
+
+  const counts = useMemo(
+    () => computeReportBucketCounts(report.verdicts ?? []),
+    [report.verdicts],
+  );
+  const unscannable = isReportUnscannable(report);
+  const cisScore = report.cis?.score ?? 0;
+
+  const consistencyAllMatched =
+    (report.linking_summary?.missing_reference ?? 0) === 0 &&
+    (report.linking_summary?.uncited_reference ?? 0) === 0 &&
+    (report.linking_summary?.in_text_mismatch ?? 0) === 0 &&
+    (report.linking_summary?.ambiguous_mapping ?? 0) === 0 &&
+    (report.linking_summary?.duplicate_reference ?? 0) === 0 &&
+    (report.linking_summary?.style_inconsistent ?? 0) === 0;
+
+  const cisHealthPill = unscannable
+    ? {
+        text: lang === 'vi' ? 'N/A · Không thể quét' : 'N/A · Not Scannable',
+        className:
+          'bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700',
+      }
+    : cisScore >= 90
+      ? {
+          text: lang === 'vi' ? '✓ Rất đáng tin cậy' : '✓ Highly Reliable',
+          className:
+            'bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-950/70 dark:text-emerald-300 dark:border-emerald-800',
+        }
+      : cisScore >= 75
+        ? {
+            text:
+              lang === 'vi'
+                ? 'Khá tốt · Cần rà soát nhẹ'
+                : 'Good · Minor Review',
+            className:
+              'bg-indigo-50 text-indigo-800 border-indigo-200 dark:bg-indigo-950/70 dark:text-indigo-300 dark:border-indigo-800',
+          }
+        : cisScore >= 50
+          ? {
+              text: lang === 'vi' ? '⚠ Cần kiểm tra kỹ' : '⚠ Needs Review',
+              className:
+                'bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/70 dark:text-amber-300 dark:border-amber-800',
+            }
+          : {
+              text:
+                lang === 'vi'
+                  ? '⚠ Nhiều mục cần rà soát'
+                  : '⚠ High Review Priority',
+              className:
+                'bg-red-50 text-red-800 border-red-200 dark:bg-red-950/70 dark:text-red-300 dark:border-red-800',
+            };
+
+  const { containerRef: tabListRef, pillStyle } = useSlidingPill<HTMLDivElement>(
+    `${activeLayer}-${lang}-${canDocument}-${canConsistency}-${canTrace}`,
+  );
+
+  const tabBase =
+    't-tab relative z-10 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-[13px] font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0';
+  const activeTabCls = pillStyle.ready
+    ? 'text-slate-950 dark:text-white'
+    : 'bg-white dark:bg-slate-900 text-slate-950 dark:text-white shadow-sm';
+  const inactiveTabCls =
+    'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200';
+
+  const handleLockedClick = (featureVi: string, featureEn: string) => {
+    if (onOpenLockedFeature) {
+      onOpenLockedFeature(lang === 'vi' ? featureVi : featureEn);
+    }
+  };
+
+  return (
+    <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 px-4 py-3 sm:px-5 shadow-sm flex flex-wrap items-center justify-between gap-3.5">
+      <div
+        data-testid="report-health-summary"
+        className="flex flex-wrap items-center gap-3.5 min-w-0"
+      >
+        <ScoreRing
+          data-testid="cis-score-ring"
+          value={unscannable ? 0 : cisScore}
+          size={40}
+          thickness={4.2}
+          color={
+            unscannable
+              ? '#94a3b8'
+              : cisScore >= 90
+                ? '#10b981'
+                : cisScore >= 75
+                  ? '#6366f1'
+                  : cisScore >= 50
+                    ? '#f59e0b'
+                    : '#ef4444'
+          }
+        />
+        <div className="flex flex-col justify-center">
+          <div className="flex items-center gap-2 flex-wrap leading-none">
+            <span className="text-lg sm:text-[19px] font-extrabold tracking-tight tabular-nums text-slate-900 dark:text-white leading-none">
+              {unscannable ? (
+                'N/A'
+              ) : (
+                <SubtleNumber value={cisScore.toFixed(1)} suffix="%" />
+              )}
+            </span>
+            <span
+              data-testid="cis-qualitative-pill"
+              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${cisHealthPill.className}`}
+            >
+              {cisHealthPill.text}
+            </span>
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 mt-1 leading-tight">
+            <span>
+              <strong className="text-slate-900 dark:text-slate-200">
+                {counts.verified}
+              </strong>{' '}
+              {lang === 'vi' ? 'đã xác minh' : 'verified'}
+            </span>
+            {counts.attentionCount > 0 && (
+              <>
+                <span>•</span>
+                <span className="font-semibold text-amber-700 dark:text-amber-400">
+                  {counts.attentionCount}{' '}
+                  {lang === 'vi' ? 'cần kiểm tra' : 'need review'}
+                </span>
+              </>
+            )}
+            {counts.resource > 0 && (
+              <>
+                <span>•</span>
+                <span className="text-violet-700 dark:text-violet-300 font-medium">
+                  {counts.resource}{' '}
+                  {lang === 'vi' ? 'nguồn web / văn bản' : 'web / legal'}
+                </span>
+              </>
+            )}
+          </div>
+        </div>
+
+        {quietRevisionSlot}
+      </div>
+
+      {/* Unified 6-Tab Horizontally Scrollable Navigation Bar across L1-L5 */}
+      <div
+        ref={tabListRef}
+        data-testid="report-view-tablist"
+        role="tablist"
+        aria-label={lang === 'vi' ? 'Chế độ xem báo cáo' : 'Report views'}
+        className="t-tabs relative flex items-center gap-1 p-1 rounded-xl bg-slate-100/90 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 overflow-x-auto max-w-full flex-nowrap"
+      >
+        <span
+          aria-hidden="true"
+          data-testid="report-tabs-sliding-pill"
+          style={{
+            width: `${pillStyle.width}px`,
+            height: `${pillStyle.height}px`,
+            transform: `translate3d(${pillStyle.left}px, ${pillStyle.top}px, 0)`,
+            opacity: pillStyle.ready ? 1 : 0,
+            transition: pillStyle.animate ? undefined : 'none',
+          }}
+          className="t-tabs-pill rounded-lg bg-white dark:bg-slate-900 shadow-sm ring-1 ring-slate-200/80 dark:ring-slate-700/80"
+        />
+
+        {/* Tab 1: Citations (L1) */}
+        {onChangeWorkspaceMode ? (
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeLayer === 'debugger'}
+            data-pill-active={activeLayer === 'debugger' ? 'true' : 'false'}
+            data-testid="mode-citations-btn"
+            onClick={() => onChangeWorkspaceMode('debugger')}
+            className={`${tabBase} ${
+              activeLayer === 'debugger' ? activeTabCls : inactiveTabCls
+            }`}
+          >
+            <FileText className="h-3.5 w-3.5 shrink-0" />
+            <span>{lang === 'vi' ? 'Trích dẫn' : 'Citations'}</span>
+            {counts.attentionCount > 0 && (
+              <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                {counts.attentionCount}
+              </span>
+            )}
+          </button>
+        ) : (
+          <Link
+            to={`/verification/report/${essayId}`}
+            role="tab"
+            aria-selected={activeLayer === 'debugger'}
+            data-pill-active={activeLayer === 'debugger' ? 'true' : 'false'}
+            data-testid="mode-citations-btn"
+            className={`${tabBase} ${
+              activeLayer === 'debugger' ? activeTabCls : inactiveTabCls
+            }`}
+          >
+            <FileText className="h-3.5 w-3.5 shrink-0" />
+            <span>{lang === 'vi' ? 'Trích dẫn' : 'Citations'}</span>
+            {counts.attentionCount > 0 && (
+              <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                {counts.attentionCount}
+              </span>
+            )}
+          </Link>
+        )}
+
+        {/* Tab 2: Issues (L2) */}
+        <Link
+          to={`/verification/report/${essayId}/issues`}
+          role="tab"
+          aria-selected={activeLayer === 'issues'}
+          data-pill-active={activeLayer === 'issues' ? 'true' : 'false'}
+          data-testid="mode-issues-btn"
+          className={`${tabBase} ${
+            activeLayer === 'issues' ? activeTabCls : inactiveTabCls
+          }`}
+        >
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+          <span>{lang === 'vi' ? 'Vấn đề' : 'Issues'}</span>
+          {counts.actionableIssues > 0 && (
+            <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300">
+              {counts.actionableIssues}
+            </span>
+          )}
+        </Link>
+
+        {/* Tab 3: In Document (L4) */}
+        {canDocument ? (
+          onChangeWorkspaceMode ? (
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeLayer === 'document'}
+              data-pill-active={activeLayer === 'document' ? 'true' : 'false'}
+              data-testid="mode-document-btn"
+              onClick={() => onChangeWorkspaceMode('document')}
+              className={`${tabBase} ${
+                activeLayer === 'document' ? activeTabCls : inactiveTabCls
+              }`}
+            >
+              <Microscope className="h-3.5 w-3.5 shrink-0" />
+              <span>{lang === 'vi' ? 'Trong bài' : 'In Document'}</span>
+            </button>
+          ) : (
+            <Link
+              to={`/verification/report/${essayId}/document`}
+              role="tab"
+              aria-selected={activeLayer === 'document'}
+              data-pill-active={activeLayer === 'document' ? 'true' : 'false'}
+              data-testid="mode-document-btn"
+              className={`${tabBase} ${
+                activeLayer === 'document' ? activeTabCls : inactiveTabCls
+              }`}
+            >
+              <Microscope className="h-3.5 w-3.5 shrink-0" />
+              <span>{lang === 'vi' ? 'Trong bài' : 'In Document'}</span>
+            </Link>
+          )
+        ) : (
+          <button
+            type="button"
+            role="tab"
+            aria-selected={false}
+            data-testid="locked-document-inspector-btn"
+            onClick={() =>
+              handleLockedClick(
+                'Xem trong bài viết (Gói Pro)',
+                'In-Document Inspector (Pro)',
+              )
+            }
+            className={`${tabBase} text-slate-400 dark:text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400`}
+          >
+            <Lock className="h-3 w-3 shrink-0" />
+            <span>{lang === 'vi' ? 'Trong bài' : 'In Document'}</span>
+          </button>
+        )}
+
+        {/* Tab 4: Consistency (L5) */}
+        {canConsistency ? (
+          onChangeWorkspaceMode ? (
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeLayer === 'consistency'}
+              data-pill-active={activeLayer === 'consistency' ? 'true' : 'false'}
+              data-testid="mode-consistency-btn"
+              onClick={() => onChangeWorkspaceMode('consistency')}
+              className={`${tabBase} ${
+                activeLayer === 'consistency' ? activeTabCls : inactiveTabCls
+              }`}
+            >
+              <ListChecks className="h-3.5 w-3.5 shrink-0" />
+              <span>{lang === 'vi' ? 'Nhất quán' : 'Consistency'}</span>
+              {consistencyAllMatched && (
+                <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0" />
+              )}
+            </button>
+          ) : (
+            <Link
+              to={`/verification/report/${essayId}/consistency`}
+              role="tab"
+              aria-selected={activeLayer === 'consistency'}
+              data-pill-active={activeLayer === 'consistency' ? 'true' : 'false'}
+              data-testid="mode-consistency-btn"
+              className={`${tabBase} ${
+                activeLayer === 'consistency' ? activeTabCls : inactiveTabCls
+              }`}
+            >
+              <ListChecks className="h-3.5 w-3.5 shrink-0" />
+              <span>{lang === 'vi' ? 'Nhất quán' : 'Consistency'}</span>
+              {consistencyAllMatched && (
+                <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0" />
+              )}
+            </Link>
+          )
+        ) : (
+          <button
+            type="button"
+            role="tab"
+            aria-selected={false}
+            data-testid="locked-consistency-btn"
+            onClick={() =>
+              handleLockedClick(
+                'Kiểm tra thiếu / thừa (Gói Pro)',
+                'Consistency Check (Pro)',
+              )
+            }
+            className={`${tabBase} text-slate-400 dark:text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400`}
+          >
+            <Lock className="h-3 w-3 shrink-0" />
+            <span>{lang === 'vi' ? 'Nhất quán' : 'Consistency'}</span>
+          </button>
+        )}
+
+        {/* Tab 5: Network Flow (Sơ đồ) */}
+        {canTrace ? (
+          onChangeWorkspaceMode ? (
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeLayer === 'graph'}
+              data-pill-active={activeLayer === 'graph' ? 'true' : 'false'}
+              data-testid="mode-graph-btn"
+              onClick={() => onChangeWorkspaceMode('graph')}
+              className={`${tabBase} ${
+                activeLayer === 'graph' ? activeTabCls : inactiveTabCls
+              }`}
+            >
+              <GitBranch className="h-3.5 w-3.5 shrink-0" />
+              <span>{lang === 'vi' ? 'Sơ đồ' : 'Network'}</span>
+            </button>
+          ) : (
+            <Link
+              to={`/verification/report/${essayId}?view=graph`}
+              role="tab"
+              aria-selected={activeLayer === 'graph'}
+              data-pill-active={activeLayer === 'graph' ? 'true' : 'false'}
+              data-testid="mode-graph-btn"
+              className={`${tabBase} ${
+                activeLayer === 'graph' ? activeTabCls : inactiveTabCls
+              }`}
+            >
+              <GitBranch className="h-3.5 w-3.5 shrink-0" />
+              <span>{lang === 'vi' ? 'Sơ đồ' : 'Network'}</span>
+            </Link>
+          )
+        ) : (
+          <button
+            type="button"
+            role="tab"
+            aria-selected={false}
+            data-testid="locked-graph-btn"
+            onClick={() =>
+              handleLockedClick(
+                'Sơ đồ luồng kiểm chứng (Gói Pro)',
+                'Citation Verification Network (Pro)',
+              )
+            }
+            className={`${tabBase} text-slate-400 dark:text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400`}
+          >
+            <Lock className="h-3 w-3 shrink-0" />
+            <span>{lang === 'vi' ? 'Sơ đồ' : 'Network'}</span>
+          </button>
+        )}
+
+        {/* Tab 6: Logic Trace / Verification Reasoning (L3) */}
+        {canTrace ? (
+          <Link
+            to={`/verification/report/${essayId}/trace`}
+            role="tab"
+            aria-selected={activeLayer === 'trace'}
+            data-pill-active={activeLayer === 'trace' ? 'true' : 'false'}
+            data-testid="mode-trace-btn"
+            className={`${tabBase} ${
+              activeLayer === 'trace' ? activeTabCls : inactiveTabCls
+            }`}
+          >
+            <Layers className="h-3.5 w-3.5 shrink-0" />
+            <span>{lang === 'vi' ? 'Cách kiểm tra' : 'Verification'}</span>
+          </Link>
+        ) : (
+          <button
+            type="button"
+            role="tab"
+            aria-selected={false}
+            data-testid="locked-trace-btn"
+            onClick={() =>
+              handleLockedClick(
+                'Chi tiết cách hệ thống kiểm chứng (Gói Pro)',
+                'Verification Reasoning (Pro)',
+              )
+            }
+            className={`${tabBase} text-slate-400 dark:text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400`}
+          >
+            <Lock className="h-3 w-3 shrink-0" />
+            <span>{lang === 'vi' ? 'Cách kiểm tra' : 'Verification'}</span>
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
 
 /* ============================================================
    Helper Types & Functions for the Real Citation Debugger IDE
@@ -136,15 +721,19 @@ function formatRevisionVerdictLabel(
   const norm = (rawLabel || '').trim().toLowerCase();
   switch (norm) {
     case 'verified':
-      return lang === 'vi' ? 'Đã xác thực' : 'Verified';
+    case 'likely_verified':
+      return getVerdictDisplay('verified', lang).label;
     case 'metadata_error':
-      return lang === 'vi' ? 'Lỗi Metadata' : 'Metadata Error';
+      return getVerdictDisplay('metadata_error', lang).label;
     case 'suspected_hallucination':
-      return lang === 'vi' ? 'Nghi vấn Bịa đặt' : 'Suspected Hallucination';
+      return getVerdictDisplay('suspected_hallucination', lang).label;
     case 'unresolved':
-      return lang === 'vi' ? 'Chưa xác minh' : 'Unresolved';
+      return getVerdictDisplay('unresolved', lang).label;
     case 'resource':
-      return lang === 'vi' ? 'Tài nguyên Web / Pháp quy' : 'URL / Legal Resource';
+    case 'url_resource':
+    case 'web_resource':
+    case 'legal_resource':
+      return getVerdictDisplay('resource', lang).label;
     case 'removed':
     case 'deleted':
       return lang === 'vi' ? 'Đã gỡ bỏ' : 'Removed';
@@ -1018,10 +1607,13 @@ export function getVerdictBadgeVisuals(
 } {
   const isLegal = (triggeredRules ?? []).some((r) => r.includes('LEGAL'));
   const isIncompleteMeta = (triggeredRules ?? []).includes('R-INCOMPLETE-METADATA');
-  switch (label) {
+  const norm = normalizeVerdictKey(label);
+  const display = getVerdictDisplay(norm, lang);
+
+  switch (norm) {
     case 'verified':
       return {
-        text: '✓ VERIFIED',
+        text: `✓ ${display.label}`,
         badgeClass:
           'verdict-badge-verified bg-emerald-100/90 text-emerald-800 border border-emerald-300 dark:bg-emerald-950/90 dark:text-emerald-300 dark:border-emerald-700 font-bold',
       };
@@ -1031,53 +1623,59 @@ export function getVerdictBadgeVisuals(
           ? lang === 'vi'
             ? '⚠ Thiếu quy cách trích dẫn'
             : '⚠ Incomplete Reference'
-          : isLegal
-            ? '⚠ LEGAL_METADATA_ERROR'
-            : '⚠ METADATA_ERROR',
+          : `⚠ ${display.label}`,
         badgeClass:
           'verdict-badge-metadata-error bg-amber-100/90 text-amber-800 border border-amber-300 dark:bg-amber-950/90 dark:text-amber-300 dark:border-amber-700 font-bold',
       };
     case 'suspected_hallucination':
       return {
-        text: '✕ HALLUCINATION',
+        text: `✕ ${display.label}`,
         badgeClass:
           'verdict-badge-hallucinated bg-red-100/90 text-red-800 border border-red-300 dark:bg-red-950/90 dark:text-red-300 dark:border-red-700 font-bold',
       };
     case 'resource':
       return {
-        text: isLegal ? '⚖ VN_LEGAL_STATUTE' : '↗ URL_RESOURCE',
+        text: isLegal
+          ? lang === 'vi'
+            ? '⚖ Văn bản pháp quy'
+            : '⚖ Legal Statute'
+          : `↗ ${display.label}`,
         badgeClass:
           'bg-violet-100/90 text-violet-800 border border-violet-300 dark:bg-violet-950/90 dark:text-violet-300 dark:border-violet-700 font-bold',
       };
     default:
       return {
-        text: '— UNRESOLVED',
+        text: `— ${display.label}`,
         badgeClass:
           'verdict-badge-unverifiable bg-slate-200/80 text-slate-700 border border-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700 font-bold',
       };
   }
 }
 
-function getMappingBadgeVisuals(status: Verdict['mapping_status']): {
+function getMappingBadgeVisuals(
+  status: Verdict['mapping_status'],
+  lang: 'vi' | 'en',
+): {
   text: string;
   badgeClass: string;
 } {
+  const display = getMappingStatusDisplay(status, lang);
   switch (status) {
     case 'matched':
       return {
-        text: 'MATCHED',
+        text: display.label,
         badgeClass:
           'bg-indigo-50 text-indigo-700 border border-indigo-200/90 dark:bg-indigo-950/70 dark:text-indigo-300 dark:border-indigo-800 font-semibold',
       };
     case 'missing_reference':
       return {
-        text: 'MISSING_REF',
+        text: display.label,
         badgeClass:
           'mapping-badge-missing bg-red-50 text-red-700 border border-red-200 dark:bg-red-950/70 dark:text-red-300 dark:border-red-800 font-semibold',
       };
     case 'uncited_reference':
       return {
-        text: 'UNCITED_REF',
+        text: display.label,
         badgeClass:
           'mapping-badge-uncited bg-sky-50 text-sky-700 border border-sky-200 dark:bg-sky-950/70 dark:text-sky-300 dark:border-sky-800 font-semibold',
       };
@@ -1086,13 +1684,13 @@ function getMappingBadgeVisuals(status: Verdict['mapping_status']): {
     case 'duplicate_reference':
     case 'style_inconsistent':
       return {
-        text: status.toUpperCase().replace('_REFERENCE', '_REF'),
+        text: display.label,
         badgeClass:
           'mapping-badge-mismatch bg-orange-50 text-orange-700 border border-orange-200 dark:bg-orange-950/70 dark:text-orange-300 dark:border-orange-800 font-semibold',
       };
     default:
       return {
-        text: 'UNRESOLVED',
+        text: display.label,
         badgeClass:
           'bg-slate-100 text-slate-600 border border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700 font-semibold',
       };
@@ -1162,18 +1760,21 @@ function getLinkBadgeVisuals(
     case 'restricted_alive':
       return {
         status,
-        text: `🔒 HTTP ${code || 403} OK`,
+        text:
+          lang === 'vi'
+            ? `🔒 Truy cập hạn chế (HTTP ${code || 403})`
+            : `🔒 Restricted Access (HTTP ${code || 403})`,
         badgeClass:
           'bg-teal-50 text-teal-700 border border-teal-200 dark:bg-teal-950/70 dark:text-teal-300 dark:border-teal-800 font-semibold',
         title:
           lang === 'vi'
-            ? `Liên kết sống — Tường lửa nhà xuất bản (HTTP ${code || 403})`
-            : `Publisher paywall / bot-filtered URL is alive (HTTP ${code || 403})`,
+            ? `Liên kết tồn tại nhưng trang nhà xuất bản chặn truy cập tự động (HTTP ${code || 403})`
+            : `Publisher paywall / bot-filtered URL is reachable with restricted access (HTTP ${code || 403})`,
       };
     case 'archived_alive':
       return {
         status,
-        text: '🏛️ WAYBACK ARCHIVED',
+        text: lang === 'vi' ? '🏛️ Lưu trữ Wayback' : '🏛️ Wayback Archived',
         badgeClass:
           'bg-amber-50 text-amber-800 border border-amber-300 dark:bg-amber-950/70 dark:text-amber-300 dark:border-amber-800 font-semibold',
         title:
@@ -1184,7 +1785,10 @@ function getLinkBadgeVisuals(
     case 'dead_link':
       return {
         status,
-        text: `✕ HTTP ${code || 404} DEAD`,
+        text:
+          lang === 'vi'
+            ? `✕ Liên kết lỗi (HTTP ${code || 404})`
+            : `✕ Broken Link (HTTP ${code || 404})`,
         badgeClass:
           'bg-red-50 text-red-700 border border-red-200 dark:bg-red-950/70 dark:text-red-300 dark:border-red-800 font-semibold',
         title:
@@ -1195,13 +1799,13 @@ function getLinkBadgeVisuals(
     case 'fake_domain':
       return {
         status,
-        text: '✕ FAKE URL',
+        text: lang === 'vi' ? '✕ URL không hợp lệ' : '✕ Invalid URL',
         badgeClass:
           'bg-red-50 text-red-700 border border-red-200 dark:bg-red-950/70 dark:text-red-300 dark:border-red-800 font-semibold',
         title:
           lang === 'vi'
-            ? 'Tên miền URL giả mạo hoặc placeholder'
-            : 'Fabricated or placeholder URL domain',
+            ? 'Tên miền URL không phân giải được hoặc không hợp lệ'
+            : 'Unresolvable or placeholder URL domain',
       };
   }
 }
@@ -1404,23 +2008,23 @@ function buildLocalizedReasoning(verdict: Verdict, lang: 'vi' | 'en'): string {
     if (urlStatus === 'alive') {
       telemetryParts.push(
         isUrlContentMismatch
-          ? `kiểm tra liên kết = HTTP ${urlCode || 200} (sai nội dung trang)`
+          ? `kiểm tra liên kết = HTTP ${urlCode || 200} — sai nội dung trang`
           : `kiểm tra liên kết = HTTP ${urlCode || 200} OK`,
       );
     } else if (urlStatus === 'restricted_alive') {
       telemetryParts.push(
-        `kiểm tra liên kết = HTTP ${urlCode || 403} (tường lửa nhà xuất bản — liên kết sống)`
+        `kiểm tra liên kết = Truy cập hạn chế [HTTP ${urlCode || 403}]`
       );
     } else if (urlStatus === 'archived_alive') {
       telemetryParts.push(
-        'kiểm tra liên kết = Đã lưu trữ trên Wayback Machine (Link Rot)'
+        'kiểm tra liên kết = Đã lưu trữ trên Wayback Machine'
       );
     } else if (urlStatus === 'dead_link') {
       telemetryParts.push(
-        `kiểm tra liên kết = HTTP ${urlCode || 404} (liên kết chết / không thể truy cập)`
+        `kiểm tra liên kết = HTTP ${urlCode || 404} — liên kết không truy cập được`
       );
     } else if (urlStatus === 'fake_domain') {
-      telemetryParts.push('kiểm tra liên kết = tên miền giả mạo');
+      telemetryParts.push('kiểm tra liên kết = tên miền không hợp lệ');
     }
     const isRetracted =
       Boolean(verdict.is_retracted) ||
@@ -1429,7 +2033,7 @@ function buildLocalizedReasoning(verdict: Verdict, lang: 'vi' | 'en'): string {
       ? '⚠️ CẢNH BÁO NGHIÊM TRỌNG: Bài báo này đã bị rút hồi chính thức (RETRACTED PAPER). Không sử dụng làm nguồn trích dẫn khoa học! '
       : '';
     const telemetrySuffix =
-      telemetryParts.length > 0 ? ` (${telemetryParts.join(' · ')})` : '';
+      telemetryParts.length > 0 ? ` — ${telemetryParts.join(' · ')}.` : '';
 
     let mainText = '';
     if (verdict.label === 'resource') {
@@ -1440,7 +2044,7 @@ function buildLocalizedReasoning(verdict: Verdict, lang: 'vi' | 'en'): string {
       } else if (observedWeb?.title) {
         mainText = `Tài nguyên Web trực tuyến hợp lệ: đã trích xuất metadata trang HTML («${observedWeb.title}»${observedWeb.venue ? ` · ${observedWeb.venue}` : ''}). Mục này được phân loại là tài nguyên tham khảo trực tuyến và không tính điểm phạt vào chỉ số CIS.${telemetrySuffix}`;
       } else {
-        mainText = `Phát hiện tài nguyên Web / API phi học thuật (${verdict.citation_raw}). Mục này được phân loại là đường dẫn tài nguyên tham khảo và không tính điểm phạt vào chỉ số CIS.${telemetrySuffix}`;
+        mainText = `Phát hiện tài nguyên Web / văn bản tham khảo trực tuyến. Mục này được phân loại là nguồn web / văn bản và không tính điểm phạt vào chỉ số CIS.${telemetrySuffix}`;
       }
     } else if (verdict.mapping_status === 'missing_reference') {
       mainText =
@@ -1458,11 +2062,11 @@ function buildLocalizedReasoning(verdict: Verdict, lang: 'vi' | 'en'): string {
         urlStatus === 'dead_link'
           ? ' Lưu ý: Công trình học thuật có thật nhưng đường dẫn URL đính kèm bị hỏng (HTTP 404/DNS).'
           : '';
-      mainText = `Trích dẫn khớp chính xác với công trình trong ${srcStr}. Các trường thông tin (${fldStr}) hoàn toàn nhất quán với bản ghi gốc.${brokenLinkNoteVi}${telemetrySuffix}`;
+      mainText = `Trích dẫn khớp chính xác với công trình trong ${srcStr}. Các trường thông tin (${fldStr}) nhất quán với bản ghi gốc.${brokenLinkNoteVi}${telemetrySuffix}`;
     } else if (verdict.label === 'metadata_error') {
       if (isUrlContentMismatch) {
         const obsTitleNoteVi = observedWeb?.title
-          ? ` Trang web thực tế tại URL có tiêu đề: «${observedWeb.title}»${observedWeb.venue ? ` (${observedWeb.venue})` : ''}.`
+          ? ` Trang web thực tế tại URL có tiêu đề: «${observedWeb.title}»${observedWeb.venue ? ` — ${observedWeb.venue}` : ''}.`
           : '';
         mainText = `Đường dẫn URL phản hồi hợp lệ (HTTP ${urlCode || 200}), nhưng nội dung/tiêu đề trang web không khớp với tiêu đề tài liệu được trích dẫn.${obsTitleNoteVi} Vui lòng kiểm tra lại liên kết URL hoặc cập nhật đúng tiêu đề trang đích.${telemetrySuffix}`;
       } else if ((verdict.triggered_rules ?? []).includes('R-INCOMPLETE-METADATA')) {
@@ -1470,7 +2074,7 @@ function buildLocalizedReasoning(verdict: Verdict, lang: 'vi' | 'en'): string {
           mismatchedFields.length > 0
             ? ` (thiếu ${mismatchedFields.join(', ')})`
             : '';
-        mainText = `Thiếu quy cách trích dẫn học thuật${missingStrVi}: mục tham khảo chưa đủ thông tin định danh (tác giả, năm xuất bản, nơi công bố hoặc DOI/URL). Đây là lỗi trình bày trích dẫn chứ không phải nguồn do AI bịa đặt — vui lòng bổ sung đầy đủ thông tin.${telemetrySuffix}`;
+        mainText = `Thiếu quy cách trích dẫn học thuật${missingStrVi}: mục tham khảo chưa đủ thông tin định danh (tác giả, năm xuất bản, nơi công bố hoặc DOI/URL). Đây là lỗi trình bày trích dẫn — vui lòng bổ sung đầy đủ thông tin.${telemetrySuffix}`;
       } else if (
         (verdict.triggered_rules ?? []).includes('R-CROSS-LINGUAL-TITLE-MATCH') ||
         verdict.features?.cross_lingual_title_detected
@@ -1478,14 +2082,14 @@ function buildLocalizedReasoning(verdict: Verdict, lang: 'vi' | 'en'): string {
         const xlSimPct = verdict.features?.cross_lingual_title_sim
           ? ` (${Math.round(verdict.features.cross_lingual_title_sim * 100)}% tương đồng ngữ nghĩa Việt ↔ Anh)`
           : '';
-        mainText = `Tiêu đề tiếng Việt dịch thuật khớp ngữ nghĩa với công trình gốc tiếng Anh${xlSimPct}, nhưng theo quy định trích dẫn học thuật TDTU cần giữ nguyên tiêu đề gốc bằng tiếng nước ngoài (có thể kèm [Bản dịch tiếng Việt] trong ngoặc vuông).${telemetrySuffix}`;
+        mainText = `Tiêu đề tiếng Việt dịch thuật khớp ngữ nghĩa với công trình gốc tiếng Anh${xlSimPct}, nhưng nên giữ nguyên tiêu đề gốc bằng tiếng nước ngoài (có thể kèm [Bản dịch tiếng Việt] trong ngoặc vuông).${telemetrySuffix}`;
       } else {
         const srcStr =
           sources.length > 0 ? ` trên ${sources.join(' và ')}` : '';
         const errFldStr =
           mismatchedFields.length > 0
             ? mismatchedFields.join(', ')
-            : 'siêu dữ liệu (năm xuất bản / tiêu đề)';
+            : 'thông tin thư mục (năm xuất bản / tiêu đề)';
         mainText = `Tìm thấy công trình học thuật tương ứng${srcStr}, nhưng phát hiện sai lệch ở trường: ${errFldStr}. Vui lòng đối chiếu và hiệu đính lại theo bản ghi gốc.${telemetrySuffix}`;
       }
     } else if (verdict.label === 'suspected_hallucination') {
@@ -1495,21 +2099,26 @@ function buildLocalizedReasoning(verdict: Verdict, lang: 'vi' | 'en'): string {
       const chimSrc = (verdict.matched_sources ?? []).find((s) => s.title);
       if (isChimeric && chimSrc?.title) {
         const chimMeta = [chimSrc.authors?.[0], chimSrc.year].filter(Boolean).join(', ');
-        mainText = `Phát hiện DOI lai ghép (R-CHIMERIC-DOI-MISMATCH): mã DOI trích dẫn thực tế trỏ tới công trình «${chimSrc.title}»${chimMeta ? ` (${chimMeta})` : ''}, mâu thuẫn hoàn toàn với tiêu đề, tác giả và nơi công bố trong bài viết.${telemetrySuffix}`;
+        mainText = `Mã DOI trích dẫn trỏ tới một công trình khác: «${chimSrc.title}»${chimMeta ? ` (${chimMeta})` : ''}, khác biệt với tiêu đề, tác giả và nơi công bố trong bài viết. Cần đối chiếu lại bản gốc.${telemetrySuffix}`;
       } else {
-        mainText = `Không tìm thấy bất kỳ công trình học thuật nào khớp với trích dẫn này trên hệ thống 15+ cơ sở dữ liệu học thuật & kỹ thuật (Local ACL FTS5, Crossref, OpenAlex, DataCite, DOAJ, OpenAIRE/HAL, NCBI/bioRxiv, DBLP, arXiv, OpenLibrary, Europe PMC, Hugging Face, IETF RFC, Global DOI RA). Nghi ngờ trích dẫn suy diễn (hallucination) hoặc thông tin không có thật.${telemetrySuffix}`;
+        mainText = `Không tìm thấy công trình học thuật khớp với trích dẫn này trên hệ thống 15+ cơ sở dữ liệu học thuật & kỹ thuật đối chiếu. Cần kiểm tra lại nguồn gốc tài liệu trước khi sử dụng.${telemetrySuffix}`;
       }
     } else {
       const srcStr =
         sources.length > 0
           ? `Tìm thấy ứng viên tiềm năng trên ${sources.join(', ')}, nhưng bằng chứng siêu dữ liệu chưa đủ mạnh để xác nhận tự động.`
-          : 'Chưa đủ bằng chứng siêu dữ liệu từ các nguồn truy hồi để xác minh tự động trích dẫn này.';
-      mainText = `${srcStr} Khuyến nghị giảng viên kiểm tra thủ công.${telemetrySuffix}`;
+          : 'Chưa đủ dữ liệu từ các nguồn truy hồi để xác minh tự động trích dẫn này.';
+      mainText = `${srcStr} Khuyến nghị kiểm tra thủ công thêm.${telemetrySuffix}`;
     }
 
-    return verdict.override_note
-      ? `[Ghi đè bởi Giảng viên: ${verdict.override_note}] — ${retractionPrefixVi}${mainText}`
-      : `${retractionPrefixVi}${mainText}`;
+    const cleanedVi = (
+      verdict.override_note
+        ? `[Ghi đè bởi Giảng viên: ${verdict.override_note}] — ${retractionPrefixVi}${mainText}`
+        : `${retractionPrefixVi}${mainText}`
+    )
+      .replace(/\)\)+/g, ')')
+      .replace(/\.\./g, '.');
+    return cleanedVi;
   }
 
   // English ('en') — 100% pure English
@@ -1525,27 +2134,27 @@ function buildLocalizedReasoning(verdict: Verdict, lang: 'vi' | 'en'): string {
   }
   if (neuralScore) {
     telemetryPartsEn.push(
-      `Neural context alignment = ${neuralScore} [${neuralLevel || 'checked'}]`
+      `context alignment = ${neuralScore} [${neuralLevel || 'checked'}]`
     );
   }
   if (urlStatus === 'alive') {
     telemetryPartsEn.push(
       isUrlContentMismatch
-        ? `link check = HTTP ${urlCode || 200} (wrong page content)`
+        ? `link check = HTTP ${urlCode || 200} — wrong page content`
         : `link check = HTTP ${urlCode || 200} OK`,
     );
   } else if (urlStatus === 'restricted_alive') {
     telemetryPartsEn.push(
-      `link check = HTTP ${urlCode || 403} (publisher paywall — link alive)`
+      `link check = Restricted Access [HTTP ${urlCode || 403}]`
     );
   } else if (urlStatus === 'archived_alive') {
     telemetryPartsEn.push(
-      'link check = Wayback Machine snapshot verified (Link Rot)'
+      'link check = Wayback Machine snapshot verified'
     );
   } else if (urlStatus === 'dead_link') {
-    telemetryPartsEn.push(`link check = HTTP ${urlCode || 404} (dead link)`);
+    telemetryPartsEn.push(`link check = HTTP ${urlCode || 404} — broken link`);
   } else if (urlStatus === 'fake_domain') {
-    telemetryPartsEn.push('link check = fake/placeholder domain');
+    telemetryPartsEn.push('link check = invalid domain');
   }
   const isRetractedEn =
     Boolean(verdict.is_retracted) ||
@@ -1554,7 +2163,7 @@ function buildLocalizedReasoning(verdict: Verdict, lang: 'vi' | 'en'): string {
     ? '⚠️ CRITICAL WARNING: This publication has been officially RETRACTED. Do not cite as valid scientific evidence! '
     : '';
   const telemetrySuffixEn =
-    telemetryPartsEn.length > 0 ? ` (${telemetryPartsEn.join(' · ')})` : '';
+    telemetryPartsEn.length > 0 ? ` — ${telemetryPartsEn.join(' · ')}.` : '';
 
   let mainTextEn = '';
   if (verdict.label === 'resource') {
@@ -1564,7 +2173,7 @@ function buildLocalizedReasoning(verdict: Verdict, lang: 'vi' | 'en'): string {
     } else if (observedWeb?.title) {
       mainTextEn = `Verified live web resource: extracted HTML metadata (“${observedWeb.title}”${observedWeb.venue ? ` · ${observedWeb.venue}` : ''}). Classified as a web resource and excluded from the CIS penalty calculation.${telemetrySuffixEn}`;
     } else {
-      mainTextEn = `Non-scholarly Web / API resource detected (${verdict.citation_raw}). Classified as a web resource and excluded from the CIS penalty calculation.${telemetrySuffixEn}`;
+      mainTextEn = `Non-scholarly Web / API resource detected. Classified as a web / legal resource and excluded from the CIS penalty calculation.${telemetrySuffixEn}`;
     }
   } else if (verdict.mapping_status === 'missing_reference') {
     mainTextEn =
@@ -1584,7 +2193,7 @@ function buildLocalizedReasoning(verdict: Verdict, lang: 'vi' | 'en'): string {
   } else if (verdict.label === 'metadata_error') {
     if (isUrlContentMismatch) {
       const obsTitleNoteEn = observedWeb?.title
-        ? ` The actual web page at this URL is titled “${observedWeb.title}”${observedWeb.venue ? ` (${observedWeb.venue})` : ''}.`
+        ? ` The actual web page at this URL is titled “${observedWeb.title}”${observedWeb.venue ? ` — ${observedWeb.venue}` : ''}.`
         : '';
       mainTextEn = `The cited URL is reachable (HTTP ${urlCode || 200}), but the web page title and metadata do not match the claimed citation title.${obsTitleNoteEn} Please verify that the URL points to the intended resource.${telemetrySuffixEn}`;
     } else if ((verdict.triggered_rules ?? []).includes('R-INCOMPLETE-METADATA')) {
@@ -1592,7 +2201,7 @@ function buildLocalizedReasoning(verdict: Verdict, lang: 'vi' | 'en'): string {
         mismatchedFields.length > 0
           ? ` (missing ${mismatchedFields.join(', ')})`
           : '';
-      mainTextEn = `Incomplete bibliographic reference${missingStrEn}: this entry lacks required scholarly identifiers (author, publication year, academic venue, or DOI/URL). This reflects incomplete formatting rather than an AI-fabricated source — please complete the citation details.${telemetrySuffixEn}`;
+      mainTextEn = `Incomplete bibliographic reference${missingStrEn}: this entry lacks required scholarly identifiers (author, publication year, academic venue, or DOI/URL). Please complete the citation details.${telemetrySuffixEn}`;
     } else if (
       (verdict.triggered_rules ?? []).includes('R-CROSS-LINGUAL-TITLE-MATCH') ||
       verdict.features?.cross_lingual_title_detected
@@ -1600,7 +2209,7 @@ function buildLocalizedReasoning(verdict: Verdict, lang: 'vi' | 'en'): string {
       const xlSimPctEn = verdict.features?.cross_lingual_title_sim
         ? ` (${Math.round(verdict.features.cross_lingual_title_sim * 100)}% VI↔EN semantic match)`
         : '';
-      mainTextEn = `Translated Vietnamese title semantically matches the canonical English publication${xlSimPctEn}, but TDTU academic citation rules require preserving the original foreign-language title (optionally followed by [Vietnamese translation] in brackets).${telemetrySuffixEn}`;
+      mainTextEn = `Translated Vietnamese title semantically matches the canonical English publication${xlSimPctEn}, but academic citation guidelines recommend preserving the original foreign-language title (optionally followed by [Vietnamese translation] in brackets).${telemetrySuffixEn}`;
     } else {
       const srcStr = sources.length > 0 ? ` in ${sources.join(' and ')}` : '';
       const errFldStr =
@@ -1616,9 +2225,9 @@ function buildLocalizedReasoning(verdict: Verdict, lang: 'vi' | 'en'): string {
     const chimSrcEn = (verdict.matched_sources ?? []).find((s) => s.title);
     if (isChimericEn && chimSrcEn?.title) {
       const chimMetaEn = [chimSrcEn.authors?.[0], chimSrcEn.year].filter(Boolean).join(', ');
-      mainTextEn = `Chimeric DOI detected (R-CHIMERIC-DOI-MISMATCH): the cited DOI resolves to “${chimSrcEn.title}”${chimMetaEn ? ` (${chimMetaEn})` : ''}, directly contradicting the claimed title, authors, and venue.${telemetrySuffixEn}`;
+      mainTextEn = `Cited DOI resolves to a different publication: “${chimSrcEn.title}”${chimMetaEn ? ` (${chimMetaEn})` : ''}, differing from the claimed title, authors, and venue. Please verify against the original source.${telemetrySuffixEn}`;
     } else {
-      mainTextEn = `No matching publication was found across all 15+ scholarly & technical databases (Local ACL FTS5, Crossref, OpenAlex, DataCite, DOAJ, OpenAIRE/HAL, NCBI/bioRxiv, DBLP, arXiv, OpenLibrary, Europe PMC, Hugging Face, IETF RFC, Global DOI RA). Suspected hallucinated or fabricated reference.${telemetrySuffixEn}`;
+      mainTextEn = `No matching publication was found across 15+ checked scholarly & technical databases. Please verify the original source manually before citing.${telemetrySuffixEn}`;
     }
   } else {
     mainTextEn =
@@ -1627,9 +2236,14 @@ function buildLocalizedReasoning(verdict: Verdict, lang: 'vi' | 'en'): string {
         : `Insufficient bibliographic evidence across queried databases to automatically verify this citation. Manual review recommended.${telemetrySuffixEn}`;
   }
 
-  return verdict.override_note
-    ? `[Instructor Override: ${verdict.override_note}] — ${retractionPrefixEn}${mainTextEn}`
-    : `${retractionPrefixEn}${mainTextEn}`;
+  const cleanedEn = (
+    verdict.override_note
+      ? `[Instructor Override: ${verdict.override_note}] — ${retractionPrefixEn}${mainTextEn}`
+      : `${retractionPrefixEn}${mainTextEn}`
+  )
+    .replace(/\)\)+/g, ')')
+    .replace(/\.\./g, '.');
+  return cleanedEn;
 }
 
 function enrichVerdictItem(
@@ -1639,9 +2253,10 @@ function enrichVerdictItem(
   extractedCitations: Citation[],
   lang: 'vi' | 'en'
 ): EnrichedCitationItem {
-  const verdict: Verdict = isUrlResource(rawVerdict)
-    ? { ...rawVerdict, label: 'resource' }
-    : rawVerdict;
+  const verdict: Verdict = {
+    ...rawVerdict,
+    label: getEffectiveVerdictKey(rawVerdict),
+  };
   const marker = getCitationMarkerLabel(verdict, index);
 
   const mismatchedFieldsSet =
@@ -2037,6 +2652,10 @@ function enrichVerdictItem(
   const hasLegalMismatch = (verdict.triggered_rules ?? []).includes(
     'R-VN-LEGAL-MISMATCH',
   );
+  const unmatchedNeutralStatus = (): { status: FieldStatus; label: string } => ({
+    status: 'missing',
+    label: lang === 'vi' ? '— Chưa đối chiếu được' : '— Not matched',
+  });
 
   const computeTitleStatus = (): { status: FieldStatus; label?: string } => {
     if (isUrlContentMismatch) {
@@ -2051,7 +2670,7 @@ function enrichVerdictItem(
       }
       return { status: 'missing', label: lang === 'vi' ? 'Đã ghi' : 'Provided' };
     }
-    if (!retrievedMeta) return { status: 'mismatch', label: 'Diff' };
+    if (!retrievedMeta) return unmatchedNeutralStatus();
     if (isLegalRule && verdict.label === 'resource' && !mismatchedFieldsSet.has('title')) {
       return { status: 'match', label: '100% Match' };
     }
@@ -2094,7 +2713,7 @@ function enrichVerdictItem(
       return { status: 'missing', label: lang === 'vi' ? 'Đã ghi' : 'Provided' };
     }
     if (citedMeta.authors === '—') return { status: 'missing' };
-    if (!retrievedMeta) return { status: 'mismatch', label: 'Diff' };
+    if (!retrievedMeta) return unmatchedNeutralStatus();
     if (
       isLegalRule &&
       verdict.label === 'resource' &&
@@ -2145,7 +2764,7 @@ function enrichVerdictItem(
       return { status: 'missing', label: lang === 'vi' ? 'Đã ghi' : 'Provided' };
     }
     if (citedMeta.year === '—') return { status: 'missing' };
-    if (!retrievedMeta) return { status: 'mismatch', label: 'Diff' };
+    if (!retrievedMeta) return unmatchedNeutralStatus();
     if (
       mismatchedFieldsSet.has('year') ||
       (validYearDistance !== undefined && validYearDistance > 0)
@@ -2187,7 +2806,7 @@ function enrichVerdictItem(
     if (citedMeta.venue === '—' && isIncompleteMeta) {
       return { status: 'missing' };
     }
-    if (!retrievedMeta) return { status: 'mismatch', label: 'Diff' };
+    if (!retrievedMeta) return unmatchedNeutralStatus();
     if (mismatchedFieldsSet.has('venue')) return { status: 'mismatch', label: 'Diff' };
     if (isLegalRule && verdict.label === 'resource' && !hasLegalMismatch) {
       return { status: 'match', label: '100% Match' };
@@ -2245,7 +2864,12 @@ function enrichVerdictItem(
     if (citedMeta.doi === '—' && (!retrievedMeta || retrievedMeta.doi === '—')) {
       return { status: 'missing' };
     }
-    if (!retrievedMeta) return { status: 'mismatch', label: 'Diff' };
+    if (!retrievedMeta) {
+      if (mismatchedFieldsSet.has('doi') || hasDoiRuleConflict) {
+        return { status: 'mismatch', label: 'Diff' };
+      }
+      return unmatchedNeutralStatus();
+    }
     if (mismatchedFieldsSet.has('doi') || hasDoiRuleConflict) {
       return { status: 'mismatch', label: 'Diff' };
     }
@@ -2294,13 +2918,25 @@ function enrichVerdictItem(
       return { status: 'match', label: `HTTP ${urlCode || 200} OK` };
     }
     if (urlStatus === 'restricted_alive') {
-      return { status: 'match', label: `HTTP ${urlCode || 403} (Alive)` };
+      return {
+        status: 'match',
+        label:
+          lang === 'vi'
+            ? `Truy cập hạn chế (HTTP ${urlCode || 403})`
+            : `Restricted Access (HTTP ${urlCode || 403})`,
+      };
     }
     if (urlStatus === 'archived_alive') {
       return { status: 'partial', label: 'Wayback Archived' };
     }
     if (urlStatus === 'dead_link') {
-      return { status: 'mismatch', label: `HTTP ${urlCode || 404} Dead` };
+      return {
+        status: 'mismatch',
+        label:
+          lang === 'vi'
+            ? `Liên kết lỗi (HTTP ${urlCode || 404})`
+            : `Broken Link (HTTP ${urlCode || 404})`,
+      };
     }
     if (urlStatus === 'fake_domain') {
       return { status: 'mismatch', label: 'Fake Domain' };
@@ -2314,10 +2950,13 @@ function enrichVerdictItem(
     if (!retrievedMeta && isIncompleteMeta && citedMeta.url !== '—') {
       return { status: 'missing', label: lang === 'vi' ? 'Đã ghi' : 'Provided' };
     }
-    if (!retrievedMeta && !isWebResourceMode) {
-      return { status: 'mismatch', label: 'Broken Link' };
-    }
     const citedUrlIsDoi = /^https?:\/\/(?:dx\.)?doi\.org\//i.test(citedMeta.url);
+    if (!retrievedMeta && !isWebResourceMode) {
+      if (citedUrlIsDoi && (hasDoiRuleConflict || mismatchedFieldsSet.has('doi'))) {
+        return { status: 'mismatch', label: 'Broken Link' };
+      }
+      return unmatchedNeutralStatus();
+    }
     if (citedUrlIsDoi) {
       const doiEval = computeDoiStatus();
       if (doiEval.status === 'mismatch') {
@@ -2564,7 +3203,7 @@ function enrichVerdictItem(
     verdict.triggered_rules,
     lang
   );
-  const mappingVisual = getMappingBadgeVisuals(verdict.mapping_status);
+  const mappingVisual = getMappingBadgeVisuals(verdict.mapping_status, lang);
   const linkBadge = getLinkBadgeVisuals(verdict, lang);
 
   return {
@@ -2660,6 +3299,7 @@ export function EssayPage() {
   const [selectedCitationId, setSelectedCitationId] = useState<string | null>(null);
   const [filterLabel, setFilterLabel] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [sortBy, setSortBy] = useState<'priority' | 'index_asc' | 'index_desc' | 'author_asc'>('priority');
   const [workspaceMode, setWorkspaceMode] = useState<ReportWorkspaceMode>(resolveInitialMode);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [lockedFeatureName, setLockedFeatureName] = useState<string>('');
@@ -2667,13 +3307,18 @@ export function EssayPage() {
   const [deepDrawerOpen, setDeepDrawerOpen] = useState(false);
   const [customRevisionDiff, setCustomRevisionDiff] = useState<RevisionDiffData | null>(null);
   const [revisionExpanded, setRevisionExpanded] = useState(false);
+  const [mobileRevisionOpen, setMobileRevisionOpen] = useState(false);
+  const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
   const [loadingRevisionDiff, setLoadingRevisionDiff] = useState(false);
+  const isBelowLg = useIsBelowLg();
   const { containerRef: queueFilterPillRef, pillStyle: queueFilterPill } =
     useSlidingPill<HTMLDivElement>(`${filterLabel}-${lang}-${workspaceMode}`);
 
   useEffect(() => {
     setCustomRevisionDiff(null);
     setRevisionExpanded(false);
+    setMobileRevisionOpen(false);
+    setMobileDetailOpen(false);
     setDeepDrawerOpen(false);
   }, [essayId]);
 
@@ -2693,6 +3338,10 @@ export function EssayPage() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || e.defaultPrevented) return;
+      if (mobileDetailOpen) {
+        setMobileDetailOpen(false);
+        return;
+      }
       if (
         upgradeOpen ||
         remediationOpen ||
@@ -2708,7 +3357,7 @@ export function EssayPage() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [upgradeOpen, remediationOpen]);
+  }, [upgradeOpen, remediationOpen, mobileDetailOpen]);
 
   // Deep link: /verification/report/:id?citation=<verdict id> (e.g. from the
   // teacher Pending Reviews queue) selects and scrolls to that citation once.
@@ -2737,13 +3386,20 @@ export function EssayPage() {
     requestAnimationFrame(() => requestAnimationFrame(scroll));
   }, [report, citationParam]);
 
-  const errorMessage =
+  const rawErrorMessage =
     essayId === null
       ? t('essay.invalidEssayId')
       : error
         ? error instanceof Error
           ? error.message
           : t('essay.failedLoadReport')
+        : null;
+
+  const friendlyErrorMessage =
+    essayId === null
+      ? t('essay.invalidEssayId')
+      : error
+        ? formatUserError(error, lang)
         : null;
 
   const enrichedItems = useMemo(() => {
@@ -2764,20 +3420,14 @@ export function EssayPage() {
       if (label === 'suspected_hallucination') return 0;
       if (label === 'metadata_error') return 1;
       if (label === 'unresolved') return 2;
-      return 3;
+      if (label === 'verified') return 3;
+      return 4;
     };
 
     return enrichedItems
       .filter((item) => {
         if (filterLabel !== 'all') {
-          if (filterLabel === 'unresolved') {
-            if (
-              item.verdict.label !== 'unresolved' &&
-              item.verdict.label !== 'resource'
-            ) {
-              return false;
-            }
-          } else if (item.verdict.label !== filterLabel) {
+          if (item.verdict.label !== filterLabel) {
             return false;
           }
         }
@@ -2793,12 +3443,18 @@ export function EssayPage() {
         }
         return true;
       })
-      .sort(
-        (a, b) =>
+      .sort((a, b) => {
+        if (sortBy === 'index_asc') return a.index - b.index;
+        if (sortBy === 'index_desc') return b.index - a.index;
+        if (sortBy === 'author_asc') {
+          return a.inText.localeCompare(b.inText) || a.index - b.index;
+        }
+        return (
           verdictPriority(a.verdict.label) - verdictPriority(b.verdict.label) ||
-          a.index - b.index,
-      );
-  }, [enrichedItems, filterLabel, searchQuery]);
+          a.index - b.index
+        );
+      });
+  }, [enrichedItems, filterLabel, searchQuery, sortBy]);
 
   async function handleOverride(
     verdict: Verdict,
@@ -2883,12 +3539,12 @@ export function EssayPage() {
     }
   };
 
-  if (errorMessage) {
+  if (rawErrorMessage) {
     const statusCode = (error as { status?: number } | null)?.status;
     const isPipelineJobFailed =
       essayId !== null &&
       (statusCode === 409 ||
-        /409|failed|thất bại|analysis failed|pipeline/i.test(errorMessage));
+        /409|failed|thất bại|analysis failed|pipeline/i.test(rawErrorMessage));
 
     if (isPipelineJobFailed) {
       return (
@@ -2907,7 +3563,7 @@ export function EssayPage() {
                   : 'Manuscript Analysis Failed'}
               </h2>
               <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed break-words">
-                {errorMessage}
+                {friendlyErrorMessage || rawErrorMessage}
               </p>
               <div className="flex flex-wrap items-center gap-3 pt-2">
                 <Link
@@ -2931,20 +3587,39 @@ export function EssayPage() {
     }
 
     return (
-      <Alert variant="destructive" className="card p-6">
-        <AlertCircle className="h-5 w-5" />
-        <AlertTitle className="font-medium">
-          {t('common.error')}: {errorMessage}
-        </AlertTitle>
-        <AlertDescription>
-          <Link
-            to="/history"
-            className="text-indigo-600 dark:text-indigo-400 hover:underline mt-2 inline-block"
-          >
-            {t('essay.backToReports')}
-          </Link>
-        </AlertDescription>
-      </Alert>
+      <div
+        data-testid="essay-error-card"
+        className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 sm:p-8 shadow-sm max-w-2xl mx-auto my-8"
+      >
+        <div className="flex items-start gap-4">
+          <div className="h-12 w-12 rounded-2xl bg-amber-50 dark:bg-amber-950/70 border border-amber-200 dark:border-amber-800 flex items-center justify-center shrink-0">
+            <AlertCircle className="h-6 w-6 text-amber-600 dark:text-amber-400" />
+          </div>
+          <div className="space-y-3 flex-1 min-w-0">
+            <h2 className="font-display text-lg sm:text-xl font-bold text-slate-900 dark:text-slate-100">
+              {lang === 'vi' ? 'Không thể mở báo cáo' : 'Unable to Open Report'}
+            </h2>
+            <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed break-words">
+              {friendlyErrorMessage}
+            </p>
+            <div className="flex flex-wrap items-center gap-3 pt-2">
+              <Link
+                to="/history"
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white transition-colors"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                {lang === 'vi' ? 'Về lịch sử báo cáo' : 'Back to History'}
+              </Link>
+              <Link
+                to="/upload"
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-colors"
+              >
+                {lang === 'vi' ? 'Tải lên tài liệu mới' : 'Upload New Document'}
+              </Link>
+            </div>
+          </div>
+        </div>
+      </div>
     );
   }
 
@@ -2974,18 +3649,7 @@ export function EssayPage() {
     enrichedItems.find((i) => i.verdict.citation_id === selectedCitationId) ||
     defaultItem;
 
-  const counts = {
-    all: enrichedItems.length,
-    verified: enrichedItems.filter((i) => i.verdict.label === 'verified').length,
-    metadata_error: enrichedItems.filter((i) => i.verdict.label === 'metadata_error')
-      .length,
-    suspected_hallucination: enrichedItems.filter(
-      (i) => i.verdict.label === 'suspected_hallucination'
-    ).length,
-    unresolved: enrichedItems.filter(
-      (i) => i.verdict.label === 'unresolved' || i.verdict.label === 'resource'
-    ).length,
-  };
+  const counts = computeReportBucketCounts(report.verdicts ?? []);
 
   const activeRevisionDiff = customRevisionDiff ?? report.revision_diff ?? null;
   const isSandboxManuscript = Boolean(
@@ -3024,32 +3688,6 @@ export function EssayPage() {
 
   const isAbnormalMapping = (status?: string | null) =>
     Boolean(status && status !== 'matched');
-
-  const cisScore = report.cis.score;
-  const cisHealthPill =
-    cisScore >= 90
-      ? {
-          text: lang === 'vi' ? '✓ Rất đáng tin cậy' : '✓ Highly Reliable',
-          className:
-            'bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-950/70 dark:text-emerald-300 dark:border-emerald-800',
-        }
-      : cisScore >= 75
-        ? {
-            text: lang === 'vi' ? 'Khá tốt · Cần rà soát nhẹ' : 'Good · Minor Review',
-            className:
-              'bg-indigo-50 text-indigo-800 border-indigo-200 dark:bg-indigo-950/70 dark:text-indigo-300 dark:border-indigo-800',
-          }
-        : cisScore >= 50
-          ? {
-              text: lang === 'vi' ? '⚠ Cần kiểm tra kỹ' : '⚠ Needs Review',
-              className:
-                'bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/70 dark:text-amber-300 dark:border-amber-800',
-            }
-          : {
-              text: lang === 'vi' ? '✕ Nhiều rủi ro trích dẫn' : '✕ High Citation Risk',
-              className:
-                'bg-red-50 text-red-800 border-red-200 dark:bg-red-950/70 dark:text-red-300 dark:border-red-800',
-            };
 
   const getPrimarySourceExternalUrl = (item: EnrichedCitationItem): string | null => {
     const rawDoi =
@@ -3103,19 +3741,18 @@ export function EssayPage() {
   };
 
   const docDiag = report.document_diagnostics;
-  const isScannedPdfDetected = Boolean(
-    docDiag?.is_scanned_pdf ||
-      (!report.filename.toLowerCase().endsWith('.docx') &&
-        report.num_pages > 0 &&
-        report.verdicts.length === 0 &&
-        (report.extracted_citations?.length ?? 0) === 0),
+  const isScannedPdfDetected = isReportUnscannable(report);
+  const scannedPdfNoticeObj = getScannedPdfNotice(
+    lang,
+    docDiag?.scanned_pages_count ?? report.num_pages,
+    report.num_pages,
   );
-
-  const attentionCount = counts.metadata_error + counts.suspected_hallucination;
-  const consistencyAllMatched =
-    (report.linking_summary?.missing_reference ?? 0) === 0 &&
-    (report.linking_summary?.uncited_reference ?? 0) === 0 &&
-    (report.linking_summary?.in_text_mismatch ?? 0) === 0;
+  const scannedPdfNotice =
+    lang === 'en'
+      ? (docDiag as { warning_message_en?: string } | undefined)?.warning_message_en ||
+        scannedPdfNoticeObj.description
+      : (docDiag as { warning_message_vi?: string } | undefined)?.warning_message_vi ||
+        scannedPdfNoticeObj.description;
 
   return (
     <div className="space-y-3.5 pb-10">
@@ -3180,19 +3817,16 @@ export function EssayPage() {
               <div className="space-y-1.5">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="px-2.5 py-0.5 rounded-md text-[11px] font-bold bg-amber-600 text-white uppercase tracking-wider">
-                    SCANNED_PDF_DETECTED
+                    {lang === 'vi' ? 'PDF dạng ảnh quét' : 'Scanned PDF'}
                   </span>
                   <h3 className="text-sm sm:text-base font-bold text-amber-950 dark:text-amber-100">
                     {lang === 'vi'
-                      ? 'Cảnh báo: Phát hiện Tài liệu PDF dạng Ảnh quét (Thiếu lớp văn bản)'
-                      : 'Alert: Scanned / Image-Only PDF Detected (Missing Digital Text Layer)'}
+                      ? 'Phát hiện Tài liệu PDF dạng Ảnh quét (Thiếu lớp văn bản)'
+                      : 'Scanned / Image-Only PDF Detected (Missing Digital Text Layer)'}
                   </h3>
                 </div>
                 <p className="text-xs sm:text-sm text-amber-900/90 dark:text-amber-200/90 leading-relaxed max-w-3xl">
-                  {docDiag?.warning_message ||
-                    (lang === 'vi'
-                      ? 'Tài liệu PDF này được tạo từ máy scan hoặc ảnh chụp trang giấy nên không chứa lớp ký tự số hóa để bóc tách trích dẫn. Vui lòng tải lên bản gốc Word (.docx) hoặc PDF xuất trực tiếp từ Word/LaTeX.'
-                      : 'This PDF appears to be scanned from images without an extractable text layer. Please run OCR or upload the native .docx / digital PDF exported from Word or LaTeX.')}
+                  {scannedPdfNotice}
                 </p>
                 <div className="flex flex-wrap items-center gap-3 pt-1 text-xs text-amber-800 dark:text-amber-300">
                   <span>
@@ -3205,7 +3839,10 @@ export function EssayPage() {
                     docDiag.avg_chars_per_page >= 0 && (
                       <span>
                         • {lang === 'vi' ? 'Mật độ ký tự trung bình' : 'Avg extractable chars/page'}:{' '}
-                        <strong>{docDiag.avg_chars_per_page} chars/page</strong>
+                        <strong>
+                          {docDiag.avg_chars_per_page}{' '}
+                          {lang === 'vi' ? 'ký tự/trang' : 'chars/page'}
+                        </strong>
                       </span>
                     )}
                 </div>
@@ -3226,14 +3863,46 @@ export function EssayPage() {
         </div>
       )}
 
-      {/* Slim Revision Progress Banner (ONLY shown when actual changes exist between v1 and v2) */}
+      {/* Slim Revision Progress Banner (Collapsed to 1-line pill by default on Mobile < md) */}
       {shouldShowRevisionDiff && activeRevisionDiff && !isZeroChangeRevision && (
         <div
           data-testid="revision-diff-banner"
           data-quiet-unchanged="false"
-          className="rounded-2xl border border-indigo-200/90 dark:border-indigo-800/80 bg-gradient-to-r from-emerald-50/80 via-white to-indigo-50/70 dark:from-emerald-950/30 dark:via-slate-900 dark:to-indigo-950/40 px-4 py-3 shadow-sm overflow-hidden"
+          className="rounded-2xl border border-indigo-200/90 dark:border-indigo-800/80 bg-gradient-to-r from-emerald-50/80 via-white to-indigo-50/70 dark:from-emerald-950/30 dark:via-slate-900 dark:to-indigo-950/40 px-4 py-2.5 md:py-3 shadow-sm overflow-hidden"
         >
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 min-w-0">
+          {/* Compact 1-Line Mobile Summary Pill (< md) */}
+          <button
+            type="button"
+            data-testid="mobile-revision-diff-toggle"
+            aria-expanded={mobileRevisionOpen}
+            onClick={() => setMobileRevisionOpen((v) => !v)}
+            className="md:hidden w-full flex items-center justify-between gap-2 text-left text-xs cursor-pointer"
+          >
+            <span className="inline-flex items-center gap-2 min-w-0">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-600 text-white shrink-0">
+                <GitBranch className="h-3 w-3" />
+                v1 → v2
+              </span>
+              <span className="font-semibold text-slate-800 dark:text-slate-200 truncate">
+                {(activeRevisionDiff.cis_before ?? 0).toFixed(1)}% →{' '}
+                {(activeRevisionDiff.cis_after ?? report.cis.score).toFixed(1)}% (
+                {(activeRevisionDiff.cis_delta ?? 0) >= 0
+                  ? `+${(activeRevisionDiff.cis_delta ?? 0).toFixed(1)}%`
+                  : `${(activeRevisionDiff.cis_delta ?? 0).toFixed(1)}%`}
+                )
+              </span>
+            </span>
+            <span className="inline-flex items-center gap-1 text-indigo-600 dark:text-indigo-400 font-semibold shrink-0">
+              <span>{mobileRevisionOpen ? (lang === 'vi' ? 'Ẩn' : 'Hide') : (lang === 'vi' ? 'Xem' : 'View')}</span>
+              <SymmetricChevron open={mobileRevisionOpen} size={13} />
+            </span>
+          </button>
+
+          <div
+            className={`${
+              mobileRevisionOpen ? 'flex mt-2.5 pt-2.5 border-t border-indigo-200/60 dark:border-indigo-800/60' : 'hidden'
+            } md:flex flex-col lg:flex-row lg:items-center justify-between gap-3 min-w-0`}
+          >
             <div className="flex flex-wrap items-center gap-2.5 min-w-0 text-xs sm:text-[13px]">
               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-indigo-600 text-white">
                 <GitBranch className="h-3 w-3 shrink-0" />
@@ -3522,73 +4191,18 @@ export function EssayPage() {
         </div>
       )}
 
-      {/* Zone 2: Unified Summary Health & Single-Purpose View Switcher Bar */}
-      <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 px-4 py-3 sm:px-5 shadow-sm flex flex-wrap items-center justify-between gap-3.5">
-        <div
-          data-testid="report-health-summary"
-          className="flex flex-wrap items-center gap-3.5 min-w-0"
-        >
-          <ScoreRing
-            data-testid="cis-score-ring"
-            value={cisScore}
-            size={40}
-            thickness={4.2}
-            color={
-              cisScore >= 90
-                ? '#10b981'
-                : cisScore >= 75
-                  ? '#6366f1'
-                  : cisScore >= 50
-                    ? '#f59e0b'
-                    : '#ef4444'
-            }
-          />
-          <div className="flex flex-col justify-center">
-            <div className="flex items-center gap-2 flex-wrap leading-none">
-              <span className="text-lg sm:text-[19px] font-extrabold tracking-tight tabular-nums text-slate-900 dark:text-white leading-none">
-                <SubtleNumber value={report.cis.score.toFixed(1)} suffix="%" />
-              </span>
-              <span
-                data-testid="cis-qualitative-pill"
-                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${cisHealthPill.className}`}
-              >
-                {cisHealthPill.text}
-              </span>
-            </div>
-            <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 mt-1 leading-tight">
-              <span>
-                <strong className="text-slate-900 dark:text-slate-200">{counts.verified}</strong>{' '}
-                {lang === 'vi' ? 'hợp lệ' : 'verified'}
-              </span>
-              {attentionCount > 0 && (
-                <>
-                  <span>•</span>
-                  <span className="font-semibold text-amber-700 dark:text-amber-400">
-                    {attentionCount}{' '}
-                    {lang === 'vi' ? 'cần kiểm tra' : 'need review'}
-                  </span>
-                </>
-              )}
-              {counts.unresolved > 0 && (
-                <>
-                  <span>•</span>
-                  <span>
-                    {counts.unresolved}{' '}
-                    {enrichedItems.some((i) => i.verdict.label === 'unresolved')
-                      ? lang === 'vi'
-                        ? 'nguồn web / cần rà soát'
-                        : 'other / web'
-                      : lang === 'vi'
-                        ? 'nguồn web trực tuyến'
-                        : 'web sources'}
-                  </span>
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* Quiet Zero-Change Revision Note (0px vertical overhead when v1 -> v2 has 0 changes) */}
-          {shouldShowRevisionDiff && activeRevisionDiff && isZeroChangeRevision && (
+      {/* Zone 2: Unified Summary Health & Single-Purpose 6-Tab Navigation Bar */}
+      <ReportSummaryAndNavBar
+        essayId={id ?? String(report.essay_id)}
+        report={report}
+        activeLayer={workspaceMode}
+        onChangeWorkspaceMode={setWorkspaceMode}
+        onOpenLockedFeature={(featureName) => {
+          setLockedFeatureName(featureName);
+          setUpgradeOpen(true);
+        }}
+        quietRevisionSlot={
+          shouldShowRevisionDiff && activeRevisionDiff && isZeroChangeRevision ? (
             <div
               data-testid="revision-diff-banner"
               data-quiet-unchanged="true"
@@ -3627,20 +4241,12 @@ export function EssayPage() {
                 <ArrowUpRight className="h-3 w-3" />
               </Link>
             </div>
-          )}
-        </div>
+          ) : null
+        }
+      />
 
-        <EssayActionBar
-          essayId={id ?? ''}
-          filename={report.filename}
-          issueCount={attentionCount}
-          consistencyOk={consistencyAllMatched}
-          workspaceMode={workspaceMode}
-          onChangeWorkspaceMode={setWorkspaceMode}
-          hideRemediationButton={true}
-          onOpenRemediation={() => setRemediationOpen(true)}
-        />
-      </div>
+      {/* Non-Accusatory Academic Decision-Support Disclaimer (BUG-03) */}
+      <DecisionSupportBanner variant="compact" lang={lang} />
 
       {/* ============================================================
           Zone 3: Unified 4-View Stage (120fps Causal Directional Slide)
@@ -3707,7 +4313,7 @@ export function EssayPage() {
                   {/* Left Pane: Exception-First Citation Queue (5 cols) */}
                   <div className="citra-cq-citations-left lg:col-span-5 min-w-0 lg:relative lg:min-h-[680px] border-b lg:border-b-0 lg:border-r border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40">
                     <div className="lg:absolute lg:inset-0 flex flex-col min-w-0">
-                      {/* Sticky Search & Filter Header */}
+                      {/* Sticky Search, Sort & Filter Header */}
                       <div className="p-3.5 sm:px-4 sm:py-3.5 border-b border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-2.5 shrink-0">
                         <div className="flex items-center gap-2">
                           <div className="relative flex-1">
@@ -3724,7 +4330,40 @@ export function EssayPage() {
                               className="w-full pl-8 pr-3 py-1.5 text-xs sm:text-[13px] rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-200 placeholder:text-slate-400 focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
                             />
                           </div>
-                          <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 shrink-0">
+                          {enrichedItems.length > 20 && (
+                            <label className="inline-flex items-center gap-1 shrink-0">
+                              <ArrowUpDown className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
+                              <select
+                                data-testid="citation-queue-sort-select"
+                                aria-label={lang === 'vi' ? 'Sắp xếp trích dẫn' : 'Sort citations'}
+                                value={sortBy}
+                                onChange={(e) =>
+                                  setSortBy(
+                                    e.target.value as
+                                      | 'priority'
+                                      | 'index_asc'
+                                      | 'index_desc'
+                                      | 'author_asc',
+                                  )
+                                }
+                                className="text-[11px] font-medium px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+                              >
+                                <option value="priority">
+                                  {lang === 'vi' ? 'Ưu tiên lỗi' : 'Priority'}
+                                </option>
+                                <option value="index_asc">
+                                  {lang === 'vi' ? 'Thứ tự [1→N]' : 'Order [1→N]'}
+                                </option>
+                                <option value="index_desc">
+                                  {lang === 'vi' ? 'Thứ tự [N→1]' : 'Order [N→1]'}
+                                </option>
+                                <option value="author_asc">
+                                  {lang === 'vi' ? 'Tác giả A→Z' : 'Author A→Z'}
+                                </option>
+                              </select>
+                            </label>
+                          )}
+                          <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 shrink-0 tabular-nums">
                             {filteredItems.length}/{enrichedItems.length}
                           </span>
                         </div>
@@ -3754,29 +4393,29 @@ export function EssayPage() {
                               ],
                               [
                                 'verified',
-                                lang === 'vi'
-                                  ? `✓ Hợp lệ (${counts.verified})`
-                                  : `✓ Verified (${counts.verified})`,
+                                `✓ ${getVerdictDisplay('verified', lang).label} (${counts.verified})`,
                               ],
                               [
                                 'metadata_error',
-                                lang === 'vi'
-                                  ? `⚠ Sai thông tin (${counts.metadata_error})`
-                                  : `⚠ Metadata (${counts.metadata_error})`,
+                                `⚠ ${getVerdictDisplay('metadata_error', lang).label} (${counts.metadata_error})`,
                               ],
                               [
                                 'suspected_hallucination',
-                                lang === 'vi'
-                                  ? `✕ Bịa đặt (${counts.suspected_hallucination})`
-                                  : `✕ Hallucination (${counts.suspected_hallucination})`,
+                                `✕ ${getVerdictDisplay('suspected_hallucination', lang).label} (${counts.suspected_hallucination})`,
                               ],
                               ...(counts.unresolved > 0
                                 ? [
                                     [
                                       'unresolved',
-                                      lang === 'vi'
-                                        ? `— Khác (${counts.unresolved})`
-                                        : `— Other (${counts.unresolved})`,
+                                      `— ${getVerdictDisplay('unresolved', lang).label} (${counts.unresolved})`,
+                                    ] as const,
+                                  ]
+                                : []),
+                              ...(counts.resource > 0
+                                ? [
+                                    [
+                                      'resource',
+                                      `↗ ${getVerdictDisplay('resource', lang).label} (${counts.resource})`,
                                     ] as const,
                                   ]
                                 : []),
@@ -3816,11 +4455,20 @@ export function EssayPage() {
                         it.verdict.label === 'metadata_error' ||
                         it.verdict.label === 'unresolved';
                       const attentionItems = filteredItems.filter(isAttentionItem);
-                      const cleanItems = filteredItems.filter((it) => !isAttentionItem(it));
+                      const verifiedItems = filteredItems.filter(
+                        (it) => it.verdict.label === 'verified',
+                      );
+                      const resourceItems = filteredItems.filter(
+                        (it) => it.verdict.label === 'resource',
+                      );
+                      const activeGroupsCount =
+                        (attentionItems.length > 0 ? 1 : 0) +
+                        (verifiedItems.length > 0 ? 1 : 0) +
+                        (resourceItems.length > 0 ? 1 : 0);
                       const showGroupHeaders =
                         filterLabel === 'all' &&
-                        attentionItems.length > 0 &&
-                        cleanItems.length > 0;
+                        sortBy === 'priority' &&
+                        activeGroupsCount > 1;
 
                       const renderQueueCard = (cit: EnrichedCitationItem) => {
                         const isSelected =
@@ -3837,7 +4485,12 @@ export function EssayPage() {
                             aria-selected={isSelected}
                             data-verdict-label={cit.verdict.label}
                             data-citation-id={cit.verdict.citation_id}
-                            onClick={() => setSelectedCitationId(cit.verdict.citation_id)}
+                            onClick={() => {
+                              setSelectedCitationId(cit.verdict.citation_id);
+                              if (isBelowLg) {
+                                setMobileDetailOpen(true);
+                              }
+                            }}
                             className={`w-full text-left px-3.5 py-3 rounded-xl border transition-all duration-150 cursor-pointer ${
                               isSelected
                                 ? 'bg-slate-50/95 dark:bg-slate-800/75 border-slate-300 dark:border-slate-600 shadow-[0_2px_10px_-3px_rgba(15,23,42,0.08)]'
@@ -3905,26 +4558,43 @@ export function EssayPage() {
 
                       return (
                         <>
-                          <div className="px-1 pt-1 pb-0.5 flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                            <span>
-                              {lang === 'vi'
-                                ? `Cần kiểm tra trước (${attentionItems.length})`
-                                : `Needs Review First (${attentionItems.length})`}
-                            </span>
-                            <span className="text-amber-700 dark:text-amber-400 font-semibold normal-case">
-                              {lang === 'vi' ? 'Ưu tiên xử lý' : 'Action required'}
-                            </span>
-                          </div>
-                          {attentionItems.map(renderQueueCard)}
+                          {attentionItems.length > 0 && (
+                            <>
+                              <div className="px-1 pt-1 pb-0.5 flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                                <span>
+                                  {lang === 'vi'
+                                    ? `Cần kiểm tra trước (${attentionItems.length})`
+                                    : `Needs Review First (${attentionItems.length})`}
+                                </span>
+                                <span className="text-amber-700 dark:text-amber-400 font-semibold normal-case">
+                                  {lang === 'vi' ? 'Ưu tiên xử lý' : 'Action required'}
+                                </span>
+                              </div>
+                              {attentionItems.map(renderQueueCard)}
+                            </>
+                          )}
 
-                          <div className="px-1 pt-3 pb-0.5 flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                            <span>
-                              {lang === 'vi'
-                                ? `Đã xác thực hợp lệ (${cleanItems.length})`
-                                : `Verified Sources (${cleanItems.length})`}
-                            </span>
-                          </div>
-                          {cleanItems.map(renderQueueCard)}
+                          {verifiedItems.length > 0 && (
+                            <>
+                              <div className="px-1 pt-3 pb-0.5 flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                                <span>
+                                  {`${getVerdictDisplay('verified', lang).label} (${verifiedItems.length})`}
+                                </span>
+                              </div>
+                              {verifiedItems.map(renderQueueCard)}
+                            </>
+                          )}
+
+                          {resourceItems.length > 0 && (
+                            <>
+                              <div className="px-1 pt-3 pb-0.5 flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-violet-600 dark:text-violet-400">
+                                <span>
+                                  {`${getVerdictDisplay('resource', lang).label} (${resourceItems.length})`}
+                                </span>
+                              </div>
+                              {resourceItems.map(renderQueueCard)}
+                            </>
+                          )}
                         </>
                       );
                     })()}
@@ -3932,19 +4602,9 @@ export function EssayPage() {
                 </div>
               </div>
 
-              {/* Right Pane: 3-Tier Human-First Detail Inspector (7 cols, 120fps Slide per Citation Click) */}
-              {activeItem && (
-                <DirectionalStageSlide
-                  stageKey={Math.max(
-                    0,
-                    enrichedItems.findIndex(
-                      (it) => it.verdict.citation_id === activeItem.verdict.citation_id,
-                    ),
-                  )}
-                  distancePx={10}
-                  data-testid="citation-detail-stage"
-                  className="citra-cq-citations-right lg:col-span-7 min-w-0 bg-white dark:bg-slate-950"
-                >
+              {/* Right Pane (Desktop >= lg) OR Responsive Mobile Detail Sheet (< lg) */}
+              {activeItem && (() => {
+                const detailInner = (
                   <div className="p-4 sm:p-6 flex flex-col gap-5">
                     {/* TIER 1: Clean Identity Header + Plain-Language Diagnosis + Quick Actions */}
                   <div className="flex flex-wrap items-start justify-between gap-3 pb-3.5 border-b border-slate-200 dark:border-slate-800">
@@ -4014,7 +4674,7 @@ export function EssayPage() {
                       <div className="text-xs sm:text-sm leading-relaxed text-slate-800 dark:text-slate-200 flex-1 min-w-0">
                         <span className="font-semibold text-slate-900 dark:text-white mr-1.5">
                           {lang === 'vi' ? 'Tóm tắt kiểm tra:' : 'Summary:'}
-                        </span>
+                        </span>{' '}
                         <StreamingText text={activeItem.explanationText} />
 
                         {canViewDeepTrace &&
@@ -4022,13 +4682,14 @@ export function EssayPage() {
                             const f = activeItem.verdict.features as
                               | CrossLingualFeaturesExt
                               | undefined;
-                            const bridgedConcepts =
+                            const rawBridged =
                               Array.isArray(f?.cross_lingual_bridged_concepts) &&
                               f.cross_lingual_bridged_concepts.length > 0
                                 ? f.cross_lingual_bridged_concepts
                                 : Array.isArray(f?.bridged_concepts)
                                   ? f.bridged_concepts
                                   : [];
+                            const bridgedConcepts = filterValidBridgedConcepts(rawBridged);
                             const hasCrossLingualRule = (
                               activeItem.verdict.triggered_rules ?? []
                             ).some(
@@ -4088,7 +4749,7 @@ export function EssayPage() {
                                     ))}
                                     {onnxPct !== null && (
                                       <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold bg-teal-50 text-teal-700 border border-teal-200 dark:bg-teal-950/60 dark:text-teal-300 dark:border-teal-800/70">
-                                        ONNX INT8 · {onnxPct}%
+                                        {lang === 'vi' ? `Việt ↔ Anh · ${onnxPct}%` : `VI ↔ EN · ${onnxPct}%`}
                                       </span>
                                     )}
                                   </>
@@ -4099,8 +4760,8 @@ export function EssayPage() {
                                   >
                                     <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold bg-teal-50 text-teal-800 border border-teal-200 dark:bg-teal-950/70 dark:text-teal-200 dark:border-teal-800">
                                       {lang === 'vi'
-                                        ? 'Đối sánh ngữ nghĩa đa ngôn ngữ ONNX INT8 (paraphrase-multilingual-MiniLM-L12-v2)'
-                                        : 'Multilingual ONNX INT8 Embedding Match (paraphrase-multilingual-MiniLM-L12-v2)'}
+                                        ? 'Đối chiếu ngữ nghĩa Việt ↔ Anh'
+                                        : 'VI ↔ EN Cross-Lingual Semantic Match'}
                                     </span>
                                     {onnxPct !== null && (
                                       <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-300 dark:border-indigo-800/70">
@@ -4119,28 +4780,70 @@ export function EssayPage() {
 
                     {(() => {
                       const primarySourceUrl = getPrimarySourceExternalUrl(activeItem);
+                      const isUnmatchedCitation =
+                        activeItem.verdict.label === 'suspected_hallucination' ||
+                        activeItem.verdict.label === 'unresolved' ||
+                        (!activeItem.retrievedMeta &&
+                          activeItem.verdict.label !== 'resource');
                       const canCopyClean =
-                        activeItem.verdict.label !== 'suspected_hallucination';
-                      if (!canCopyClean && !primarySourceUrl) return null;
+                        Boolean(activeItem.retrievedMeta) &&
+                        activeItem.verdict.label !== 'suspected_hallucination' &&
+                        activeItem.verdict.label !== 'unresolved';
+                      const scholarQuery =
+                        activeItem.citedMeta.title && activeItem.citedMeta.title !== '—'
+                          ? activeItem.citedMeta.title
+                          : activeItem.verdict.citation_raw;
+                      const scholarUrl = `https://scholar.google.com/scholar?q=${encodeURIComponent(
+                        scholarQuery,
+                      )}`;
+
                       return (
                         <div className="flex flex-wrap items-center gap-2 pl-6">
-                          {canCopyClean && (
-                            <button
-                              type="button"
-                              data-testid="copy-formatted-citation-btn"
-                              onClick={() => void handleCopyFormattedCitation(activeItem)}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm transition-colors cursor-pointer"
+                          <button
+                            type="button"
+                            data-testid="copy-formatted-citation-btn"
+                            disabled={!canCopyClean}
+                            title={
+                              canCopyClean
+                                ? undefined
+                                : lang === 'vi'
+                                  ? 'Không tìm thấy bản ghi chuẩn trong thư viện để sao chép'
+                                  : 'No canonical library record was found to copy'
+                            }
+                            onClick={() => {
+                              if (canCopyClean) {
+                                void handleCopyFormattedCitation(activeItem);
+                              }
+                            }}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm transition-colors cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed disabled:hover:bg-indigo-600"
+                          >
+                            <Copy className="h-3.5 w-3.5" />
+                            <span>
+                              {lang === 'vi'
+                                ? 'Chép trích dẫn chuẩn'
+                                : 'Copy Formatted Citation'}
+                            </span>
+                          </button>
+
+                          {isUnmatchedCitation ? (
+                            <a
+                              data-testid="google-scholar-search-btn"
+                              href={scholarUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
                             >
-                              <Copy className="h-3.5 w-3.5" />
+                              <Search className="h-3.5 w-3.5" />
                               <span>
                                 {lang === 'vi'
-                                  ? 'Chép trích dẫn chuẩn'
-                                  : 'Copy Formatted Citation'}
+                                  ? 'Tìm thử trên Google Scholar'
+                                  : 'Search on Google Scholar'}
                               </span>
-                            </button>
-                          )}
-                          {primarySourceUrl && (
+                              <ExternalLink className="h-3.5 w-3.5" />
+                            </a>
+                          ) : primarySourceUrl ? (
                             <a
+                              data-testid="open-source-paper-btn"
                               href={primarySourceUrl}
                               target="_blank"
                               rel="noopener noreferrer"
@@ -4151,7 +4854,7 @@ export function EssayPage() {
                               </span>
                               <ExternalLink className="h-3.5 w-3.5" />
                             </a>
-                          )}
+                          ) : null}
                         </div>
                       );
                     })()}
@@ -4396,7 +5099,7 @@ export function EssayPage() {
                                           : 'Insufficient citation metadata for canonical lookup'}
                                       </span>
                                     ) : (
-                                      <span className="text-red-500 dark:text-red-400 italic">
+                                      <span className="text-slate-500 dark:text-slate-400 italic">
                                         {lang === 'vi'
                                           ? 'Không tìm thấy bản ghi chuẩn'
                                           : 'No canonical record found'}
@@ -4550,15 +5253,15 @@ export function EssayPage() {
                                     value="sources"
                                     className="w-full text-xs font-semibold py-1.5 px-2.5 truncate"
                                   >
-                                    {lang === 'vi' ? '3. Nguồn Truy hồi' : '3. Source Retrieval'}
+                                    {lang === 'vi' ? '1. Nguồn đối chiếu' : '1. Checked Sources'}
                                   </TabsTrigger>
                                   <TabsTrigger
                                     value="rules"
                                     className="w-full text-xs font-semibold py-1.5 px-2.5 truncate"
                                   >
                                     {lang === 'vi'
-                                      ? `2. Luật Suy diễn (${activeItem.rules.length})`
-                                      : `2. Symbolic Rules (${activeItem.rules.length})`}
+                                      ? `2. Tiêu chí đánh giá (${activeItem.rules.length})`
+                                      : `2. Verification Checks (${activeItem.rules.length})`}
                                   </TabsTrigger>
                                   <TabsTrigger
                                     value="graph"
@@ -4567,15 +5270,22 @@ export function EssayPage() {
                                   >
                                     <GitBranch className="h-3 w-3 shrink-0 text-violet-500" />
                                     <span className="truncate">
-                                      {lang === 'vi' ? '4. Đồ thị Bằng chứng' : '4. Evidence Graph'}
+                                      {lang === 'vi' ? '3. Sơ đồ suy luận' : '3. Decision Flow'}
                                     </span>
                                   </TabsTrigger>
                                 </TabsList>
 
-                                {/* Multi-Source Federation */}
-                                <TabsContent value="sources" className="mt-3">
-                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 min-w-0">
-                                    {activeItem.sources.map((src) => {
+                                {/* Multi-Source Federation (Matched first; empty 0.00 DBs collapsed by default) */}
+                                <TabsContent value="sources" className="mt-3 space-y-2.5">
+                                  {(() => {
+                                    const matchedOrPartialSources = activeItem.sources.filter(
+                                      (s) => s.status !== 'not_found',
+                                    );
+                                    const emptySources = activeItem.sources.filter(
+                                      (s) => s.status === 'not_found',
+                                    );
+
+                                    const renderSourceCard = (src: SourceRetrievalItem) => {
                                       const localizeFieldToken = (f: string) => {
                                         if (lang !== 'vi') return f;
                                         const low = f.toLowerCase();
@@ -4602,8 +5312,8 @@ export function EssayPage() {
                                                 ? 'Không định tuyến · Tài nguyên phi học thuật'
                                                 : 'Not Routed · Non-scholarly resource'
                                               : lang === 'vi'
-                                                ? `Đã truy vấn · Tương đồng: ${src.score}`
-                                                : `Queried · Sim: ${src.score}`;
+                                                ? `Đã truy vấn · Không có bản ghi trùng`
+                                                : `Queried · No matching record`;
                                       return (
                                         <div
                                           key={src.name}
@@ -4655,27 +5365,56 @@ export function EssayPage() {
                                           >
                                             {src.status === 'matched'
                                               ? lang === 'vi'
-                                                ? 'KHỚP'
-                                                : 'MATCH'
+                                                ? 'Khớp nguồn'
+                                                : 'Matched'
                                               : src.status === 'partial'
                                                 ? lang === 'vi'
-                                                  ? 'ỨNG VIÊN'
-                                                  : 'CANDIDATE'
+                                                  ? 'Ứng viên'
+                                                  : 'Candidate'
                                                 : src.notRouted
                                                   ? lang === 'vi'
-                                                    ? 'KHÔNG ĐỊNH TUYẾN'
-                                                    : 'NOT ROUTED'
+                                                    ? 'Không định tuyến'
+                                                    : 'Not Routed'
                                                   : lang === 'vi'
-                                                    ? 'KHÔNG KHỚP'
-                                                    : 'NO HIT'}
+                                                    ? 'Không khớp'
+                                                    : 'No Hit'}
                                           </span>
                                         </div>
                                       );
-                                    })}
-                                  </div>
+                                    };
+
+                                    return (
+                                      <>
+                                        {matchedOrPartialSources.length > 0 ? (
+                                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 min-w-0">
+                                            {matchedOrPartialSources.map(renderSourceCard)}
+                                          </div>
+                                        ) : (
+                                          <p className="text-xs text-slate-500 dark:text-slate-400 italic">
+                                            {lang === 'vi'
+                                              ? 'Không có cơ sở dữ liệu học thuật nào trả về bản ghi khớp.'
+                                              : 'No scholarly database returned a matching record.'}
+                                          </p>
+                                        )}
+
+                                        {emptySources.length > 0 && (
+                                          <details className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/50 p-2.5">
+                                            <summary className="cursor-pointer select-none text-xs font-medium text-slate-600 dark:text-slate-300">
+                                              {lang === 'vi'
+                                                ? `Xem thêm ${emptySources.length} cơ sở dữ liệu đã dò tìm (không khớp)`
+                                                : `Show ${emptySources.length} other checked databases (no match)`}
+                                            </summary>
+                                            <div className="mt-2.5 grid grid-cols-1 sm:grid-cols-2 gap-2 min-w-0">
+                                              {emptySources.map(renderSourceCard)}
+                                            </div>
+                                          </details>
+                                        )}
+                                      </>
+                                    );
+                                  })()}
                                 </TabsContent>
 
-                                {/* Symbolic Rules Trace */}
+                                {/* Symbolic Rules Trace (Formulas & Telemetry tucked under collapsible Technical Details) */}
                                 <TabsContent value="rules" className="mt-3">
                                   <div className="space-y-2.5">
                                     {activeItem.rules.map((rule) => (
@@ -4699,7 +5438,7 @@ export function EssayPage() {
                                             </span>
                                           </div>
                                           <span
-                                            className={`text-[11px] font-bold uppercase shrink-0 ${
+                                            className={`text-[11px] font-bold shrink-0 ${
                                               rule.status === 'passed'
                                                 ? 'text-emerald-700 dark:text-emerald-400'
                                                 : rule.status === 'warning'
@@ -4708,134 +5447,151 @@ export function EssayPage() {
                                             }`}
                                           >
                                             {rule.status === 'passed'
-                                              ? '✓ PASS'
+                                              ? lang === 'vi'
+                                                ? '✓ Đạt'
+                                                : '✓ Pass'
                                               : rule.status === 'warning'
-                                                ? '⚠ WARN'
-                                                : '✕ FAIL'}
+                                                ? lang === 'vi'
+                                                  ? '⚠ Lưu ý'
+                                                  : '⚠ Notice'
+                                                : lang === 'vi'
+                                                  ? '✕ Chưa khớp'
+                                                  : '✕ Unmatched'}
                                           </span>
                                         </div>
-                                        <p className="font-mono text-slate-600 dark:text-slate-300 text-[11px] pl-1">
-                                          {rule.condition}
-                                        </p>
+                                        <details className="mt-1.5">
+                                          <summary className="cursor-pointer select-none text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                                            {lang === 'vi'
+                                              ? 'Thông số kỹ thuật'
+                                              : 'Technical Details'}
+                                          </summary>
+                                          <p className="mt-1 font-mono text-slate-600 dark:text-slate-300 text-[11px] pl-1 break-words">
+                                            {rule.condition}
+                                          </p>
+                                        </details>
                                       </div>
                                     ))}
 
                                     {(activeItem.verdict.features || activeItem.linkBadge) && (
-                                      <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 font-mono text-[11px] text-slate-600 dark:text-slate-400 flex flex-wrap items-center gap-x-4 gap-y-1">
-                                        <span className="font-semibold text-slate-800 dark:text-slate-200">
-                                          Telemetry:
-                                        </span>
-                                        {activeItem.verdict.features?.title_sim_fuzzy !==
-                                          undefined && (
-                                          <span>
-                                            title_fuzzy=
-                                            {activeItem.verdict.features.title_sim_fuzzy.toFixed(2)}
-                                          </span>
-                                        )}
-                                        {activeItem.verdict.features?.title_sim_semantic !==
-                                          undefined &&
-                                          activeItem.verdict.features.title_sim_semantic > 0 && (
+                                      <details className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs">
+                                        <summary className="cursor-pointer select-none font-semibold text-slate-700 dark:text-slate-200">
+                                          {lang === 'vi'
+                                            ? 'Thông số kỹ thuật (Chỉ số đối sánh chi tiết)'
+                                            : 'Technical Details (Detailed Matching Telemetry)'}
+                                        </summary>
+                                        <div className="mt-2 font-mono text-[11px] text-slate-600 dark:text-slate-400 flex flex-wrap items-center gap-x-4 gap-y-1">
+                                          {activeItem.verdict.features?.title_sim_fuzzy !==
+                                            undefined && (
                                             <span>
-                                              title_semantic=
-                                              {activeItem.verdict.features.title_sim_semantic.toFixed(
-                                                2,
-                                              )}
+                                              title_fuzzy=
+                                              {activeItem.verdict.features.title_sim_fuzzy.toFixed(2)}
                                             </span>
                                           )}
-                                        {typeof activeItem.verdict.features?.html_meta_title_sim ===
-                                          'number' && (
-                                          <span>
-                                            html_meta_title_sim=
-                                            {activeItem.verdict.features.html_meta_title_sim.toFixed(
-                                              2,
+                                          {activeItem.verdict.features?.title_sim_semantic !==
+                                            undefined &&
+                                            activeItem.verdict.features.title_sim_semantic > 0 && (
+                                              <span>
+                                                title_semantic=
+                                                {activeItem.verdict.features.title_sim_semantic.toFixed(
+                                                  2,
+                                                )}
+                                              </span>
                                             )}
-                                          </span>
-                                        )}
-                                        {activeItem.verdict.features?.author_jaccard !==
-                                          undefined && (
-                                          <span>
-                                            author_jaccard=
-                                            {activeItem.verdict.features.author_jaccard.toFixed(2)}
-                                          </span>
-                                        )}
-                                        {activeItem.verdict.features?.year_distance !== undefined &&
-                                          activeItem.verdict.features.year_distance < 900 &&
-                                          activeItem.verdict.features?.has_scholarly_candidate !==
-                                            false && (
+                                          {typeof activeItem.verdict.features?.html_meta_title_sim ===
+                                            'number' && (
                                             <span>
-                                              year_dist={activeItem.verdict.features.year_distance}
-                                            </span>
-                                          )}
-                                        {(activeItem.verdict.features?.cross_lingual_detected ||
-                                          activeItem.verdict.features
-                                            ?.cross_lingual_title_detected) && (
-                                          <span>cross_lingual_detected=true</span>
-                                        )}
-                                        {typeof activeItem.verdict.features
-                                          ?.cross_lingual_title_sim === 'number' &&
-                                          activeItem.verdict.features.cross_lingual_title_sim >
-                                            0 && (
-                                            <span>
-                                              cross_lingual_title_sim=
-                                              {activeItem.verdict.features.cross_lingual_title_sim.toFixed(
+                                              html_meta_title_sim=
+                                              {activeItem.verdict.features.html_meta_title_sim.toFixed(
                                                 2,
                                               )}
                                             </span>
                                           )}
-                                        {activeItem.verdict.features?.venue_sim !== undefined &&
-                                          activeItem.verdict.features.venue_sim > 0 && (
+                                          {activeItem.verdict.features?.author_jaccard !==
+                                            undefined && (
                                             <span>
-                                              venue_sim=
-                                              {activeItem.verdict.features.venue_sim.toFixed(2)}
+                                              author_jaccard=
+                                              {activeItem.verdict.features.author_jaccard.toFixed(2)}
                                             </span>
                                           )}
-                                        {activeItem.verdict.features?.doi_exact_match !==
-                                          undefined && (
-                                          <span>
-                                            doi_match=
-                                            {String(activeItem.verdict.features.doi_exact_match)}
-                                          </span>
-                                        )}
-                                        {activeItem.verdict.features?.source_consensus !==
-                                          undefined && (
-                                          <span>
-                                            consensus=
-                                            {activeItem.verdict.features.source_consensus}
-                                          </span>
-                                        )}
-                                        {activeItem.verdict.features?.content_alignment_score !==
-                                          undefined &&
-                                          activeItem.verdict.features.content_alignment_score >
-                                            0 && (
+                                          {activeItem.verdict.features?.year_distance !== undefined &&
+                                            activeItem.verdict.features.year_distance < 900 &&
+                                            activeItem.verdict.features?.has_scholarly_candidate !==
+                                              false && (
+                                              <span>
+                                                year_dist={activeItem.verdict.features.year_distance}
+                                              </span>
+                                            )}
+                                          {(activeItem.verdict.features?.cross_lingual_detected ||
+                                            activeItem.verdict.features
+                                              ?.cross_lingual_title_detected) && (
+                                            <span>cross_lingual_detected=true</span>
+                                          )}
+                                          {typeof activeItem.verdict.features
+                                            ?.cross_lingual_title_sim === 'number' &&
+                                            activeItem.verdict.features.cross_lingual_title_sim >
+                                              0 && (
+                                              <span>
+                                                cross_lingual_title_sim=
+                                                {activeItem.verdict.features.cross_lingual_title_sim.toFixed(
+                                                  2,
+                                                )}
+                                              </span>
+                                            )}
+                                          {activeItem.verdict.features?.venue_sim !== undefined &&
+                                            activeItem.verdict.features.venue_sim > 0 && (
+                                              <span>
+                                                venue_sim=
+                                                {activeItem.verdict.features.venue_sim.toFixed(2)}
+                                              </span>
+                                            )}
+                                          {activeItem.verdict.features?.doi_exact_match !==
+                                            undefined && (
                                             <span>
-                                              content_align=
-                                              {activeItem.verdict.features.content_alignment_score.toFixed(
-                                                2,
-                                              )}
-                                              {activeItem.verdict.features
-                                                .content_alignment_confidence
-                                                ? ` (${activeItem.verdict.features.content_alignment_confidence})`
-                                                : ''}
+                                              doi_match=
+                                              {String(activeItem.verdict.features.doi_exact_match)}
                                             </span>
                                           )}
-                                        {activeItem.linkBadge && (
-                                          <span
-                                            className={
-                                              (
-                                                activeItem.verdict.triggered_rules ?? []
-                                              ).includes('R-URL-CONTENT-MISMATCH')
-                                                ? 'text-amber-700 dark:text-amber-400 font-semibold'
-                                                : activeItem.linkBadge.status === 'alive' ||
-                                                    activeItem.linkBadge.status ===
-                                                      'restricted_alive'
-                                                  ? 'text-emerald-700 dark:text-emerald-400 font-semibold'
-                                                  : 'text-red-600 dark:text-red-400 font-semibold'
-                                            }
-                                          >
-                                            link_status={activeItem.linkBadge.text}
-                                          </span>
-                                        )}
-                                      </div>
+                                          {activeItem.verdict.features?.source_consensus !==
+                                            undefined && (
+                                            <span>
+                                              consensus=
+                                              {activeItem.verdict.features.source_consensus}
+                                            </span>
+                                          )}
+                                          {activeItem.verdict.features?.content_alignment_score !==
+                                            undefined &&
+                                            activeItem.verdict.features.content_alignment_score >
+                                              0 && (
+                                              <span>
+                                                content_align=
+                                                {activeItem.verdict.features.content_alignment_score.toFixed(
+                                                  2,
+                                                )}
+                                                {activeItem.verdict.features
+                                                  .content_alignment_confidence
+                                                  ? ` (${activeItem.verdict.features.content_alignment_confidence})`
+                                                  : ''}
+                                              </span>
+                                            )}
+                                          {activeItem.linkBadge && (
+                                            <span
+                                              className={
+                                                (
+                                                  activeItem.verdict.triggered_rules ?? []
+                                                ).includes('R-URL-CONTENT-MISMATCH')
+                                                  ? 'text-amber-700 dark:text-amber-400 font-semibold'
+                                                  : activeItem.linkBadge.status === 'alive' ||
+                                                      activeItem.linkBadge.status ===
+                                                        'restricted_alive'
+                                                    ? 'text-emerald-700 dark:text-emerald-400 font-semibold'
+                                                    : 'text-red-600 dark:text-red-400 font-semibold'
+                                              }
+                                            >
+                                              link_status={activeItem.linkBadge.text}
+                                            </span>
+                                          )}
+                                        </div>
+                                      </details>
                                     )}
                                   </div>
                                 </TabsContent>
@@ -4850,7 +5606,7 @@ export function EssayPage() {
                               <div className="p-3 rounded-xl bg-slate-50/80 dark:bg-slate-900/60 border border-slate-200/70 dark:border-slate-800 text-xs">
                                 <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 block mb-1">
                                   {lang === 'vi'
-                                    ? 'Chuỗi Trích dẫn Gốc trong Tài liệu (Raw Extracted String)'
+                                    ? 'Chuỗi trích dẫn gốc trong tài liệu'
                                     : 'Raw Extracted Reference String'}
                                 </span>
                                 <p className="font-mono text-slate-700 dark:text-slate-300 break-words leading-relaxed">
@@ -4871,8 +5627,8 @@ export function EssayPage() {
                                 </strong>
                                 <span>
                                   {lang === 'vi'
-                                    ? `Xem toàn bộ kết quả đối chiếu từ 15+ CSDL học thuật quốc tế, ${SYMBOLIC_RULES_COUNT} quy tắc AI & Đồ thị bằng chứng.`
-                                    : `Inspect federated lookups across 15+ scholarly registries, ${SYMBOLIC_RULES_COUNT} symbolic rules & interactive Evidence Graph.`}
+                                    ? `Xem toàn bộ kết quả đối chiếu từ 15+ CSDL học thuật quốc tế, ${SYMBOLIC_RULES_COUNT} tiêu chí đánh giá & Sơ đồ suy luận.`
+                                    : `Inspect federated lookups across 15+ scholarly registries, ${SYMBOLIC_RULES_COUNT} verification rules & interactive Decision Flow.`}
                                 </span>
                               </div>
                               <button
@@ -4881,8 +5637,8 @@ export function EssayPage() {
                                 onClick={() => {
                                   setLockedFeatureName(
                                     lang === 'vi'
-                                      ? 'Chi tiết Kiểm chứng Chuyên sâu & Đồ thị Bằng chứng (Gói Pro)'
-                                      : 'Deep Verification Details & Interactive Evidence Graph',
+                                      ? 'Chi tiết Kiểm chứng Chuyên sâu & Sơ đồ Suy luận (Gói Pro)'
+                                      : 'Deep Verification Details & Interactive Decision Flow',
                                   );
                                   setUpgradeOpen(true);
                                 }}
@@ -4898,8 +5654,80 @@ export function EssayPage() {
                     </div>
                   </div>
                   </div>
-                </DirectionalStageSlide>
-              )}
+                );
+
+                if (isBelowLg) {
+                  if (!mobileDetailOpen) return null;
+                  return createPortal(
+                    <div
+                      data-testid="mobile-citation-detail-sheet"
+                      role="dialog"
+                      aria-modal="true"
+                      aria-label={
+                        lang === 'vi'
+                          ? `Chi tiết trích dẫn ${activeItem.marker}`
+                          : `Citation details ${activeItem.marker}`
+                      }
+                      className="fixed inset-0 z-[95] flex flex-col bg-slate-950/60 backdrop-blur-sm"
+                      onClick={() => setMobileDetailOpen(false)}
+                    >
+                      <div
+                        className="mt-auto w-full max-h-[92dvh] flex flex-col rounded-t-2xl bg-white dark:bg-slate-950 border-t border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <div className="sticky top-0 z-10 px-4 py-3 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2">
+                          <button
+                            type="button"
+                            data-testid="mobile-detail-back-btn"
+                            onClick={() => setMobileDetailOpen(false)}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 transition-colors cursor-pointer"
+                          >
+                            <ArrowLeft className="h-3.5 w-3.5" />
+                            <span>
+                              {lang === 'vi' ? 'Quay lại danh sách' : 'Back to List'}
+                            </span>
+                          </button>
+                          <span className="font-mono text-xs font-bold text-slate-600 dark:text-slate-300 truncate">
+                            {activeItem.marker} · {activeItem.inText}
+                          </span>
+                          <button
+                            type="button"
+                            data-testid="mobile-detail-close-btn"
+                            onClick={() => setMobileDetailOpen(false)}
+                            aria-label={lang === 'vi' ? 'Đóng chi tiết' : 'Close details'}
+                            className="p-1.5 rounded-lg text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+                        <div
+                          data-testid="citation-detail-stage"
+                          className="flex-1 overflow-y-auto min-h-0"
+                        >
+                          {detailInner}
+                        </div>
+                      </div>
+                    </div>,
+                    document.body,
+                  );
+                }
+
+                return (
+                  <DirectionalStageSlide
+                    stageKey={Math.max(
+                      0,
+                      enrichedItems.findIndex(
+                        (it) => it.verdict.citation_id === activeItem.verdict.citation_id,
+                      ),
+                    )}
+                    distancePx={10}
+                    data-testid="citation-detail-stage"
+                    className="citra-cq-citations-right lg:col-span-7 min-w-0 bg-white dark:bg-slate-950"
+                  >
+                    {detailInner}
+                  </DirectionalStageSlide>
+                );
+              })()}
                 </div>
               )}
             </div>

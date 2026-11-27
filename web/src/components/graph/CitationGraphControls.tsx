@@ -2,6 +2,7 @@ import { Search, RotateCcw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import type { CitationMappingStatus, ValidationLabel } from '@/api/client';
+import { getMappingStatusDisplay, getVerdictDisplay } from '@/lib/academicTaxonomy';
 
 /* ============================================================
    Filter Configuration (shared with parent)
@@ -13,14 +14,14 @@ export const STATUS_FILTERS: {
   labelVi: string;
   dotColor: string;
 }[] = [
-  { value: 'matched', label: 'Matched', labelVi: 'Đã khớp', dotColor: 'bg-emerald-500' },
-  { value: 'missing_reference', label: 'Missing Ref', labelVi: 'Thiếu nguồn', dotColor: 'bg-red-500' },
-  { value: 'uncited_reference', label: 'Uncited Ref', labelVi: 'Chưa trích dẫn', dotColor: 'bg-amber-500' },
-  { value: 'in_text_mismatch', label: 'Mismatch', labelVi: 'Sai lệch', dotColor: 'bg-amber-500' },
-  { value: 'duplicate_reference', label: 'Duplicate', labelVi: 'Trùng lặp', dotColor: 'bg-orange-500' },
-  { value: 'ambiguous_mapping', label: 'Ambiguous', labelVi: 'Mơ hồ', dotColor: 'bg-amber-500' },
-  { value: 'style_inconsistent', label: 'Style Issue', labelVi: 'Sai chuẩn', dotColor: 'bg-violet-500' },
-  { value: 'unresolved', label: 'Unresolved', labelVi: 'Chưa xác định', dotColor: 'bg-slate-400' },
+  { value: 'matched', label: getMappingStatusDisplay('matched', 'en').label, labelVi: getMappingStatusDisplay('matched', 'vi').label, dotColor: 'bg-emerald-500' },
+  { value: 'missing_reference', label: getMappingStatusDisplay('missing_reference', 'en').label, labelVi: getMappingStatusDisplay('missing_reference', 'vi').label, dotColor: 'bg-red-500' },
+  { value: 'uncited_reference', label: getMappingStatusDisplay('uncited_reference', 'en').label, labelVi: getMappingStatusDisplay('uncited_reference', 'vi').label, dotColor: 'bg-amber-500' },
+  { value: 'in_text_mismatch', label: getMappingStatusDisplay('in_text_mismatch', 'en').label, labelVi: getMappingStatusDisplay('in_text_mismatch', 'vi').label, dotColor: 'bg-amber-500' },
+  { value: 'duplicate_reference', label: getMappingStatusDisplay('duplicate_reference', 'en').label, labelVi: getMappingStatusDisplay('duplicate_reference', 'vi').label, dotColor: 'bg-orange-500' },
+  { value: 'ambiguous_mapping', label: getMappingStatusDisplay('ambiguous_mapping', 'en').label, labelVi: getMappingStatusDisplay('ambiguous_mapping', 'vi').label, dotColor: 'bg-amber-500' },
+  { value: 'style_inconsistent', label: getMappingStatusDisplay('style_inconsistent', 'en').label, labelVi: getMappingStatusDisplay('style_inconsistent', 'vi').label, dotColor: 'bg-violet-500' },
+  { value: 'unresolved', label: getMappingStatusDisplay('unresolved', 'en').label, labelVi: getMappingStatusDisplay('unresolved', 'vi').label, dotColor: 'bg-slate-400' },
 ];
 
 export const LABEL_FILTERS: {
@@ -29,11 +30,11 @@ export const LABEL_FILTERS: {
   labelVi: string;
   dotColor: string;
 }[] = [
-  { value: 'verified', label: 'Verified', labelVi: 'Đã xác minh', dotColor: 'bg-emerald-500' },
-  { value: 'metadata_error', label: 'Meta Error', labelVi: 'Sai Metadata', dotColor: 'bg-amber-500' },
-  { value: 'suspected_hallucination', label: 'Suspected', labelVi: 'Nghi vấn', dotColor: 'bg-red-500' },
-  { value: 'unresolved', label: 'Unresolved', labelVi: 'Chưa xác minh', dotColor: 'bg-slate-400' },
-  { value: 'resource', label: 'URL / Legal Resource', labelVi: 'Nguồn Web & Pháp quy', dotColor: 'bg-violet-500' },
+  { value: 'verified', label: getVerdictDisplay('verified', 'en').label, labelVi: getVerdictDisplay('verified', 'vi').label, dotColor: 'bg-emerald-500' },
+  { value: 'metadata_error', label: getVerdictDisplay('metadata_error', 'en').label, labelVi: getVerdictDisplay('metadata_error', 'vi').label, dotColor: 'bg-amber-500' },
+  { value: 'suspected_hallucination', label: getVerdictDisplay('suspected_hallucination', 'en').label, labelVi: getVerdictDisplay('suspected_hallucination', 'vi').label, dotColor: 'bg-red-500' },
+  { value: 'unresolved', label: getVerdictDisplay('unresolved', 'en').label, labelVi: getVerdictDisplay('unresolved', 'vi').label, dotColor: 'bg-slate-400' },
+  { value: 'resource', label: getVerdictDisplay('resource', 'en').label, labelVi: getVerdictDisplay('resource', 'vi').label, dotColor: 'bg-violet-500' },
 ];
 
 export type ViewMode = 'integrity' | 'source' | 'combined';

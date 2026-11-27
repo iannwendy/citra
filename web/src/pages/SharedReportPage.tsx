@@ -18,6 +18,10 @@ import {
   Lock,
   Sparkles,
   Scale,
+  Printer,
+  Sun,
+  Moon,
+  Search,
 } from 'lucide-react';
 import {
   api,
@@ -26,7 +30,9 @@ import {
   type Verdict,
 } from '@/api/client';
 import { FileFormatIcon } from '@/components/FileFormatIcon';
+import { DecisionSupportBanner } from '@/components/DecisionSupportBanner';
 import { useToast } from '@/contexts/ToastContext';
+import { useTheme } from '@/contexts/ThemeContext';
 import { copyTextToClipboard } from '@/lib/clipboard';
 import { toSafeDoiHref, toSafeExternalHref } from '@/lib/utils';
 import { encodeQrMatrix } from '@/lib/qrCode';
@@ -38,6 +44,15 @@ import {
   getVerdictExplanation,
   isLegalStatuteVerdict,
 } from '@/lib/verdictExplanation';
+import {
+  normalizeVerdictKey,
+  getVerdictDisplay,
+  formatCisScore,
+  formatLocalizedDateTime,
+  formatUserError,
+  getScannedPdfNotice,
+  resolveAcademicLang,
+} from '@/lib/academicTaxonomy';
 
 /**
  * Genuine ISO/IEC 18004 QR Code SVG with a 4-module quiet zone.
@@ -99,6 +114,49 @@ function VerificationQrMatrixSvg({
   );
 }
 
+/**
+ * Strips raw markdown backticks, internal neural telemetry blocks, and raw
+ * uppercase backend enum tokens from public verification text.
+ */
+function sanitizePublicText(text: string, lang: 'en' | 'vi'): string {
+  if (!text) return '';
+  let out = text
+    // Strip internal [Neural: content alignment score=...] blocks
+    .replace(/\s*\[Neural:[^\]]*\]/gi, '')
+    // Strip parenthetical raw telemetry e.g. (title_sim=1.00, author_sim=1.00)
+    .replace(/\s*\((?:[^()]*\b(?:title_sim|author_sim|year_diff|score|sim)=[^()]*)\)/gi, '')
+    // Unwrap backticked enum tokens and replace known ones with human labels
+    .replace(/`([^`]+)`/g, (_match, inner: string) => {
+      const token = inner.trim().toLowerCase().replace(/[\s-]+/g, '_');
+      if (
+        token === 'suspected_hallucination' ||
+        token === 'metadata_error' ||
+        token === 'verified' ||
+        token === 'unresolved' ||
+        token === 'resource' ||
+        token === 'url_resource'
+      ) {
+        return `"${getVerdictDisplay(token, lang).label}"`;
+      }
+      return inner.trim();
+    })
+    // Replace bare uppercase internal enum tokens
+    .replace(/\bSUSPECTED_HALLUCINATION\b/g, getVerdictDisplay('suspected_hallucination', lang).label)
+    .replace(/\bMETADATA_ERROR\b/g, getVerdictDisplay('metadata_error', lang).label)
+    .replace(/\bURL_RESOURCE\b/g, getVerdictDisplay('resource', lang).label)
+    .replace(/\bUNCITED_REF\b/g, lang === 'vi' ? 'Chưa trích dẫn trong bài' : 'Not Cited')
+    .replace(/\bSTYLE_INCONSISTENT\b/g, lang === 'vi' ? 'Khác chuẩn trích dẫn' : 'Style Issue')
+    .replace(/\bDUPLICATE_REF\b/g, lang === 'vi' ? 'Trích dẫn trùng lặp' : 'Duplicate Reference')
+    // Clean double closing parens and double spaces
+    .replace(/\)\)+/g, ')')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+
+  // Fix missing space after colon in Vietnamese/English prose (excluding URLs/times)
+  out = out.replace(/([A-Za-zÀ-ỹ]):(?=[A-Za-zÀ-ỹ])/g, '$1: ');
+  return out;
+}
+
 function localizeExplanation(v: SharedVerdictItem, lang: 'en' | 'vi'): string {
   const raw = (v.explanation || v.reasoning || '').trim();
   const asVerdict: Verdict = {
@@ -135,44 +193,20 @@ function localizeExplanation(v: SharedVerdictItem, lang: 'en' | 'vi'): string {
       /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i.test(
         raw,
       );
+    const hasRawTelemetry = /\[Neural:|title_sim=|author_sim=|\bR-[A-Z0-9_-]+\b/i.test(raw);
     if (
       !raw ||
       hasVietnameseChars ||
+      hasRawTelemetry ||
       v.label === 'resource' ||
       (v.triggered_rules ?? []).includes('R-URL-CONTENT-MISMATCH') ||
       (v.triggered_rules ?? []).includes('R-INCOMPLETE-METADATA')
     ) {
-      return getVerdictExplanation(asVerdict, 'en');
+      return sanitizePublicText(getVerdictExplanation(asVerdict, 'en'), 'en');
     }
-    return raw;
+    return sanitizePublicText(raw, 'en');
   }
-  const localizedSummary = getVerdictExplanation(asVerdict, 'vi');
-  if (!raw) return localizedSummary;
-
-  const translatedTechnical = raw
-    .replace(
-      /Exact match in local DB/gi,
-      'Khớp chính xác trong CSDL học thuật cục bộ',
-    )
-    .replace(
-      /Strong match in local DB/gi,
-      'Khớp độ tương đồng cao trong CSDL học thuật cục bộ',
-    )
-    .replace(
-      /Exact title and DOI match in/gi,
-      'Khớp chính xác tiêu đề và DOI trên',
-    )
-    .replace(
-      /Zero matches across 15\+ scholarly indexes/gi,
-      'Không tìm thấy bản ghi khớp trên hơn 15 cơ sở dữ liệu học thuật',
-    )
-    .replace(/title_sim=/g, 'độ khớp tiêu đề=')
-    .replace(/author_sim=/g, 'độ khớp tác giả=');
-
-  if (translatedTechnical !== raw) {
-    return `${localizedSummary} (${translatedTechnical})`;
-  }
-  return localizedSummary;
+  return sanitizePublicText(getVerdictExplanation(asVerdict, 'vi'), 'vi');
 }
 
 const CIS_COMPONENT_KEYS: Array<{
@@ -207,17 +241,151 @@ const CIS_COMPONENT_KEYS: Array<{
   },
 ];
 
+interface PublicReceiptHeaderProps {
+  lang: 'en' | 'vi';
+  isDark: boolean;
+  onToggleTheme: () => void;
+  onToggleLanguage: () => void;
+  showReportActions?: boolean;
+  copied?: boolean;
+  onCopyLink?: () => void;
+  onPrint?: () => void;
+}
+
+function PublicReceiptHeader({
+  lang,
+  isDark,
+  onToggleTheme,
+  onToggleLanguage,
+  showReportActions = false,
+  copied = false,
+  onCopyLink,
+  onPrint,
+}: PublicReceiptHeaderProps) {
+  const { t } = useTranslation();
+  return (
+    <header className="border-b border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md sticky top-0 z-40 print:static print:bg-white print:border-slate-300">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-2 sm:gap-3">
+        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+          <Link
+            to="/"
+            className="inline-flex items-center gap-2 font-display font-bold text-lg tracking-tight text-slate-900 dark:text-white shrink-0"
+          >
+            <ShieldCheck className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
+            <span>CITRA</span>
+          </Link>
+          <span
+            data-testid="shared-receipt-badge"
+            className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-mono font-semibold bg-emerald-50 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 whitespace-nowrap"
+          >
+            <Lock className="h-3 w-3 shrink-0" />
+            {lang === 'vi'
+              ? 'CHỨNG NHẬN XÁC MINH TRÍCH DẪN'
+              : 'CITATION VERIFICATION RECEIPT'}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 print:hidden">
+          <button
+            type="button"
+            onClick={onToggleTheme}
+            data-testid="shared-theme-toggle"
+            aria-label={
+              lang === 'vi'
+                ? isDark
+                  ? 'Chuyển sang giao diện sáng'
+                  : 'Chuyển sang giao diện tối'
+                : isDark
+                  ? 'Switch to light mode'
+                  : 'Switch to dark mode'
+            }
+            title={
+              lang === 'vi'
+                ? isDark
+                  ? 'Chuyển sang giao diện sáng'
+                  : 'Chuyển sang giao diện tối'
+                : isDark
+                  ? 'Switch to light mode'
+                  : 'Switch to dark mode'
+            }
+            className="inline-flex items-center justify-center p-1.5 sm:px-2 sm:py-1.5 rounded-lg text-xs border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors cursor-pointer touch-manipulation select-none"
+          >
+            {isDark ? (
+              <Sun className="h-3.5 w-3.5 text-amber-400" />
+            ) : (
+              <Moon className="h-3.5 w-3.5 text-indigo-600" />
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={onToggleLanguage}
+            data-testid="shared-lang-toggle"
+            aria-label={t('nav.language')}
+            title={
+              lang === 'vi'
+                ? 'Chuyển sang Tiếng Anh (EN)'
+                : 'Switch to Vietnamese (VI)'
+            }
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-mono font-semibold border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer touch-manipulation select-none"
+          >
+            <Globe className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+            <span>{lang === 'vi' ? 'VI' : 'EN'}</span>
+          </button>
+
+          {showReportActions && onPrint && (
+            <button
+              type="button"
+              onClick={onPrint}
+              data-testid="shared-print-btn"
+              title={lang === 'vi' ? 'In hoặc lưu PDF chứng nhận' : 'Print or save receipt as PDF'}
+              className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-mono font-semibold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 transition-colors cursor-pointer touch-manipulation select-none"
+            >
+              <Printer className="h-3.5 w-3.5 text-slate-600 dark:text-slate-300" />
+              <span className="hidden md:inline">
+                {lang === 'vi' ? 'In / Lưu PDF' : 'Print / Save PDF'}
+              </span>
+            </button>
+          )}
+
+          {showReportActions && onCopyLink && (
+            <button
+              type="button"
+              onClick={onCopyLink}
+              data-testid="copy-share-url-btn"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono font-semibold bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white transition-colors cursor-pointer touch-manipulation select-none"
+            >
+              {copied ? (
+                <>
+                  <Check className="h-3.5 w-3.5" />
+                  <span>{t('sharedReport.copied')}</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="h-3.5 w-3.5" />
+                  <span>{t('sharedReport.copyVerificationLink')}</span>
+                </>
+              )}
+            </button>
+          )}
+        </div>
+      </div>
+    </header>
+  );
+}
+
 export function SharedReportPage() {
   const { token } = useParams<{ token: string }>();
   const { t, i18n } = useTranslation();
   const toast = useToast();
+  const { isDark, setTheme } = useTheme();
   const [report, setReport] = useState<SharedEssayReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>({});
 
-  const lang = i18n.language?.startsWith('vi') ? 'vi' : 'en';
+  const lang = resolveAcademicLang(i18n.resolvedLanguage || i18n.language);
 
   useEffect(() => {
     let cancelled = false;
@@ -273,6 +441,16 @@ export function SharedReportPage() {
     setTimeout(() => setCopied(false), 2500);
   };
 
+  const handlePrint = () => {
+    if (typeof window !== 'undefined' && typeof window.print === 'function') {
+      window.print();
+    }
+  };
+
+  const handleToggleTheme = () => {
+    setTheme(isDark ? 'light' : 'dark');
+  };
+
   const toggleExpand = (refId: string) => {
     setExpandedIds((prev) => ({ ...prev, [refId]: !prev[refId] }));
   };
@@ -297,12 +475,14 @@ export function SharedReportPage() {
     label: SharedVerdictItem['label'],
     triggeredRules?: string[],
   ) => {
-    switch (label) {
+    const normalized = normalizeVerdictKey(label);
+    const display = getVerdictDisplay(normalized, lang);
+    switch (normalized) {
       case 'verified':
         return (
           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-mono font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-300/60 dark:border-emerald-800">
             <CheckCircle2 className="h-3.5 w-3.5" />
-            {t('verdict.verified')}
+            {display.label}
           </span>
         );
       case 'metadata_error': {
@@ -313,13 +493,10 @@ export function SharedReportPage() {
           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-mono font-semibold bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-300/60 dark:border-amber-800">
             <AlertTriangle className="h-3.5 w-3.5" />
             {isIncompleteMeta
-              ? t(
-                  'verdict.incompleteReference',
-                  lang === 'vi'
-                    ? 'Thiếu quy cách trích dẫn'
-                    : 'Incomplete Reference',
-                )
-              : t('verdict.metadataError')}
+              ? lang === 'vi'
+                ? 'Thiếu quy cách trích dẫn'
+                : 'Incomplete Reference'
+              : display.label}
           </span>
         );
       }
@@ -327,7 +504,7 @@ export function SharedReportPage() {
         return (
           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-mono font-semibold bg-red-100 text-red-800 dark:bg-red-950/80 dark:text-red-300 border border-red-300/60 dark:border-red-800">
             <XCircle className="h-3.5 w-3.5" />
-            {t('verdict.suspectedHallucination')}
+            {display.label}
           </span>
         );
       case 'resource': {
@@ -346,7 +523,7 @@ export function SharedReportPage() {
               ? lang === 'vi'
                 ? 'Văn bản Pháp luật'
                 : 'Legal Statute'
-              : t('verdict.resource')}
+              : display.label}
           </span>
         );
       }
@@ -354,7 +531,7 @@ export function SharedReportPage() {
         return (
           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-mono font-semibold bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-300/60 dark:border-slate-700">
             <HelpCircle className="h-3.5 w-3.5" />
-            {t('verdict.unresolved')}
+            {display.label}
           </span>
         );
     }
@@ -363,43 +540,96 @@ export function SharedReportPage() {
   if (loading) {
     return (
       <div
-        className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col items-center justify-center p-6"
+        className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col"
         data-testid="shared-report-loading"
       >
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600 mb-4" />
-        <p className="text-sm font-mono text-slate-600 dark:text-slate-400">
-          {t('sharedReport.verifyingSignature')}
-        </p>
+        <PublicReceiptHeader
+          lang={lang}
+          isDark={isDark}
+          onToggleTheme={handleToggleTheme}
+          onToggleLanguage={toggleLanguage}
+        />
+        <div className="flex-1 flex flex-col items-center justify-center p-6">
+          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600 mb-4" />
+          <p className="text-sm font-mono text-slate-600 dark:text-slate-400">
+            {t('sharedReport.verifyingSignature')}
+          </p>
+        </div>
       </div>
     );
   }
 
   if (error || !report) {
+    const formattedErr = formatUserError(
+      error,
+      lang,
+      t('sharedReport.invalidOrExpiredDesc'),
+    );
+    const displayErr =
+      lang === 'vi' &&
+      /tampered|missing verification token|signature/i.test(formattedErr)
+        ? t('sharedReport.invalidOrExpiredDesc')
+        : formattedErr;
+
     return (
       <div
-        className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col items-center justify-center p-6"
+        className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col"
         data-testid="shared-report-error"
       >
-        <div className="max-w-md w-full rounded-2xl bg-white dark:bg-slate-900 border border-red-200 dark:border-red-900/60 p-6 text-center shadow-sm">
-          <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-950/80 flex items-center justify-center mx-auto mb-4">
-            <AlertTriangle className="h-6 w-6 text-red-600 dark:text-red-400" />
+        <PublicReceiptHeader
+          lang={lang}
+          isDark={isDark}
+          onToggleTheme={handleToggleTheme}
+          onToggleLanguage={toggleLanguage}
+        />
+        <div className="flex-1 flex flex-col items-center justify-center p-6">
+          <div className="max-w-md w-full rounded-2xl bg-white dark:bg-slate-900 border border-red-200 dark:border-red-900/60 p-6 text-center shadow-sm">
+            <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-950/80 flex items-center justify-center mx-auto mb-4">
+              <AlertTriangle className="h-6 w-6 text-red-600 dark:text-red-400" />
+            </div>
+            <h1 className="text-lg font-bold text-slate-900 dark:text-slate-100 mb-2">
+              {t('sharedReport.invalidOrExpiredTitle')}
+            </h1>
+            <p className="text-sm text-slate-600 dark:text-slate-400 mb-3">
+              {displayErr}
+            </p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-800 rounded-xl px-3.5 py-2.5 mb-6 leading-relaxed">
+              {lang === 'vi'
+                ? 'Vui lòng liên hệ tác giả tài liệu để xin liên kết xác minh mới.'
+                : 'Please contact the document author to request a new verification link.'}
+            </p>
+            <Link
+              to="/"
+              className="inline-flex items-center justify-center px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium transition-colors"
+            >
+              {t('sharedReport.returnHome')}
+            </Link>
           </div>
-          <h1 className="text-lg font-bold text-slate-900 dark:text-slate-100 mb-2">
-            {t('sharedReport.invalidOrExpiredTitle')}
-          </h1>
-          <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">
-            {error || t('sharedReport.invalidOrExpiredDesc')}
-          </p>
-          <Link
-            to="/"
-            className="inline-flex items-center justify-center px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium transition-colors"
-          >
-            {t('sharedReport.returnHome')}
-          </Link>
         </div>
       </div>
     );
   }
+
+  const docDiag = (
+    report as SharedEssayReport & {
+      document_diagnostics?: {
+        is_scanned_pdf?: boolean;
+        scanned_pages_count?: number;
+        avg_chars_per_page?: number;
+        legacy_encoding_detected?: string | null;
+        ocr_pages_recovered?: number[];
+        warning_message?: string | null;
+        warning_message_en?: string | null;
+        warning_message_vi?: string | null;
+      } | null;
+    }
+  ).document_diagnostics;
+
+  const isUnscannable =
+    Boolean(report.cis?.is_unscannable) ||
+    (Boolean(docDiag?.is_scanned_pdf) &&
+      report.num_citations === 0 &&
+      report.verdicts.length === 0);
 
   const cisScore = Number(report.cis?.score ?? 0);
   const cisComponents = report.cis?.components ?? {};
@@ -432,69 +662,34 @@ export function SharedReportPage() {
                 : 'APA'
             : rawStyle;
 
+  const formattedVerifiedAt = formatLocalizedDateTime(report.verified_at, lang);
+  const sanitizedDisclaimer = sanitizePublicText(
+    t('sharedReport.disclaimer'),
+    lang,
+  );
+
   return (
     <div
-      className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 pb-16"
+      className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 pb-16 print:bg-white print:pb-6"
       data-testid="shared-report-page"
     >
       {/* Top Public Verification Bar */}
-      <header className="border-b border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md sticky top-0 z-40">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3 min-w-0">
-            <Link
-              to="/"
-              className="inline-flex items-center gap-2 font-display font-bold text-lg tracking-tight text-slate-900 dark:text-white shrink-0"
-            >
-              <ShieldCheck className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
-              <span>CITRA</span>
-            </Link>
-            <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-mono font-semibold bg-emerald-50 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-              <Lock className="h-3 w-3" />
-              {t('sharedReport.publicAuditBadge')}
-            </span>
-          </div>
+      <PublicReceiptHeader
+        lang={lang}
+        isDark={isDark}
+        onToggleTheme={handleToggleTheme}
+        onToggleLanguage={toggleLanguage}
+        showReportActions
+        copied={copied}
+        onCopyLink={() => void handleCopyLink()}
+        onPrint={handlePrint}
+      />
 
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={toggleLanguage}
-              data-testid="shared-lang-toggle"
-              aria-label={t('nav.language')}
-              title={
-                lang === 'vi'
-                  ? 'Chuyển sang Tiếng Anh (EN)'
-                  : 'Switch to Vietnamese (VI)'
-              }
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-mono font-semibold border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer touch-manipulation select-none"
-            >
-              <Globe className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
-              <span>{lang === 'vi' ? 'VI' : 'EN'}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleCopyLink()}
-              data-testid="copy-share-url-btn"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono font-semibold bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white transition-colors cursor-pointer touch-manipulation select-none"
-            >
-              {copied ? (
-                <>
-                  <Check className="h-3.5 w-3.5" />
-                  <span>{t('sharedReport.copied')}</span>
-                </>
-              ) : (
-                <>
-                  <Copy className="h-3.5 w-3.5" />
-                  <span>{t('sharedReport.copyVerificationLink')}</span>
-                </>
-              )}
-            </button>
-          </div>
-        </div>
-      </header>
+      <main className="max-w-5xl mx-auto px-4 sm:px-6 pt-6 sm:pt-8 space-y-6">
+        <DecisionSupportBanner variant="compact" lang={lang} />
 
-      <main className="max-w-5xl mx-auto px-4 sm:px-6 pt-8 space-y-6">
         {/* Digital Verification Receipt Card */}
-        <section className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-sm">
+        <section className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-sm print:shadow-none">
           <div className="flex flex-col lg:flex-row items-start justify-between gap-6">
             <div className="space-y-3 flex-1 min-w-0 w-full">
               <div className="flex items-center gap-2.5 flex-wrap">
@@ -516,7 +711,9 @@ export function SharedReportPage() {
 
               <div>
                 <p className="text-xs font-mono uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-1">
-                  {t('sharedReport.receiptHeading')}
+                  {lang === 'vi'
+                    ? 'Chứng nhận Xác minh Trích dẫn CITRA'
+                    : 'CITRA Citation Verification Receipt'}
                 </p>
                 <div className="flex items-center gap-3 min-w-0">
                   <FileFormatIcon filename={report.filename} size="lg" />
@@ -529,7 +726,7 @@ export function SharedReportPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 text-xs font-mono">
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-2 text-xs font-mono">
                 <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-800">
                   <div className="text-slate-400 dark:text-slate-500">
                     {t('sharedReport.pagesLabel')}
@@ -554,18 +751,21 @@ export function SharedReportPage() {
                     {displayStyle}
                   </div>
                 </div>
-                <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-800">
+                <div className="col-span-2 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-800">
                   <div className="text-slate-400 dark:text-slate-500">
                     {t('sharedReport.verifiedAtLabel')}
                   </div>
-                  <div className="font-bold text-slate-800 dark:text-slate-200 mt-0.5 truncate">
-                    {report.verified_at ? report.verified_at.slice(0, 10) : '—'}
+                  <div
+                    data-testid="shared-verified-at"
+                    className="font-bold text-slate-800 dark:text-slate-200 mt-0.5 whitespace-nowrap"
+                  >
+                    {formattedVerifiedAt}
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* QR Matrix + Cryptographic Signature Block */}
+            {/* QR Matrix + Integrity Seal Block */}
             <div className="flex items-center gap-4 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 w-full lg:w-auto">
               <VerificationQrMatrixSvg
                 value={shareUrlFull}
@@ -574,7 +774,7 @@ export function SharedReportPage() {
               />
               <div className="space-y-1.5 text-xs font-mono min-w-0 flex-1">
                 <div className="font-bold text-slate-800 dark:text-slate-200">
-                  {t('sharedReport.qrSealTitle')}
+                  {lang === 'vi' ? 'Mã xác thực toàn vẹn' : 'Tamper-Evident Seal'}
                 </div>
                 <div className="text-slate-500 dark:text-slate-400 text-[11px] leading-relaxed">
                   {t('sharedReport.qrSealSubtitle')}
@@ -591,23 +791,22 @@ export function SharedReportPage() {
 
         {/* Document Ingestion Diagnostics (OCR, Legacy TCVN3/VNI, Scanned PDF) */}
         {(() => {
-          const docDiag = (
-            report as SharedEssayReport & {
-              document_diagnostics?: {
-                is_scanned_pdf?: boolean;
-                scanned_pages_count?: number;
-                avg_chars_per_page?: number;
-                legacy_encoding_detected?: string | null;
-                ocr_pages_recovered?: number[];
-                warning_message?: string | null;
-              } | null;
-            }
-          ).document_diagnostics;
           if (!docDiag) return null;
           const hasLegacy = Boolean(docDiag.legacy_encoding_detected);
           const hasOcr = (docDiag.ocr_pages_recovered?.length ?? 0) > 0;
           const hasScanned = Boolean(docDiag.is_scanned_pdf);
           if (!hasLegacy && !hasOcr && !hasScanned) return null;
+          const scannedNotice = getScannedPdfNotice(
+            lang,
+            docDiag.scanned_pages_count ?? report.num_pages,
+            report.num_pages,
+          );
+          const scannedMessage =
+            lang === 'en'
+              ? docDiag.warning_message_en ||
+                `${scannedNotice.title}. ${scannedNotice.description}`
+              : docDiag.warning_message_vi ||
+                `${scannedNotice.title}. ${scannedNotice.description}`;
           return (
             <div
               data-testid="shared-doc-diagnostics-banner"
@@ -634,23 +833,18 @@ export function SharedReportPage() {
                   <FileText className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
                   <span>
                     {lang === 'vi'
-                      ? `Đã khôi phục văn bản bằng OCR (Tesseract vie+eng) tại trang: ${docDiag.ocr_pages_recovered!.join(', ')}`
-                      : `Recovered text via Tesseract OCR (vie+eng) on page(s): ${docDiag.ocr_pages_recovered!.join(', ')}`}
+                      ? `Đã khôi phục văn bản bằng OCR tại trang: ${docDiag.ocr_pages_recovered!.join(', ')}`
+                      : `Recovered text via OCR on page(s): ${docDiag.ocr_pages_recovered!.join(', ')}`}
                   </span>
                 </div>
               )}
               {hasScanned && (
                 <div
                   data-testid="shared-scanned-pdf-pill"
-                  className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-mono bg-amber-50/90 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200"
+                  className="inline-flex items-start gap-2 px-3.5 py-2.5 rounded-xl text-xs bg-amber-50/90 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 leading-relaxed"
                 >
-                  <AlertTriangle className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
-                  <span>
-                    {docDiag.warning_message ||
-                      (lang === 'vi'
-                        ? `Cảnh báo: Phát hiện PDF dạng ảnh quét (Thiếu lớp văn bản số hóa — ${docDiag.scanned_pages_count ?? report.num_pages}/${report.num_pages} trang)`
-                        : `Scanned / Image-Only PDF Detected (${docDiag.scanned_pages_count ?? report.num_pages}/${report.num_pages} pages missing digital text layer)`)}
-                  </span>
+                  <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                  <span>{scannedMessage}</span>
                 </div>
               )}
             </div>
@@ -659,7 +853,7 @@ export function SharedReportPage() {
 
         {/* CIS Score & 5-Component Breakdown + Verdict Distribution */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          <section className="lg:col-span-7 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-sm">
+          <section className="lg:col-span-7 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-sm print:shadow-none">
             <div className="flex items-center justify-between gap-4 mb-5">
               <div>
                 <h2 className="text-base font-bold text-slate-900 dark:text-white">
@@ -669,19 +863,29 @@ export function SharedReportPage() {
                   {t('essay.cisSubtitle')}
                 </p>
               </div>
-              <div
-                data-testid="shared-cis-score"
-                className="text-3xl font-display font-extrabold text-indigo-600 dark:text-indigo-400"
-              >
-                {cisScore.toFixed(1)}
-                <span className="text-sm font-mono text-slate-400">/100</span>
-              </div>
+              {isUnscannable ? (
+                <div
+                  data-testid="shared-cis-score"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-mono font-bold bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-200 border border-amber-200 dark:border-amber-800 whitespace-nowrap"
+                >
+                  {lang === 'vi' ? 'N/A · Không thể quét' : 'N/A · Not Scannable'}
+                </div>
+              ) : (
+                <div
+                  data-testid="shared-cis-score"
+                  className="text-2xl sm:text-3xl font-display font-extrabold text-indigo-600 dark:text-indigo-400 whitespace-nowrap"
+                >
+                  {formatCisScore(cisScore)}
+                </div>
+              )}
             </div>
 
             <div className="space-y-3">
               {CIS_COMPONENT_KEYS.map(({ key, labelKey, fallbackEn }) => {
                 const rawVal = Number(cisComponents[key] ?? 0);
-                const pct = Math.max(0, Math.min(100, rawVal <= 1 ? rawVal * 100 : rawVal));
+                const pct = isUnscannable
+                  ? 0
+                  : Math.max(0, Math.min(100, rawVal <= 1 ? rawVal * 100 : rawVal));
                 return (
                   <div key={key} className="space-y-1">
                     <div className="flex justify-between text-xs font-mono">
@@ -689,7 +893,7 @@ export function SharedReportPage() {
                         {t(labelKey, fallbackEn)}
                       </span>
                       <span className="font-semibold text-slate-900 dark:text-white">
-                        {pct.toFixed(0)}%
+                        {isUnscannable ? '—' : `${pct.toFixed(0)}%`}
                       </span>
                     </div>
                     <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
@@ -704,7 +908,7 @@ export function SharedReportPage() {
             </div>
           </section>
 
-          <section className="lg:col-span-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-sm flex flex-col justify-between">
+          <section className="lg:col-span-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-sm print:shadow-none flex flex-col justify-between">
             <div>
               <h2 className="text-base font-bold text-slate-900 dark:text-white mb-1">
                 {t('sharedReport.verdictDistributionTitle')}
@@ -716,7 +920,7 @@ export function SharedReportPage() {
               <div className="grid grid-cols-2 gap-3 text-xs font-mono">
                 <div className="p-3 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/40 border border-emerald-200/70 dark:border-emerald-900/60">
                   <div className="text-emerald-700 dark:text-emerald-300">
-                    {t('verdict.verified')}
+                    {getVerdictDisplay('verified', lang).label}
                   </div>
                   <div
                     className="text-2xl font-bold text-emerald-800 dark:text-emerald-200 mt-1"
@@ -727,7 +931,7 @@ export function SharedReportPage() {
                 </div>
                 <div className="p-3 rounded-xl bg-amber-50/70 dark:bg-amber-950/40 border border-amber-200/70 dark:border-amber-900/60">
                   <div className="text-amber-700 dark:text-amber-300">
-                    {t('verdict.metadataError')}
+                    {getVerdictDisplay('metadata_error', lang).label}
                   </div>
                   <div
                     className="text-2xl font-bold text-amber-800 dark:text-amber-200 mt-1"
@@ -738,7 +942,7 @@ export function SharedReportPage() {
                 </div>
                 <div className="p-3 rounded-xl bg-red-50/70 dark:bg-red-950/40 border border-red-200/70 dark:border-red-900/60">
                   <div className="text-red-700 dark:text-red-300">
-                    {t('verdict.suspectedHallucination')}
+                    {getVerdictDisplay('suspected_hallucination', lang).label}
                   </div>
                   <div
                     className="text-2xl font-bold text-red-800 dark:text-red-200 mt-1"
@@ -749,15 +953,28 @@ export function SharedReportPage() {
                 </div>
                 <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800">
                   <div className="text-slate-600 dark:text-slate-400">
-                    {t('verdict.unresolved')} / {t('verdict.resource')}
+                    {getVerdictDisplay('unresolved', lang).label}
                   </div>
                   <div
                     className="text-2xl font-bold text-slate-800 dark:text-slate-200 mt-1"
-                    data-testid="count-other"
+                    data-testid="count-unresolved"
                   >
-                    {counts.unresolved + counts.resource}
+                    {counts.unresolved}
                   </div>
                 </div>
+                {counts.resource > 0 && (
+                  <div className="col-span-2 p-3 rounded-xl bg-violet-50/70 dark:bg-violet-950/40 border border-violet-200/70 dark:border-violet-900/60 flex items-center justify-between">
+                    <div className="text-violet-700 dark:text-violet-300">
+                      {getVerdictDisplay('resource', lang).label}
+                    </div>
+                    <div
+                      className="text-xl font-bold text-violet-800 dark:text-violet-200"
+                      data-testid="count-resource"
+                    >
+                      {counts.resource}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -765,13 +982,13 @@ export function SharedReportPage() {
               data-testid="shared-report-disclaimer"
               className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400"
             >
-              {t('sharedReport.disclaimer')}
+              {sanitizedDisclaimer}
             </div>
           </section>
         </div>
 
         {/* Expandable Reference Verdicts List */}
-        <section className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-sm">
+        <section className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-sm print:shadow-none">
           <div className="flex items-center justify-between gap-4 mb-4">
             <div className="flex items-center gap-2">
               <FileText className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
@@ -789,6 +1006,7 @@ export function SharedReportPage() {
             <div className="space-y-3">
               {report.verdicts.map((v, idx) => {
                 const isExpanded = Boolean(expandedIds[v.reference_id]);
+                const normalizedLabel = normalizeVerdictKey(v.label);
                 const matched =
                   v.matched_source ??
                   (v.matched_sources && v.matched_sources.length > 0
@@ -833,6 +1051,15 @@ export function SharedReportPage() {
                         },
                       )
                   : '';
+                const showGoogleScholarFallback =
+                  !matched &&
+                  (normalizedLabel === 'suspected_hallucination' ||
+                    normalizedLabel === 'unresolved');
+                const scholarQuery = (v.raw_text || v.citation_raw || '')
+                  .replace(/^\s*\[\d+[a-z]?\]\s*/i, '')
+                  .trim()
+                  .slice(0, 180);
+
                 return (
                   <div
                     key={v.reference_id || idx}
@@ -846,8 +1073,11 @@ export function SharedReportPage() {
                     >
                       <div className="space-y-1.5 flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-mono text-xs font-bold text-slate-400">
-                            {markerLabel} ({v.reference_id})
+                          <span
+                            title={v.reference_id}
+                            className="font-mono text-xs font-bold text-slate-500 dark:text-slate-400"
+                          >
+                            {markerLabel}
                           </span>
                           {renderVerdictBadge(v.label, v.triggered_rules)}
                           {urlStatus && (
@@ -870,14 +1100,20 @@ export function SharedReportPage() {
                                 : urlStatus === 'alive'
                                   ? `✓ HTTP ${urlStatusCode ?? 200} OK`
                                   : urlStatus === 'restricted_alive'
-                                    ? `🔒 HTTP ${urlStatusCode ?? 403} OK`
+                                    ? lang === 'vi'
+                                      ? `🔒 Truy cập hạn chế (HTTP ${urlStatusCode ?? 403})`
+                                      : `🔒 Restricted Access (HTTP ${urlStatusCode ?? 403})`
                                     : urlStatus === 'archived_alive'
                                       ? lang === 'vi'
                                         ? '🏛️ Bản lưu Wayback'
                                         : '🏛️ Wayback Archived'
                                       : urlStatus === 'dead_link'
-                                        ? `✕ HTTP ${urlStatusCode ?? 404} Dead`
-                                        : '✕ Fake URL'}
+                                        ? lang === 'vi'
+                                          ? `✕ Liên kết hỏng (HTTP ${urlStatusCode ?? 404})`
+                                          : `✕ Broken Link (HTTP ${urlStatusCode ?? 404})`
+                                        : lang === 'vi'
+                                          ? '✕ Tên miền không tồn tại'
+                                          : '✕ Invalid Domain'}
                             </span>
                           )}
                           {(() => {
@@ -910,7 +1146,9 @@ export function SharedReportPage() {
                                 data-testid={`shared-cross-lingual-badge-${idx}`}
                                 className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-mono font-semibold bg-teal-50 dark:bg-teal-950/70 text-teal-800 dark:text-teal-300 border border-teal-200 dark:border-teal-800"
                               >
-                                VI↔EN ONNX
+                                {lang === 'vi'
+                                  ? 'Đối chiếu Việt ↔ Anh'
+                                  : 'VI ↔ EN Cross-Lingual'}
                                 {crossSim > 0 ? ` · ${Math.round(crossSim * 100)}%` : ''}
                               </span>
                             );
@@ -924,7 +1162,7 @@ export function SharedReportPage() {
                           {v.raw_text}
                         </p>
                       </div>
-                      <span className="text-slate-400 mt-1 shrink-0">
+                      <span className="text-slate-400 mt-1 shrink-0 print:hidden">
                         {isExpanded ? (
                           <ChevronUp className="h-4 w-4" />
                         ) : (
@@ -948,15 +1186,15 @@ export function SharedReportPage() {
                         {v.triggered_rules && v.triggered_rules.length > 0 && (
                           <div className="flex items-center gap-1.5 flex-wrap">
                             <span className="font-mono font-semibold text-slate-600 dark:text-slate-300">
-                              {t('essay.rulesTriggered')}:
+                              {lang === 'vi' ? 'Tiêu chí kiểm tra' : 'Verification Checks'}:
                             </span>
                             {v.triggered_rules.map((r) => (
                               <span
                                 key={r}
-                                title={getRuleDisplayName(r, lang)}
-                                className="px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 font-mono text-[11px]"
+                                title={r}
+                                className="px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 text-[11px] font-medium"
                               >
-                                {r}
+                                {getRuleDisplayName(r, lang)}
                               </span>
                             ))}
                           </div>
@@ -1062,6 +1300,23 @@ export function SharedReportPage() {
                                 .filter(Boolean)
                                 .join(' · ')}
                             </div>
+                          </div>
+                        )}
+                        {showGoogleScholarFallback && scholarQuery && (
+                          <div className="pt-1">
+                            <a
+                              href={`https://scholar.google.com/scholar?q=${encodeURIComponent(scholarQuery)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              data-testid={`shared-google-scholar-${idx}`}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 font-medium transition-colors"
+                            >
+                              <Search className="h-3 w-3" />
+                              {lang === 'vi'
+                                ? 'Tìm thử trên Google Scholar'
+                                : 'Search on Google Scholar'}
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
                           </div>
                         )}
                       </div>

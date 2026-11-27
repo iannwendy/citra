@@ -83,9 +83,7 @@ describe('v3.70.0 Groups 5 & 6: Cross-Lingual ONNX INT8 UI, RevisionDiff Polarit
 
     const bridgeBox = screen.getByTestId('essay-bridged-concepts');
     expect(bridgeBox.textContent).toContain('VI → EN');
-    expect(bridgeBox.textContent).toContain(
-      'Multilingual ONNX INT8 Embedding Match (paraphrase-multilingual-MiniLM-L12-v2)',
-    );
+    expect(bridgeBox.textContent).toContain('VI ↔ EN Cross-Lingual Semantic Match');
     expect(bridgeBox.textContent).toContain('84%');
 
     // Title similarity in Metadata Diff table must show 84% Sim, NEVER 11% Sim
@@ -96,7 +94,7 @@ describe('v3.70.0 Groups 5 & 6: Cross-Lingual ONNX INT8 UI, RevisionDiff Polarit
     expect(container.textContent).not.toContain('title similarity = 0.11');
     unmount();
 
-    // Verify Vietnamese localization of the ONNX INT8 callout
+    // Verify Vietnamese localization of the cross-lingual callout
     await i18n.changeLanguage('vi');
     renderWithProviders(
       <Routes>
@@ -112,7 +110,7 @@ describe('v3.70.0 Groups 5 & 6: Cross-Lingual ONNX INT8 UI, RevisionDiff Polarit
       expect(screen.getByTestId('essay-onnx-cross-lingual-badge')).toBeDefined(),
     );
     expect(screen.getByTestId('essay-onnx-cross-lingual-badge').textContent).toContain(
-      'Đối sánh ngữ nghĩa đa ngôn ngữ ONNX INT8',
+      'Đối chiếu ngữ nghĩa Việt ↔ Anh',
     );
     expect(screen.getByTestId('essay-onnx-cross-lingual-badge').textContent).toContain(
       '84%',
@@ -176,8 +174,8 @@ describe('v3.70.0 Groups 5 & 6: Cross-Lingual ONNX INT8 UI, RevisionDiff Polarit
       expect(screen.getAllByText(/Fabricated Title With Real DOI/).length).toBeGreaterThan(0),
     );
 
-    // Switch to Tab 2 (Symbolic Rules) and verify R-CHIMERIC-DOI-MISMATCH consequent
-    const rulesTab = screen.getByRole('tab', { name: /2\. Symbolic Rules/i });
+    // Switch to Tab 2 (Verification Checks) and verify R-CHIMERIC-DOI-MISMATCH consequent (in collapsible Technical Details)
+    const rulesTab = screen.getByRole('tab', { name: /2\. Verification Checks/i });
     fireEvent.mouseDown(rulesTab);
     fireEvent.click(rulesTab);
     await waitFor(() =>
@@ -188,24 +186,24 @@ describe('v3.70.0 Groups 5 & 6: Cross-Lingual ONNX INT8 UI, RevisionDiff Polarit
     );
     expect(container.textContent).toContain('R-DOI-CONFLICT');
 
-    // Switch to Tab 3 (Source Retrieval) in EN mode
-    const sourcesTabEn = screen.getByRole('tab', { name: /3\. Source Retrieval/i });
+    // Switch to Tab 1 (Checked Sources) in EN mode
+    const sourcesTabEn = screen.getByRole('tab', { name: /1\. Checked Sources/i });
     fireEvent.mouseDown(sourcesTabEn);
     fireEvent.click(sourcesTabEn);
     await waitFor(() =>
       expect(container.textContent).toContain('Matched · Sim: 0.88'),
     );
-    expect(container.textContent).toContain('NO HIT');
+    expect(container.textContent).toContain('No Hit');
 
     // Select web resource [2] in EN mode -> shows Not Routed
     const webCardEn = container.querySelector('[data-citation-id="cit-web-unrouted"]');
     fireEvent.click(webCardEn!);
     await waitFor(() =>
-      expect(container.textContent).toContain('NOT ROUTED'),
+      expect(container.textContent).toContain('Not Routed'),
     );
     unmount();
 
-    // Verify Vietnamese localization in Tab 3 (Source Retrieval)
+    // Verify Vietnamese localization in Tab 1 (Checked Sources)
     await i18n.changeLanguage('vi');
     const { container: viContainer } = renderWithProviders(
       <Routes>
@@ -220,20 +218,20 @@ describe('v3.70.0 Groups 5 & 6: Cross-Lingual ONNX INT8 UI, RevisionDiff Polarit
     await waitFor(() =>
       expect(screen.getAllByText(/Fabricated Title With Real DOI/).length).toBeGreaterThan(0),
     );
-    const sourcesTabVi = screen.getByRole('tab', { name: /3\. Nguồn Truy hồi/i });
+    const sourcesTabVi = screen.getByRole('tab', { name: /1\. Nguồn đối chiếu/i });
     fireEvent.mouseDown(sourcesTabVi);
     fireEvent.click(sourcesTabVi);
     await waitFor(() =>
       expect(viContainer.textContent).toContain('Đã khớp · Tương đồng: 0.88'),
     );
-    expect(viContainer.textContent).toContain('KHỚP');
-    expect(viContainer.textContent).toContain('KHÔNG KHỚP');
-    expect(viContainer.textContent).not.toContain('NO HIT');
+    expect(viContainer.textContent).toContain('Khớp');
+    expect(viContainer.textContent).toContain('Không khớp');
+    expect(viContainer.textContent).not.toContain('No Hit');
 
     const webCardVi = viContainer.querySelector('[data-citation-id="cit-web-unrouted"]');
     fireEvent.click(webCardVi!);
     await waitFor(() =>
-      expect(viContainer.textContent).toContain('KHÔNG ĐỊNH TUYẾN'),
+      expect(viContainer.textContent).toContain('Không định tuyến'),
     );
   });
 
@@ -335,8 +333,8 @@ describe('v3.70.0 Groups 5 & 6: Cross-Lingual ONNX INT8 UI, RevisionDiff Polarit
     const panel = screen.getByTestId('revision-diff-details-panel');
     expect(panel.textContent).toContain('[14a]');
     expect(panel.textContent).toContain('[15b]');
-    expect(panel.textContent).toContain('Metadata Error → Verified');
-    expect(panel.textContent).toContain('Unresolved → Suspected Hallucination');
+    expect(panel.textContent).toContain('Details Mismatch → Verified');
+    expect(panel.textContent).toContain('Unverified → Source Not Found');
     expect(panel.textContent).not.toContain('SUSPECTED_HALLUCINATION');
     expect(panel.textContent).not.toContain('METADATA_ERROR');
   });
@@ -421,7 +419,7 @@ describe('v3.70.0 Groups 5 & 6: Cross-Lingual ONNX INT8 UI, RevisionDiff Polarit
 
     // Filter by 'resource' pill -> shows only the legal resource item
     const resourceFilterBtn = screen.getByTestId('graph-label-filter-resource');
-    expect(resourceFilterBtn.textContent).toContain('URL / Legal Resource');
+    expect(resourceFilterBtn.textContent).toContain('Web / Legal Source');
     fireEvent.click(resourceFilterBtn);
     expect(screen.getAllByTestId('graph-sidebar-marker')).toHaveLength(1);
     expect(screen.getByTestId('graph-sidebar-marker').textContent).toBe('[15]');
@@ -591,18 +589,18 @@ describe('v3.70.0 Groups 5 & 6: Cross-Lingual ONNX INT8 UI, RevisionDiff Polarit
       expect(screen.getByTestId('inspector-list-cross-lingual-0')).toBeDefined(),
     );
     expect(screen.getByTestId('inspector-list-cross-lingual-0').textContent).toContain(
-      'VI↔EN ONNX · 84%',
+      'VI ↔ EN Match · 84%',
     );
     fireEvent.click(screen.getByTestId('page-citation-item-0'));
     await waitFor(() =>
       expect(screen.getByTestId('inspector-cross-lingual-pill')).toBeDefined(),
     );
     expect(screen.getByTestId('inspector-cross-lingual-pill').textContent).toContain(
-      'VI↔EN ONNX · 84%',
+      'VI ↔ EN Match · 84%',
     );
     unmountInsp();
 
-    // 3. SharedReportPage renders OCR + TCVN3 + Scanned PDF diagnostics chips & VI↔EN ONNX badge
+    // 3. SharedReportPage renders OCR + TCVN3 + Scanned PDF diagnostics chips & VI ↔ EN badge
     vi.spyOn(api, 'getSharedEssayReport').mockResolvedValue({
       essay_id: 3705,
       filename: 'luannvan_tcvn3_ocr.pdf',
@@ -677,10 +675,10 @@ describe('v3.70.0 Groups 5 & 6: Cross-Lingual ONNX INT8 UI, RevisionDiff Polarit
       'Auto-transcoded legacy Vietnamese encoding (TCVN3 → Unicode NFC)',
     );
     expect(screen.getByTestId('shared-ocr-recovery-pill').textContent).toContain(
-      'Recovered text via Tesseract OCR (vie+eng) on page(s): 3, 7',
+      'Recovered text via OCR on page(s): 3, 7',
     );
     expect(screen.getByTestId('shared-cross-lingual-badge-0').textContent).toContain(
-      'VI↔EN ONNX · 84%',
+      'VI ↔ EN Cross-Lingual · 84%',
     );
 
     // Toggle SharedReportPage to VI and check localized diagnostics
@@ -691,7 +689,7 @@ describe('v3.70.0 Groups 5 & 6: Cross-Lingual ONNX INT8 UI, RevisionDiff Polarit
       ),
     );
     expect(screen.getByTestId('shared-ocr-recovery-pill').textContent).toContain(
-      'Đã khôi phục văn bản bằng OCR (Tesseract vie+eng) tại trang: 3, 7',
+      'Đã khôi phục văn bản bằng OCR tại trang: 3, 7',
     );
   });
 });

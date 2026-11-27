@@ -21,6 +21,12 @@ import {
 } from 'lucide-react';
 import { isDocxFilename } from '@/lib/fileKind';
 import { useModalA11y } from '@/hooks/useModalA11y';
+import { useToast } from '@/contexts/ToastContext';
+import { formatUserError } from '@/lib/academicTaxonomy';
+import {
+  getFieldDisplayName,
+  getSourceDisplayName,
+} from '@/lib/verdictExplanation';
 import {
   IconSwap,
   TextMorph,
@@ -37,12 +43,35 @@ interface BibliographyRemediationModalProps {
 
 type StyleOption = 'apa' | 'ieee' | 'tdtu' | 'bibtex' | 'ris';
 
-const STYLE_LABELS: { id: StyleOption; label: string; ext: string }[] = [
-  { id: 'apa', label: 'APA 7th Edition', ext: 'txt' },
-  { id: 'ieee', label: 'IEEE Numeric', ext: 'txt' },
-  { id: 'tdtu', label: 'Harvard / TDTU', ext: 'txt' },
-  { id: 'bibtex', label: 'BibTeX (.bib)', ext: 'bib' },
-  { id: 'ris', label: 'RIS (.ris)', ext: 'ris' },
+/**
+ * Deduplicate adjacent repeated venue strings like "CVPR - CVPR" or
+ * "NeurIPS – NeurIPS" produced when both conference acronym and proceedings
+ * venue repeat verbatim (BUG-56).
+ */
+export function deduplicateRepeatedVenue(text: string): string {
+  if (!text) return text;
+  return text.replace(
+    /\b([A-Za-zÀ-ỹ][A-Za-z0-9À-ỹ&.,'()/\s]{1,70}?)\s*(?:[-–—]|,)\s*\1(?=[\s.,;:)(\n]|$)/gi,
+    '$1',
+  );
+}
+
+const STYLE_LABELS: {
+  id: StyleOption;
+  labelVi: string;
+  labelEn: string;
+  ext: string;
+}[] = [
+  { id: 'apa', labelVi: 'APA (Ấn bản 7)', labelEn: 'APA 7th Edition', ext: 'txt' },
+  { id: 'ieee', labelVi: 'IEEE (Đánh số)', labelEn: 'IEEE Numeric', ext: 'txt' },
+  {
+    id: 'tdtu',
+    labelVi: 'Harvard (Khóa luận)',
+    labelEn: 'Harvard (Thesis)',
+    ext: 'txt',
+  },
+  { id: 'bibtex', labelVi: 'BibTeX (.bib)', labelEn: 'BibTeX (.bib)', ext: 'bib' },
+  { id: 'ris', labelVi: 'RIS (.ris)', labelEn: 'RIS (.ris)', ext: 'ris' },
 ];
 
 export function BibliographyRemediationModal({
@@ -52,6 +81,7 @@ export function BibliographyRemediationModal({
   lang,
   onClose,
 }: BibliographyRemediationModalProps) {
+  const toast = useToast();
   const [selectedStyle, setSelectedStyle] = useState<StyleOption>('apa');
   const { containerRef: stylePillRef, pillStyle: stylePill } =
     useSlidingPill<HTMLDivElement>(selectedStyle);
@@ -78,7 +108,7 @@ export function BibliographyRemediationModal({
       })
       .catch((err) => {
         if (active) {
-          setError(err instanceof Error ? err.message : 'Failed to load remediated bibliography');
+          setError(formatUserError(err, lang));
         }
       })
       .finally(() => {
@@ -87,14 +117,23 @@ export function BibliographyRemediationModal({
     return () => {
       active = false;
     };
-  }, [open, essayId, selectedStyle]);
+  }, [open, essayId, selectedStyle, lang]);
 
   if (!open) return null;
 
   const handleCopy = async (text: string, key: string) => {
     try {
-      await navigator.clipboard.writeText(text);
+      await navigator.clipboard.writeText(deduplicateRepeatedVenue(text));
       setCopiedKey(key);
+      toast.success(
+        lang === 'vi'
+          ? key === 'all'
+            ? 'Đã sao chép toàn bộ danh mục'
+            : 'Đã sao chép trích dẫn'
+          : key === 'all'
+            ? 'Copied full bibliography'
+            : 'Copied citation',
+      );
       setTimeout(() => setCopiedKey(null), 2000);
     } catch {
       // ignore clipboard errors
@@ -109,13 +148,17 @@ export function BibliographyRemediationModal({
     setHealedError(null);
     try {
       await api.downloadAutoHealedDocx(essayId, selectedDocxStyle, filename);
+      toast.success(
+        lang === 'vi'
+          ? 'Đã tải xuống tệp Word (.docx) chuẩn hóa'
+          : 'Downloaded auto-healed Word (.docx) file',
+      );
     } catch (err) {
-      const detail = err instanceof Error ? err.message : '';
+      const detail = formatUserError(err, lang);
       setHealedError(
-        (lang === 'vi'
-          ? 'Không thể xuất tệp Word tự sửa lỗi. Vui lòng thử lại.'
-          : 'Could not export the auto-healed Word file. Please try again.') +
-          (detail ? ` (${detail})` : ''),
+        lang === 'vi'
+          ? `Không thể xuất tệp Word tự sửa lỗi. ${detail}`
+          : `Could not export the auto-healed Word file. ${detail}`,
       );
     } finally {
       setHealedBusy(false);
@@ -124,11 +167,12 @@ export function BibliographyRemediationModal({
 
   const healedDisabledHint =
     lang === 'vi'
-      ? 'Auto-Healed .DOCX chỉ khả dụng với bài nộp dạng tệp .docx'
-      : 'Auto-Healed .DOCX is only available for essays uploaded as .docx files';
+      ? 'Chỉ khả dụng cho tệp Word (.docx) — bài nộp PDF không hỗ trợ xuất trực tiếp .docx'
+      : 'Available for Word (.docx) uploads only — PDF uploads cannot export directly to .docx';
 
   const handleDownloadFile = (content: string, ext: string, suffix: string) => {
-    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const cleaned = deduplicateRepeatedVenue(content);
+    const blob = new Blob([cleaned], { type: 'text/plain;charset=utf-8' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     const cleanBase = (filename || `essay_${essayId}`).replace(/\.[^/.]+$/, '');
@@ -138,6 +182,11 @@ export function BibliographyRemediationModal({
     a.click();
     document.body.removeChild(a);
     window.URL.revokeObjectURL(url);
+    toast.success(
+      lang === 'vi'
+        ? `Đã tải xuống tệp .${ext.toUpperCase()}`
+        : `Downloaded .${ext.toUpperCase()} file`,
+    );
   };
 
   const flaggedRedCount = data
@@ -189,16 +238,13 @@ export function BibliographyRemediationModal({
               <div className="flex items-center gap-2">
                 <h2 id={titleId} className="text-base sm:text-lg font-display font-bold tracking-tight">
                   {lang === 'vi'
-                    ? '1-Click Chuẩn hóa & Sửa lỗi Danh mục Tài liệu Tham khảo'
-                    : '1-Click Bibliography Auto-Remediation & Export Studio'}
+                    ? 'Chuẩn hóa & Sửa lỗi Danh mục Tài liệu Tham khảo'
+                    : 'Bibliography Auto-Remediation & Export'}
                 </h2>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-indigo-500/30 border border-indigo-400/40 text-indigo-200">
-                  PRO STUDIO
-                </span>
               </div>
               <p className="text-xs text-slate-300 mt-0.5">
                 {lang === 'vi'
-                  ? 'Tự động đối chiếu & khôi phục Năm xuất bản, Tiêu đề, Tác giả, Tạp chí và DOI chuẩn xác từ 15+ CSDL học thuật.'
+                  ? 'Tự động đối chiếu & khôi phục Năm xuất bản, Tiêu đề, Tác giả, Nơi công bố và DOI chuẩn xác từ 15+ CSDL học thuật.'
                   : 'Automatically repairs mismatched Year, Title, Authors, Venue & DOI using canonical records from 15+ scholarly databases.'}
               </p>
             </div>
@@ -208,7 +254,7 @@ export function BibliographyRemediationModal({
             type="button"
             onClick={onClose}
             className="p-2 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition-colors"
-            aria-label="Close studio"
+            aria-label={lang === 'vi' ? 'Đóng cửa sổ chuẩn hóa' : 'Close remediation modal'}
           >
             <X className="h-5 w-5" />
           </button>
@@ -220,7 +266,7 @@ export function BibliographyRemediationModal({
             ref={stylePillRef}
             className="relative flex flex-wrap items-center gap-1.5"
             role="group"
-            aria-label="Target citation style"
+            aria-label={lang === 'vi' ? 'Chọn chuẩn trích dẫn' : 'Target citation style'}
           >
             {stylePill.ready && (
               <span
@@ -251,7 +297,7 @@ export function BibliographyRemediationModal({
                       : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-indigo-400'
                   }`}
                 >
-                  {st.label}
+                  {lang === 'vi' ? st.labelVi : st.labelEn}
                 </button>
               );
             })}
@@ -359,8 +405,8 @@ export function BibliographyRemediationModal({
                   )}
                   <span>
                     {lang === 'vi'
-                      ? 'Xuất Word (.docx) Tự sửa lỗi + Change Log'
-                      : 'Export Auto-Healed .DOCX + Change Log'}
+                      ? 'Xuất Word (.docx) kèm nhật ký chỉnh sửa'
+                      : 'Export Auto-Healed .DOCX + Edit Log'}
                   </span>
                 </button>
                 {!isDocxSource && (
@@ -473,8 +519,8 @@ export function BibliographyRemediationModal({
                         <span className="inline-flex items-center gap-1.5 text-[11px] font-mono font-bold text-red-600 dark:text-red-400">
                           <XCircle className="h-3.5 w-3.5" />
                           {lang === 'vi'
-                            ? 'NGHI VẤN NGUỒN BỊA ĐẶT / ẢO GIÁC AI — CẦN KIỂM TRA'
-                            : 'SUSPECTED HALLUCINATION — MANUAL VERIFICATION REQUIRED'}
+                            ? 'Không tìm thấy nguồn — Cần kiểm tra lại bản gốc'
+                            : 'Source Not Found — Manual Verification Required'}
                         </span>
                       ) : isManualReview ? (
                         <>
@@ -482,7 +528,7 @@ export function BibliographyRemediationModal({
                             data-testid={`remediation-status-manual-${entry.index}`}
                             className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-mono font-semibold bg-amber-50 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800"
                           >
-                            <AlertTriangle className="h-3 w-3" />
+                            {isIncompleteMeta && <AlertTriangle className="h-3 w-3" />}
                             {isIncompleteMeta
                               ? lang === 'vi'
                                 ? 'Cần bổ sung thủ công'
@@ -494,8 +540,8 @@ export function BibliographyRemediationModal({
                           {isIncompleteMeta && (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
                               {lang === 'vi'
-                                ? 'Thiếu quy cách trích dẫn (R-INCOMPLETE-METADATA)'
-                                : 'Incomplete Reference (R-INCOMPLETE-METADATA)'}
+                                ? 'Thiếu quy cách trích dẫn'
+                                : 'Incomplete Reference'}
                             </span>
                           )}
                         </>
@@ -506,25 +552,23 @@ export function BibliographyRemediationModal({
                         >
                           <Globe className="h-3 w-3" />
                           {lang === 'vi'
-                            ? 'Nguồn Web & Pháp quy'
+                            ? 'Nguồn Web & Văn bản'
                             : 'Web / Statutory Resource'}
                         </span>
                       ) : isMetadataError ? (
                         <>
-                          <span className="inline-flex items-center gap-1 text-[11px] font-mono font-bold text-red-600 dark:text-red-400">
-                            <AlertTriangle className="h-3 w-3 text-red-600 dark:text-red-400" />
+                          <span className="inline-flex items-center gap-1 text-[11px] font-mono font-bold text-amber-700 dark:text-amber-300">
+                            <AlertTriangle className="h-3 w-3 text-amber-600 dark:text-amber-400" />
                             {lang === 'vi'
-                              ? 'Nguồn bị đánh dấu Lỗi Metadata'
-                              : 'Flagged Metadata Error'}
+                              ? 'Sai lệch thông tin cần chuẩn hóa'
+                              : 'Details Mismatch'}
                           </span>
                           {entry.was_modified ? (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-mono font-semibold bg-emerald-50 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300">
-                              <CheckCircle2 className="h-3 w-3" />
                               {lang === 'vi' ? '✓ Đã tự động khôi phục chuẩn' : '✓ Auto-Repaired'}
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-mono font-semibold bg-amber-50 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
-                              <AlertTriangle className="h-3 w-3" />
                               {lang === 'vi' ? '⚠ Cần bổ sung thủ công' : '⚠ Manual Completion Needed'}
                             </span>
                           )}
@@ -532,30 +576,42 @@ export function BibliographyRemediationModal({
                       ) : entry.was_modified || entry.remediation_status === 'repaired' ? (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-mono font-semibold bg-amber-50 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300">
                           <AlertTriangle className="h-3 w-3" />
-                          {lang === 'vi' ? 'Đã bổ sung Metadata thiếu' : 'Metadata Enriched'}
+                          {lang === 'vi' ? 'Đã bổ sung thông tin thiếu' : 'Metadata Enriched'}
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-mono font-semibold bg-emerald-50 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300">
                           <CheckCircle2 className="h-3 w-3" />
-                          {lang === 'vi' ? 'Chuẩn xác & Đã chuẩn hóa' : 'Verified & Standardized'}
+                          {lang === 'vi' ? 'Đã xác minh & Chuẩn hóa' : 'Verified & Standardized'}
                         </span>
                       )}
 
-                      {entry.diff_fields.map((field) => (
-                        <span
-                          key={field}
-                          className={`text-[10px] font-mono uppercase px-1.5 py-0.5 rounded ${
-                            isFlaggedError
-                              ? 'text-red-600 dark:text-red-400 font-bold'
-                              : 'text-indigo-700 dark:text-indigo-300'
-                          }`}
-                        >
-                          {isFlaggedError ? `sửa:${field}` : `+${field}`}
-                        </span>
-                      ))}
+                      {entry.diff_fields.map((field) => {
+                        const fieldLabel = getFieldDisplayName(field, lang).replace(
+                          /^the\s+/i,
+                          '',
+                        );
+                        return (
+                          <span
+                            key={field}
+                            className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
+                              isFlaggedError
+                                ? 'text-red-600 dark:text-red-400 font-bold'
+                                : 'text-indigo-700 dark:text-indigo-300'
+                            }`}
+                          >
+                            {isFlaggedError
+                              ? lang === 'vi'
+                                ? `Sửa: ${fieldLabel}`
+                                : `Fix: ${fieldLabel}`
+                              : `+${fieldLabel}`}
+                          </span>
+                        );
+                      })}
                       {entry.source_used && (
-                        <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
-                          via {entry.source_used}
+                        <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                          {lang === 'vi'
+                            ? `Nguồn đối chiếu: ${getSourceDisplayName(entry.source_used, lang)}`
+                            : `Matched via ${getSourceDisplayName(entry.source_used, lang)}`}
                         </span>
                       )}
                     </div>
@@ -590,13 +646,13 @@ export function BibliographyRemediationModal({
                       <div>
                         <span className="font-bold">
                           {lang === 'vi'
-                            ? 'Cảnh báo hỗ trợ quyết định — Nghi vấn nguồn không tồn tại: '
-                            : 'Decision-Support Alert — Suspected Unverifiable Source: '}
+                            ? 'Lưu ý hỗ trợ rà soát — Chưa tìm thấy bản gốc: '
+                            : 'Decision-Support Notice — Source Not Found: '}
                         </span>
                         <span>
                           {entry.reasoning ||
                             (lang === 'vi'
-                              ? 'Chưa tìm thấy bản ghi khớp trong các cơ sở dữ liệu học thuật hoặc phát hiện dấu hiệu bất thường (DOI không hợp lệ / Chimera). Vui lòng kiểm tra thủ công nguồn gốc trước khi sử dụng.'
+                              ? 'Chưa tìm thấy bản ghi khớp trong các cơ sở dữ liệu học thuật hoặc phát hiện bất thường ở mã định danh. Vui lòng đối chiếu lại bản gốc trước khi trích dẫn.'
                               : 'No matching scholarly record was found or metadata anomalies were detected. Please manually verify the original publication before citing.')}
                         </span>
                       </div>
@@ -619,23 +675,23 @@ export function BibliographyRemediationModal({
                       >
                         {isHallucination
                           ? lang === 'vi'
-                            ? '✕ Bản gốc có dấu hiệu nghi vấn cần kiểm tra (Before)'
-                            : '✕ Flagged Reference Pending Verification (Before)'
+                            ? '✕ Mục chưa tìm thấy nguồn trong bài nộp'
+                            : '✕ Unmatched Reference in Manuscript'
                           : isManualReview
                             ? lang === 'vi'
-                              ? '⚠ Mục tham khảo thiếu thông tin trong bài nộp (Before)'
-                              : '⚠ Incomplete Reference in Manuscript (Before)'
+                              ? '⚠ Mục tham khảo thiếu thông tin trong bài nộp'
+                              : '⚠ Incomplete Reference in Manuscript'
                             : isResource
                               ? lang === 'vi'
-                                ? 'Nguồn Web & Pháp quy trong bài nộp (Before)'
-                                : 'Web / Statutory Source in Manuscript (Before)'
+                                ? 'Nguồn Web & Văn bản trong bài nộp'
+                                : 'Web / Statutory Source in Manuscript'
                               : isMetadataError
                                 ? lang === 'vi'
-                                  ? '✕ Bản gốc bị lỗi Metadata trong bài nộp (Before)'
-                                  : '✕ Erroneous Source in Manuscript (Before)'
+                                  ? '⚠ Bản ghi sai lệch thông tin trong bài nộp'
+                                  : '⚠ Mismatched Entry in Manuscript'
                                 : lang === 'vi'
-                                  ? 'Bản gốc trong bài nộp (Before)'
-                                  : 'Original in Manuscript (Before)'}
+                                  ? 'Bản gốc trong bài nộp'
+                                  : 'Original in Manuscript'}
                       </div>
                       <p
                         className={`text-xs font-serif break-words leading-relaxed ${
@@ -682,15 +738,15 @@ export function BibliographyRemediationModal({
                         <span>
                           {isHallucination
                             ? lang === 'vi'
-                              ? `✕ NGHI VẤN NGUỒN — Cần kiểm tra / xem xét loại bỏ (${selectedStyle.toUpperCase()})`
-                              : `✕ SUSPECTED ENTRY — Verify Manually Before Citing (${selectedStyle.toUpperCase()})`
+                              ? `✕ Không tìm thấy nguồn — Cần kiểm tra lại (${selectedStyle.toUpperCase()})`
+                              : `✕ Source Not Found — Verify Manually (${selectedStyle.toUpperCase()})`
                             : isManualReview
                               ? lang === 'vi'
                                 ? `⚠ Cần bổ sung thủ công (${selectedStyle.toUpperCase()})`
                                 : `⚠ Manual Completion Needed (${selectedStyle.toUpperCase()})`
                               : isResource
                                 ? lang === 'vi'
-                                  ? `↗ Nguồn Web & Pháp quy (${selectedStyle.toUpperCase()})`
+                                  ? `↗ Nguồn Web & Văn bản (${selectedStyle.toUpperCase()})`
                                   : `↗ Web / Statutory Resource (${selectedStyle.toUpperCase()})`
                                 : isMetadataError
                                   ? entry.was_modified
@@ -713,7 +769,7 @@ export function BibliographyRemediationModal({
                             : 'text-slate-900 dark:text-slate-100'
                         }`}
                       >
-                        {entry.remediated_text}
+                        {deduplicateRepeatedVenue(entry.remediated_text)}
                       </pre>
                     </div>
                   </div>

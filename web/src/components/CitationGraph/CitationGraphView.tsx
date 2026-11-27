@@ -25,6 +25,7 @@ import {
 import { InteractiveDecisionFlowBoard } from './InteractiveDecisionFlowBoard';
 import { DirectionalStageSlide, useSlidingPill } from '@/components/ui/transitions';
 import { getCitationMarkerLabel, isUrlResource } from '@/lib/verdictExplanation';
+import { getVerdictDisplay, normalizeVerdictKey } from '@/lib/academicTaxonomy';
 
 interface CitationGraphViewProps {
   verdicts: Verdict[];
@@ -183,7 +184,9 @@ export function CitationGraphView({
       verdict: v,
       originalIndex: idx,
       marker: getCitationMarkerLabel(v, idx),
-      effectiveLabel: (isUrlResource(v) ? 'resource' : v.label) as ValidationLabel,
+      effectiveLabel: (isUrlResource(v)
+        ? 'resource'
+        : normalizeVerdictKey(v.label)) as ValidationLabel,
     }));
   }, [verdicts]);
 
@@ -314,13 +317,12 @@ export function CitationGraphView({
     (stats.sourceCounts.suspected_hallucination ?? 0) +
     (stats.sourceCounts.unresolved ?? 0);
 
+  const lang: 'vi' | 'en' = isVi ? 'vi' : 'en';
   const cleanFilterOptions = [
     { key: 'all', label: isVi ? `Tất cả (${stats.total})` : `All (${stats.total})`, show: true },
     {
       key: 'verified',
-      label: isVi
-        ? `✓ Hợp lệ (${stats.sourceCounts.verified ?? 0})`
-        : `✓ Verified (${stats.sourceCounts.verified ?? 0})`,
+      label: `✓ ${getVerdictDisplay('verified', lang).label} (${stats.sourceCounts.verified ?? 0})`,
       show: (stats.sourceCounts.verified ?? 0) > 0,
     },
     {
@@ -332,9 +334,7 @@ export function CitationGraphView({
     },
     {
       key: 'resource',
-      label: isVi
-        ? `🔗 Nguồn Web (${stats.sourceCounts.resource ?? 0})`
-        : `🔗 Web (${stats.sourceCounts.resource ?? 0})`,
+      label: `🔗 ${getVerdictDisplay('resource', lang).label} (${stats.sourceCounts.resource ?? 0})`,
       show: (stats.sourceCounts.resource ?? 0) > 0,
     },
   ].filter((o) => o.show);

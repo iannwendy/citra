@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils"
 import { FileCode, CheckCircle, XCircle, AlertTriangle } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { getVerdictDisplay } from "@/lib/academicTaxonomy"
 
 /* ============================================================
    SourceLogic — Rule Inspector Component
@@ -979,6 +980,32 @@ function getVerdictColorClass(conclusion: string): {
   }
 }
 
+function formatRuleConclusion(conclusion: string, lang: "vi" | "en"): string {
+  const upper = conclusion.toUpperCase()
+  if (upper.includes("HALLUCINATION")) {
+    return getVerdictDisplay("suspected_hallucination", lang).label
+  }
+  if (upper.includes("RETRACTED")) {
+    return lang === "vi" ? "Bài báo đã bị rút" : "Retracted Publication"
+  }
+  if (upper.includes("METADATA_ERROR")) {
+    return getVerdictDisplay("metadata_error", lang).label
+  }
+  if (upper.includes("RESOURCE") || upper.includes("ARCHIVED")) {
+    return getVerdictDisplay("resource", lang).label
+  }
+  if (upper.includes("VERIFIED")) {
+    return getVerdictDisplay("verified", lang).label
+  }
+  if (upper.includes("UNRESOLVED")) {
+    return getVerdictDisplay("unresolved", lang).label
+  }
+  if (upper.includes("CONFIDENCE PENALTY")) {
+    return lang === "vi" ? "Điều chỉnh độ tin cậy" : "Confidence adjusted"
+  }
+  return conclusion
+}
+
 export function RuleInspector({
   triggeredRules,
   verdictLabel,
@@ -986,7 +1013,8 @@ export function RuleInspector({
   className
 }: RuleInspectorProps) {
   const { i18n } = useTranslation()
-  const isVi = i18n.language?.startsWith("vi")
+  const isVi = Boolean(i18n.language?.startsWith("vi"))
+  const lang: "vi" | "en" = isVi ? "vi" : "en"
 
   const featurePills: string[] = []
   if (features) {
@@ -1065,22 +1093,26 @@ export function RuleInspector({
       </div>
 
       {featurePills.length > 0 && (
-        <div
-          data-testid="rule-inspector-live-features"
-          className="flex flex-wrap items-center gap-1.5 p-2 rounded-lg bg-slate-100/80 dark:bg-slate-900/70 border border-slate-200/70 dark:border-slate-800"
-        >
-          <span className="text-[10px] font-mono font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mr-1">
-            {isVi ? "Đặc trưng thực tế:" : "Observed Features:"}
-          </span>
-          {featurePills.map((pill) => (
-            <span
-              key={pill}
-              className="px-2 py-0.5 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-mono text-[10px] text-slate-700 dark:text-slate-300"
-            >
-              {pill}
-            </span>
-          ))}
-        </div>
+        <details className="rounded-lg bg-slate-100/80 dark:bg-slate-900/70 border border-slate-200/70 dark:border-slate-800 px-2.5 py-2">
+          <summary className="cursor-pointer select-none text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+            {isVi
+              ? `Thông số kỹ thuật (${featurePills.length} đặc trưng)`
+              : `Technical Details (${featurePills.length} observed features)`}
+          </summary>
+          <div
+            data-testid="rule-inspector-live-features"
+            className="mt-2 flex flex-wrap items-center gap-1.5"
+          >
+            {featurePills.map((pill) => (
+              <span
+                key={pill}
+                className="px-2 py-0.5 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-mono text-[10px] text-slate-700 dark:text-slate-300"
+              >
+                {pill}
+              </span>
+            ))}
+          </div>
+        </details>
       )}
 
       <div className="space-y-2">
@@ -1088,6 +1120,7 @@ export function RuleInspector({
           const colors = getVerdictColorClass(rule.conclusion)
           const displayName = isVi ? rule.nameVi : rule.name
           const displayDesc = isVi ? rule.descriptionVi : rule.description
+          const displayConclusion = formatRuleConclusion(rule.conclusion, lang)
 
           return (
             <Card
@@ -1114,7 +1147,7 @@ export function RuleInspector({
                   className={cn("flex items-center gap-1 text-xs font-medium px-2 py-1 rounded shrink-0", colors.bg, colors.border, colors.text)}
                 >
                   {colors.icon}
-                  <span className="text-[10px]">{rule.conclusion}</span>
+                  <span className="text-[10px]">{displayConclusion}</span>
                 </Badge>
               </div>
 
@@ -1123,8 +1156,11 @@ export function RuleInspector({
               </p>
 
               {rule.conditions.length > 0 && (
-                <div className="mt-2 p-2 bg-white/50 dark:bg-slate-900/50 rounded border border-slate-200/50 dark:border-slate-700/50 overflow-x-auto">
-                  <div className="font-mono text-xs space-y-1">
+                <details className="mt-2 rounded border border-slate-200/60 dark:border-slate-700/60 bg-white/50 dark:bg-slate-900/50 px-2.5 py-1.5">
+                  <summary className="cursor-pointer select-none text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                    {isVi ? "Thông số kỹ thuật" : "Technical Details"}
+                  </summary>
+                  <div className="mt-2 overflow-x-auto font-mono text-xs space-y-1">
                     <div className="text-slate-500 dark:text-slate-400 font-semibold">
                       {isVi ? "NẾU" : "IF"}
                     </div>
@@ -1144,10 +1180,10 @@ export function RuleInspector({
                       {isVi ? "KẾT LUẬN" : "THEN"}
                     </div>
                     <div className="pl-3 text-slate-600 dark:text-slate-300 break-words">
-                      {rule.conclusion}
+                      {displayConclusion}
                     </div>
                   </div>
-                </div>
+                </details>
               )}
             </Card>
           )

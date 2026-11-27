@@ -243,7 +243,7 @@ describe('Task 6.1: SharedReportPage & EssayHeader Share Receipt', () => {
     await waitFor(() => expect(langBtn.textContent).toContain('VI'));
     expect(getReportSpy).toHaveBeenCalledTimes(1);
     expect(screen.getByTestId('shared-report-disclaimer').textContent).toContain(
-      'Hệ thống này chỉ hỗ trợ giảng viên',
+      'Hệ thống này là công cụ hỗ trợ giảng viên',
     );
     expect(screen.getByTestId('shared-verdict-row-0').textContent).toContain(
       'thư viện học thuật cục bộ',
@@ -342,7 +342,7 @@ describe('Task 6.1: SharedReportPage & EssayHeader Share Receipt', () => {
 
     await waitFor(() => expect(screen.getByTestId('shared-report-page')).toBeDefined());
     expect(screen.getByTestId('shared-verdict-row-0').textContent).toContain('Incomplete Reference');
-    expect(screen.getByTestId('shared-verdict-row-1').textContent).toContain('Metadata Error');
+    expect(screen.getByTestId('shared-verdict-row-1').textContent).toContain('Details Mismatch');
 
     fireEvent.click(screen.getByTestId('shared-lang-toggle'));
     await waitFor(() =>
@@ -350,6 +350,109 @@ describe('Task 6.1: SharedReportPage & EssayHeader Share Receipt', () => {
         'Thiếu quy cách trích dẫn',
       ),
     );
-    expect(screen.getByTestId('shared-verdict-row-1').textContent).toContain('Lỗi Metadata');
+    expect(screen.getByTestId('shared-verdict-row-1').textContent).toContain('Sai lệch thông tin');
+  });
+
+  it('BUG-44: renders Print & Theme controls, non-truncated verified date, clean receipt branding, Restricted Access 403, and branded invalid-token header', async () => {
+    const printSpy = vi.spyOn(window, 'print').mockImplementation(() => {});
+    vi.spyOn(api, 'getSharedEssayReport').mockResolvedValueOnce({
+      essay_id: 88,
+      filename: 'public_receipt_audit.pdf',
+      created_at: '2026-11-27T05:30:00Z',
+      num_pages: 12,
+      num_citations: 1,
+      cis: {
+        score: 94.0,
+        components: { verified_ratio: 1.0 },
+        weights_used: {},
+        num_citations: 1,
+        num_unresolved: 0,
+        disclaimer: '',
+      },
+      style_profile: {
+        style: 'IEEE_LIKE',
+        confidence: 0.95,
+        apa_count: 0,
+        ieee_count: 1,
+        mixed_count: 0,
+        features: {},
+        ratios: {},
+        explanation: '',
+      },
+      receipt_id: 'CITRA-00088-AABBCCDD',
+      verified_at: '2026-11-27T05:30:00Z',
+      disclaimer: '',
+      verdict_counts: {
+        verified: 0,
+        metadata_error: 0,
+        suspected_hallucination: 0,
+        unresolved: 0,
+        resource: 1,
+      },
+      verdicts: [
+        {
+          reference_id: 'ref-0004',
+          numeric_index: 5,
+          raw_text: '[5] IEEE Access Guidelines. https://ieeeaccess.ieee.org/',
+          label: 'resource',
+          confidence: 0.92,
+          explanation: 'Verified web source [Neural: content alignment score=0.91] `url_resource`.',
+          triggered_rules: ['R-URL-RESOURCE'],
+          url_status: 'restricted_alive',
+          url_status_code: 403,
+          matched_source: null,
+        },
+      ],
+    });
+
+    const { unmount } = renderWithProviders(
+      <Routes>
+        <Route path="/verify/share/:token" element={<SharedReportPage />} />
+      </Routes>,
+      { initialRoute: '/verify/share/sh_88_valid', user: null },
+    );
+
+    await waitFor(() => expect(screen.getByTestId('shared-report-page')).toBeDefined());
+
+    // Branded receipt badge, Print button & Theme toggle
+    expect(screen.getByTestId('shared-receipt-badge').textContent).toContain(
+      'CITATION VERIFICATION RECEIPT',
+    );
+    expect(screen.getByTestId('shared-theme-toggle')).toBeDefined();
+    fireEvent.click(screen.getByTestId('shared-print-btn'));
+    expect(printSpy).toHaveBeenCalledTimes(1);
+
+    // Non-truncated verified date
+    const verifiedAt = screen.getByTestId('shared-verified-at');
+    expect(verifiedAt.className).toContain('whitespace-nowrap');
+    expect(verifiedAt.className).not.toContain('truncate');
+
+    // Clean verdict row: no (ref-0004), no HTTP 403 OK, no [Neural: ...] or backticks
+    const row0 = screen.getByTestId('shared-verdict-row-0');
+    expect(row0.textContent).toContain('[5]');
+    expect(row0.textContent).not.toContain('(ref-0004)');
+    expect(row0.textContent).toContain('Restricted Access (HTTP 403)');
+    expect(row0.textContent).not.toContain('HTTP 403 OK');
+    expect(row0.textContent).not.toContain('[Neural:');
+    expect(row0.textContent).not.toContain('`');
+    unmount();
+
+    // Invalid token error state renders branded header with language & theme toggles + recovery hint
+    vi.spyOn(api, 'getSharedEssayReport').mockRejectedValueOnce(
+      new Error('API 400: {"detail":"Invalid share token format"}'),
+    );
+    renderWithProviders(
+      <Routes>
+        <Route path="/verify/share/:token" element={<SharedReportPage />} />
+      </Routes>,
+      { initialRoute: '/verify/share/bad_token', user: null },
+    );
+    await waitFor(() => expect(screen.getByTestId('shared-report-error')).toBeDefined());
+    expect(screen.getByTestId('shared-theme-toggle')).toBeDefined();
+    expect(screen.getByTestId('shared-lang-toggle')).toBeDefined();
+    expect(screen.getByTestId('shared-report-error').textContent).not.toContain('{"detail"');
+    expect(screen.getByTestId('shared-report-error').textContent).toContain(
+      'contact the document author',
+    );
   });
 });
