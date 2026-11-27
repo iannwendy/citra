@@ -292,6 +292,12 @@ function MappingIssueCard({
           <p className="text-sm font-serif text-slate-800 dark:text-slate-200 line-clamp-2 leading-relaxed break-words [overflow-wrap:anywhere]">
             {displayRaw || citation.citation_raw}
           </p>
+          <p className="text-xs text-slate-600 dark:text-slate-400 mt-1.5 leading-relaxed">
+            <span className="font-semibold text-slate-700 dark:text-slate-300">
+              {isVi ? 'Gợi ý sửa: ' : 'How to fix: '}
+            </span>
+            {statusDisplay.description}
+          </p>
           <div className="flex items-center gap-2 mt-2.5 flex-wrap">
             <VerdictBadge
               verdict={isUrlResource(citation) ? 'resource' : citation.label}
@@ -316,6 +322,10 @@ function UncitedReferenceCard({
 }) {
   const markerLabel = getCitationMarkerLabel(reference, index);
   const displayRaw = reference.raw_text.replace(/^\s*\[\s*\d+[a-z]?\s*\]\s*/i, '');
+  const uncitedGuide = getMappingStatusDisplay(
+    'uncited_reference',
+    isVi ? 'vi' : 'en',
+  ).description;
   return (
     <Card
       data-testid="consistency-entry-card"
@@ -333,7 +343,7 @@ function UncitedReferenceCard({
             </span>
             <Badge
               variant="metadata_error"
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-mono font-medium"
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium"
             >
               <Link2Off className="h-3 w-3" />
               {isVi ? 'Chưa trích dẫn' : 'Uncited'}
@@ -342,6 +352,12 @@ function UncitedReferenceCard({
           <p className="text-sm font-serif text-slate-800 dark:text-slate-200 line-clamp-2 leading-relaxed break-words [overflow-wrap:anywhere]">
             {displayRaw || reference.raw_text}
           </p>
+          <p className="text-xs text-slate-600 dark:text-slate-400 mt-1.5 leading-relaxed">
+            <span className="font-semibold text-slate-700 dark:text-slate-300">
+              {isVi ? 'Gợi ý sửa: ' : 'How to fix: '}
+            </span>
+            {uncitedGuide}
+          </p>
         </div>
       </div>
     </Card>
@@ -349,41 +365,37 @@ function UncitedReferenceCard({
 }
 
 function SectionHeader({
-  indexCode,
   title,
   icon,
   count,
   color,
   description,
+  testId,
 }: {
-  indexCode: string;
   title: string;
   icon: React.ReactNode;
   count: number;
   color: 'red' | 'amber' | 'green' | 'blue';
   description: string;
+  testId?: string;
 }) {
   const colorClasses = {
     red: {
-      badge: 'bg-red-50 dark:bg-red-950/80 text-red-600 dark:text-red-400',
       icon: 'text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/60 border-red-200/70 dark:border-red-800/70',
       text: 'text-red-600 dark:text-red-400',
       count: 'text-red-600 dark:text-red-400',
     },
     amber: {
-      badge: 'bg-amber-50 dark:bg-amber-950/80 text-amber-600 dark:text-amber-400',
       icon: 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/60 border-amber-200/70 dark:border-amber-800/70',
       text: 'text-amber-600 dark:text-amber-400',
       count: 'text-amber-600 dark:text-amber-400',
     },
     green: {
-      badge: 'bg-emerald-50 dark:bg-emerald-950/80 text-emerald-600 dark:text-emerald-400',
       icon: 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 border-emerald-200/70 dark:border-emerald-800/70',
       text: 'text-emerald-600 dark:text-emerald-400',
       count: 'text-emerald-600 dark:text-emerald-400',
     },
     blue: {
-      badge: 'bg-blue-50 dark:bg-blue-950/80 text-blue-600 dark:text-blue-400',
       icon: 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 border-blue-200/70 dark:border-blue-800/70',
       text: 'text-blue-600 dark:text-blue-400',
       count: 'text-blue-600 dark:text-blue-400',
@@ -393,14 +405,14 @@ function SectionHeader({
   const c = colorClasses[color];
 
   return (
-    <Card className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm">
+    <Card
+      data-testid={testId}
+      className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm"
+    >
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className={`p-2.5 rounded-xl border ${c.icon}`}>
           {icon}
         </div>
-        <span className={`text-[10px] font-mono px-2 py-0.5 rounded ${c.badge}`}>
-          {indexCode}
-        </span>
       </div>
       <div className="flex items-baseline justify-between gap-3">
         <div className="min-w-0">
@@ -443,11 +455,31 @@ export function OrphanConsistencyWorkspace({
     stats.styleCount > 0 ||
     stats.otherUnresolvedCount > 0;
 
+  const otherMappingCount =
+    stats.ambiguousCount +
+    stats.duplicateCount +
+    stats.styleCount +
+    stats.otherUnresolvedCount;
+
+  const otherCardTitle =
+    stats.ambiguousCount > 0 && otherMappingCount === stats.ambiguousCount
+      ? isVi
+        ? 'Mơ hồ (trùng tên–năm)'
+        : 'Multiple Matches'
+      : stats.otherUnresolvedCount > 0 &&
+          otherMappingCount === stats.otherUnresolvedCount
+        ? isVi
+          ? 'Chưa đủ dữ liệu'
+          : 'Unresolved Links'
+        : isVi
+          ? 'Mơ hồ / Chưa đủ dữ liệu'
+          : 'Unclear / Unresolved';
+
   const filterTabs = [
     { id: 'all' as const, label: isVi ? 'Tất cả' : 'All', count: stats.total, idx: 0 },
-    { id: 'orphans' as const, label: isVi ? 'Thiếu tham khảo' : 'Orphans', count: stats.orphanCount, idx: 1 },
+    { id: 'orphans' as const, label: isVi ? 'Thiếu ở cuối bài' : 'Missing in List', count: stats.orphanCount, idx: 1 },
     { id: 'uncited' as const, label: isVi ? 'Chưa trích dẫn' : 'Uncited', count: stats.uncitedCount, idx: 2 },
-    { id: 'ambiguous' as const, label: isVi ? 'Mơ hồ' : 'Ambiguous', count: stats.ambiguousCount, idx: 3 },
+    { id: 'ambiguous' as const, label: isVi ? 'Mơ hồ' : 'Multiple Matches', count: stats.ambiguousCount, idx: 3 },
     ...(stats.duplicateCount > 0
       ? [{ id: 'duplicates' as const, label: isVi ? 'Trùng lặp' : 'Duplicates', count: stats.duplicateCount, idx: 4 }]
       : []),
@@ -455,7 +487,7 @@ export function OrphanConsistencyWorkspace({
       ? [{ id: 'style' as const, label: isVi ? 'Sai quy cách' : 'Style Issues', count: stats.styleCount, idx: 5 }]
       : []),
     ...(stats.otherUnresolvedCount > 0
-      ? [{ id: 'other' as const, label: isVi ? 'Khác' : 'Other', count: stats.otherUnresolvedCount, idx: 6 }]
+      ? [{ id: 'other' as const, label: isVi ? 'Chưa đủ dữ liệu' : 'Unresolved', count: stats.otherUnresolvedCount, idx: 6 }]
       : []),
   ];
   const { containerRef: filterPillRef, pillStyle: filterPill } =
@@ -464,10 +496,15 @@ export function OrphanConsistencyWorkspace({
 
   return (
     <div className={embedded ? 'space-y-4' : 'space-y-6'}>
-      {/* Summary stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {/* Summary stats — always sums to 100% of stats.total */}
+      <div
+        data-testid="consistency-kpi-grid"
+        className={`grid grid-cols-1 ${
+          otherMappingCount > 0 ? 'sm:grid-cols-2 lg:grid-cols-4' : 'md:grid-cols-3'
+        } gap-4`}
+      >
         <SectionHeader
-          indexCode="01"
+          testId="consistency-kpi-linked"
           title={isVi ? 'Liên kết chính xác' : 'Correctly Linked'}
           icon={<CheckCircle className="h-5 w-5" />}
           count={stats.correctlyLinkedCount}
@@ -479,8 +516,8 @@ export function OrphanConsistencyWorkspace({
           }
         />
         <SectionHeader
-          indexCode="02"
-          title={isVi ? 'Trích dẫn thiếu tham khảo' : 'Citations Without Reference'}
+          testId="consistency-kpi-orphans"
+          title={isVi ? 'Trích dẫn thiếu tham khảo' : 'Missing in Reference List'}
           icon={<Link2Off className="h-5 w-5" />}
           count={stats.orphanCount}
           color="red"
@@ -491,7 +528,7 @@ export function OrphanConsistencyWorkspace({
           }
         />
         <SectionHeader
-          indexCode="03"
+          testId="consistency-kpi-uncited"
           title={isVi ? 'Tham khảo chưa trích dẫn' : 'Uncited References'}
           icon={<FileText className="h-5 w-5" />}
           count={stats.uncitedCount}
@@ -502,6 +539,20 @@ export function OrphanConsistencyWorkspace({
               : 'Bibliography entries never cited in document'
           }
         />
+        {otherMappingCount > 0 && (
+          <SectionHeader
+            testId="consistency-kpi-other"
+            title={otherCardTitle}
+            icon={<HelpCircle className="h-5 w-5" />}
+            count={otherMappingCount}
+            color="blue"
+            description={
+              isVi
+                ? 'Mục mơ hồ, trùng lặp, sai chuẩn hoặc chưa đủ dữ liệu liên kết'
+                : 'Ambiguous, duplicate, style-mismatched, or unresolved link items'
+            }
+          />
+        )}
       </div>
 
       {/* Consistency Container */}
@@ -511,8 +562,8 @@ export function OrphanConsistencyWorkspace({
             <GitCompare className="h-4 w-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
             <span>
               {isVi
-                ? `Kiểm tra khớp nối hai chiều · ${stats.total} mục đã phân tích`
-                : `Two-way citation check · ${stats.total} entries analyzed`}
+                ? `Đối chiếu trích dẫn trong bài & danh mục cuối bài · ${stats.total} mục`
+                : `In-text & reference list check · ${stats.total} items`}
             </span>
           </div>
 
@@ -723,8 +774,8 @@ export function OrphanConsistencyWorkspace({
                       </h2>
                       <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mb-4">
                         {isVi
-                          ? 'Định dạng các trích dẫn này chưa đồng nhất với chuẩn trích dẫn chung của tài liệu.'
-                          : 'These citations do not match the dominant citation style used across the manuscript.'}
+                          ? 'Định dạng các trích dẫn này chưa đồng nhất với chuẩn trích dẫn chung của bài viết.'
+                          : 'These citations do not match the dominant citation style used across the document.'}
                       </p>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
                         {stats.styleInconsistent.map((citation) => (
@@ -782,13 +833,13 @@ export function OrphanConsistencyWorkspace({
                     <h2 className="font-sans text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100 mb-1.5 flex items-center gap-2">
                       <CheckCircle className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                       {isVi
-                        ? 'Trích dẫn liên kết chính xác hai chiều'
+                        ? 'Trích dẫn đã khớp trong bài & cuối bài'
                         : 'Correctly Linked Citations'}
                     </h2>
                     <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mb-4">
                       {isVi
-                        ? 'Các mục tài liệu tham khảo này đã được liên kết khớp hoàn toàn với trích dẫn trong bài viết.'
-                        : 'These bibliography entries are properly linked to in-text citations in the manuscript.'}
+                        ? 'Các mục tài liệu tham khảo này đã khớp chính xác với trích dẫn trong nội dung bài viết.'
+                        : 'These bibliography entries are properly linked to in-text citations in the document.'}
                     </p>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
                       {stats.correctlyLinked.map((v) => {
@@ -913,7 +964,7 @@ export function OrphanConsistencyWorkspace({
                   {stats.ambiguousCount + stats.duplicateCount + stats.styleCount + stats.otherUnresolvedCount}
                 </p>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  {isVi ? 'Mơ hồ / Quy cách / Trùng' : 'Ambiguous / Style / Dup'}
+                  {isVi ? 'Mơ hồ / Quy cách / Lặp / Khác' : 'Unclear / Style / Duplicate'}
                 </p>
               </div>
             </div>
@@ -983,7 +1034,7 @@ export function OrphanDetectionPage() {
     return (
       <div className="flex items-center justify-center py-16">
         <Loader2 className="h-8 w-8 text-indigo-600 dark:text-indigo-400 animate-spin" />
-        <span className="ml-3 text-slate-600 dark:text-slate-400 font-mono text-sm">
+        <span className="ml-3 text-slate-600 dark:text-slate-400 text-sm">
           {isVi ? 'Đang tải dữ liệu trích dẫn...' : 'Loading citation data...'}
         </span>
       </div>
@@ -1002,17 +1053,17 @@ export function OrphanDetectionPage() {
         styleName={formatCitationStyleLabel(report.style_profile?.style, lang)}
       />
 
-      {/* Shared Multi-Tab Diagnostic Navigation + Compact CIS Score (BUG-19) */}
+      {/* Shared Multi-Tab Diagnostic Navigation + Compact Score (BUG-19) */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <EssayActionBar essayId={id ?? ''} filename={report.filename} />
-        <div className="flex flex-wrap items-center gap-2.5 text-xs font-mono text-slate-500 dark:text-slate-400">
+        <div className="flex flex-wrap items-center gap-2.5 text-xs text-slate-500 dark:text-slate-400">
           {report.cis && (
             <span
               data-testid="consistency-cis-pill"
               className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/80 font-semibold"
             >
-              <span>CIS:</span>
-              <span>
+              <span>{isVi ? 'Điểm trích dẫn:' : 'Citation Score:'}</span>
+              <span className="font-mono tabular-nums">
                 {report.cis.is_unscannable
                   ? isVi
                     ? 'N/A · Không thể quét'
@@ -1025,8 +1076,8 @@ export function OrphanDetectionPage() {
             <GitCompare className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
             <span>
               {isVi
-                ? `Nhất quán Trích dẫn · ${report.verdicts.length} mục đã phân tích`
-                : `Citation Consistency · ${report.verdicts.length} entries analyzed`}
+                ? `Đối chiếu trong bài & danh mục cuối bài · ${report.verdicts.length} mục`
+                : `In-text & reference list check · ${report.verdicts.length} items`}
             </span>
           </div>
         </div>

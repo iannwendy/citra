@@ -21,7 +21,6 @@ import {
   getVerdictDisplay,
   sanitizeReasoningForDisplay,
 } from '@/lib/academicTaxonomy';
-import { SYMBOLIC_RULES_COUNT } from '@/lib/productFacts';
 import { useEssayPolling } from '@/hooks/useEssayPolling';
 import { EssayHeader } from './essay/EssayHeader';
 import {
@@ -37,7 +36,7 @@ import {
   HelpCircle,
   ChevronRight,
   GitBranch,
-  Brain,
+  BookOpen,
   Sparkles,
   Languages,
   ArrowLeft,
@@ -115,51 +114,110 @@ function getStepStatusColor(status: TraceStepStatus): {
   }
 }
 
+function cleanTraceText(text: string, lang: 'vi' | 'en'): string {
+  let out = sanitizeReasoningForDisplay(text, lang);
+  out = out
+    .replace(/\s*\(\s*HTTP\s+\d{3}(?:\s+OK)?\s*\)/gi, '')
+    .replace(/\bHTTP\s+\d{3}(?:\s+OK)?\b/gi, '');
+  if (lang === 'vi') {
+    out = out
+      .replace(/ứng viên bài báo/gi, 'tài liệu gần giống')
+      .replace(/(\d+)\s+đặc trưng/gi, '$1 tiêu chí');
+  } else {
+    out = out.replace(/(\d+)\s+observed features/gi, '$1 checks');
+  }
+  return out.replace(/\s{2,}/g, ' ').trim();
+}
+
 function buildTraceSteps(verdict: Verdict, lang: 'vi' | 'en'): TraceStep[] {
   const sources = verdict.matched_sources ?? [];
   const f = verdict.features;
   const urlStatus = verdict.url_status ?? f?.url_status;
-  const urlCode = verdict.url_status_code ?? f?.url_status_code;
 
   const featureParts: string[] = [];
   if (f?.title_sim_fuzzy !== undefined) {
-    featureParts.push(`title_fuzzy=${f.title_sim_fuzzy.toFixed(2)}`);
+    const pct = Math.round(f.title_sim_fuzzy * 100);
+    featureParts.push(
+      lang === 'vi' ? `Khớp mặt chữ tiêu đề: ${pct}%` : `Title wording match: ${pct}%`,
+    );
   }
   if (f?.title_sim_semantic !== undefined && f.title_sim_semantic > 0) {
-    featureParts.push(`title_semantic=${f.title_sim_semantic.toFixed(2)}`);
+    const pct = Math.round(f.title_sim_semantic * 100);
+    featureParts.push(
+      lang === 'vi' ? `Khớp ý nghĩa tiêu đề: ${pct}%` : `Title meaning match: ${pct}%`,
+    );
   }
   if (f?.author_jaccard !== undefined) {
-    featureParts.push(`author_jaccard=${f.author_jaccard.toFixed(2)}`);
+    const pct = Math.round(f.author_jaccard * 100);
+    featureParts.push(
+      lang === 'vi' ? `Độ khớp tác giả: ${pct}%` : `Author match: ${pct}%`,
+    );
   }
   if (
     f?.year_distance !== undefined &&
     f.year_distance < 900 &&
     f.has_scholarly_candidate !== false
   ) {
-    featureParts.push(`year_dist=${f.year_distance}`);
-  }
-  if (f?.venue_sim !== undefined && f.venue_sim > 0) {
-    featureParts.push(`venue_sim=${f.venue_sim.toFixed(2)}`);
-  }
-  if (f?.doi_exact_match !== undefined) {
-    featureParts.push(`doi_match=${String(f.doi_exact_match)}`);
-  }
-  if (f?.content_alignment_score !== undefined && f.content_alignment_score > 0) {
     featureParts.push(
-      `content_align=${f.content_alignment_score.toFixed(2)} (${f.content_alignment_confidence || 'checked'})`
+      lang === 'vi'
+        ? f.year_distance === 0
+          ? 'Năm xuất bản: Khớp'
+          : `Lệch năm xuất bản: ${f.year_distance} năm`
+        : f.year_distance === 0
+          ? 'Publication year: Matches'
+          : `Year difference: ${f.year_distance} ${f.year_distance === 1 ? 'yr' : 'yrs'}`,
     );
   }
-  if (f?.best_evidence_score !== undefined && f?.best_evidence_score !== null && f.best_evidence_score > 0) {
-    featureParts.push(`evidence_sim=${f.best_evidence_score.toFixed(2)}`);
+  if (f?.venue_sim !== undefined && f.venue_sim > 0) {
+    const pct = Math.round(f.venue_sim * 100);
+    featureParts.push(
+      lang === 'vi' ? `Độ khớp nơi công bố: ${pct}%` : `Venue match: ${pct}%`,
+    );
+  }
+  if (f?.doi_exact_match !== undefined) {
+    featureParts.push(
+      lang === 'vi'
+        ? `Khớp mã DOI: ${f.doi_exact_match ? 'Có' : 'Không'}`
+        : `DOI matched: ${f.doi_exact_match ? 'Yes' : 'No'}`,
+    );
+  }
+  if (f?.content_alignment_score !== undefined && f.content_alignment_score > 0) {
+    const pct = Math.round(f.content_alignment_score * 100);
+    featureParts.push(
+      lang === 'vi'
+        ? `Mức độ liên quan ngữ cảnh: ${pct}%`
+        : `Context relevance: ${pct}%`,
+    );
+  }
+  if (
+    f?.best_evidence_score !== undefined &&
+    f?.best_evidence_score !== null &&
+    f.best_evidence_score > 0
+  ) {
+    const pct = Math.round(f.best_evidence_score * 100);
+    featureParts.push(
+      lang === 'vi' ? `Độ khớp đoạn tóm tắt: ${pct}%` : `Abstract match: ${pct}%`,
+    );
   }
   if (f?.citation_intent) {
-    featureParts.push(`intent=${f.citation_intent}`);
+    featureParts.push(
+      lang === 'vi'
+        ? `Vai trò trích dẫn: ${formatTaxonomyIntent(f.citation_intent, lang)}`
+        : `Citation role: ${formatTaxonomyIntent(f.citation_intent, lang)}`,
+    );
   }
   if (f?.stance_label) {
-    featureParts.push(`stance=${f.stance_label}`);
+    featureParts.push(
+      lang === 'vi'
+        ? `Mức độ phù hợp: ${formatTaxonomyStance(f.stance_label, lang)}`
+        : `Support check: ${formatTaxonomyStance(f.stance_label, lang)}`,
+    );
   }
   if (f?.html_meta_title_sim !== undefined && f.html_meta_title_sim !== null) {
-    featureParts.push(`html_meta_title_sim=${f.html_meta_title_sim.toFixed(2)}`);
+    const pct = Math.round(f.html_meta_title_sim * 100);
+    featureParts.push(
+      lang === 'vi' ? `Khớp tiêu đề trang web: ${pct}%` : `Web page title match: ${pct}%`,
+    );
   }
   const extF = f as
     | (NonNullable<Verdict['features']> & {
@@ -182,47 +240,105 @@ function buildTraceSteps(verdict: Verdict, lang: 'vi' | 'en'): TraceStep[] {
         : f?.bridged_concepts,
     );
     featureParts.push(
-      bridged.length > 0
-        ? `cross_lingual=VI↔EN (${bridged.slice(0, 2).join(', ')})`
-        : `cross_lingual=VI↔EN`,
+      lang === 'vi'
+        ? bridged.length > 0
+          ? `Đối chiếu Việt ↔ Anh (${bridged.slice(0, 2).join(', ')})`
+          : 'Đối chiếu song ngữ Việt ↔ Anh'
+        : bridged.length > 0
+          ? `Bilingual VI ↔ EN (${bridged.slice(0, 2).join(', ')})`
+          : 'Bilingual VI ↔ EN match',
     );
   }
   if (
     f?.cross_lingual_title_detected ||
     (f?.cross_lingual_title_sim !== undefined && f.cross_lingual_title_sim > 0)
   ) {
+    const pct = Math.round((f.cross_lingual_title_sim ?? 0) * 100);
     featureParts.push(
-      `cross_lingual_title_sim=${(f.cross_lingual_title_sim ?? 0).toFixed(2)}${
-        f?.cross_lingual_title_detected ? ' (detected)' : ''
-      }`
+      lang === 'vi'
+        ? `Khớp tiêu đề dịch Việt ↔ Anh: ${pct}%`
+        : `VI ↔ EN title match: ${pct}%`,
     );
   }
   if (urlStatus) {
-    const codeStr = urlCode ? ` HTTP ${urlCode}` : '';
-    featureParts.push(`url_status=${urlStatus}${codeStr}`);
+    const humanLinkStatus =
+      urlStatus === 'alive'
+        ? lang === 'vi'
+          ? 'Liên kết web: Đang hoạt động'
+          : 'Web link: Active'
+        : urlStatus === 'restricted_alive'
+          ? lang === 'vi'
+            ? 'Liên kết web: Yêu cầu đăng nhập / trả phí'
+            : 'Web link: Paywalled / login required'
+          : urlStatus === 'archived_alive'
+            ? lang === 'vi'
+              ? 'Liên kết web: Xác minh qua bản lưu Wayback'
+              : 'Web link: Verified via Wayback'
+            : urlStatus === 'dead_link'
+              ? lang === 'vi'
+                ? 'Liên kết web: Không mở được'
+                : 'Web link: Broken'
+              : lang === 'vi'
+                ? 'Liên kết web: Tên miền không tồn tại'
+                : 'Web link: Unreachable domain';
+    featureParts.push(humanLinkStatus);
   }
+
+  const hasSourceHit = sources.length > 0;
+  const hasComparableEvidence =
+    hasSourceHit ||
+    Boolean(urlStatus) ||
+    verdict.label === 'verified' ||
+    verdict.label === 'resource';
+
+  const step2Status: TraceStepStatus = hasSourceHit
+    ? verdict.label === 'suspected_hallucination'
+      ? 'active'
+      : 'completed'
+    : verdict.label === 'suspected_hallucination'
+      ? 'error'
+      : 'pending';
+
+  const step3Status: TraceStepStatus = !hasComparableEvidence
+    ? verdict.label === 'suspected_hallucination'
+      ? 'error'
+      : 'pending'
+    : verdict.label === 'suspected_hallucination'
+      ? 'error'
+      : verdict.label === 'metadata_error' || (verdict.mismatched_fields?.length ?? 0) > 0
+        ? 'active'
+        : 'completed';
+
+  const step4Status: TraceStepStatus =
+    verdict.label === 'suspected_hallucination'
+      ? 'error'
+      : verdict.label === 'metadata_error'
+        ? 'active'
+        : verdict.label === 'verified' || verdict.label === 'resource'
+          ? 'completed'
+          : 'pending';
 
   return [
     {
       id: 'parse',
-      label: lang === 'vi' ? '1. Bóc tách & Ánh xạ Trích dẫn' : '1. Match the citation',
+      label: lang === 'vi' ? '1. Đọc & ghép trích dẫn' : '1. Read & link citation',
       description:
         lang === 'vi'
-          ? 'Liên kết dấu trích dẫn trong bài với mục tài liệu tham khảo tương ứng.'
-          : 'Link the in-text citation to the reference in your bibliography.',
+          ? 'Đọc nội dung trích dẫn và nối với mục tương ứng trong danh mục tài liệu tham khảo.'
+          : 'Read the citation details and connect it to your reference list entry.',
       status: 'completed',
       detail: verdict.citation_raw,
-      tag: lang === 'vi' ? 'BƯỚC 1 · BÓC TÁCH' : 'STEP 1 · EXTRACTION',
+      tag: lang === 'vi' ? 'BƯỚC 1 · ĐỌC TRÍCH DẪN' : 'STEP 1 · READ CITATION',
     },
     {
       id: 'search',
       label:
         lang === 'vi'
-          ? '2. Tra cứu ấn phẩm đa nguồn'
-          : '2. Find the publication',
-      description: getSearchStepDescription(verdict, lang),
-      status: sources.length > 0 ? 'completed' : 'pending',
-      tag: lang === 'vi' ? 'BƯỚC 2 · ĐỐI CHIẾU CSDL' : 'STEP 2 · REGISTRY LOOKUP',
+          ? '2. Tìm nguồn trên thư viện học thuật'
+          : '2. Search academic libraries',
+      description: cleanTraceText(getSearchStepDescription(verdict, lang), lang),
+      status: step2Status,
+      tag: lang === 'vi' ? 'BƯỚC 2 · TRA CỨU THƯ VIỆN' : 'STEP 2 · LIBRARY SEARCH',
     },
     {
       id: 'compare',
@@ -230,39 +346,39 @@ function buildTraceSteps(verdict: Verdict, lang: 'vi' | 'en'): TraceStep[] {
         lang === 'vi'
           ? '3. So sánh thông tin & kiểm tra liên kết'
           : '3. Compare details & link status',
-      description:
-        lang === 'vi'
-          ? 'So khớp tiêu đề, tác giả, năm xuất bản, độ khớp nội dung ngữ cảnh và tình trạng đường dẫn.'
-          : 'Compare title, authors, publication year, context alignment, and link status.',
-      status: verdict.confidence > 0 || Boolean(urlStatus) ? 'completed' : 'pending',
+      description: hasComparableEvidence
+        ? lang === 'vi'
+          ? 'Đối chiếu tiêu đề, tác giả, năm xuất bản, mức độ liên quan ngữ cảnh và trạng thái đường dẫn.'
+          : 'Compare title, authors, publication year, context relevance, and link status.'
+        : lang === 'vi'
+          ? 'Chưa tìm thấy bản gốc tương ứng để đối chiếu chi tiết từng thông tin.'
+          : 'No matching publication was found to compare details.',
+      status: step3Status,
       detail: featureParts.length > 0 ? featureParts.join(' · ') : undefined,
       collapsibleDetail: true,
-      tag: lang === 'vi' ? 'BƯỚC 3 · SO KHỚP' : 'STEP 3 · COMPARISON',
+      tag: lang === 'vi' ? 'BƯỚC 3 · SO SÁNH' : 'STEP 3 · COMPARISON',
     },
     {
       id: 'rules',
       label:
         lang === 'vi'
-          ? '4. Đánh giá theo tiêu chí kiểm chứng'
+          ? '4. Đối chiếu tiêu chí kiểm tra'
           : '4. Apply verification checks',
       description:
         verdict.triggered_rules.length > 0
           ? lang === 'vi'
-            ? `Đã áp dụng ${verdict.triggered_rules.length} tiêu chí kiểm chứng.`
+            ? `Đã đối chiếu ${verdict.triggered_rules.length} tiêu chí kiểm tra.`
             : `Evaluated ${verdict.triggered_rules.length} verification ${verdict.triggered_rules.length === 1 ? 'check' : 'checks'}.`
           : lang === 'vi'
-            ? 'Không có cảnh báo bổ sung nào được kích hoạt.'
-            : 'No additional warnings were raised.',
-      status: verdict.triggered_rules.length > 0 ? 'completed' : 'pending',
-      tag:
-        lang === 'vi'
-          ? `${SYMBOLIC_RULES_COUNT} TIÊU CHÍ KIỂM CHỨNG`
-          : `${SYMBOLIC_RULES_COUNT} VERIFICATION CHECKS`,
+            ? 'Không có lưu ý bổ sung nào được phát hiện.'
+            : 'No additional flags were raised.',
+      status: step4Status,
+      tag: lang === 'vi' ? 'BƯỚC 4 · ĐÁNH GIÁ' : 'STEP 4 · CHECKS',
     },
     {
       id: 'verdict',
-      label: lang === 'vi' ? '5. Kết luận kiểm chứng' : '5. Final Result',
-      description: sanitizeReasoningForDisplay(getVerdictExplanation(verdict, lang), lang),
+      label: lang === 'vi' ? '5. Kết quả kiểm tra' : '5. Final Result',
+      description: cleanTraceText(getVerdictExplanation(verdict, lang), lang),
       status:
         verdict.label === 'verified'
           ? 'completed'
@@ -272,13 +388,11 @@ function buildTraceSteps(verdict: Verdict, lang: 'vi' | 'en'): TraceStep[] {
               ? 'active'
               : 'pending',
       tag:
-        verdict.label === 'suspected_hallucination' || verdict.label === 'metadata_error'
-          ? lang === 'vi'
-            ? `ĐỘ CHẮC CHẮN ${Math.round(verdict.confidence * 100)}%`
-            : `CERTAINTY ${Math.round(verdict.confidence * 100)}%`
+        verdict.label === 'suspected_hallucination' || verdict.label === 'unresolved'
+          ? getVerdictDisplay(verdict.label, lang).shortLabel.toUpperCase()
           : lang === 'vi'
-            ? `ĐỘ TIN CẬY ${Math.round(verdict.confidence * 100)}%`
-            : `CONFIDENCE ${Math.round(verdict.confidence * 100)}%`,
+            ? `ĐỘ KHỚP ${Math.round(verdict.confidence * 100)}%`
+            : `MATCH ${Math.round(verdict.confidence * 100)}%`,
     },
   ];
 }
@@ -331,15 +445,15 @@ function TraceStepCard({
           {step.detail &&
             (step.collapsibleDetail ? (
               <details className="mt-2 rounded-lg bg-white/80 dark:bg-slate-900/80 border border-slate-200/70 dark:border-slate-800 px-2.5 py-1.5">
-                <summary className="cursor-pointer select-none text-[11px] font-medium text-slate-500 dark:text-slate-400">
-                  {lang === 'vi' ? 'Thông số kỹ thuật' : 'Technical Details'}
+                <summary className="cursor-pointer select-none text-[11px] font-medium text-slate-600 dark:text-slate-300">
+                  {lang === 'vi' ? 'Chi tiết so sánh' : 'Comparison Details'}
                 </summary>
-                <p className="mt-1.5 text-xs text-slate-700 dark:text-slate-300 font-mono break-words">
+                <p className="mt-1.5 text-xs text-slate-700 dark:text-slate-300 break-words leading-relaxed">
                   {step.detail}
                 </p>
               </details>
             ) : (
-              <p className="text-xs text-slate-700 dark:text-slate-300 mt-2 font-mono bg-white/80 dark:bg-slate-900/80 p-2.5 rounded-lg border border-slate-200/70 dark:border-slate-800 break-words">
+              <p className="text-xs text-slate-700 dark:text-slate-300 mt-2 font-serif bg-white/80 dark:bg-slate-900/80 p-2.5 rounded-lg border border-slate-200/70 dark:border-slate-800 break-words">
                 {step.detail}
               </p>
             ))}
@@ -443,18 +557,18 @@ function NeuralAlignmentPanel({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 rounded-lg bg-indigo-100 dark:bg-indigo-950 flex items-center justify-center border border-indigo-200 dark:border-indigo-800">
-            <Brain className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+            <BookOpen className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
           </div>
           <div>
             <h5 className="text-xs font-bold text-indigo-950 dark:text-indigo-200 tracking-wide">
               {lang === 'vi'
-                ? 'Phân tích ngữ nghĩa & bằng chứng nội dung'
-                : 'Semantic & Evidence Alignment Analysis'}
+                ? 'Đối chiếu nội dung trích dẫn với bài gốc'
+                : 'Citation Context & Source Content Match'}
             </h5>
             <p className="text-[11px] text-slate-500 dark:text-slate-400">
               {lang === 'vi'
-                ? 'So khớp câu trích dẫn trọng tâm với tóm tắt bài báo gốc, phân loại mục đích trích dẫn & quan điểm.'
-                : 'Sentence-level evidence matching against source abstract, citation intent, and claim stance.'}
+                ? 'So sánh câu trích dẫn trong bài với tóm tắt bài báo gốc, vai trò trích dẫn và mức độ phù hợp.'
+                : 'Compares your cited sentence against the source abstract, citation role, and support level.'}
             </p>
           </div>
         </div>
@@ -574,24 +688,10 @@ function NeuralAlignmentPanel({
           ) : (
             <p className="text-[11px] text-teal-900 dark:text-teal-200">
               {lang === 'vi'
-                ? `Đã xác nhận độ tương đồng ngữ nghĩa giữa tiếng Việt và bản gốc tiếng Anh${crossTitleSim > 0 ? ` (${Math.round(crossTitleSim * 100)}%)` : ''}.`
-                : `Confirmed cross-lingual semantic match between Vietnamese text and English source${crossTitleSim > 0 ? ` (${Math.round(crossTitleSim * 100)}%)` : ''}.`}
+                ? `Đã xác nhận độ tương đồng nội dung giữa bài viết tiếng Việt và bản gốc tiếng Anh${crossTitleSim > 0 ? ` (${Math.round(crossTitleSim * 100)}%)` : ''}.`
+                : `Confirmed bilingual content match between Vietnamese text and English source${crossTitleSim > 0 ? ` (${Math.round(crossTitleSim * 100)}%)` : ''}.`}
             </p>
           )}
-          <details className="text-[10px] text-teal-800/80 dark:text-teal-300/80">
-            <summary className="cursor-pointer select-none font-medium">
-              {lang === 'vi' ? 'Thông số kỹ thuật' : 'Technical Details'}
-            </summary>
-            <div className="mt-1 flex flex-wrap gap-1.5 font-mono">
-              <span>model=paraphrase-multilingual-MiniLM-L12-v2 (ONNX INT8)</span>
-              {f.cross_lingual_title_detected && (
-                <span>· cross_lingual_title_detected=true</span>
-              )}
-              {crossTitleSim > 0 && (
-                <span>· cross_lingual_title_sim={crossTitleSim.toFixed(2)}</span>
-              )}
-            </div>
-          </details>
         </div>
       )}
 
@@ -653,10 +753,10 @@ function NeuralAlignmentPanel({
       {/* Multi-occurrence table when cited multiple times */}
       {occAlignments.length > 1 && (
         <div className="pt-1">
-          <div className="text-[10px] font-mono font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+          <div className="text-[11px] font-semibold text-slate-600 dark:text-slate-300 mb-1.5">
             {lang === 'vi'
-              ? `Chi tiết Căn chỉnh theo Từng Vị trí Trích dẫn (${occAlignments.length} vị trí)`
-              : `Multi-Occurrence Context Alignment (${occAlignments.length} occurrences)`}
+              ? `Độ khớp tại từng vị trí trích dẫn trong bài (${occAlignments.length} vị trí)`
+              : `Context Match at Each Citation Location (${occAlignments.length} locations)`}
           </div>
           <div className="space-y-1.5">
             {occAlignments.map((occ, idx) => (
@@ -723,7 +823,6 @@ function VerdictTrace({
           rawUrlStatus === 'fake_domain'
         ? rawUrlStatus
         : null;
-  const urlCode = verdict.url_status_code ?? verdict.features?.url_status_code;
   const cleanCitationTitle = verdict.citation_raw.replace(/^\[\d+[a-z]?\]\s*/i, '');
 
   return (
@@ -743,7 +842,7 @@ function VerdictTrace({
         <div className="flex items-center gap-2 shrink-0">
           {(urlStatus || isWrongPage) && (
             <span
-              className={`hidden md:inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono font-semibold border ${
+              className={`hidden md:inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold border ${
                 isWrongPage || urlStatus === 'archived_alive'
                   ? 'bg-amber-50 text-amber-800 border-amber-300 dark:bg-amber-950/70 dark:text-amber-300 dark:border-amber-800'
                   : urlStatus === 'alive' || urlStatus === 'restricted_alive'
@@ -753,44 +852,44 @@ function VerdictTrace({
             >
               {isWrongPage
                 ? lang === 'vi'
-                  ? `⚠ HTTP ${urlCode || 200} · Sai trang`
-                  : `⚠ HTTP ${urlCode || 200} · Wrong Page`
+                  ? '⚠ Sai nội dung trang'
+                  : '⚠ Wrong page'
                 : urlStatus === 'alive'
                   ? lang === 'vi'
                     ? '✓ Liên kết hoạt động'
-                    : '✓ Link Active'
+                    : '✓ Link active'
                   : urlStatus === 'restricted_alive'
                     ? lang === 'vi'
-                      ? `🔒 Truy cập hạn chế (HTTP ${urlCode || 403})`
-                      : `🔒 Restricted Access (HTTP ${urlCode || 403})`
+                      ? '🔒 Yêu cầu đăng nhập / trả phí'
+                      : '🔒 Paywalled / login required'
                     : urlStatus === 'archived_alive'
                       ? lang === 'vi'
-                        ? '🏛️ Lưu trữ Wayback'
-                        : '🏛️ Wayback Archived'
+                        ? '🏛️ Bản lưu Wayback'
+                        : '🏛️ Wayback archived'
                       : urlStatus === 'dead_link'
                         ? lang === 'vi'
-                          ? `✕ Liên kết lỗi (HTTP ${urlCode || 404})`
-                          : `✕ Broken Link (HTTP ${urlCode || 404})`
+                          ? '✕ Đường dẫn không mở được'
+                          : '✕ Broken link'
                         : lang === 'vi'
-                          ? '✕ URL không hợp lệ'
+                          ? '✕ Đường dẫn không hợp lệ'
                           : '✕ Invalid URL'}
             </span>
           )}
           {verdict.features?.content_alignment_score !== undefined &&
             verdict.features.content_alignment_score > 0 && (
               <span className="hidden lg:inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold border bg-indigo-50/90 text-indigo-700 border-indigo-200 dark:bg-indigo-950/70 dark:text-indigo-300 dark:border-indigo-800">
-                <Brain className="h-3 w-3" />
-                {lang === 'vi' ? 'Ngữ nghĩa' : 'Semantic'}{' '}
+                <Sparkles className="h-3 w-3" />
+                {lang === 'vi' ? 'Liên quan ngữ cảnh:' : 'Context match:'}{' '}
                 {Math.round(verdict.features.content_alignment_score * 100)}%
                 {verdict.features.citation_intent
                   ? ` · ${formatTaxonomyIntent(verdict.features.citation_intent, lang)}`
                   : ''}
               </span>
             )}
-          <Badge variant="outline" className="hidden sm:inline-flex font-mono text-[10px]">
+          <Badge variant="outline" className="hidden sm:inline-flex text-[10px]">
             {lang === 'vi'
               ? `${verdict.triggered_rules.length} tiêu chí`
-              : `${verdict.triggered_rules.length} ${verdict.triggered_rules.length === 1 ? 'rule' : 'rules'}`}
+              : `${verdict.triggered_rules.length} ${verdict.triggered_rules.length === 1 ? 'check' : 'checks'}`}
           </Badge>
           <VerdictBadge
             verdict={isUrlResource(verdict) ? 'resource' : verdict.label}
@@ -813,8 +912,8 @@ function VerdictTrace({
             <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
               <h5 className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                 {lang === 'vi'
-                  ? 'Quy trình kiểm chứng 5 bước & Sơ đồ suy luận'
-                  : 'How the result was reached (5-Step Trace & Decision Flow)'}
+                  ? 'Các bước kiểm tra & Sơ đồ đối chiếu'
+                  : 'How this result was reached (5-Step Breakdown & Check Flow)'}
               </h5>
               <div className="inline-flex items-center p-0.5 rounded-lg bg-slate-200/70 dark:bg-slate-900 border border-slate-300/70 dark:border-slate-800">
                 <button
@@ -826,7 +925,7 @@ function VerdictTrace({
                       : 'text-slate-600 dark:text-slate-400'
                   }`}
                 >
-                  {lang === 'vi' ? 'Quy trình 5 bước' : '5-Step Pipeline'}
+                  {lang === 'vi' ? 'Quy trình 5 bước' : '5-Step Breakdown'}
                 </button>
                 <button
                   type="button"
@@ -839,7 +938,7 @@ function VerdictTrace({
                   }`}
                 >
                   <GitBranch className="h-3 w-3 text-violet-500" />
-                  <span>{lang === 'vi' ? 'Sơ đồ bằng chứng' : 'Evidence Graph'}</span>
+                  <span>{lang === 'vi' ? 'Sơ đồ đối chiếu' : 'Check Flow'}</span>
                 </button>
               </div>
             </div>
@@ -865,9 +964,7 @@ function VerdictTrace({
           {verdict.triggered_rules.length > 0 && traceViewMode === 'linear' && (
             <div>
               <h5 className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
-                {lang === 'vi'
-                  ? 'Chi tiết tiêu chí đánh giá'
-                  : 'Triggered Verification Checks'}
+                {lang === 'vi' ? 'Tiêu chí kiểm tra' : 'Verification Checks'}
               </h5>
               <RuleInspector
                 triggeredRules={verdict.triggered_rules}
@@ -890,10 +987,15 @@ export function LogicTracePage() {
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [lockedFeatureName, setLockedFeatureName] = useState('');
 
+  const traceLoadFallback =
+    lang === 'vi'
+      ? 'Không thể tải chi tiết quá trình kiểm tra. Vui lòng thử lại.'
+      : 'Could not load the verification details. Please try again.';
+
   const numericId = id ? parseInt(id, 10) : null;
   const { report, error } = useEssayPolling(
     numericId !== null && !Number.isNaN(numericId) && numericId > 0 ? numericId : null,
-    { errorMessage: 'Failed to load verification trace. Please try again.' }
+    { errorMessage: traceLoadFallback }
   );
 
   // Single-definition buckets: NEVER merge resource into verified (BUG-02)
@@ -947,7 +1049,7 @@ export function LogicTracePage() {
                 : 'Unable to Load Verification Details'}
             </h2>
             <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed break-words">
-              {formatUserError(error, lang)}
+              {formatUserError(error, lang, traceLoadFallback)}
             </p>
             <div className="pt-1">
               <Link
@@ -968,7 +1070,7 @@ export function LogicTracePage() {
     return (
       <div className="flex items-center justify-center py-16">
         <Loader2 className="h-8 w-8 text-indigo-600 dark:text-indigo-400 animate-spin" />
-        <span className="ml-3 text-slate-600 dark:text-slate-400 font-mono text-sm">
+        <span className="ml-3 text-slate-600 dark:text-slate-400 text-sm">
           {lang === 'vi' ? 'Đang tải dữ liệu kiểm chứng...' : 'Loading verification data...'}
         </span>
       </div>

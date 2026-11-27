@@ -72,7 +72,7 @@ export function getVerdictNodeTitle(
     return isVi ? 'Thiếu quy cách trích dẫn' : 'Incomplete Reference';
   }
   if (verdict.label === 'resource' && isLegalStatuteVerdict(verdict as Verdict)) {
-    return isVi ? 'Văn bản Pháp luật VN' : 'VN Legal Statute';
+    return isVi ? 'Văn bản pháp luật' : 'Legal Statute';
   }
   return getVerdictDisplay(verdict.label, isVi ? 'vi' : 'en').label;
 }

@@ -5,7 +5,7 @@ import {
   Layers,
   ListChecks,
   Database,
-  Brain,
+  FileSearch,
   Scale,
   ShieldCheck,
   ChevronsDownUp,
@@ -279,6 +279,8 @@ export function buildEvidenceGraph(
         r === 'R-CROSS-LINGUAL-ALIGNMENT' || r === 'R-CROSS-LINGUAL-TITLE-MATCH',
     );
 
+  const isSourceNotFound = verdict.label === 'suspected_hallucination';
+
   if (f) {
     if (
       f.title_sim_fuzzy !== undefined ||
@@ -296,12 +298,23 @@ export function buildEvidenceGraph(
         f.title_sim_semantic ?? 0,
         f.cross_lingual_title_sim ?? 0,
       );
+      const titleStatus: GraphNode['status'] = isSourceNotFound
+        ? bestTitle >= 0.55
+          ? 'warning'
+          : 'error'
+        : bestTitle >= 0.85
+          ? 'success'
+          : bestTitle >= 0.55
+            ? 'warning'
+            : 'error';
       similarityChildren.push({
         id: 'sim-title',
-        label: isVi ? 'Đối sánh từ vựng & ngữ nghĩa tiêu đề' : 'Title Lexical & Neural Match',
+        label: isVi ? 'So sánh tên tài liệu' : 'Title Comparison',
         type: 'similarity',
-        status: bestTitle >= 0.85 ? 'success' : bestTitle >= 0.55 ? 'warning' : 'error',
-        detail: `RapidFuzz=${fuzzyPct}% · Sentence-BERT=${semPct}%${xlTitlePct !== null ? ` · ONNX VI↔EN=${xlTitlePct}%` : ''}`,
+        status: titleStatus,
+        detail: isVi
+          ? `Khớp mặt chữ: ${fuzzyPct}% · Khớp ý nghĩa: ${semPct}%${xlTitlePct !== null ? ` · Khớp Việt ↔ Anh: ${xlTitlePct}%` : ''}`
+          : `Wording match: ${fuzzyPct}% · Meaning match: ${semPct}%${xlTitlePct !== null ? ` · VI ↔ EN match: ${xlTitlePct}%` : ''}`,
       });
     }
     const validYearDist =
@@ -312,47 +325,71 @@ export function buildEvidenceGraph(
         : null;
     if (f.author_jaccard !== undefined || validYearDist !== null) {
       const authPct = Math.round((f.author_jaccard ?? 0) * 100);
+      const yearPart =
+        validYearDist !== null
+          ? isVi
+            ? validYearDist === 0
+              ? 'Khớp năm xuất bản'
+              : `Lệch ${validYearDist} năm`
+            : validYearDist === 0
+              ? 'Year matches'
+              : validYearDist === 1
+                ? '1 yr off'
+                : `${validYearDist} yrs off`
+          : null;
+      const metaRawPass =
+        (f.author_jaccard ?? 0) >= 0.65 && (validYearDist === null || validYearDist <= 1);
+      const metaStatus: GraphNode['status'] = isSourceNotFound
+        ? (f.author_jaccard ?? 0) >= 0.4
+          ? 'warning'
+          : 'error'
+        : metaRawPass
+          ? 'success'
+          : (f.author_jaccard ?? 0) >= 0.4
+            ? 'warning'
+            : 'error';
       similarityChildren.push({
         id: 'sim-meta',
         label: isVi
           ? validYearDist !== null
-            ? 'Đối chiếu tác giả & năm xuất bản'
-            : 'Đối chiếu tác giả'
+            ? 'So sánh tác giả & năm xuất bản'
+            : 'So sánh tác giả'
           : validYearDist !== null
-            ? 'Author & Publication Year Alignment'
-            : 'Author Alignment',
+            ? 'Author & Publication Year Check'
+            : 'Author Check',
         type: 'similarity',
-        status:
-          (f.author_jaccard ?? 0) >= 0.65 && (validYearDist === null || validYearDist <= 1)
-            ? 'success'
-            : (f.author_jaccard ?? 0) >= 0.4
-              ? 'warning'
-              : 'error',
+        status: metaStatus,
         detail:
-          validYearDist !== null
+          yearPart !== null
             ? isVi
-              ? `Tác giả Jaccard=${authPct}% · Lệch năm Δ=${validYearDist} năm`
-              : `Author Jaccard=${authPct}% · Year Δ=${validYearDist} yr(s)`
+              ? `Độ khớp tác giả: ${authPct}% · ${yearPart}`
+              : `Author match: ${authPct}% · ${yearPart}`
             : isVi
-              ? `Tác giả Jaccard=${authPct}%`
-              : `Author Jaccard=${authPct}%`,
+              ? `Độ khớp tác giả: ${authPct}%`
+              : `Author match: ${authPct}%`,
       });
     }
     if (f.html_meta_title_sim !== undefined && f.html_meta_title_sim !== null) {
       const htmlSimPct = Math.round(f.html_meta_title_sim * 100);
+      const htmlStatus: GraphNode['status'] = isSourceNotFound
+        ? f.html_meta_title_sim >= 0.25
+          ? 'warning'
+          : 'error'
+        : f.html_meta_title_sim >= 0.65
+          ? 'success'
+          : f.html_meta_title_sim >= 0.25
+            ? 'warning'
+            : 'error';
       similarityChildren.push({
         id: 'sim-html-meta-title',
         label: isVi
-          ? `Đối sánh tiêu đề Metadata trang Web (${htmlSimPct}%)`
-          : `Live Web HTML Metadata Title Match (${htmlSimPct}%)`,
+          ? `So sánh tiêu đề trang web (${htmlSimPct}%)`
+          : `Web Page Title Match (${htmlSimPct}%)`,
         type: 'similarity',
-        status:
-          f.html_meta_title_sim >= 0.65
-            ? 'success'
-            : f.html_meta_title_sim >= 0.25
-              ? 'warning'
-              : 'error',
-        detail: `html_meta_title_sim=${f.html_meta_title_sim.toFixed(2)} (${htmlSimPct}%)`,
+        status: htmlStatus,
+        detail: isVi
+          ? `Độ khớp với tiêu đề thực tế của trang gốc: ${htmlSimPct}%`
+          : `Match with actual web page title: ${htmlSimPct}%`,
       });
     }
     if (
@@ -360,25 +397,29 @@ export function buildEvidenceGraph(
       f.best_evidence_sentence
     ) {
       const alignPct = Math.round((f.content_alignment_score ?? 0) * 100);
+      const evStatus: GraphNode['status'] = isSourceNotFound
+        ? (f.content_alignment_score ?? 0) >= 0.35
+          ? 'warning'
+          : 'error'
+        : (f.content_alignment_score ?? 0) >= 0.5
+          ? 'success'
+          : (f.content_alignment_score ?? 0) >= 0.35
+            ? 'warning'
+            : 'error';
       similarityChildren.push({
         id: 'sim-evidence',
         label: isVi
-          ? `Bằng chứng tóm tắt Sentence-BERT (${alignPct}%)`
-          : `Sentence-BERT Abstract Evidence (${alignPct}%)`,
+          ? `Đoạn tóm tắt khớp từ bài gốc (${alignPct}%)`
+          : `Matching Passage in Source Abstract (${alignPct}%)`,
         type: 'similarity',
-        status:
-          (f.content_alignment_score ?? 0) >= 0.5
-            ? 'success'
-            : (f.content_alignment_score ?? 0) >= 0.35
-              ? 'warning'
-              : 'error',
+        status: evStatus,
         detail: f.best_evidence_sentence
           ? isVi
-            ? `Câu tóm tắt khớp: "${f.best_evidence_sentence.slice(0, 140)}${f.best_evidence_sentence.length > 140 ? '...' : ''}"`
-            : `Matched Abstract Sentence: "${f.best_evidence_sentence.slice(0, 140)}${f.best_evidence_sentence.length > 140 ? '...' : ''}"`
+            ? `Đoạn tóm tắt khớp: "${f.best_evidence_sentence.slice(0, 140)}${f.best_evidence_sentence.length > 140 ? '…' : ''}"`
+            : `Matching excerpt: "${f.best_evidence_sentence.slice(0, 140)}${f.best_evidence_sentence.length > 140 ? '…' : ''}"`
           : isVi
-            ? `Điểm tương đồng ngữ nghĩa ngữ cảnh–nguồn: ${alignPct}%`
-            : `Context-to-Source semantic alignment score: ${alignPct}%`,
+            ? `Mức độ liên quan ngữ cảnh với bài gốc: ${alignPct}%`
+            : `Context relevance to source: ${alignPct}%`,
       });
     }
     if (
@@ -394,24 +435,24 @@ export function buildEvidenceGraph(
         type: 'similarity',
         status: 'warning',
         detail: isVi
-          ? `Tiêu đề dịch sang tiếng Việt khớp công trình tiếng Anh (${crossTitlePct}%), nhưng cần giữ nguyên tiêu đề tiếng nước ngoài theo chuẩn TDTU.`
-          : `Translated Vietnamese title matches English publication (${crossTitlePct}%), but original foreign-language title should be preserved per TDTU citation rules.`,
+          ? `Tiêu đề dịch sang tiếng Việt khớp công trình tiếng Anh (${crossTitlePct}%). Theo chuẩn trích dẫn học thuật phổ biến, nên giữ nguyên tiêu đề gốc bằng tiếng nước ngoài.`
+          : `Translated Vietnamese title matches the English publication (${crossTitlePct}%). Standard academic citation guidelines recommend preserving the original publication title.`,
       });
     }
     if (bridgedConcepts.length > 0) {
       similarityChildren.push({
         id: 'sim-cross-lingual-bridge',
         label: isVi
-          ? `Cầu nối khái niệm học thuật Việt ↔ Anh (${bridgedConcepts.length} khái niệm)`
-          : `VI ↔ EN Academic Concept Bridge (${bridgedConcepts.length} concepts)`,
+          ? `Thuật ngữ tương đương Việt ↔ Anh (${bridgedConcepts.length} cặp)`
+          : `VI ↔ EN Academic Concepts (${bridgedConcepts.length} pairs)`,
         type: 'similarity',
-        status: 'success',
+        status: isSourceNotFound ? 'warning' : 'success',
         detail: isVi
           ? `Cặp khái niệm: ${bridgedConcepts.slice(0, 5).join('; ')}`
-          : `Bridged pairs: ${bridgedConcepts.slice(0, 5).join('; ')}`,
+          : `Matched concepts: ${bridgedConcepts.slice(0, 5).join('; ')}`,
       });
     } else if (hasCrossLingual) {
-      const onnxScore =
+      const crossScore =
         f.cross_lingual_title_sim ??
         f.semantic_similarity ??
         f.content_alignment_score ??
@@ -419,47 +460,46 @@ export function buildEvidenceGraph(
         (typeof f.cross_lingual_alignment === 'number'
           ? f.cross_lingual_alignment
           : undefined);
-      const onnxPct =
-        typeof onnxScore === 'number' && onnxScore > 0
-          ? Math.round(onnxScore * 100)
+      const crossPct =
+        typeof crossScore === 'number' && crossScore > 0
+          ? Math.round(crossScore * 100)
           : null;
       similarityChildren.push({
         id: 'sim-cross-lingual-bridge',
         label: isVi
-          ? 'Đối sánh ngữ nghĩa đa ngôn ngữ ONNX INT8 (VI ↔ EN)'
-          : 'VI ↔ EN Multilingual ONNX INT8 Embedding Bridge',
+          ? 'Đối chiếu song ngữ Việt ↔ Anh'
+          : 'Bilingual Comparison (VI ↔ EN)',
         type: 'similarity',
-        status: 'success',
+        status: isSourceNotFound ? 'warning' : 'success',
         detail: isVi
-          ? `Mô hình paraphrase-multilingual-MiniLM-L12-v2 (ONNX INT8)${onnxPct !== null ? ` · Tương đồng ngữ nghĩa: ${onnxPct}%` : ''}`
-          : `Model paraphrase-multilingual-MiniLM-L12-v2 (ONNX INT8)${onnxPct !== null ? ` · Semantic similarity: ${onnxPct}%` : ''}`,
+          ? `Đối chiếu trích dẫn tiếng Việt với ấn phẩm tiếng Anh${crossPct !== null ? ` · Độ khớp nội dung: ${crossPct}%` : ''}`
+          : `Matched Vietnamese citation text against the English publication${crossPct !== null ? ` · Content match: ${crossPct}%` : ''}`,
       });
     }
     if (f.citation_intent || f.stance_label || hasCrossLingual) {
       const stance = f.stance_label || 'supported';
+      const stanceStatus: GraphNode['status'] =
+        stance === 'contradiction_risk'
+          ? 'error'
+          : stance === 'partially_supported' || isSourceNotFound
+            ? 'warning'
+            : 'success';
       similarityChildren.push({
         id: 'sim-intent-stance',
-        label: isVi
-          ? 'Mục đích trích dẫn & Cực tính quan điểm'
-          : 'Citation Intent & Claim Stance Polarity',
+        label: isVi ? 'Mức độ liên quan ngữ cảnh' : 'Context relevance',
         type: 'similarity',
-        status:
-          stance === 'contradiction_risk'
-            ? 'error'
-            : stance === 'partially_supported'
-              ? 'warning'
-              : 'success',
+        status: stanceStatus,
         detail: [
           f.citation_intent
-            ? `${isVi ? 'Mục đích' : 'Intent'}: ${formatIntentLabel(f.citation_intent, resolvedLang)}`
+            ? `${isVi ? 'Vai trò trích dẫn' : 'Citation role'}: ${formatIntentLabel(f.citation_intent, resolvedLang)}`
             : null,
-          `${isVi ? 'Quan điểm' : 'Stance'}: ${formatStanceLabel(stance, resolvedLang)}`,
+          `${isVi ? 'Mức độ phù hợp' : 'Support check'}: ${formatStanceLabel(stance, resolvedLang)}`,
           hasCrossLingual
             ? bridgedConcepts.length > 0
-              ? `${isVi ? 'Cầu nối (Việt ↔ Anh)' : 'Bridge (VI↔EN)'}: ${bridgedConcepts.slice(0, 3).join('; ')}`
+              ? `${isVi ? 'Thuật ngữ Việt ↔ Anh' : 'VI ↔ EN terms'}: ${bridgedConcepts.slice(0, 3).join('; ')}`
               : isVi
-                ? 'Cầu nối: Đối chiếu đa ngôn ngữ Việt ↔ Anh'
-                : 'Bridge: VI ↔ EN Cross-Lingual Active'
+                ? 'Đối chiếu song ngữ Việt ↔ Anh'
+                : 'Bilingual VI ↔ EN comparison'
             : null,
         ]
           .filter(Boolean)
@@ -469,43 +509,44 @@ export function buildEvidenceGraph(
   }
 
   // Append compact URL Link Check child node when url_status is present
-  const { status: effectiveUrlStatus, code: effectiveUrlCode } =
-    resolveGraphUrlStatus(verdict);
+  const { status: effectiveUrlStatus } = resolveGraphUrlStatus(verdict);
   if (effectiveUrlStatus) {
     const linkStatus: GraphNode['status'] =
       isUrlContentMismatch || effectiveUrlStatus === 'archived_alive'
         ? 'warning'
         : effectiveUrlStatus === 'alive' || effectiveUrlStatus === 'restricted_alive'
-          ? 'success'
+          ? isSourceNotFound
+            ? 'warning'
+            : 'success'
           : 'error';
     const linkLabel = isUrlContentMismatch
       ? isVi
-        ? `Kiểm tra URL: HTTP ${effectiveUrlCode || 200} · Sai nội dung trang`
-        : `URL Link Check: HTTP ${effectiveUrlCode || 200} · Wrong Page`
+        ? 'Kiểm tra đường dẫn: Trang web không khớp tiêu đề'
+        : 'Link Check: Wrong Page'
       : effectiveUrlStatus === 'alive'
         ? isVi
-          ? `Kiểm tra URL: HTTP ${effectiveUrlCode || 200} OK`
-          : `URL Link Check: HTTP ${effectiveUrlCode || 200} OK`
+          ? 'Kiểm tra đường dẫn: Đang hoạt động'
+          : 'Link Check: Active'
         : effectiveUrlStatus === 'restricted_alive'
           ? isVi
-            ? `Kiểm tra URL: Truy cập hạn chế (HTTP ${effectiveUrlCode || 403})`
-            : `URL Link Check: Restricted Access (HTTP ${effectiveUrlCode || 403})`
+            ? 'Kiểm tra đường dẫn: Yêu cầu đăng nhập / trả phí (link còn hoạt động)'
+            : 'Link Check: Paywalled / Login Required (link active)'
           : effectiveUrlStatus === 'archived_alive'
             ? isVi
-              ? 'Kiểm tra URL: Bản lưu Wayback Machine đã xác thực'
-              : 'URL Link Check: Wayback Machine Snapshot Verified'
+              ? 'Kiểm tra đường dẫn: Xác minh qua bản lưu Wayback'
+              : 'Link Check: Verified via Wayback Archive'
             : effectiveUrlStatus === 'dead_link'
               ? isVi
-                ? `Kiểm tra URL: HTTP ${effectiveUrlCode || 404} (Liên kết chết)`
-                : `URL Link Check: HTTP ${effectiveUrlCode || 404} Dead Link`
+                ? 'Kiểm tra đường dẫn: Không mở được'
+                : 'Link Check: Broken Link'
               : isVi
-                ? 'Kiểm tra URL: Tên miền không tồn tại / giả mạo'
-                : 'URL Link Check: Unresolvable / Fake Domain';
+                ? 'Kiểm tra đường dẫn: Tên miền không tồn tại'
+                : 'Link Check: Unreachable Domain';
     const linkDetail =
       isUrlContentMismatch && observedWeb?.title
         ? isVi
-          ? `Tiêu đề trang thực tế: «${observedWeb.title}»`
-          : `Observed page <title>: “${observedWeb.title}”`
+          ? `Tiêu đề thực tế của trang web: «${observedWeb.title}»`
+          : `Actual web page title: “${observedWeb.title}”`
         : verdict.archive_url && effectiveUrlStatus === 'archived_alive'
           ? verdict.archive_url
           : verdict.cited_url || undefined;
@@ -535,12 +576,14 @@ export function buildEvidenceGraph(
         });
         const candidateLabel =
           db === 'vn_legal_registry' && !isVi
-            ? 'VN Legal Registry'
+            ? 'Vietnamese Legal Registry'
             : db === 'tech_standard' ||
                 db === 'vn_tech_standard' ||
                 db === 'vn_textbook_registry' ||
                 db === 'web_html_meta' ||
                 db === 'wayback_html_meta' ||
+                db === 'local_db' ||
+                db === 'known_papers' ||
                 isVi
               ? contextualName
               : config.label;
@@ -548,8 +591,7 @@ export function buildEvidenceGraph(
         const isWebMetaMismatch =
           isUrlContentMismatch &&
           (db === 'web_html_meta' || db === 'wayback_html_meta');
-        const isHallucinationCandidate =
-          verdict.label === 'suspected_hallucination' && c.matched;
+        const isHallucinationCandidate = isSourceNotFound && c.matched;
         const obsPageTitle = c.title || observedWeb?.title || null;
 
         const candidateStatus: GraphNode['status'] =
@@ -562,18 +604,18 @@ export function buildEvidenceGraph(
         const candidateDetail = isWebMetaMismatch
           ? obsPageTitle
             ? isVi
-              ? `Tiêu đề <title> thực tế: «${obsPageTitle}» — không khớp tiêu đề trích dẫn.`
-              : `Observed HTML <title>: “${obsPageTitle}” — mismatches cited title.`
+              ? `Tiêu đề thực tế của trang web: «${obsPageTitle}» — khác với tên tài liệu bạn trích dẫn.`
+              : `Actual web page title: “${obsPageTitle}” — does not match the cited title.`
             : isVi
-              ? 'Metadata trang web không khớp tiêu đề trích dẫn.'
-              : 'Observed web page metadata mismatches cited title.'
+              ? 'Thông tin trang web không khớp với tiêu đề trích dẫn.'
+              : 'Web page details do not match the cited title.'
           : isHallucinationCandidate
             ? isVi
-              ? `Ứng viên gần nhất (chỉ trùng: ${cleanedFields || 'một phần'}) — không xác thực được trích dẫn.`
-              : `Nearest neighbor candidate (overlap: ${cleanedFields || 'partial'}) — does not verify cited work.`
+              ? `Tài liệu gần giống nhất (chỉ trùng: ${cleanedFields || 'một phần'}) — chưa đủ để xác nhận nguồn trích dẫn.`
+              : `Closest similar work (overlap: ${cleanedFields || 'partial'}) — does not verify cited work.`
             : c.matched
               ? isVi
-                ? `Trường khớp: ${cleanedFields || 'thông tin sẵn có'}.`
+                ? `Thông tin khớp: ${cleanedFields || 'thông tin sẵn có'}.`
                 : `Matched fields: ${cleanedFields || 'available details'}.`
               : isVi
                 ? 'Không tìm thấy bản ghi khớp'
@@ -591,8 +633,8 @@ export function buildEvidenceGraph(
               : 'MISMATCH'
             : isHallucinationCandidate
               ? isVi
-                ? 'LỆCH NGUỒN'
-                : 'CONFLICT'
+                ? 'CHƯA KHỚP'
+                : 'UNCONFIRMED'
               : undefined,
           detail: candidateDetail,
           matchedSource: {
@@ -605,7 +647,7 @@ export function buildEvidenceGraph(
               ? [
                   {
                     id: `${db}-${idx}-link`,
-                    label: isVi ? 'Xem công bố gốc' : 'View Publication',
+                    label: isVi ? 'Xem tài liệu gốc' : 'View Publication',
                     type: 'candidate' as const,
                     status: (
                       isWebMetaMismatch || isHallucinationCandidate
@@ -641,7 +683,8 @@ export function buildEvidenceGraph(
     }),
   ];
 
-  const hasPassingCandidate = candidateNodes.some((n) => n.status === 'success');
+  const hasPassingCandidate =
+    !isSourceNotFound && candidateNodes.some((n) => n.status === 'success');
   const hasWarningCandidate = candidateNodes.some((n) => n.status === 'warning');
   const sourcesNodeStatus: GraphNode['status'] = hasPassingCandidate
     ? 'success'
@@ -649,13 +692,15 @@ export function buildEvidenceGraph(
       ? 'warning'
       : 'no_match';
 
-  // Differentiate positive verification rules from warning / error / neutral rules
+  // Differentiate positive verification checks from warning / error / neutral checks
   const mismatchedCount = (verdict.mismatched_fields ?? []).length;
   const hasWarningRule = triggeredRules.some((r) => WARNING_SYMBOLIC_RULES.has(r));
   const rulesNodeStatus: GraphNode['status'] =
     triggeredRules.length === 0 && mismatchedCount === 0
-      ? 'success'
-      : verdict.label === 'suspected_hallucination'
+      ? isSourceNotFound
+        ? 'error'
+        : 'success'
+      : isSourceNotFound
         ? 'error'
         : verdict.label === 'metadata_error' || mismatchedCount > 0 || hasWarningRule
           ? 'warning'
@@ -663,66 +708,105 @@ export function buildEvidenceGraph(
             ? 'neutral'
             : 'success';
 
+  const rawFeatureMatch = Math.max(
+    f?.content_alignment_score ?? 0,
+    f?.title_sim_semantic ?? 0,
+    f?.title_sim_fuzzy ?? 0,
+    f?.cross_lingual_title_sim ?? 0,
+  );
+  const effectiveSimScore = isSourceNotFound
+    ? rawFeatureMatch
+    : rawFeatureMatch > 0
+      ? rawFeatureMatch
+      : verdict.confidence;
+
+  const similarityNodeStatus: GraphNode['status'] = isSourceNotFound
+    ? databasesWithResults.length === 0 || effectiveSimScore < 0.4
+      ? 'error'
+      : 'warning'
+    : effectiveSimScore >= 0.7
+      ? 'success'
+      : effectiveSimScore >= 0.4
+        ? 'warning'
+        : 'error';
+
+  const similarityNodeDetail = isSourceNotFound
+    ? effectiveSimScore > 0
+      ? isVi
+        ? `Độ khớp gần nhất: ${Math.round(effectiveSimScore * 100)}% (chưa đủ để xác nhận nguồn)`
+        : `Closest match: ${Math.round(effectiveSimScore * 100)}% (insufficient to confirm source)`
+      : isVi
+        ? 'Chưa tìm thấy bản gốc để so sánh nội dung'
+        : 'No matching publication found to compare'
+    : isVi
+      ? `Độ khớp cao nhất: ${Math.round(effectiveSimScore * 100)}%`
+      : `Best match: ${Math.round(effectiveSimScore * 100)}%`;
+
+  const rootDetail =
+    isSourceNotFound || verdict.label === 'unresolved'
+      ? isVi
+        ? 'Cần kiểm tra lại nguồn gốc trích dẫn này'
+        : 'Manual source review recommended'
+      : isVi
+        ? `Độ khớp xác minh: ${(verdict.confidence * 100).toFixed(0)}%`
+        : `Match confidence: ${(verdict.confidence * 100).toFixed(0)}%`;
+
   const graph: GraphNode = {
     id: 'reference',
     label: verdict.citation_raw || (isVi ? 'Trích dẫn không rõ' : 'Unknown Citation'),
     type: 'reference',
     status: 'neutral',
-    detail: isVi
-      ? `Độ tin cậy: ${(verdict.confidence * 100).toFixed(0)}%`
-      : `Confidence: ${(verdict.confidence * 100).toFixed(0)}%`,
+    detail: rootDetail,
     children: [
       {
         id: 'sources',
-        label: isVi ? 'Cơ sở dữ liệu học thuật' : 'Academic Databases',
+        label: isVi ? 'Thư viện học thuật' : 'Academic Libraries',
         type: 'source',
         status: sourcesNodeStatus,
         detail: isLocalOnly
           ? isVi
-            ? 'Khớp bộ nhớ đệm cục bộ — không cần truy vấn API ngoài'
-            : 'Local database cache hit — no external APIs queried'
+            ? 'Đã tìm thấy ngay trong Thư viện học thuật CITRA'
+            : 'Matched instantly in CITRA Scholarly Library'
           : isCuratedOnly
             ? isVi
-              ? 'Danh mục Chuẩn hóa — xác thực từ cơ sở dữ liệu quy chuẩn'
-              : 'Curated Registry Hit — verified against authoritative registry'
-            : isVi
-              ? `${databasesWithResults.length} nguồn được truy vấn`
-              : `${databasesWithResults.length} sources queried`,
+              ? 'Đã đối chiếu từ danh mục chính thức'
+              : 'Verified against official registry'
+            : databasesWithResults.length === 0
+              ? isVi
+                ? `Đã tra cứu ${databasesWithoutResults.length} thư viện — không tìm thấy bản ghi khớp`
+                : `Checked ${databasesWithoutResults.length} academic libraries — no matching record`
+              : isVi
+                ? `${databasesWithResults.length} thư viện có dữ liệu đối chiếu`
+                : `${databasesWithResults.length} ${databasesWithResults.length === 1 ? 'source checked' : 'sources checked'}`,
         children: candidateNodes,
       },
       {
         id: 'similarity',
-        label: isVi ? 'Đối sánh ngữ nghĩa' : 'Semantic Matching',
+        label: isVi ? 'So sánh nội dung' : 'Content Comparison',
         type: 'similarity',
-        status: (verdict.confidence >= 0.7
-          ? 'success'
-          : verdict.confidence >= 0.4
-            ? 'warning'
-            : 'error') as GraphNode['status'],
-        detail: isVi
-          ? `Khớp cao nhất: ${(verdict.confidence * 100).toFixed(0)}%`
-          : `Best match: ${(verdict.confidence * 100).toFixed(0)}%`,
+        status: similarityNodeStatus,
+        detail: similarityNodeDetail,
         children: similarityChildren.length > 0 ? similarityChildren : undefined,
       },
       {
         id: 'rules',
-        label: isVi ? 'Luật xác minh' : 'Verification Rules',
+        label: isVi ? 'Tiêu chí kiểm tra' : 'Verification Checks',
         type: 'rules',
         status: rulesNodeStatus,
         detail:
           triggeredRules.length > 0
             ? triggeredRules.map((r) => getRuleDisplayName(r, resolvedLang)).join('. ')
             : isVi
-              ? 'Không có cảnh báo bổ sung nào được phát hiện.'
-              : 'No additional warnings were raised.',
+              ? 'Không có lưu ý bổ sung nào.'
+              : 'No additional flags were raised.',
         children:
           triggeredRules.length > 0
             ? [
                 {
                   id: 'rules-list',
                   label: isVi
-                    ? `${triggeredRules.length} luật được kích hoạt`
-                    : `${triggeredRules.length} rules triggered`,
+                    ? `${triggeredRules.length} tiêu chí đã đối chiếu`
+                    : `${triggeredRules.length} ${triggeredRules.length === 1 ? 'check applied' : 'checks applied'}`,
                   type: 'rules' as const,
                   status: rulesNodeStatus,
                   detail: getVerdictExplanation(verdict, resolvedLang),
@@ -735,8 +819,8 @@ export function buildEvidenceGraph(
                   type: 'rules' as const,
                   status: 'error' as GraphNode['status'],
                   detail: isVi
-                    ? 'Thông tin này khác với hồ sơ công bố mà chúng tôi tìm thấy.'
-                    : 'This detail differs from the publication record we found.',
+                    ? 'Thông tin này khác với ấn phẩm gốc mà hệ thống tìm thấy.'
+                    : 'This detail differs from the published record we found.',
                 })),
               ]
             : undefined,
@@ -806,18 +890,26 @@ export function EvidenceGraph({ verdict, onClose }: EvidenceGraphProps) {
     VERDICT_CONFIG[verdict.label] ?? VERDICT_CONFIG.unresolved;
   const verdictTitle = getVerdictNodeTitle(verdict, isVi);
   const Icon = verdictConfig.icon;
-  const matchedSourcesCount = (verdict.matched_sources ?? []).filter(
-    (s) => s.matched_fields && s.matched_fields.length > 0,
-  ).length;
+  const isNotFoundVerdict = verdict.label === 'suspected_hallucination';
+  const matchedSourcesCount = isNotFoundVerdict
+    ? 0
+    : (verdict.matched_sources ?? []).filter(
+        (s) => s.matched_fields && s.matched_fields.length > 0,
+      ).length;
   const fExt = verdict.features as CrossLingualFeaturesExt | undefined;
-  const neuralPct = Math.round(
+  const featureMatchPct = Math.round(
     Math.max(
       verdict.features?.content_alignment_score ?? 0,
       verdict.features?.title_sim_semantic ?? 0,
+      verdict.features?.title_sim_fuzzy ?? 0,
       verdict.features?.cross_lingual_title_sim ?? 0,
-      verdict.confidence || 0,
     ) * 100,
   );
+  const contentMatchPct = isNotFoundVerdict
+    ? featureMatchPct
+    : featureMatchPct > 0
+      ? featureMatchPct
+      : Math.round((verdict.confidence || 0) * 100);
   const hasCrossLingualBanner =
     Boolean(fExt?.cross_lingual_detected) ||
     Boolean(fExt?.cross_lingual_alignment) ||
@@ -832,8 +924,7 @@ export function EvidenceGraph({ verdict, onClose }: EvidenceGraphProps) {
       (r) =>
         r === 'R-CROSS-LINGUAL-ALIGNMENT' || r === 'R-CROSS-LINGUAL-TITLE-MATCH',
     );
-  const { status: bannerUrlStatus, code: bannerUrlCode } =
-    resolveGraphUrlStatus(verdict);
+  const { status: bannerUrlStatus } = resolveGraphUrlStatus(verdict);
   const isUrlMismatchBanner = (verdict.triggered_rules ?? []).includes(
     'R-URL-CONTENT-MISMATCH',
   );
@@ -848,17 +939,17 @@ export function EvidenceGraph({ verdict, onClose }: EvidenceGraphProps) {
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
-                {isVi ? 'Đồ Thị Bằng Chứng Neuro-Symbolic' : 'Neuro-Symbolic Evidence Graph'}
+              <h3 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100 leading-snug">
+                {isVi ? 'Các bước đối chiếu trích dẫn' : 'Step-by-Step Verification'}
               </h3>
-              <span className="px-1.5 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200/70 dark:border-indigo-800 text-[9px] font-mono font-semibold text-indigo-700 dark:text-indigo-300 shrink-0">
-                {isVi ? 'TRUY VẾT DAG' : 'DAG TRACE'}
+              <span className="px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200/70 dark:border-indigo-800 text-[10px] font-semibold tracking-wide text-indigo-700 dark:text-indigo-300 shrink-0">
+                {isVi ? 'QUY TRÌNH KIỂM TRA' : 'CHECK FLOW'}
               </span>
             </div>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-snug mt-0.5">
               {isVi
-                ? 'Cây quyết định từ truy xuất liên hợp đến phán quyết hiệu chỉnh'
-                : 'Decision tree from federated retrieval to calibrated verdict'}
+                ? 'Tóm tắt quá trình tìm kiếm, so sánh và đưa ra kết quả'
+                : 'How CITRA searched libraries, compared details, and reached this result'}
             </p>
           </div>
         </div>
@@ -867,7 +958,7 @@ export function EvidenceGraph({ verdict, onClose }: EvidenceGraphProps) {
           <button
             type="button"
             onClick={expandAll}
-            className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-[10px] sm:text-[11px] font-mono text-slate-600 dark:text-slate-300 hover:border-indigo-400 transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:border-indigo-400 transition-colors cursor-pointer"
           >
             <ChevronsUpDown className="h-3 w-3 shrink-0" />
             <span>{isVi ? 'Mở rộng' : 'Expand'}</span>
@@ -875,7 +966,7 @@ export function EvidenceGraph({ verdict, onClose }: EvidenceGraphProps) {
           <button
             type="button"
             onClick={collapseAll}
-            className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-[10px] sm:text-[11px] font-mono text-slate-600 dark:text-slate-300 hover:border-indigo-400 transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:border-indigo-400 transition-colors cursor-pointer"
           >
             <ChevronsDownUp className="h-3 w-3 shrink-0" />
             <span>{isVi ? 'Thu gọn' : 'Collapse'}</span>
@@ -884,7 +975,7 @@ export function EvidenceGraph({ verdict, onClose }: EvidenceGraphProps) {
             <button
               type="button"
               onClick={onClose}
-              className="px-2 py-1 rounded-lg text-xs font-mono text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 cursor-pointer"
+              className="px-2 py-1 rounded-lg text-xs font-medium text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 cursor-pointer"
             >
               {isVi ? 'Đóng' : 'Close'}
             </button>
@@ -892,83 +983,96 @@ export function EvidenceGraph({ verdict, onClose }: EvidenceGraphProps) {
         </div>
       </div>
 
-      {/* 4-Stage Visual Pipeline Flow Strip */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 p-2.5 rounded-xl bg-slate-100/80 dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800">
-        <div className="flex items-center justify-between p-2 rounded-lg bg-white dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 min-w-0">
-          <div className="min-w-0">
-            <div className="flex items-center gap-1 text-[10px] font-mono uppercase text-slate-400">
+      {/* 4-Stage Visual Flow Strip (wraps cleanly without mid-word clipping) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 p-2.5 rounded-xl bg-slate-100/80 dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800">
+        <div className="flex items-start justify-between gap-1.5 p-2.5 rounded-lg bg-white dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 min-w-0">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
               <Database className="h-3 w-3 text-blue-500 shrink-0" />
-              <span className="truncate">{isVi ? '1. Truy xuất' : '1. Retrieval'}</span>
+              <span className="leading-tight">{isVi ? '1. Tìm nguồn' : '1. Library Search'}</span>
             </div>
-            <p className="text-[11px] sm:text-xs font-bold font-mono text-slate-900 dark:text-white mt-0.5 truncate">
-              {isLocalOnly
+            <p className="text-xs font-semibold text-slate-900 dark:text-white mt-1 leading-snug break-words">
+              {isNotFoundVerdict
                 ? isVi
-                  ? 'Khớp FTS5 cục bộ'
-                  : 'Local FTS5 Hit'
-                : hasCuratedRegistryHit
+                  ? 'Chưa tìm thấy nguồn'
+                  : 'No source found'
+                : isLocalOnly
                   ? isVi
-                    ? 'Danh mục Chuẩn hóa'
-                    : 'Curated Registry Hit'
-                  : isVi
-                    ? `${matchedSourcesCount} CSDL khớp`
-                    : `${matchedSourcesCount} DB Match(es)`}
+                    ? 'Thư viện CITRA'
+                    : 'CITRA Library'
+                  : hasCuratedRegistryHit
+                    ? isVi
+                      ? 'Danh mục chính thức'
+                      : 'Official Registry'
+                    : matchedSourcesCount === 0
+                      ? isVi
+                        ? 'Chưa có kết quả'
+                        : 'No match found'
+                      : isVi
+                        ? `${matchedSourcesCount} thư viện khớp`
+                        : matchedSourcesCount === 1
+                          ? '1 library match'
+                          : `${matchedSourcesCount} library matches`}
             </p>
           </div>
-          <ArrowRight className="h-3 w-3 text-slate-300 dark:text-slate-700 hidden sm:block shrink-0" />
+          <ArrowRight className="h-3.5 w-3.5 text-slate-300 dark:text-slate-700 hidden lg:block shrink-0 mt-0.5" />
         </div>
 
-        <div className="flex items-center justify-between p-2 rounded-lg bg-white dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 min-w-0">
-          <div className="min-w-0">
-            <div className="flex items-center gap-1 text-[10px] font-mono uppercase text-slate-400">
-              <Brain className="h-3 w-3 text-violet-500 shrink-0" />
-              <span className="truncate">{isVi ? '2. Ngữ nghĩa' : '2. Neural'}</span>
+        <div className="flex items-start justify-between gap-1.5 p-2.5 rounded-lg bg-white dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 min-w-0">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              <FileSearch className="h-3 w-3 text-violet-500 shrink-0" />
+              <span className="leading-tight">{isVi ? '2. So sánh nội dung' : '2. Content Match'}</span>
             </div>
-            <p className="text-[11px] sm:text-xs font-bold font-mono text-slate-900 dark:text-white mt-0.5 truncate">
-              {isVi ? 'Tương đồng:' : 'Sim:'} {neuralPct}%
-              {verdict.features?.citation_intent
-                ? ` · ${formatIntentLabel(verdict.features.citation_intent, lang)}`
-                : ''}
+            <p className="text-xs font-semibold text-slate-900 dark:text-white mt-1 leading-snug break-words tabular-nums">
+              {isNotFoundVerdict && contentMatchPct === 0
+                ? isVi
+                  ? 'Chưa có bản gốc'
+                  : 'No match'
+                : isVi
+                  ? `Khớp ${contentMatchPct}%`
+                  : `${contentMatchPct}% match`}
             </p>
           </div>
-          <ArrowRight className="h-3 w-3 text-slate-300 dark:text-slate-700 hidden sm:block shrink-0" />
+          <ArrowRight className="h-3.5 w-3.5 text-slate-300 dark:text-slate-700 hidden lg:block shrink-0 mt-0.5" />
         </div>
 
-        <div className="flex items-center justify-between p-2 rounded-lg bg-white dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 min-w-0">
-          <div className="min-w-0">
-            <div className="flex items-center gap-1 text-[10px] font-mono uppercase text-slate-400">
+        <div className="flex items-start justify-between gap-1.5 p-2.5 rounded-lg bg-white dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 min-w-0">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
               <Scale className="h-3 w-3 text-amber-500 shrink-0" />
-              <span className="truncate">{isVi ? '3. Luật logic' : '3. Symbolic'}</span>
+              <span className="leading-tight">{isVi ? '3. Đối chiếu tiêu chí' : '3. Detail Checks'}</span>
             </div>
-            <p className="text-[11px] sm:text-xs font-bold font-mono text-slate-900 dark:text-white mt-0.5 truncate">
+            <p className="text-xs font-semibold text-slate-900 dark:text-white mt-1 leading-snug break-words tabular-nums">
               {isVi
-                ? `${verdict.triggered_rules.length} Luật`
-                : `${verdict.triggered_rules.length} Rule(s)`}
+                ? `${verdict.triggered_rules.length} tiêu chí`
+                : `${verdict.triggered_rules.length} ${verdict.triggered_rules.length === 1 ? 'check' : 'checks'}`}
             </p>
           </div>
-          <ArrowRight className="h-3 w-3 text-slate-300 dark:text-slate-700 hidden sm:block shrink-0" />
+          <ArrowRight className="h-3.5 w-3.5 text-slate-300 dark:text-slate-700 hidden lg:block shrink-0 mt-0.5" />
         </div>
 
-        <div className={`flex items-center justify-between p-2 rounded-lg border min-w-0 ${verdictConfig.bgColor} ${verdictConfig.borderColor}`}>
-          <div className="min-w-0">
-            <div className="flex items-center gap-1 text-[10px] font-mono uppercase text-slate-500 dark:text-slate-400">
+        <div className={`flex items-start justify-between gap-1.5 p-2.5 rounded-lg border min-w-0 ${verdictConfig.bgColor} ${verdictConfig.borderColor}`}>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
               <ShieldCheck className={`h-3 w-3 shrink-0 ${verdictConfig.color}`} />
-              <span className="truncate">{isVi ? '4. Phán quyết' : '4. Verdict'}</span>
+              <span className="leading-tight">{isVi ? '4. Kết quả' : '4. Result'}</span>
             </div>
-            <p className={`text-[11px] sm:text-xs font-bold font-mono mt-0.5 truncate ${verdictConfig.color}`}>
-              {verdictTitle} ({Math.round(verdict.confidence * 100)}%)
+            <p className={`text-xs font-bold mt-1 leading-snug break-words ${verdictConfig.color}`}>
+              {verdictTitle}
             </p>
           </div>
         </div>
       </div>
 
-      {/* Verdict Summary Banner */}
+      {/* Result Summary Banner */}
       <div
         className={`p-3 rounded-xl border w-full min-w-0 overflow-hidden ${verdictConfig.bgColor} ${verdictConfig.borderColor}`}
       >
         <div className="flex items-center justify-between gap-2 mb-1 flex-wrap">
           <div className="flex items-center gap-1.5 min-w-0">
             <Icon className={`h-4 w-4 shrink-0 ${verdictConfig.color}`} />
-            <span className={`font-bold text-xs font-mono truncate ${verdictConfig.color}`}>
+            <span className={`font-bold text-xs sm:text-[13px] ${verdictConfig.color}`}>
               {verdictTitle}
             </span>
           </div>
@@ -976,7 +1080,7 @@ export function EvidenceGraph({ verdict, onClose }: EvidenceGraphProps) {
             {bannerUrlStatus && (
               <span
                 data-testid="evidence-graph-url-status"
-                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold border ${
+                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold border ${
                   isUrlMismatchBanner || bannerUrlStatus === 'archived_alive'
                     ? 'bg-amber-100/90 dark:bg-amber-950/90 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-800'
                     : bannerUrlStatus === 'alive' || bannerUrlStatus === 'restricted_alive'
@@ -987,33 +1091,35 @@ export function EvidenceGraph({ verdict, onClose }: EvidenceGraphProps) {
                 <Link2 className="h-3 w-3 shrink-0" />
                 {isUrlMismatchBanner
                   ? isVi
-                    ? `HTTP ${bannerUrlCode || 200} · Sai trang`
-                    : `HTTP ${bannerUrlCode || 200} · Wrong Page`
+                    ? 'Trang web không khớp tiêu đề'
+                    : 'Page title mismatch'
                   : bannerUrlStatus === 'alive'
-                    ? `HTTP ${bannerUrlCode || 200} OK`
+                    ? isVi
+                      ? 'Liên kết hoạt động'
+                      : 'Link active'
                     : bannerUrlStatus === 'restricted_alive'
                       ? isVi
-                        ? `Truy cập hạn chế (HTTP ${bannerUrlCode || 403})`
-                        : `Restricted Access (HTTP ${bannerUrlCode || 403})`
+                        ? 'Trang yêu cầu đăng nhập / trả phí'
+                        : 'Paywalled / login required'
                       : bannerUrlStatus === 'archived_alive'
                         ? isVi
                           ? 'Bản lưu Wayback'
-                          : 'Wayback Archived'
+                          : 'Wayback archived'
                         : bannerUrlStatus === 'dead_link'
                           ? isVi
-                            ? `Liên kết lỗi (HTTP ${bannerUrlCode || 404})`
-                            : `Broken Link (HTTP ${bannerUrlCode || 404})`
+                            ? 'Đường dẫn không mở được'
+                            : 'Broken link'
                           : isVi
-                            ? 'URL không hợp lệ'
+                            ? 'Đường dẫn không hợp lệ'
                             : 'Invalid URL'}
               </span>
             )}
             {hasCrossLingualBanner && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-violet-100 dark:bg-violet-950/90 text-violet-700 dark:text-violet-300 text-[10px] font-mono font-semibold shrink-0">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-violet-100 dark:bg-violet-950/90 text-violet-700 dark:text-violet-300 text-[11px] font-semibold shrink-0">
                 <Sparkles className="h-3 w-3 shrink-0" />
                 {isVi
-                  ? 'Cầu nối ngữ nghĩa ONNX INT8 (Việt ↔ Anh)'
-                  : 'VI ↔ EN ONNX INT8 Cross-Lingual Bridge'}
+                  ? 'Đối chiếu song ngữ Việt ↔ Anh'
+                  : 'Bilingual VI ↔ EN Match'}
               </span>
             )}
           </div>
@@ -1026,17 +1132,17 @@ export function EvidenceGraph({ verdict, onClose }: EvidenceGraphProps) {
             {verdict.triggered_rules.map((rule) => (
               <span
                 key={rule}
-                className="inline-flex items-center gap-1 px-2 py-0.5 bg-white/80 dark:bg-slate-900/80 border border-amber-300/80 dark:border-amber-800 text-amber-800 dark:text-amber-300 rounded-md text-[10px] font-mono font-semibold break-all"
+                className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-white/85 dark:bg-slate-900/85 border border-slate-200/90 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-md text-[11px] font-medium break-words"
               >
-                <ListChecks className="h-3 w-3 shrink-0" />
-                {rule}
+                <ListChecks className={`h-3 w-3 shrink-0 ${verdictConfig.color}`} />
+                {getRuleDisplayName(rule, lang)}
               </span>
             ))}
           </div>
         )}
       </div>
 
-      {/* Interactive Hierarchical DAG Tree (no min-w-fit, never overflows horizontally) */}
+      {/* Interactive Hierarchical Verification Tree (never overflows horizontally) */}
       <div className="border border-slate-200 dark:border-slate-800 rounded-xl p-3 sm:p-4 bg-white dark:bg-slate-950 w-full min-w-0 max-w-full overflow-hidden shadow-sm">
         <EvidenceGraphNode
           node={graphData}
@@ -1055,29 +1161,29 @@ export function EvidenceGraph({ verdict, onClose }: EvidenceGraphProps) {
           </div>
           <div className="flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block" />
-            <span>{isVi ? 'Cảnh báo / Luật' : 'Warning / Rule'}</span>
+            <span>{isVi ? 'Cần lưu ý' : 'Caution'}</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block" />
-            <span>{isVi ? 'Sai lệch / Lỗi' : 'Mismatch / Fail'}</span>
+            <span>{isVi ? 'Sai lệch / Chưa khớp' : 'Mismatch / Issue'}</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded-full bg-slate-400 dark:bg-slate-600 inline-block" />
-            <span>{isVi ? 'Không tìm thấy' : 'No Hit'}</span>
+            <span>{isVi ? 'Không có kết quả' : 'Not found'}</span>
           </div>
         </div>
 
         {verdict.mismatched_fields.length > 0 && (
           <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="font-mono text-[10px] uppercase text-red-600 dark:text-red-400 font-semibold">
-              {isVi ? 'Trường lệch:' : 'Mismatched:'}
+            <span className="text-[11px] text-red-600 dark:text-red-400 font-semibold">
+              {isVi ? 'Thông tin lệch:' : 'Mismatched:'}
             </span>
             {verdict.mismatched_fields.map((field) => (
               <span
                 key={field}
-                className="px-1.5 py-0.5 bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-400 rounded text-[10px] font-mono border border-red-200 dark:border-red-800"
+                className="px-2 py-0.5 bg-red-50 dark:bg-red-950 text-red-700 dark:text-red-300 rounded text-[11px] font-medium border border-red-200 dark:border-red-800"
               >
-                {field}
+                {getFieldDisplayName(field, lang).replace(/^the\s+/i, '')}
               </span>
             ))}
           </div>

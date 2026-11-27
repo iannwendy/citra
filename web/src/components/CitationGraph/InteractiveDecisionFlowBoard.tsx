@@ -130,10 +130,10 @@ const SATELLITE_CLUSTERS: SatelliteClusterDef[] = [
   },
   {
     key: 'local_scholarly',
-    nameVi: 'Thư viện Học thuật Cục bộ',
-    nameEn: 'Local Scholarly Library',
-    domainVi: 'Kho ACL Anthology & công trình học thuật chuẩn hóa cục bộ',
-    domainEn: 'Curated local ACL Anthology & canonical scholarly index',
+    nameVi: 'Thư viện học thuật CITRA',
+    nameEn: 'CITRA Scholarly Library',
+    domainVi: 'Kho bài báo học thuật chuẩn hóa tích hợp sẵn trong CITRA',
+    domainEn: 'Built-in library of verified academic publications',
     sourceKeys: ['local_db', 'acl', 'known_papers'],
     xPct: 84,
     yPct: 15,
@@ -142,10 +142,10 @@ const SATELLITE_CLUSTERS: SatelliteClusterDef[] = [
   },
   {
     key: 'semantic',
-    nameVi: 'Đối sánh Ngữ nghĩa',
-    nameEn: 'Semantic AI Match',
-    domainVi: 'Hiểu nội dung & đối chiếu đa ngôn ngữ Việt ↔ Anh',
-    domainEn: 'Deep content & VI ↔ EN cross-lingual matching',
+    nameVi: 'Đối chiếu ngữ cảnh',
+    nameEn: 'Context Match',
+    domainVi: 'So sánh nội dung câu trích dẫn & song ngữ Việt ↔ Anh',
+    domainEn: 'Sentence meaning & VI ↔ EN bilingual matching',
     sourceKeys: ['semantic_scholar'],
     xPct: 86.5,
     yPct: 33,
@@ -423,7 +423,11 @@ function humanizeField(field: string, isVi: boolean): string {
   if (low === 'authors' || low === 'author') return isVi ? 'Tác giả' : 'Authors';
   if (low === 'venue' || low === 'journal') return isVi ? 'Nơi công bố' : 'Journal / Venue';
   if (low === 'doi') return 'DOI';
-  if (low === 'retracted_paper') return isVi ? 'Bài đã rút lại' : 'Retracted paper';
+  if (low === 'url') return isVi ? 'Đường dẫn URL' : 'Web link';
+  if (low === 'content') return isVi ? 'Nội dung trích dẫn' : 'Cited content';
+  if (low === 'retracted' || low === 'retracted_paper') {
+    return isVi ? 'Bài đã rút lại' : 'Retracted paper';
+  }
   return field;
 }
 
@@ -526,13 +530,41 @@ export function InteractiveDecisionFlowBoard({
   const evaluatedSatellites = useMemo(() => {
     const matchedList = verdict.matched_sources ?? [];
     const rules = verdict.triggered_rules ?? [];
+    const mismatchedLower = (verdict.mismatched_fields ?? []).map((f) =>
+      f.trim().toLowerCase(),
+    );
+    const hasContentMismatch =
+      mismatchedLower.includes('content') ||
+      rules.includes('R-CONTENT-MISMATCH') ||
+      verdict.features?.stance_label === 'contradiction_risk';
     const urlSt = verdict.url_status ?? verdict.features?.url_status ?? null;
     const sourceUsed = (verdict.features?.source_used ?? '').toLowerCase();
     const hasLocalScholarlyHit =
       ['local_db', 'acl', 'known_papers'].includes(sourceUsed) ||
+      matchedList.some((m) =>
+        ['local_db', 'acl', 'known_papers'].includes(m.source.toLowerCase()),
+      ) ||
       rules.some(
         (r) => r.startsWith('R-LOCAL_DB') || r.startsWith('R-KNOWN-PAPER'),
       );
+    const externalScholarlyKeys = new Set([
+      'crossref',
+      'openalex',
+      'pubmed',
+      'arxiv',
+      'doaj',
+    ]);
+    const hasExternalScholarlyHit = matchedList.some((m) => {
+      const src = m.source.toLowerCase();
+      return SATELLITE_CLUSTERS.some(
+        (c) => externalScholarlyKeys.has(c.key) && c.sourceKeys.includes(src),
+      );
+    });
+    const matchedInPrimaryLibraryOnly =
+      !hasExternalScholarlyHit &&
+      ((hasLocalScholarlyHit &&
+        (effectiveLabel === 'verified' || effectiveLabel === 'metadata_error')) ||
+        effectiveLabel === 'verified');
     const hasVnLegalRuleHit =
       isLegal ||
       rules.some(
@@ -543,10 +575,11 @@ export function InteractiveDecisionFlowBoard({
           r === 'R-VN-TEXTBOOK-VERIFIED',
       );
     const hasSemanticHit =
-      (verdict.features?.content_alignment_score ?? 0) >= 0.45 ||
-      Boolean(verdict.features?.cross_lingual_detected) ||
-      Boolean(verdict.features?.cross_lingual_title_detected) ||
-      ((verdict.features?.title_sim_semantic ?? 0) >= 0.8 && matchedList.length > 0);
+      effectiveLabel !== 'suspected_hallucination' &&
+      ((verdict.features?.content_alignment_score ?? 0) >= 0.45 ||
+        Boolean(verdict.features?.cross_lingual_detected) ||
+        Boolean(verdict.features?.cross_lingual_title_detected) ||
+        ((verdict.features?.title_sim_semantic ?? 0) >= 0.8 && matchedList.length > 0));
     const hasWebHit =
       matchedList.some((m) =>
         ['web_html_meta', 'wayback_html_meta'].includes(m.source.toLowerCase()),
@@ -569,6 +602,7 @@ export function InteractiveDecisionFlowBoard({
       );
 
       let isMatched = matchedRecords.length > 0;
+      let isSkippedPrimary = false;
       let satTone: Tone = primaryTone === 'amber' ? 'amber' : 'emerald';
       let statusLine = isVi ? 'Đã dò · Không trùng' : 'Scanned · No match';
       let storyTitle = '';
@@ -599,16 +633,16 @@ export function InteractiveDecisionFlowBoard({
             ? ` (${bestRec.year})`
             : '';
         storyTitle = isVi
-          ? `${cluster.nameVi} — Đã tìm thấy công trình đối chứng`
-          : `${cluster.nameEn} — Canonical Record Found`;
+          ? `${cluster.nameVi} — Đã tìm thấy bài gốc`
+          : `${cluster.nameEn} — Official Record Found`;
         storyBody =
           mismatched.length > 0 && effectiveLabel === 'metadata_error'
             ? isVi
-              ? `Tìm thấy hồ sơ gốc "${bestRec?.title || identity.cleanTitle}"${venueNote} trong ${cluster.nameVi}, nhưng phát hiện sai lệch ở trường: ${mismatched.map((f) => humanizeField(f, true)).join(', ')}.`
-              : `Found canonical record "${bestRec?.title || identity.cleanTitle}"${venueNote} in ${cluster.nameEn}, with discrepancy in: ${mismatched.map((f) => humanizeField(f, false)).join(', ')}.`
+              ? `Tìm thấy tài liệu gốc "${bestRec?.title || identity.cleanTitle}"${venueNote} trong ${cluster.nameVi}, nhưng phát hiện sai lệch ở: ${mismatched.map((f) => humanizeField(f, true)).join(', ')}.`
+              : `Found official record "${bestRec?.title || identity.cleanTitle}"${venueNote} in ${cluster.nameEn}, with differences in: ${mismatched.map((f) => humanizeField(f, false)).join(', ')}.`
             : isVi
-              ? `Xác nhận công trình "${bestRec?.title || identity.cleanTitle}"${venueNote} tồn tại trong ${cluster.nameVi} (chỉ mục bài báo hội nghị/tạp chí chuẩn đã lập chỉ mục cục bộ) với thông tin trùng khớp.`
-              : `Confirmed "${bestRec?.title || identity.cleanTitle}"${venueNote} in the ${cluster.nameEn} (locally indexed conference & journal registry) with consistent metadata.`;
+              ? `Xác nhận công trình "${bestRec?.title || identity.cleanTitle}"${venueNote} tồn tại trong ${cluster.nameVi} với thông tin trùng khớp.`
+              : `Confirmed "${bestRec?.title || identity.cleanTitle}"${venueNote} in the ${cluster.nameEn} with matching publication details.`;
       } else if (cluster.key === 'vnlegal' && (isMatched || hasVnLegalRuleHit)) {
         isMatched = true;
         satTone = isLegal
@@ -625,10 +659,22 @@ export function InteractiveDecisionFlowBoard({
             : '✓ Source matched';
         storyTitle = isVi
           ? `${cluster.nameVi} — Đã đối chứng hợp lệ`
-          : `${cluster.nameEn} — Authoritative Registry Hit`;
+          : `${cluster.nameEn} — Official Registry Match`;
         storyBody = isVi
           ? `Xác nhận văn bản/tiêu chuẩn "${bestRec?.title || identity.cleanTitle}" tồn tại trong ${cluster.nameVi}.`
           : `Confirmed "${bestRec?.title || identity.cleanTitle}" against ${cluster.nameEn}.`;
+      } else if (cluster.key === 'semantic' && hasContentMismatch) {
+        isMatched = true;
+        satTone = 'amber';
+        statusLine = isVi
+          ? '⚠ Nội dung chưa khớp nguồn'
+          : '⚠ Cited content differs';
+        storyTitle = isVi
+          ? 'Đối chiếu ngữ cảnh — Cần kiểm tra lại nội dung trích dẫn'
+          : 'Context Match — Cited Content Needs Review';
+        storyBody = isVi
+          ? 'Nội dung câu trích dẫn trong bài chưa khớp với tóm tắt của tài liệu gốc. Bạn nên đối chiếu lại bài gốc để đảm bảo trích dẫn đúng ý.'
+          : 'Your in-text claim differs from the source publication’s abstract. Please review the original paper to ensure accurate representation.';
       } else if (cluster.key === 'semantic' && hasSemanticHit) {
         isMatched = true;
         const isCross =
@@ -641,21 +687,21 @@ export function InteractiveDecisionFlowBoard({
             : 'emerald';
         statusLine = isCross
           ? isVi
-            ? '✓ Khớp đa ngôn ngữ Việt↔Anh'
-            : '✓ VI↔EN semantic match'
+            ? '✓ Khớp song ngữ Việt ↔ Anh'
+            : '✓ VI ↔ EN content match'
           : isVi
             ? '✓ Nội dung khớp ngữ cảnh'
             : '✓ Context meaning aligned';
         storyTitle = isVi
-          ? 'Đối sánh Ngữ nghĩa AI — Hiểu ý nghĩa câu trích dẫn'
-          : 'Semantic AI Match — Context & Meaning Verified';
+          ? 'Đối chiếu ngữ cảnh — Nội dung phù hợp với bài gốc'
+          : 'Context Match — Sentence Aligns with Source';
         storyBody = isCross
           ? isVi
-            ? 'Hệ thống nhận diện trích dẫn có sự chuyển ngữ Việt ↔ Anh và xác nhận nội dung bài báo gốc tương ứng chính xác với ý được trích.'
-            : 'Detected Vietnamese ↔ English cross-lingual citation and confirmed semantic equivalence with the source paper.'
+            ? 'Hệ thống nhận diện trích dẫn song ngữ Việt ↔ Anh và xác nhận nội dung bài báo gốc phù hợp với câu trích dẫn trong bài.'
+            : 'Detected Vietnamese ↔ English bilingual citation and confirmed the English source aligns with your sentence.'
           : isVi
             ? 'Nội dung câu viết trong bài của bạn phù hợp với chủ đề và tóm tắt của công trình khoa học gốc.'
-            : 'Your in-text claim aligns semantically with the source publication abstract and topic.';
+            : 'Your in-text sentence aligns with the source publication’s abstract and topic.';
       } else if (cluster.key === 'web' && hasWebHit) {
         isMatched = true;
         const isDead = urlSt === 'dead_link' || urlSt === 'fake_domain';
@@ -690,7 +736,7 @@ export function InteractiveDecisionFlowBoard({
               : 'The original URL changed, but CITRA verified an intact snapshot on the Internet Archive Wayback Machine.'
             : isVi
               ? 'Đường dẫn trực tuyến mở thành công và phản hồi nội dung trang hợp lệ.'
-              : 'The cited web link responds normally with valid page metadata.';
+              : 'The cited web link responds normally with valid page details.';
         if (!externalUrl) {
           const rawUrlMatch = verdict.citation_raw.match(/\bhttps?:\/\/[^\s<>")'\]]+/i);
           externalUrl =
@@ -721,16 +767,27 @@ export function InteractiveDecisionFlowBoard({
             ? ` (${bestRec.year})`
             : '';
         storyTitle = isVi
-          ? `${cluster.nameVi} — Đã tìm thấy công trình đối chứng`
-          : `${cluster.nameEn} — Canonical Record Found`;
+          ? `${cluster.nameVi} — Đã tìm thấy bài gốc`
+          : `${cluster.nameEn} — Official Record Found`;
         storyBody =
           mismatched.length > 0 && effectiveLabel === 'metadata_error'
             ? isVi
-              ? `Tìm thấy hồ sơ gốc "${bestRec.title || identity.cleanTitle}"${venueNote} trên ${cluster.nameVi}, nhưng phát hiện sai lệch ở trường: ${mismatched.map((f) => humanizeField(f, true)).join(', ')}.`
-              : `Found canonical record "${bestRec.title || identity.cleanTitle}"${venueNote} on ${cluster.nameEn}, with discrepancy in: ${mismatched.map((f) => humanizeField(f, false)).join(', ')}.`
+              ? `Tìm thấy tài liệu gốc "${bestRec.title || identity.cleanTitle}"${venueNote} trên ${cluster.nameVi}, nhưng phát hiện sai lệch ở: ${mismatched.map((f) => humanizeField(f, true)).join(', ')}.`
+              : `Found official record "${bestRec.title || identity.cleanTitle}"${venueNote} on ${cluster.nameEn}, with differences in: ${mismatched.map((f) => humanizeField(f, false)).join(', ')}.`
             : isVi
               ? `Xác nhận công trình "${bestRec.title || identity.cleanTitle}"${venueNote} tồn tại chính thức trên ${cluster.nameVi} với thông tin trùng khớp.`
-              : `Confirmed "${bestRec.title || identity.cleanTitle}"${venueNote} on ${cluster.nameEn} with consistent metadata.`;
+              : `Confirmed "${bestRec.title || identity.cleanTitle}"${venueNote} on ${cluster.nameEn} with consistent details.`;
+      } else if (matchedInPrimaryLibraryOnly) {
+        isSkippedPrimary = true;
+        statusLine = isVi
+          ? 'Đã khớp ở kho chính'
+          : 'Matched in primary library';
+        storyTitle = isVi
+          ? `${cluster.nameVi} — Không cần tra cứu thêm`
+          : `${cluster.nameEn} — Not Needed`;
+        storyBody = isVi
+          ? `Tài liệu ${marker} đã được xác minh trực tiếp trong Thư viện học thuật CITRA nên không cần tra cứu bổ sung tại ${cluster.nameVi}.`
+          : `Reference ${marker} was already verified in the primary library (CITRA Scholarly Library), so no extra lookup in ${cluster.nameEn} was needed.`;
       } else {
         storyTitle = isVi
           ? `${cluster.nameVi} — Đã quét tự động`
@@ -743,6 +800,7 @@ export function InteractiveDecisionFlowBoard({
       return {
         ...cluster,
         isMatched,
+        isSkippedPrimary,
         satTone,
         statusLine,
         storyTitle,
@@ -828,7 +886,7 @@ export function InteractiveDecisionFlowBoard({
       : mismatched.length > 0
         ? isVi
           ? `⚠ Lệch: ${mismatched.map((f) => humanizeField(f, true)).join(', ')}`
-          : `⚠ Diff: ${mismatched.map((f) => humanizeField(f, false)).join(', ')}`
+          : `⚠ Differs: ${mismatched.map((f) => humanizeField(f, false)).join(', ')}`
         : effectiveLabel === 'verified'
           ? isVi
             ? 'Tên bài ✓ · Tác giả ✓ · Năm XB ✓'
@@ -839,20 +897,20 @@ export function InteractiveDecisionFlowBoard({
               : 'Valid web / legal resource ✓'
             : isVi
               ? 'Chưa có bản gốc để đối chiếu'
-              : 'No canonical record to compare';
+              : 'No published record to compare';
 
     const pct = Math.round((verdict.confidence ?? 0) * 100);
     const step4Sub =
       effectiveLabel === 'verified'
         ? isVi
-          ? `✓ Hợp lệ · Độ tin cậy ${pct}%`
+          ? `✓ Đã xác minh · Độ tin cậy ${pct}%`
           : `✓ Verified · ${pct}% confidence`
         : effectiveLabel === 'metadata_error'
           ? isVi
             ? '⚠ Có bài thật · Cần sửa thông tin'
-            : '⚠ Real paper · Fix metadata'
-        : effectiveLabel === 'suspected_hallucination'
-          ? `✕ ${getVerdictDisplay('suspected_hallucination', lang).label}`
+            : '⚠ Real paper · Update details'
+          : effectiveLabel === 'suspected_hallucination'
+            ? `✕ ${getVerdictDisplay('suspected_hallucination', lang).label}`
             : effectiveLabel === 'resource'
               ? isLegal
                 ? isVi
@@ -872,8 +930,8 @@ export function InteractiveDecisionFlowBoard({
         sub: step1Sub,
         tone: step1Tone,
         hudBadge: isVi
-          ? `1/4 · Đang đọc & bóc tách mục ${marker} từ bài viết của bạn`
-          : `1/4 · Extracting citation ${marker} from your manuscript`,
+          ? `1/4 · Đang đọc mục ${marker} từ bài viết của bạn`
+          : `1/4 · Reading citation ${marker} from your document`,
         storyTitle: isVi
           ? `Bước 1 — Đọc & kiểm tra vị trí trích dẫn ${marker}`
           : `Step 1 — Read & Locate Citation ${marker}`,
@@ -887,8 +945,8 @@ export function InteractiveDecisionFlowBoard({
                 ? `Mục ${marker} có tên trong danh mục cuối bài nhưng chưa thấy được trích dẫn ở đoạn văn nào trong thân bài.`
                 : `Entry ${marker} appears in your bibliography, but isn't cited anywhere in the body text.`
               : isVi
-                ? `Đã bóc tách thông tin trích dẫn ${marker} từ bài viết để chuẩn bị đối chiếu với các thư viện học thuật.`
-                : `Extracted citation metadata for ${marker} from your manuscript for database verification.`,
+                ? `Đã đọc thông tin trích dẫn ${marker} từ bài viết để chuẩn bị đối chiếu với các thư viện học thuật.`
+                : `Read citation details for ${marker} from your document for library verification.`,
       },
       {
         num: isVi ? 'BƯỚC 02' : 'STEP 02',
@@ -898,21 +956,21 @@ export function InteractiveDecisionFlowBoard({
         hudBadge:
           hitNames.length > 0
             ? isVi
-              ? `2/4 · Phát tín hiệu quét 15+ kho quốc tế → Tìm thấy tại ${hitNames.join(', ')}!`
-              : `2/4 · Scanning 15+ registries → Found in ${hitNames.join(', ')}!`
+              ? `2/4 · Tra cứu 15+ thư viện → Tìm thấy tại ${hitNames.join(', ')}`
+              : `2/4 · Searched 15+ libraries → Found in ${hitNames.join(', ')}`
             : isVi
-              ? '2/4 · Đã phát tín hiệu quét 15+ thư viện quốc tế → Không có bản ghi trùng'
-              : '2/4 · Scanned 15+ global scholarly libraries → 0 matching records',
+              ? '2/4 · Đã tra cứu 15+ thư viện học thuật → Không có bản ghi trùng'
+              : '2/4 · Searched 15+ academic libraries → 0 matching records',
         storyTitle: isVi
-          ? 'Bước 2 — Dò tìm song song trên hơn 15 kho dữ liệu quốc tế'
-          : 'Step 2 — Parallel Lookup Across 15+ Global Registries',
+          ? 'Bước 2 — Tra cứu song song trên hơn 15 thư viện học thuật'
+          : 'Step 2 — Parallel Search Across 15+ Academic Libraries',
         storyBody:
           hitNames.length > 0
             ? isVi
-              ? `Tín hiệu dò tìm tỏa ra toàn bộ các kho dữ liệu trên sơ đồ: kho nào có bài gốc (${hitNames.join(', ')}) lập tức sáng đèn và truyền dữ liệu chuẩn về tâm.`
-              : `Search probes radiate across all libraries on the board: matching indexes (${hitNames.join(', ')}) lock on and stream canonical records back to the center.`
+              ? `CITRA tra cứu song song trên hơn 15 thư viện học thuật và tìm thấy bản gốc tại: ${hitNames.join(', ')}.`
+              : `CITRA searched 15+ scholarly libraries in parallel and found the published record in: ${hitNames.join(', ')}.`
             : isVi
-              ? 'Đã phát tín hiệu dò tìm tới Crossref, OpenAlex, PubMed, arXiv, DBLP, DOAJ và kho sách quốc tế nhưng không tìm thấy công trình nào trùng khớp.'
+              ? 'Đã tra cứu Crossref, OpenAlex, PubMed, arXiv, DBLP, DOAJ và kho sách quốc tế nhưng không tìm thấy công trình nào trùng khớp.'
               : 'Searched Crossref, OpenAlex, PubMed, arXiv, DBLP, DOAJ, and book registries, returning zero matching publications.',
       },
       {
@@ -1031,8 +1089,8 @@ export function InteractiveDecisionFlowBoard({
               ok: true,
             },
             {
-              field: isVi ? 'Điểm học thuật' : 'CIS Impact',
-              value: isVi ? 'Không trừ điểm ✓' : 'Exempt ✓',
+              field: isVi ? 'Điểm trích dẫn' : 'Citation Score',
+              value: isVi ? 'Không trừ điểm ✓' : 'No penalty ✓',
               ok: true,
             },
           ];
@@ -1046,7 +1104,7 @@ export function InteractiveDecisionFlowBoard({
           ok: false,
         },
         {
-          field: isVi ? 'Thư viện khớp' : 'Matched DBs',
+          field: isVi ? 'Thư viện khớp' : 'Libraries matched',
           value: `${matchedSatellites.length} / 15+`,
           ok: false,
         },
@@ -1058,6 +1116,7 @@ export function InteractiveDecisionFlowBoard({
       mismatched.has('authors') || mismatched.has('author') || isIncomplete;
     const yearMismatch = mismatched.has('year') || isIncomplete;
     const venueMismatch = mismatched.has('venue') || mismatched.has('journal');
+    const contentMismatch = mismatched.has('content');
 
     let yearValue = isVi ? '✓ Trùng khớp' : '✓ Matches';
     if (yearMismatch) {
@@ -1111,10 +1170,19 @@ export function InteractiveDecisionFlowBoard({
             ? '⚠ Lệch nơi công bố'
             : '⚠ Venue differs'
           : isVi
-            ? '✓ Xác thực'
+            ? '✓ Đã xác minh'
             : '✓ Verified',
         ok: !venueMismatch,
       },
+      ...(contentMismatch
+        ? [
+            {
+              field: isVi ? 'Nội dung trích dẫn' : 'Cited content',
+              value: isVi ? '⚠ Cần kiểm tra lại nội dung' : '⚠ Claim differs from source',
+              ok: false,
+            },
+          ]
+        : []),
     ];
   }, [
     verdict.mismatched_fields,
@@ -1209,15 +1277,15 @@ export function InteractiveDecisionFlowBoard({
           ]
         : [
             { label: isVi ? 'Đường dẫn Web ✓' : 'Web Link ✓', ok: true },
-            { label: isVi ? 'Không trừ điểm CIS ✓' : 'CIS Exempt ✓', ok: true },
+            { label: isVi ? 'Không trừ điểm ✓' : 'No score penalty ✓', ok: true },
           ];
     }
     if (effectiveLabel === 'suspected_hallucination' || effectiveLabel === 'unresolved') {
       return [
         {
           label: isVi
-            ? `${matchedSatellites.length} nguồn khớp`
-            : `${matchedSatellites.length} DB hits`,
+            ? `${matchedSatellites.length} thư viện khớp`
+            : `${matchedSatellites.length} ${matchedSatellites.length === 1 ? 'library match' : 'library matches'}`,
           ok: false,
         },
       ];
@@ -1238,6 +1306,14 @@ export function InteractiveDecisionFlowBoard({
         label: `${isVi ? 'Năm XB' : 'Year'} ${mismatched.has('year') ? '⚠' : '✓'}`,
         ok: !mismatched.has('year'),
       },
+      ...(mismatched.has('content')
+        ? [
+            {
+              label: `${isVi ? 'Nội dung' : 'Content'} ⚠`,
+              ok: false,
+            },
+          ]
+        : []),
     ];
   }, [
     effectiveLabel,
@@ -1264,19 +1340,19 @@ export function InteractiveDecisionFlowBoard({
     boardPhase === 'step-0'
       ? isVi
         ? '1/4 · ĐANG ĐỌC TỪ BÀI VIẾT'
-        : '1/4 · READING MANUSCRIPT'
+        : '1/4 · READING DOCUMENT'
       : boardPhase === 'step-1'
         ? isVi
-          ? `2/4 · PHÁT HIỆN ${matchedSatellites.length} KHO KHỚP`
-          : `2/4 · ${matchedSatellites.length} MATCHING INDEXES`
+          ? `2/4 · PHÁT HIỆN ${matchedSatellites.length} THƯ VIỆN KHỚP`
+          : `2/4 · ${matchedSatellites.length} MATCHING LIBRARIES`
         : boardPhase === 'step-2'
           ? isVi
-            ? '3/4 · ĐỐI CHIẾU TỪNG TRƯỜNG'
-            : '3/4 · FIELD-BY-FIELD CHECK'
+            ? '3/4 · ĐỐI CHIẾU TỪNG THÔNG TIN'
+            : '3/4 · DETAIL COMPARISON'
           : effectiveLabel === 'verified'
             ? isVi
-              ? '✓ ĐÃ XÁC THỰC HỢP LỆ'
-              : '✓ VERIFIED PUBLICATION'
+              ? '✓ ĐÃ XÁC MINH'
+              : '✓ VERIFIED'
             : effectiveLabel === 'metadata_error'
               ? isVi
                 ? '⚠ CẦN SỬA THÔNG TIN'
@@ -1369,8 +1445,8 @@ export function InteractiveDecisionFlowBoard({
           <span className={`h-2 w-2 rounded-full ${toneDotClass(activeCanvasTone)}`} />
           <span>
             {isVi
-              ? `Luồng Kiểm Chứng Trực Quan · Tài liệu ${marker}`
-              : `Interactive Verification Flow · Reference ${marker}`}
+              ? `Các bước kiểm tra · Tài liệu ${marker}`
+              : `Verification Steps · Reference ${marker}`}
           </span>
         </div>
 
@@ -1392,14 +1468,14 @@ export function InteractiveDecisionFlowBoard({
                 <Square className="h-3 w-3 fill-current" />
                 <span>
                   {isVi
-                    ? `Dừng mô phỏng (${(activeStepIndex ?? 0) + 1}/4)`
+                    ? `Dừng xem lại (${(activeStepIndex ?? 0) + 1}/4)`
                     : `Stop Replay (${(activeStepIndex ?? 0) + 1}/4)`}
                 </span>
               </>
             ) : (
               <>
                 <Play className="h-3 w-3 fill-current" />
-                <span>{isVi ? 'Chạy mô phỏng từng bước' : 'Play Step-by-Step'}</span>
+                <span>{isVi ? 'Xem lại từng bước' : 'Replay Steps'}</span>
               </>
             )}
           </button>
@@ -1417,7 +1493,7 @@ export function InteractiveDecisionFlowBoard({
               }`}
             >
               <MonitorPlay className="h-3.5 w-3.5" />
-              <span>{isVi ? 'Nền tối trình chiếu' : 'Cinema Mode'}</span>
+              <span>{isVi ? 'Giao diện tối' : 'Dark view'}</span>
             </button>
           )}
 
@@ -1431,7 +1507,7 @@ export function InteractiveDecisionFlowBoard({
                   : 'bg-white hover:bg-slate-50 border-slate-200/90 text-slate-700 shadow-sm'
               }`}
             >
-              <span>{isVi ? 'Bảng đối chiếu' : 'Field Diff'}</span>
+              <span>{isVi ? 'So sánh chi tiết' : 'Compare Details'}</span>
               <ArrowUpRight className="h-3.5 w-3.5" />
             </button>
           )}
@@ -1618,8 +1694,8 @@ export function InteractiveDecisionFlowBoard({
             <FileText className="h-3.5 w-3.5 shrink-0" />
             <span>
               {isVi
-                ? `Bản thảo bài viết → Tách trích dẫn ${marker}`
-                : `Manuscript Text → Extracting ${marker}`}
+                ? `Bài viết của bạn → Đọc trích dẫn ${marker}`
+                : `Your Document → Reading ${marker}`}
             </span>
           </div>
         </div>
@@ -2060,28 +2136,47 @@ export function InteractiveDecisionFlowBoard({
                   {stages[3].sub}
                 </div>
                 <div className="text-[11px] opacity-90 mt-0.5 leading-snug">
-                  {effectiveLabel === 'metadata_error' &&
-                  identity.citedYear &&
-                  identity.canonicalYear &&
-                  identity.citedYear !== identity.canonicalYear
-                    ? isVi
-                      ? `Chỉ cần sửa năm ${identity.citedYear} → ${identity.canonicalYear} là hoàn chỉnh`
-                      : `Simply update year ${identity.citedYear} → ${identity.canonicalYear}`
-                    : effectiveLabel === 'verified'
-                      ? isVi
-                        ? `Xác nhận chính thức qua ${matchedSatellites.length} thư viện quốc tế`
-                        : `Confirmed across ${matchedSatellites.length} global registries`
-                      : effectiveLabel === 'suspected_hallucination'
-                        ? isVi
-                          ? '0/15+ thư viện có công trình này · Nên kiểm tra lại'
-                          : '0/15+ libraries matched · Please verify source'
-                        : effectiveLabel === 'resource'
-                          ? isVi
-                            ? 'Nguồn tham khảo hợp lệ · Không bị trừ điểm học thuật'
-                            : 'Valid reference · Exempt from academic penalty'
-                          : isVi
-                            ? 'Khuyến nghị đối chiếu thêm bản in hoặc nguồn nội bộ'
-                            : 'Please double-check print or local repository'}
+                  {(() => {
+                    const normMismatch = (verdict.mismatched_fields ?? [])
+                      .map((f) => f.trim().toLowerCase())
+                      .filter(Boolean);
+                    const isYearOnlyMismatch =
+                      normMismatch.length === 1 && normMismatch[0] === 'year';
+                    if (
+                      effectiveLabel === 'metadata_error' &&
+                      isYearOnlyMismatch &&
+                      identity.citedYear &&
+                      identity.canonicalYear &&
+                      identity.citedYear !== identity.canonicalYear
+                    ) {
+                      return isVi
+                        ? `Chỉ cần sửa năm ${identity.citedYear} → ${identity.canonicalYear} là hoàn chỉnh`
+                        : `Simply update year ${identity.citedYear} → ${identity.canonicalYear}`;
+                    }
+                    if (effectiveLabel === 'metadata_error') {
+                      return isVi
+                        ? 'Cần rà soát lại các thông tin bị lệch so với bản gốc'
+                        : 'Review the mismatched fields against the published record';
+                    }
+                    if (effectiveLabel === 'verified') {
+                      return isVi
+                        ? `Đã xác minh qua ${matchedSatellites.length} thư viện học thuật`
+                        : `Verified across ${matchedSatellites.length} ${matchedSatellites.length === 1 ? 'academic library' : 'academic libraries'}`;
+                    }
+                    if (effectiveLabel === 'suspected_hallucination') {
+                      return isVi
+                        ? '0/15+ thư viện có công trình này · Nên kiểm tra lại'
+                        : '0/15+ libraries matched · Please verify source';
+                    }
+                    if (effectiveLabel === 'resource') {
+                      return isVi
+                        ? 'Nguồn tham khảo hợp lệ · Không bị trừ điểm học thuật'
+                        : 'Valid reference · No score penalty';
+                    }
+                    return isVi
+                      ? 'Khuyến nghị đối chiếu thêm bản in hoặc nguồn nội bộ'
+                      : 'Please double-check print or local repository';
+                  })()}
                 </div>
               </div>
             </div>
@@ -2185,9 +2280,13 @@ export function InteractiveDecisionFlowBoard({
                 ? 'Chờ bước tra cứu...'
                 : 'Waiting to scan...'
               : phaseState === 'scanning'
-                ? isVi
-                  ? '◌ Đang quét → Không trùng'
-                  : '◌ Scanning → No match'
+                ? sat.isSkippedPrimary
+                  ? isVi
+                    ? 'Đã khớp ở kho chính'
+                    : 'Matched in primary library'
+                  : isVi
+                    ? '◌ Đang quét → Không trùng'
+                    : '◌ Scanning → No match'
                 : boardPhase === 'step-1' && sat.isMatched
                   ? isVi
                     ? '⚡ Đã tìm thấy bản gốc!'

@@ -47,6 +47,7 @@ import {
 import {
   normalizeVerdictKey,
   getVerdictDisplay,
+  getCisBand,
   formatCisScore,
   formatCitationStyleLabel,
   formatLocalizedDateTime,
@@ -193,19 +194,19 @@ const CIS_COMPONENT_KEYS: Array<{
   fallbackEn: string;
 }> = [
   {
+    key: 'in_text_bib_consistency',
+    labelKey: 'sharedReport.compLinkingConsistency',
+    fallbackEn: 'In-Text & Reference List Match',
+  },
+  {
     key: 'verified_ratio',
     labelKey: 'sharedReport.compVerifiedRatio',
-    fallbackEn: 'Verified Ratio (Layer 2)',
+    fallbackEn: 'Verified Sources Rate',
   },
   {
     key: 'metadata_accuracy',
     labelKey: 'sharedReport.compMetadataAccuracy',
-    fallbackEn: 'Metadata Accuracy',
-  },
-  {
-    key: 'in_text_bib_consistency',
-    labelKey: 'sharedReport.compLinkingConsistency',
-    fallbackEn: 'In-Text ↔ Bibliography Consistency (Layer 1)',
+    fallbackEn: 'Citation Details Accuracy',
   },
   {
     key: 'format_consistency',
@@ -257,12 +258,12 @@ function PublicReceiptHeader({
           </Link>
           <span
             data-testid="shared-receipt-badge"
-            className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-mono font-semibold bg-emerald-50 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 whitespace-nowrap"
+            className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 whitespace-nowrap"
           >
             <Lock className="h-3 w-3 shrink-0" />
             {lang === 'vi'
-              ? 'CHỨNG NHẬN XÁC MINH TRÍCH DẪN'
-              : 'CITATION VERIFICATION RECEIPT'}
+              ? 'BÁO CÁO ĐỐI CHIẾU XÁC THỰC · CITRA'
+              : 'VERIFIED CITATION REPORT · CITRA'}
           </span>
         </div>
 
@@ -462,7 +463,7 @@ export function SharedReportPage() {
     switch (normalized) {
       case 'verified':
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-mono font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-300/60 dark:border-emerald-800">
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-300/60 dark:border-emerald-800">
             <CheckCircle2 className="h-3.5 w-3.5" />
             {display.label}
           </span>
@@ -472,7 +473,7 @@ export function SharedReportPage() {
           'R-INCOMPLETE-METADATA',
         );
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-mono font-semibold bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-300/60 dark:border-amber-800">
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-300/60 dark:border-amber-800">
             <AlertTriangle className="h-3.5 w-3.5" />
             {isIncompleteMeta
               ? lang === 'vi'
@@ -484,7 +485,7 @@ export function SharedReportPage() {
       }
       case 'suspected_hallucination':
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-mono font-semibold bg-red-100 text-red-800 dark:bg-red-950/80 dark:text-red-300 border border-red-300/60 dark:border-red-800">
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-800 dark:bg-red-950/80 dark:text-red-300 border border-red-300/60 dark:border-red-800">
             <XCircle className="h-3.5 w-3.5" />
             {display.label}
           </span>
@@ -495,7 +496,7 @@ export function SharedReportPage() {
           triggered_rules: triggeredRules,
         });
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-mono font-semibold bg-sky-100 text-sky-800 dark:bg-sky-950/80 dark:text-sky-300 border border-sky-300/60 dark:border-sky-800">
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-sky-100 text-sky-800 dark:bg-sky-950/80 dark:text-sky-300 border border-sky-300/60 dark:border-sky-800">
             {isLegal ? (
               <Scale className="h-3.5 w-3.5" />
             ) : (
@@ -511,7 +512,7 @@ export function SharedReportPage() {
       }
       default:
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-mono font-semibold bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-300/60 dark:border-slate-700">
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-300/60 dark:border-slate-700">
             <HelpCircle className="h-3.5 w-3.5" />
             {display.label}
           </span>
@@ -533,8 +534,10 @@ export function SharedReportPage() {
         />
         <div className="flex-1 flex flex-col items-center justify-center p-6">
           <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600 mb-4" />
-          <p className="text-sm font-mono text-slate-600 dark:text-slate-400">
-            {t('sharedReport.verifyingSignature')}
+          <p className="text-sm text-slate-600 dark:text-slate-400">
+            {lang === 'vi'
+              ? 'Đang xác nhận liên kết báo cáo...'
+              : 'Verifying official report link...'}
           </p>
         </div>
       </div>
@@ -614,6 +617,7 @@ export function SharedReportPage() {
       report.verdicts.length === 0);
 
   const cisScore = Number(report.cis?.score ?? 0);
+  const cisBand = getCisBand(cisScore, lang);
   const cisComponents = report.cis?.components ?? {};
   const counts = report.verdict_counts ?? {
     verified: 0,
@@ -645,10 +649,10 @@ export function SharedReportPage() {
     : String(report.num_citations);
 
   const formattedVerifiedAt = formatLocalizedDateTime(report.verified_at, lang);
-  const sanitizedDisclaimer = sanitizePublicText(
-    t('sharedReport.disclaimer'),
-    lang,
-  );
+  const conciseDisclaimer =
+    lang === 'vi'
+      ? 'Ghi chú: Báo cáo này chỉ mang tính hỗ trợ rà soát dựa trên các thư viện học thuật công khai. Giảng viên và tác giả là người đưa ra đánh giá cuối cùng.'
+      : 'Note: This report is an evidence-based review aid compiled from public academic libraries. Instructors and authors make the final academic judgment.';
 
   return (
     <div
@@ -684,18 +688,20 @@ export function SharedReportPage() {
                 </span>
                 <span
                   data-testid="hmac-verified-seal"
-                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg font-mono text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
+                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
                 >
                   <ShieldCheck className="h-3.5 w-3.5" />
-                  {t('sharedReport.hmacVerifiedSeal')}
+                  {lang === 'vi'
+                    ? 'Báo cáo đối chiếu xác thực · CITRA'
+                    : 'Verified Official Report · CITRA'}
                 </span>
               </div>
 
               <div>
-                <p className="text-xs font-mono uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-1">
+                <p className="text-xs font-medium uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-1">
                   {lang === 'vi'
-                    ? 'Chứng nhận Xác minh Trích dẫn CITRA'
-                    : 'CITRA Citation Verification Receipt'}
+                    ? 'Báo cáo đối chiếu trích dẫn CITRA'
+                    : 'CITRA Citation Verification Report'}
                 </p>
                 <div className="flex items-center gap-3 min-w-0">
                   <FileFormatIcon filename={report.filename} size="lg" />
@@ -708,12 +714,12 @@ export function SharedReportPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 text-xs font-mono">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 text-xs">
                 <div className="min-w-0 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-800">
                   <div className="text-slate-400 dark:text-slate-500">
                     {t('sharedReport.pagesLabel')}
                   </div>
-                  <div className="font-bold text-slate-800 dark:text-slate-200 mt-0.5 break-words">
+                  <div className="font-bold font-mono tabular-nums text-slate-800 dark:text-slate-200 mt-0.5 break-words">
                     {report.num_pages}
                   </div>
                 </div>
@@ -742,7 +748,7 @@ export function SharedReportPage() {
                   </div>
                   <div
                     data-testid="shared-verified-at"
-                    className="font-bold text-slate-800 dark:text-slate-200 mt-0.5 break-words sm:whitespace-nowrap"
+                    className="font-bold font-mono tabular-nums text-slate-800 dark:text-slate-200 mt-0.5 break-words sm:whitespace-nowrap"
                   >
                     {formattedVerifiedAt}
                   </div>
@@ -750,23 +756,25 @@ export function SharedReportPage() {
               </div>
             </div>
 
-            {/* QR Matrix + Integrity Seal Block */}
+            {/* QR Matrix + Report Verification Code Block */}
             <div className="flex items-center gap-4 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 w-full lg:w-[296px] lg:shrink-0">
               <VerificationQrMatrixSvg
                 value={shareUrlFull}
                 matrix={qrMatrixForUrl}
                 size={112}
               />
-              <div className="space-y-1.5 text-xs font-mono min-w-0 flex-1">
+              <div className="space-y-1.5 text-xs min-w-0 flex-1">
                 <div className="font-bold text-slate-800 dark:text-slate-200">
-                  {lang === 'vi' ? 'Mã xác thực toàn vẹn' : 'Tamper-Evident Seal'}
+                  {lang === 'vi' ? 'Mã xác nhận báo cáo' : 'Report Verification Code'}
                 </div>
                 <div className="text-slate-500 dark:text-slate-400 text-[11px] leading-relaxed">
-                  {t('sharedReport.qrSealSubtitle')}
+                  {lang === 'vi'
+                    ? 'Quét mã để mở lại báo cáo gốc trực tiếp trên CITRA'
+                    : 'Scan to open and confirm the original report directly on CITRA'}
                 </div>
                 {report.signature_prefix && (
-                  <div className="text-[10px] text-indigo-600 dark:text-indigo-400 truncate">
-                    SIG: {report.signature_prefix}
+                  <div className="text-[11px] font-mono text-indigo-600 dark:text-indigo-400 truncate">
+                    {lang === 'vi' ? 'Mã xác nhận:' : 'Verification ID:'} {report.signature_prefix}
                   </div>
                 )}
               </div>
@@ -774,7 +782,7 @@ export function SharedReportPage() {
           </div>
         </section>
 
-        {/* Document Ingestion Diagnostics (OCR, Legacy TCVN3/VNI, Scanned PDF) */}
+        {/* Document Ingestion Diagnostics (OCR, Legacy Vietnamese fonts, Scanned PDF) */}
         {(() => {
           if (!docDiag) return null;
           const hasLegacy = Boolean(docDiag.legacy_encoding_detected);
@@ -800,26 +808,26 @@ export function SharedReportPage() {
               {hasLegacy && (
                 <div
                   data-testid="shared-legacy-encoding-pill"
-                  className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-mono bg-indigo-50/90 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 text-indigo-800 dark:text-indigo-200"
+                  className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-medium bg-indigo-50/90 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 text-indigo-800 dark:text-indigo-200"
                 >
                   <Sparkles className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
                   <span>
                     {lang === 'vi'
-                      ? `Đã tự động chuyển mã bảng mã tiếng Việt cũ (${String(docDiag.legacy_encoding_detected).toUpperCase()} → Unicode NFC)`
-                      : `Auto-transcoded legacy Vietnamese encoding (${String(docDiag.legacy_encoding_detected).toUpperCase()} → Unicode NFC)`}
+                      ? 'Đã tự động sửa lỗi font tiếng Việt cũ để đọc chính xác nội dung'
+                      : 'Automatically fixed legacy Vietnamese fonts so text could be read accurately'}
                   </span>
                 </div>
               )}
               {hasOcr && (
                 <div
                   data-testid="shared-ocr-recovery-pill"
-                  className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-mono bg-emerald-50/90 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200"
+                  className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-medium bg-emerald-50/90 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200"
                 >
                   <FileText className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
                   <span>
                     {lang === 'vi'
-                      ? `Đã khôi phục văn bản bằng OCR tại trang: ${docDiag.ocr_pages_recovered!.join(', ')}`
-                      : `Recovered text via OCR on page(s): ${docDiag.ocr_pages_recovered!.join(', ')}`}
+                      ? `Đã tự động nhận diện chữ từ trang ảnh chụp (trang ${docDiag.ocr_pages_recovered!.join(', ')})`
+                      : `Automatically extracted text from scanned image pages (pages ${docDiag.ocr_pages_recovered!.join(', ')})`}
                   </span>
                 </div>
               )}
@@ -836,10 +844,10 @@ export function SharedReportPage() {
           );
         })()}
 
-        {/* CIS Score & 5-Component Breakdown + Verdict Distribution */}
+        {/* Citation Score & 5-Component Breakdown + Results Summary */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           <section className="lg:col-span-7 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-sm print:shadow-none">
-            <div className="flex items-center justify-between gap-4 mb-5">
+            <div className="flex items-start justify-between gap-4 mb-5">
               <div>
                 <h2 className="text-base font-bold text-slate-900 dark:text-white">
                   {t('essay.cisTitle')}
@@ -851,16 +859,25 @@ export function SharedReportPage() {
               {isUnscannable ? (
                 <div
                   data-testid="shared-cis-score"
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-mono font-bold bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-200 border border-amber-200 dark:border-amber-800 whitespace-nowrap"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-200 border border-amber-200 dark:border-amber-800 whitespace-nowrap"
                 >
                   {lang === 'vi' ? 'N/A · Không thể quét' : 'N/A · Not Scannable'}
                 </div>
               ) : (
-                <div
-                  data-testid="shared-cis-score"
-                  className="text-2xl sm:text-3xl font-display font-extrabold text-indigo-600 dark:text-indigo-400 whitespace-nowrap"
-                >
-                  {formatCisScore(cisScore)}
+                <div className="flex flex-col items-end gap-1 shrink-0">
+                  <div
+                    data-testid="shared-cis-score"
+                    className={`text-2xl sm:text-3xl font-display font-extrabold tabular-nums whitespace-nowrap ${cisBand.textClass}`}
+                  >
+                    {formatCisScore(cisScore)}
+                  </div>
+                  <span
+                    data-testid="shared-cis-band-badge"
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${cisBand.badgeClass}`}
+                  >
+                    <span className={`h-1.5 w-1.5 rounded-full ${cisBand.dotClass}`} />
+                    {cisBand.label}
+                  </span>
                 </div>
               )}
             </div>
@@ -873,11 +890,11 @@ export function SharedReportPage() {
                   : Math.max(0, Math.min(100, rawVal <= 1 ? rawVal * 100 : rawVal));
                 return (
                   <div key={key} className="space-y-1">
-                    <div className="flex justify-between text-xs font-mono">
-                      <span className="text-slate-700 dark:text-slate-300">
+                    <div className="flex justify-between gap-2 text-xs">
+                      <span className="text-slate-700 dark:text-slate-300 font-medium">
                         {t(labelKey, fallbackEn)}
                       </span>
-                      <span className="font-semibold text-slate-900 dark:text-white">
+                      <span className="font-mono tabular-nums font-semibold text-slate-900 dark:text-white shrink-0">
                         {isUnscannable ? '—' : `${pct.toFixed(0)}%`}
                       </span>
                     </div>
@@ -902,46 +919,46 @@ export function SharedReportPage() {
                 {t('sharedReport.verdictDistributionSubtitle')}
               </p>
 
-              <div className="grid grid-cols-2 gap-3 text-xs font-mono">
+              <div className="grid grid-cols-2 gap-3 text-xs">
                 <div className="p-3 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/40 border border-emerald-200/70 dark:border-emerald-900/60">
-                  <div className="text-emerald-700 dark:text-emerald-300">
+                  <div className="font-medium text-emerald-700 dark:text-emerald-300">
                     {getVerdictDisplay('verified', lang).label}
                   </div>
                   <div
-                    className="text-2xl font-bold text-emerald-800 dark:text-emerald-200 mt-1"
+                    className="text-2xl font-bold font-mono tabular-nums text-emerald-800 dark:text-emerald-200 mt-1"
                     data-testid="count-verified"
                   >
                     {counts.verified}
                   </div>
                 </div>
                 <div className="p-3 rounded-xl bg-amber-50/70 dark:bg-amber-950/40 border border-amber-200/70 dark:border-amber-900/60">
-                  <div className="text-amber-700 dark:text-amber-300">
+                  <div className="font-medium text-amber-700 dark:text-amber-300">
                     {getVerdictDisplay('metadata_error', lang).label}
                   </div>
                   <div
-                    className="text-2xl font-bold text-amber-800 dark:text-amber-200 mt-1"
+                    className="text-2xl font-bold font-mono tabular-nums text-amber-800 dark:text-amber-200 mt-1"
                     data-testid="count-metadata-error"
                   >
                     {counts.metadata_error}
                   </div>
                 </div>
                 <div className="p-3 rounded-xl bg-red-50/70 dark:bg-red-950/40 border border-red-200/70 dark:border-red-900/60">
-                  <div className="text-red-700 dark:text-red-300">
+                  <div className="font-medium text-red-700 dark:text-red-300">
                     {getVerdictDisplay('suspected_hallucination', lang).label}
                   </div>
                   <div
-                    className="text-2xl font-bold text-red-800 dark:text-red-200 mt-1"
+                    className="text-2xl font-bold font-mono tabular-nums text-red-800 dark:text-red-200 mt-1"
                     data-testid="count-suspected"
                   >
                     {counts.suspected_hallucination}
                   </div>
                 </div>
                 <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800">
-                  <div className="text-slate-600 dark:text-slate-400">
+                  <div className="font-medium text-slate-600 dark:text-slate-400">
                     {getVerdictDisplay('unresolved', lang).label}
                   </div>
                   <div
-                    className="text-2xl font-bold text-slate-800 dark:text-slate-200 mt-1"
+                    className="text-2xl font-bold font-mono tabular-nums text-slate-800 dark:text-slate-200 mt-1"
                     data-testid="count-unresolved"
                   >
                     {counts.unresolved}
@@ -949,11 +966,11 @@ export function SharedReportPage() {
                 </div>
                 {counts.resource > 0 && (
                   <div className="col-span-2 p-3 rounded-xl bg-violet-50/70 dark:bg-violet-950/40 border border-violet-200/70 dark:border-violet-900/60 flex items-center justify-between">
-                    <div className="text-violet-700 dark:text-violet-300">
+                    <div className="font-medium text-violet-700 dark:text-violet-300">
                       {getVerdictDisplay('resource', lang).label}
                     </div>
                     <div
-                      className="text-xl font-bold text-violet-800 dark:text-violet-200"
+                      className="text-xl font-bold font-mono tabular-nums text-violet-800 dark:text-violet-200"
                       data-testid="count-resource"
                     >
                       {counts.resource}
@@ -967,7 +984,7 @@ export function SharedReportPage() {
               data-testid="shared-report-disclaimer"
               className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400"
             >
-              {sanitizedDisclaimer}
+              {conciseDisclaimer}
             </div>
           </section>
         </div>
@@ -1014,27 +1031,22 @@ export function SharedReportPage() {
                         rawUrlStatus === 'fake_domain'
                       ? rawUrlStatus
                       : undefined;
-                const urlStatusCode =
-                  v.url_status_code ?? v.features?.url_status_code;
                 const isUrlContentMismatch = (v.triggered_rules ?? []).includes(
                   'R-URL-CONTENT-MISMATCH',
                 );
                 const markerLabel = getCitationMarkerLabel(v, idx);
                 const localizedReason = localizeExplanation(v, lang);
                 const matchedSourceDisplay = matched
-                  ? matched.source?.toLowerCase() === 'vn_legal_registry' &&
-                    lang === 'en'
-                    ? 'VN Legal Registry'
-                    : getSourceDisplayName(
-                        matched.source || 'scholarly_db',
-                        lang,
-                        {
-                          triggered_rules: v.triggered_rules,
-                          external_ids: matched.external_ids,
-                          venue: matched.venue,
-                          title: matched.title,
-                        },
-                      )
+                  ? getSourceDisplayName(
+                      matched.source || 'scholarly_db',
+                      lang,
+                      {
+                        triggered_rules: v.triggered_rules,
+                        external_ids: matched.external_ids,
+                        venue: matched.venue,
+                        title: matched.title,
+                      },
+                    )
                   : '';
                 const showGoogleScholarFallback =
                   !matched &&
@@ -1058,17 +1070,14 @@ export function SharedReportPage() {
                     >
                       <div className="space-y-1.5 flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span
-                            title={v.reference_id}
-                            className="font-mono text-xs font-bold text-slate-500 dark:text-slate-400"
-                          >
+                          <span className="font-mono text-xs font-bold text-slate-500 dark:text-slate-400">
                             {markerLabel}
                           </span>
                           {renderVerdictBadge(v.label, v.triggered_rules)}
                           {urlStatus && (
                             <span
                               data-testid={`shared-url-status-${idx}`}
-                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-mono font-semibold border ${
+                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border ${
                                 isUrlContentMismatch
                                   ? 'bg-amber-50 dark:bg-amber-950/70 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'
                                   : urlStatus === 'alive'
@@ -1081,26 +1090,28 @@ export function SharedReportPage() {
                               }`}
                             >
                               {isUrlContentMismatch
-                                ? `⚠ HTTP ${urlStatusCode ?? 200} · ${lang === 'vi' ? 'Sai nội dung trang' : 'Wrong Page'}`
+                                ? lang === 'vi'
+                                  ? '⚠ Trang web không khớp tiêu đề'
+                                  : '⚠ Page does not match title'
                                 : urlStatus === 'alive'
                                   ? lang === 'vi'
                                     ? '✓ Liên kết hoạt động'
-                                    : '✓ Link Active'
+                                    : '✓ Link active'
                                   : urlStatus === 'restricted_alive'
                                     ? lang === 'vi'
-                                      ? `🔒 Truy cập hạn chế (HTTP ${urlStatusCode ?? 403})`
-                                      : `🔒 Restricted Access (HTTP ${urlStatusCode ?? 403})`
+                                      ? '🔒 Yêu cầu đăng nhập / trả phí'
+                                      : '🔒 Paywalled / login required'
                                     : urlStatus === 'archived_alive'
                                       ? lang === 'vi'
                                         ? '🏛️ Bản lưu Wayback'
-                                        : '🏛️ Wayback Archived'
+                                        : '🏛️ Wayback archived'
                                       : urlStatus === 'dead_link'
                                         ? lang === 'vi'
-                                          ? `✕ Liên kết hỏng (HTTP ${urlStatusCode ?? 404})`
-                                          : `✕ Broken Link (HTTP ${urlStatusCode ?? 404})`
+                                          ? '✕ Đường dẫn không mở được'
+                                          : '✕ Broken link'
                                         : lang === 'vi'
                                           ? '✕ Tên miền không tồn tại'
-                                          : '✕ Invalid Domain'}
+                                          : '✕ Unreachable domain'}
                             </span>
                           )}
                           {(() => {
@@ -1131,19 +1142,32 @@ export function SharedReportPage() {
                             return (
                               <span
                                 data-testid={`shared-cross-lingual-badge-${idx}`}
-                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-mono font-semibold bg-teal-50 dark:bg-teal-950/70 text-teal-800 dark:text-teal-300 border border-teal-200 dark:border-teal-800"
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-teal-50 dark:bg-teal-950/70 text-teal-800 dark:text-teal-300 border border-teal-200 dark:border-teal-800"
                               >
                                 {lang === 'vi'
-                                  ? 'Đối chiếu Việt ↔ Anh'
-                                  : 'VI ↔ EN Cross-Lingual'}
+                                  ? 'Khớp bản gốc tiếng Anh'
+                                  : 'VI ↔ EN Match'}
                                 {crossSim > 0 ? ` · ${Math.round(crossSim * 100)}%` : ''}
                               </span>
                             );
                           })()}
-                          <span className="font-mono text-xs text-slate-500">
-                            {(Number(v.confidence || 0) * 100).toFixed(0)}%{' '}
-                            {t('essay.confidence')}
-                          </span>
+                          {normalizedLabel === 'suspected_hallucination' ||
+                          normalizedLabel === 'unresolved' ? (
+                            <span
+                              data-testid={`shared-manual-check-hint-${idx}`}
+                              className="text-xs font-medium text-slate-500 dark:text-slate-400"
+                            >
+                              {lang === 'vi'
+                                ? 'Cần kiểm tra thủ công'
+                                : 'Manual check recommended'}
+                            </span>
+                          ) : (
+                            <span className="font-mono tabular-nums text-xs text-slate-500 dark:text-slate-400">
+                              {lang === 'vi'
+                                ? `Độ khớp: ${(Number(v.confidence || 0) * 100).toFixed(0)}%`
+                                : `${(Number(v.confidence || 0) * 100).toFixed(0)}% match`}
+                            </span>
+                          )}
                         </div>
                         <p className="text-sm text-slate-900 dark:text-slate-100 font-medium break-words">
                           {v.raw_text}
@@ -1162,8 +1186,8 @@ export function SharedReportPage() {
                       <div className="px-4 pb-4 pt-2 border-t border-slate-100 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-900/50 space-y-2.5 text-xs">
                         {localizedReason && (
                           <div>
-                            <span className="font-mono font-semibold text-slate-600 dark:text-slate-300">
-                              {t('sharedReport.explanationLabel')}:{' '}
+                            <span className="font-semibold text-slate-600 dark:text-slate-300">
+                              {lang === 'vi' ? 'Giải thích kết quả' : 'Verification Details'}:{' '}
                             </span>
                             <span className="text-slate-700 dark:text-slate-300">
                               {localizedReason}
@@ -1172,13 +1196,12 @@ export function SharedReportPage() {
                         )}
                         {v.triggered_rules && v.triggered_rules.length > 0 && (
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="font-mono font-semibold text-slate-600 dark:text-slate-300">
+                            <span className="font-semibold text-slate-600 dark:text-slate-300">
                               {lang === 'vi' ? 'Tiêu chí kiểm tra' : 'Verification Checks'}:
                             </span>
                             {v.triggered_rules.map((r) => (
                               <span
                                 key={r}
-                                title={r}
                                 className="px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 text-[11px] font-medium"
                               >
                                 {getRuleDisplayName(r, lang)}
@@ -1200,7 +1223,7 @@ export function SharedReportPage() {
                           >
                             <div
                               data-testid={`shared-matched-source-header-${idx}`}
-                              className={`font-mono font-semibold flex items-center justify-between gap-2 flex-wrap ${
+                              className={`font-semibold flex items-center justify-between gap-2 flex-wrap ${
                                 isUnconfirmedCandidate
                                   ? 'text-amber-700 dark:text-amber-300'
                                   : 'text-emerald-700 dark:text-emerald-300'
@@ -1209,8 +1232,8 @@ export function SharedReportPage() {
                               <span>
                                 {isUnconfirmedCandidate
                                   ? lang === 'vi'
-                                    ? 'Ứng viên tham khảo (chưa đủ khớp)'
-                                    : 'Candidate (insufficient match)'
+                                    ? 'Tài liệu gần giống (chưa đủ khớp)'
+                                    : 'Similar work (not a confirmed match)'
                                   : t('sharedReport.matchedSourceLabel')}
                                 : {matchedSourceDisplay}
                               </span>

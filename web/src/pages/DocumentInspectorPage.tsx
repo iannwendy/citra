@@ -16,6 +16,7 @@ import { DecisionSupportBanner } from '@/components/DecisionSupportBanner';
 import {
   getCitationMarkerLabel,
   getFieldDisplayName,
+  getRuleDisplayName,
   getVerdictExplanation,
   isUrlResource,
 } from '@/lib/verdictExplanation';
@@ -46,7 +47,6 @@ import {
   XCircle,
   Link2,
   Filter,
-  Brain,
   Sparkles,
   Eye,
   ChevronLeft,
@@ -481,17 +481,16 @@ function CitationPopup({
                     ? rawSt
                     : null;
               if (!st && !isWrongPage) return null;
-              const code = verdict?.url_status_code ?? verdict?.features?.url_status_code;
               const isOk = !isWrongPage && (st === 'alive' || st === 'restricted_alive');
               const isArchived = isWrongPage || st === 'archived_alive';
               return (
                 <div>
-                  <label className="text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                  <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                     {t('inspector.linkStatus')}
                   </label>
                   <div className="mt-1.5">
                     <span
-                      className={`inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-mono font-semibold border ${
+                      className={`inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-semibold border ${
                         isOk
                           ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/70 dark:text-emerald-300 dark:border-emerald-800'
                           : isArchived
@@ -501,26 +500,26 @@ function CitationPopup({
                     >
                       {isWrongPage
                         ? lang === 'vi'
-                          ? `⚠ HTTP ${code || 200} · Sai nội dung trang`
-                          : `⚠ HTTP ${code || 200} · Wrong Page`
+                          ? '⚠ Trang web không khớp tiêu đề'
+                          : '⚠ Page does not match title'
                         : st === 'alive'
                           ? lang === 'vi'
                             ? '✓ Liên kết hoạt động'
-                            : '✓ Link Active'
+                            : '✓ Link active'
                           : st === 'restricted_alive'
                             ? lang === 'vi'
-                              ? `🔒 Truy cập hạn chế (HTTP ${code || 403})`
-                              : `🔒 Restricted Access (HTTP ${code || 403})`
+                              ? '🔒 Yêu cầu đăng nhập / trả phí'
+                              : '🔒 Paywalled / login required'
                             : st === 'archived_alive'
                               ? lang === 'vi'
-                                ? '🏛️ Lưu trữ Wayback'
-                                : '🏛️ Wayback Archived'
+                                ? '🏛️ Bản lưu Wayback'
+                                : '🏛️ Wayback archived'
                               : st === 'dead_link'
                                 ? lang === 'vi'
-                                  ? `✕ Liên kết lỗi (HTTP ${code || 404})`
-                                  : `✕ Broken Link (HTTP ${code || 404})`
+                                  ? '✕ Đường dẫn không mở được'
+                                  : '✕ Broken link'
                                 : lang === 'vi'
-                                  ? '✕ URL không hợp lệ'
+                                  ? '✕ Đường dẫn không hợp lệ'
                                   : '✕ Invalid URL'}
                     </span>
                   </div>
@@ -532,7 +531,7 @@ function CitationPopup({
           {verdict && (
             <>
               <div>
-                <label className="text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                   {t('inspector.whatWeFound')}
                 </label>
                 <p className="mt-1 text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
@@ -540,35 +539,36 @@ function CitationPopup({
                 </p>
               </div>
 
-              <div>
-                <label className="text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                  {verdict.label === 'suspected_hallucination' ||
-                  verdict.label === 'metadata_error'
-                    ? lang === 'vi'
-                      ? 'Độ chắc chắn của phân tích'
-                      : 'Analysis Certainty'
-                    : t('inspector.confidence')}
-                </label>
-                <div className="mt-2 flex items-center gap-3">
-                  <Progress
-                    value={verdict.confidence * 100}
-                    className="flex-1 h-2"
-                    indicatorClassName={
-                      verdict.label === 'suspected_hallucination' ||
-                      verdict.label === 'metadata_error'
-                        ? 'bg-slate-500 dark:bg-slate-400'
-                        : verdict.confidence >= 0.8
-                          ? 'bg-emerald-500'
-                          : verdict.confidence >= 0.5
-                            ? 'bg-amber-500'
-                            : 'bg-red-500'
-                    }
-                  />
-                  <span className="text-xs font-mono font-semibold text-slate-700 dark:text-slate-300">
-                    {(verdict.confidence * 100).toFixed(0)}%
-                  </span>
-                </div>
-              </div>
+              {verdict.label !== 'suspected_hallucination' &&
+                verdict.label !== 'unresolved' && (
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                      {verdict.label === 'metadata_error'
+                        ? lang === 'vi'
+                          ? 'Độ khớp đối chiếu'
+                          : 'Match Certainty'
+                        : t('inspector.confidence')}
+                    </label>
+                    <div className="mt-2 flex items-center gap-3">
+                      <Progress
+                        value={verdict.confidence * 100}
+                        className="flex-1 h-2"
+                        indicatorClassName={
+                          verdict.label === 'metadata_error'
+                            ? 'bg-amber-500 dark:bg-amber-400'
+                            : verdict.confidence >= 0.8
+                              ? 'bg-emerald-500'
+                              : verdict.confidence >= 0.5
+                                ? 'bg-amber-500'
+                                : 'bg-red-500'
+                        }
+                      />
+                      <span className="text-xs font-mono tabular-nums font-semibold text-slate-700 dark:text-slate-300">
+                        {(verdict.confidence * 100).toFixed(0)}%
+                      </span>
+                    </div>
+                  </div>
+                )}
 
               {(() => {
                 const f = verdict.features as
@@ -619,7 +619,7 @@ function CitationPopup({
                   <div className="rounded-xl border border-indigo-200/80 dark:border-indigo-900/70 bg-indigo-50/40 dark:bg-indigo-950/25 p-3.5 space-y-2.5">
                     <div className="flex items-center justify-between gap-2 flex-wrap">
                       <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-indigo-900 dark:text-indigo-200 uppercase tracking-wider">
-                        <Brain className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+                        <FileText className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
                         {t('inspector.neuralSemanticMatch')}
                       </span>
                       <div className="flex items-center gap-1.5 flex-wrap">
@@ -639,12 +639,12 @@ function CitationPopup({
                             data-testid="inspector-cross-lingual-pill"
                             className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-teal-100/80 text-teal-800 dark:bg-teal-900/70 dark:text-teal-300"
                           >
-                            {lang === 'vi' ? 'Đối chiếu Việt ↔ Anh' : 'VI ↔ EN Match'}
+                            {lang === 'vi' ? 'Khớp bản gốc tiếng Anh' : 'VI ↔ EN Match'}
                             {bestTitleSim > 0 ? ` · ${Math.round(bestTitleSim * 100)}%` : ''}
                           </span>
                         )}
                         {displayScore > 0 && (
-                          <span className="text-[11px] font-mono font-bold text-indigo-700 dark:text-indigo-300">
+                          <span className="text-[11px] font-mono tabular-nums font-bold text-indigo-700 dark:text-indigo-300">
                             {Math.round(displayScore * 100)}%
                           </span>
                         )}
@@ -656,7 +656,7 @@ function CitationPopup({
                         {bridgedConcepts.slice(0, 5).map((bc, bIdx) => (
                           <span
                             key={`${bc}-${bIdx}`}
-                            className="inline-flex items-center px-1.5 py-0.5 rounded bg-teal-50 dark:bg-teal-950/60 border border-teal-200/80 dark:border-teal-800 text-[10px] font-mono text-teal-800 dark:text-teal-300"
+                            className="inline-flex items-center px-1.5 py-0.5 rounded bg-teal-50 dark:bg-teal-950/60 border border-teal-200/80 dark:border-teal-800 text-[10px] font-medium text-teal-800 dark:text-teal-300"
                           >
                             {bc}
                           </span>
@@ -666,7 +666,7 @@ function CitationPopup({
 
                     {f.best_evidence_sentence && (
                       <div className="rounded-lg bg-white/90 dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 p-2.5">
-                        <span className="block text-[10px] font-mono font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 mb-1">
+                        <span className="block text-[10px] font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 mb-1">
                           {t('inspector.matchedAbstractEvidence')}
                         </span>
                         <p className="text-xs font-serif text-slate-700 dark:text-slate-300 leading-relaxed">
@@ -680,7 +680,7 @@ function CitationPopup({
 
               {verdict.mismatched_fields.length > 0 && (
                 <div>
-                  <label className="text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                  <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                     {t('inspector.mismatchedFields')}
                   </label>
                   <div className="mt-2 flex flex-wrap gap-1.5">
@@ -699,17 +699,17 @@ function CitationPopup({
 
               {verdict.triggered_rules.length > 0 && (
                 <div>
-                  <label className="text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                    {t('inspector.triggeredRules')}
+                  <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                    {lang === 'vi' ? 'Tiêu chí kiểm tra' : 'Verification Checks'}
                   </label>
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {verdict.triggered_rules.map((rule) => (
                       <Badge
                         key={rule}
                         variant="outline"
-                        className="px-2 py-0.5 bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800 rounded text-xs font-mono"
+                        className="px-2.5 py-0.5 bg-indigo-50/70 dark:bg-indigo-950/60 text-indigo-800 dark:text-indigo-200 border-indigo-200 dark:border-indigo-800 rounded text-xs font-medium"
                       >
-                        {rule}
+                        {getRuleDisplayName(rule, lang)}
                       </Badge>
                     ))}
                   </div>
@@ -864,7 +864,7 @@ export function DocumentInspectorWorkspace({
               <div className="flex items-center gap-2">
                 <div className="w-3 h-1 rounded-full bg-emerald-500" />
                 <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
-                  {statusLabelByKey.verified} ({statusCounts.verified})
+                  {statusLabelByKey.verified}
                 </span>
               </div>
             </div>
@@ -878,7 +878,7 @@ export function DocumentInspectorWorkspace({
               <div className="flex items-center gap-2">
                 <div className="w-3 h-1 rounded-full bg-amber-500" />
                 <span className="text-xs font-medium text-amber-600 dark:text-amber-400">
-                  {statusLabelByKey.metadata_error} ({statusCounts.metadata_error})
+                  {statusLabelByKey.metadata_error}
                 </span>
               </div>
             </div>
@@ -892,7 +892,7 @@ export function DocumentInspectorWorkspace({
               <div className="flex items-center gap-2">
                 <div className="w-3 h-1 rounded-full bg-red-500" />
                 <span className="text-xs font-medium text-red-600 dark:text-red-400">
-                  {statusLabelByKey.suspected_hallucination} ({statusCounts.suspected_hallucination})
+                  {statusLabelByKey.suspected_hallucination}
                 </span>
               </div>
             </div>
@@ -906,7 +906,7 @@ export function DocumentInspectorWorkspace({
               <div className="flex items-center gap-2">
                 <div className="w-3 h-1 rounded-full bg-slate-400" />
                 <span className="text-xs font-medium text-slate-600 dark:text-slate-300">
-                  {statusLabelByKey.unresolved} ({statusCounts.unresolved})
+                  {statusLabelByKey.unresolved}
                 </span>
               </div>
             </div>
@@ -921,7 +921,7 @@ export function DocumentInspectorWorkspace({
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-1 rounded-full bg-violet-500" />
                   <span className="text-xs font-medium text-violet-600 dark:text-violet-400">
-                    {statusLabelByKey.resource} ({statusCounts.resource})
+                    {statusLabelByKey.resource}
                   </span>
                 </div>
               </div>
@@ -1025,7 +1025,7 @@ export function DocumentInspectorWorkspace({
                         : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                     }`}
                   >
-                    {t('inspector.contextStream')}
+                    {lang === 'vi' ? 'Đoạn văn trích dẫn' : 'In-Text Citations'}
                   </button>
                   <button
                     type="button"
@@ -1173,8 +1173,10 @@ export function DocumentInspectorWorkspace({
                     {previewLoading ? (
                       <div className="flex flex-col items-center justify-center py-24 gap-2">
                         <Loader2 className="h-7 w-7 animate-spin text-indigo-600 dark:text-indigo-400" />
-                        <span className="text-xs font-mono text-slate-500">
-                          {t('inspector.renderingPage', { page: previewPage })}
+                        <span className="text-xs text-slate-500">
+                          {lang === 'vi'
+                            ? `Đang tải trang ${previewPage} và đánh dấu trích dẫn...`
+                            : `Loading page ${previewPage} and highlighting citations...`}
                         </span>
                       </div>
                     ) : previewUrl ? (
@@ -1192,7 +1194,7 @@ export function DocumentInspectorWorkspace({
                         className="h-auto rounded-lg shadow-md border border-slate-200/90 dark:border-slate-800 bg-white transition-all"
                       />
                     ) : (
-                      <div className="py-20 text-center text-xs font-mono text-slate-500">
+                      <div className="py-20 text-center text-xs text-slate-500">
                         {t('inspector.unableToRenderPreview')}
                       </div>
                     )}
@@ -1246,7 +1248,7 @@ export function DocumentInspectorWorkspace({
                 <div className="prose prose-slate dark:prose-invert max-w-none">
                   <div className="space-y-4 text-sm leading-relaxed max-h-[540px] overflow-y-auto pr-2">
                     {filteredCitations.length === 0 ? (
-                      <p className="text-slate-500 dark:text-slate-400 italic py-8 text-center font-mono text-xs">
+                      <p className="text-slate-500 dark:text-slate-400 italic py-8 text-center text-xs">
                         {t('inspector.noCitationsMatchFilter')}
                       </p>
                     ) : (
@@ -1254,6 +1256,10 @@ export function DocumentInspectorWorkspace({
                         const isFlaggedRed =
                           citation.label === 'suspected_hallucination' ||
                           citation.label === 'metadata_error';
+                        const jumpToPageLabel =
+                          lang === 'vi'
+                            ? 'Nhấn để xem vị trí trích dẫn trên trang tài liệu'
+                            : 'Click to jump to this citation on the document page';
                         return (
                           <div
                             key={citation.id}
@@ -1272,9 +1278,9 @@ export function DocumentInspectorWorkspace({
                                   setPreviewHighlight(citation.raw || '');
                                   setDocViewMode('pdf');
                                 }}
-                                aria-label={t('inspector.inspectBboxTooltip')}
-                                title={embedded ? undefined : t('inspector.inspectBboxTooltip')}
-                                className={`text-[11px] font-mono hover:underline shrink-0 pt-0.5 select-none font-bold cursor-pointer ${
+                                aria-label={jumpToPageLabel}
+                                title={embedded ? undefined : jumpToPageLabel}
+                                className={`text-[11px] font-semibold tabular-nums hover:underline shrink-0 pt-0.5 select-none cursor-pointer whitespace-nowrap ${
                                   isFlaggedRed
                                     ? 'text-red-600 dark:text-red-400'
                                     : 'text-indigo-600 dark:text-indigo-400'
@@ -1282,7 +1288,9 @@ export function DocumentInspectorWorkspace({
                               >
                                 {(() => {
                                   const inner = citation.markerLabel.replace(/^\[|\]$/g, '');
-                                  return `p${citation.page}:${/^\d+$/.test(inner) ? inner.padStart(2, '0') : inner}`;
+                                  return lang === 'vi'
+                                    ? `Trang ${citation.page} · #${inner}`
+                                    : `Page ${citation.page} · #${inner}`;
                                 })()}
                               </button>
                               <p className="flex-1 min-w-0 text-slate-700 dark:text-slate-300 font-serif leading-relaxed break-words [overflow-wrap:anywhere]">
@@ -1302,7 +1310,9 @@ export function DocumentInspectorWorkspace({
                                 ) : (
                                   <>
                                     <span className="text-slate-500 dark:text-slate-400 italic font-sans text-xs">
-                                      {t('inspector.noSurroundingText')}
+                                      {lang === 'vi'
+                                        ? 'Chưa tìm thấy câu văn chứa trích dẫn này trong phần nội dung.'
+                                        : 'No surrounding sentence found in the body text.'}
                                     </span>{' '}
                                     <InlineCitationMarker
                                       citation={citation}
@@ -1402,7 +1412,7 @@ export function DocumentInspectorWorkspace({
                               data-testid={`inspector-list-cross-lingual-${index}`}
                               className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold bg-teal-50 dark:bg-teal-950/70 text-teal-800 dark:text-teal-300 border border-teal-200/80 dark:border-teal-800"
                             >
-                              {lang === 'vi' ? 'Đối chiếu Việt ↔ Anh' : 'VI ↔ EN Match'}
+                              {lang === 'vi' ? 'Khớp bản gốc tiếng Anh' : 'VI ↔ EN Match'}
                               {citation.crossLingualSim && citation.crossLingualSim > 0
                                 ? ` · ${Math.round(citation.crossLingualSim * 100)}%`
                                 : ''}
@@ -1410,9 +1420,18 @@ export function DocumentInspectorWorkspace({
                           )}
                           {citation.alignmentScore !== undefined &&
                             citation.alignmentScore > 0 && (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-indigo-50 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800">
-                                <Brain className="h-2.5 w-2.5" />
-                                {Math.round(citation.alignmentScore * 100)}%
+                              <span
+                                title={
+                                  lang === 'vi'
+                                    ? 'Mức độ liên quan giữa câu trích dẫn trong bài và nội dung bài gốc'
+                                    : 'How closely the cited sentence matches the original source content'
+                                }
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-indigo-50 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800"
+                              >
+                                <FileText className="h-2.5 w-2.5 shrink-0" />
+                                {lang === 'vi'
+                                  ? `Liên quan ngữ cảnh: ${Math.round(citation.alignmentScore * 100)}%`
+                                  : `Context match: ${Math.round(citation.alignmentScore * 100)}%`}
                                 {citation.citationIntent
                                   ? ` · ${formatIntentLabel(citation.citationIntent, lang)}`
                                   : ''}
@@ -1532,43 +1551,43 @@ export function DocumentInspectorPage() {
           {report.document_diagnostics?.legacy_encoding_detected && (
             <div
               data-testid="legacy-encoding-diagnostic-pill"
-              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-mono bg-indigo-50/90 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 text-indigo-800 dark:text-indigo-200"
+              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-medium bg-indigo-50/90 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 text-indigo-800 dark:text-indigo-200"
             >
               <Sparkles className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
               <span>
                 {isVi
-                  ? `Đã tự động chuyển mã bảng mã tiếng Việt cũ (${String(report.document_diagnostics.legacy_encoding_detected).toUpperCase()} → Unicode NFC)`
-                  : `Auto-transcoded legacy Vietnamese encoding (${String(report.document_diagnostics.legacy_encoding_detected).toUpperCase()} → Unicode NFC)`}
+                  ? 'Đã tự động sửa lỗi font tiếng Việt cũ để đọc chính xác nội dung'
+                  : 'Automatically fixed legacy Vietnamese fonts so text could be read accurately'}
               </span>
             </div>
           )}
           {(report.document_diagnostics?.ocr_pages_recovered?.length ?? 0) > 0 && (
             <div
               data-testid="ocr-recovery-diagnostic-pill"
-              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-mono bg-emerald-50/90 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200"
+              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-medium bg-emerald-50/90 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200"
             >
               <CheckCircle className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
               <span>
                 {isVi
-                  ? `Đã khôi phục văn bản bằng OCR (Tesseract vie+eng) tại trang: ${report.document_diagnostics!.ocr_pages_recovered!.join(', ')}`
-                  : `Recovered text via Tesseract OCR (vie+eng) on page(s): ${report.document_diagnostics!.ocr_pages_recovered!.join(', ')}`}
+                  ? `Đã tự động nhận diện chữ từ trang ảnh chụp (trang ${report.document_diagnostics!.ocr_pages_recovered!.join(', ')})`
+                  : `Automatically extracted text from scanned image pages (pages ${report.document_diagnostics!.ocr_pages_recovered!.join(', ')})`}
               </span>
             </div>
           )}
         </div>
       )}
 
-      {/* Shared Multi-Tab Diagnostic Navigation + Compact CIS Score (BUG-19) */}
+      {/* Shared Multi-Tab Diagnostic Navigation + Compact Score (BUG-19) */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <EssayActionBar essayId={id ?? ''} filename={report.filename} />
-        <div className="flex flex-wrap items-center gap-2.5 text-xs font-mono text-slate-500 dark:text-slate-400">
+        <div className="flex flex-wrap items-center gap-2.5 text-xs text-slate-500 dark:text-slate-400">
           {report.cis && (
             <span
               data-testid="inspector-cis-pill"
               className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/80 font-semibold"
             >
-              <span>CIS:</span>
-              <span>
+              <span>{isVi ? 'Điểm trích dẫn:' : 'Citation Score:'}</span>
+              <span className="font-mono tabular-nums">
                 {report.cis.is_unscannable
                   ? isVi
                     ? 'N/A · Không thể quét'

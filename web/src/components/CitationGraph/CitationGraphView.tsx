@@ -394,22 +394,22 @@ export function CitationGraphView({
                 <div className="min-w-0">
                   <h3 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white truncate">
                     {isVi
-                      ? 'Trình Khám Phá Mạng Lưới Trích Dẫn & Nguồn 2 Tầng'
-                      : 'Two-Layer Citation & Source Network Explorer'}
+                      ? 'Mạng lưới đối chiếu trích dẫn & nguồn gốc'
+                      : 'Citation & Source Verification Network'}
                   </h3>
                   <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 truncate">
                     {isVi
-                      ? 'Chọn tài liệu bất kỳ ở cột trái để xem sơ đồ luồng kiểm chứng trực quan bên phải'
-                      : 'Select any reference on the left to inspect its Interactive Verification Flow'}
+                      ? 'Chọn tài liệu bất kỳ ở cột trái để xem sơ đồ kiểm tra trực quan bên phải'
+                      : 'Select any reference on the left to inspect its verification flow on the right'}
                   </p>
                 </div>
               </div>
 
-              <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-mono shrink-0">
+              <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-medium tabular-nums shrink-0">
                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-emerald-50/90 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border border-emerald-200/70 dark:border-emerald-800">
                   <Link2 className="h-3 w-3 shrink-0" />
                   <span>
-                    {isVi ? 'Tầng 1 Liên kết:' : 'L1 Linked:'}{' '}
+                    {isVi ? 'Khớp trong bài:' : 'In-Text Linked:'}{' '}
                     {stats.integrityCounts.matched ?? 0}/{stats.total}
                   </span>
                 </span>
@@ -419,7 +419,7 @@ export function CitationGraphView({
                 >
                   <Database className="h-3 w-3 shrink-0 text-indigo-600 dark:text-indigo-400" />
                   <span>
-                    {isVi ? 'Tầng 2 Xác minh:' : 'L2 Verified:'}{' '}
+                    {isVi ? 'Nguồn đã xác minh:' : 'Verified Sources:'}{' '}
                     {scholarlyDenom > 0
                       ? `${l2VerifiedCount}/${scholarlyDenom} (${l2VerifiedPct}%)`
                       : `${l2VerifiedCount}/0`}

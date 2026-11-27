@@ -36,16 +36,15 @@ import {
   Loader2,
   ChevronDown,
   ChevronUp,
-  Database,
   XCircle,
   CheckCircle,
   Scale,
   Lock,
-  Globe,
   Link2,
   ArrowRight,
   ArrowLeft,
 } from 'lucide-react';
+import { SourceIcon } from '@/components/CitationGraph/SourceIcon';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
@@ -109,8 +108,8 @@ const severityConfig = {
     borderCard: 'border-amber-200/80 dark:border-amber-900/70',
   },
   linking: {
-    labelEn: 'In-Text Linking (Uncited / Orphan / Style)',
-    labelVi: 'Liên kết trong bài (Chưa trích dẫn / Thiếu mục / Quy cách)',
+    labelEn: 'In-Text Linking (Uncited / Missing in List / Style)',
+    labelVi: 'Liên kết trong bài (Chưa trích dẫn / Thiếu trong danh mục / Quy cách)',
     shortLabel: 'In-Text Linking',
     bgClass: 'bg-indigo-50 dark:bg-indigo-950/70',
     borderClass: 'border-indigo-200 dark:border-indigo-800/80',
@@ -133,27 +132,6 @@ const severityConfig = {
     borderCard: 'border-slate-200/80 dark:border-slate-800',
   },
 };
-
-function SourceIcon({ source }: { source: string }) {
-  const lower = source.toLowerCase();
-  if (lower.includes('crossref')) return <span className="text-[11px] font-mono font-bold">CR</span>;
-  if (lower.includes('openalex')) return <span className="text-[11px] font-mono font-bold">OA</span>;
-  if (lower.includes('datacite')) return <span className="text-[11px] font-mono font-bold">DC</span>;
-  if (lower.includes('doaj')) return <span className="text-[11px] font-mono font-bold">DJ</span>;
-  if (lower.includes('openaire') || lower.includes('hal')) return <span className="text-[11px] font-mono font-bold">HL</span>;
-  if (lower.includes('ncbi') || lower.includes('biorxiv')) return <span className="text-[11px] font-mono font-bold">NC</span>;
-  if (lower.includes('dblp')) return <span className="text-[11px] font-mono font-bold">DB</span>;
-  if (lower.includes('arxiv')) return <span className="text-[11px] font-mono font-bold">AX</span>;
-  if (lower.includes('openlibrary')) return <span className="text-[11px] font-mono font-bold">OL</span>;
-  if (lower.includes('europepmc')) return <span className="text-[11px] font-mono font-bold">PM</span>;
-  if (lower.includes('huggingface')) return <span className="text-[11px] font-mono font-bold">HF</span>;
-  if (lower.includes('tech_standard') || lower.includes('rfc') || lower.includes('github') || lower.includes('npm')) return <span className="text-[11px] font-mono font-bold">TS</span>;
-  if (lower.includes('wikidata') || lower.includes('opencitations')) return <span className="text-[11px] font-mono font-bold">WD</span>;
-  if (lower.includes('doi_ra')) return <span className="text-[11px] font-mono font-bold">RA</span>;
-  if (lower.includes('vn_legal')) return <span className="text-[11px] font-mono font-bold">VL</span>;
-  if (lower.includes('web_html') || lower.includes('wayback_html')) return <Globe className="h-3.5 w-3.5" />;
-  return <Database className="h-3.5 w-3.5" />;
-}
 
 function IssueCard({
   verdict,
@@ -199,8 +177,6 @@ function IssueCard({
           rawUrlStatus === 'fake_domain'
         ? rawUrlStatus
         : undefined;
-  const urlStatusCode =
-    verdict.url_status_code ?? verdict.features?.url_status_code;
   const isUrlContentMismatch = (verdict.triggered_rules ?? []).includes(
     'R-URL-CONTENT-MISMATCH',
   );
@@ -214,71 +190,50 @@ function IssueCard({
       }
       return lang === 'vi'
         ? 'Nội dung/tiêu đề trang web tại đường dẫn URL không khớp với tài liệu được trích dẫn.'
-        : 'Cited web page title/metadata does not match the claimed citation title.';
+        : 'Cited web page title does not match the claimed citation title.';
     }
     if (isUrlResource(v)) {
       if (observedWeb?.title) {
         return lang === 'vi'
-          ? `Tài nguyên Web trực tuyến: «${observedWeb.title}»${observedWeb.venue ? ` (${observedWeb.venue})` : ''}. Không tính vào điểm CIS.`
-          : `Web resource: “${observedWeb.title}”${observedWeb.venue ? ` (${observedWeb.venue})` : ''}. Excluded from CIS scoring.`;
+          ? `Trang web tham khảo: «${observedWeb.title}»${observedWeb.venue ? ` (${observedWeb.venue})` : ''}. Không ảnh hưởng điểm trích dẫn.`
+          : `Web source: “${observedWeb.title}”${observedWeb.venue ? ` (${observedWeb.venue})` : ''}. Does not affect your citation score.`;
       }
       return lang === 'vi'
-        ? `Tài nguyên URL: ${v.citation_raw}. Không tính vào điểm CIS.`
-        : `URL resource: ${v.citation_raw}. Excluded from CIS scoring.`;
+        ? `Liên kết tham khảo: ${v.citation_raw}. Không ảnh hưởng điểm trích dẫn.`
+        : `Web link: ${v.citation_raw}. Does not affect your citation score.`;
     }
     if (v.label === 'suspected_hallucination') {
       return lang === 'vi'
-        ? 'Không tìm thấy ấn phẩm khớp trong bất kỳ cơ sở dữ liệu học thuật nào.'
-        : 'No matching publication was found in any scholarly database.';
+        ? 'Không tìm thấy ấn phẩm khớp trên các thư viện học thuật.'
+        : 'No matching publication was found in academic libraries.';
     }
     if (v.label === 'metadata_error') {
+      const localizedFields = v.mismatched_fields.map((f) =>
+        getFieldDisplayName(f, lang).replace(/^the\s+/i, ''),
+      );
       if ((v.triggered_rules ?? []).includes('R-INCOMPLETE-METADATA')) {
-        if (v.mismatched_fields.length > 0) {
-          const fieldViMap: Record<string, string> = {
-            author: 'tác giả',
-            authors: 'tác giả',
-            year: 'năm xuất bản',
-            title: 'tiêu đề',
-            venue: 'nơi công bố',
-            doi: 'DOI',
-          };
-          const localizedFields =
-            lang === 'vi'
-              ? v.mismatched_fields.map((f) => fieldViMap[f.toLowerCase()] || f)
-              : v.mismatched_fields;
+        if (localizedFields.length > 0) {
           return lang === 'vi'
             ? `Thiếu quy cách trích dẫn (thiếu ${localizedFields.join(', ')})`
-            : `Incomplete bibliographic reference (missing ${v.mismatched_fields.join(', ')})`;
+            : `Incomplete bibliographic reference (missing ${localizedFields.join(', ')})`;
         }
         return lang === 'vi'
           ? 'Thiếu quy cách trích dẫn (thiếu tác giả, năm xuất bản hoặc nơi công bố).'
           : 'Incomplete bibliographic reference (missing author, year, or venue).';
       }
-      if (v.mismatched_fields.length > 0) {
-        const fieldViMap: Record<string, string> = {
-          author: 'tác giả',
-          authors: 'tác giả',
-          year: 'năm xuất bản',
-          title: 'tiêu đề',
-          venue: 'nơi công bố',
-          doi: 'DOI',
-        };
-        const localizedFields =
-          lang === 'vi'
-            ? v.mismatched_fields.map((f) => fieldViMap[f.toLowerCase()] || f)
-            : v.mismatched_fields;
+      if (localizedFields.length > 0) {
         return lang === 'vi'
-          ? `Sai lệch trường: ${localizedFields.join(', ')}`
-          : `${v.mismatched_fields.join(', ')} mismatch`;
+          ? `Thông tin chưa khớp: ${localizedFields.join(', ')}`
+          : `Details differing from source: ${localizedFields.join(', ')}`;
       }
       return lang === 'vi'
-        ? 'Phát hiện không nhất quán trong metadata tài liệu tham khảo.'
-        : 'Metadata inconsistency detected.';
+        ? 'Một số thông tin trích dẫn (tác giả, năm, tiêu đề...) chưa khớp với bản gốc.'
+        : 'Some citation details (author, year, title, or venue) differ from the published record.';
     }
     if (v.label === 'unresolved') {
       return lang === 'vi'
-        ? 'Không đủ dữ liệu định danh (DOI/Tác giả/Tiêu đề) để xác minh tự động.'
-        : 'Unable to verify due to insufficient data.';
+        ? 'Chưa đủ thông tin (tác giả, tiêu đề hoặc mã DOI) để đối chiếu tự động.'
+        : 'Unable to verify automatically due to insufficient details.';
     }
     return getVerdictExplanation(v, lang);
   }
@@ -303,7 +258,7 @@ function IssueCard({
             {urlStatus && (
               <span
                 data-testid="issue-url-status-badge"
-                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-mono font-semibold border ${
+                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold border ${
                   isUrlContentMismatch
                     ? 'bg-amber-50 dark:bg-amber-950/70 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'
                     : urlStatus === 'alive'
@@ -316,25 +271,27 @@ function IssueCard({
                 }`}
               >
                 {isUrlContentMismatch
-                  ? `⚠ HTTP ${urlStatusCode ?? 200} · ${lang === 'vi' ? 'Sai nội dung trang' : 'Wrong Page'}`
+                  ? lang === 'vi'
+                    ? '⚠ Trang web không khớp tiêu đề'
+                    : '⚠ Page does not match title'
                   : urlStatus === 'alive'
                     ? lang === 'vi'
                       ? '✓ Liên kết hoạt động'
-                      : '✓ Link Active'
+                      : '✓ Link active'
                     : urlStatus === 'restricted_alive'
                       ? lang === 'vi'
-                        ? `🔒 Truy cập hạn chế (HTTP ${urlStatusCode ?? 403})`
-                        : `🔒 Restricted Access (HTTP ${urlStatusCode ?? 403})`
+                        ? '🔒 Yêu cầu đăng nhập / trả phí (link còn hoạt động)'
+                        : '🔒 Paywalled / login required (link active)'
                       : urlStatus === 'archived_alive'
                         ? lang === 'vi'
                           ? '🏛️ Bản lưu Wayback'
-                          : '🏛️ Wayback Archived'
+                          : '🏛️ Wayback archived'
                         : urlStatus === 'dead_link'
                           ? lang === 'vi'
-                            ? `✕ Liên kết lỗi (HTTP ${urlStatusCode ?? 404})`
-                            : `✕ Broken Link (HTTP ${urlStatusCode ?? 404})`
+                            ? '✕ Đường dẫn không mở được'
+                            : '✕ Broken link'
                           : lang === 'vi'
-                            ? '✕ URL không hợp lệ'
+                            ? '✕ Đường dẫn không hợp lệ'
                             : '✕ Invalid URL'}
               </span>
             )}
@@ -343,14 +300,14 @@ function IssueCard({
                 {getMappingStatusDisplay(verdict.mapping_status, lang).label}
               </span>
             )}
-            {canViewDeep && (
-              <span className="text-xs font-mono text-slate-500 dark:text-slate-400">
-                {lang === 'vi'
-                  ? 'Độ chắc chắn của phân tích:'
-                  : 'Analysis certainty:'}{' '}
-                <strong>{Math.round(verdict.confidence * 100)}%</strong>
-              </span>
-            )}
+            {canViewDeep &&
+              verdict.label !== 'suspected_hallucination' &&
+              verdict.label !== 'unresolved' && (
+                <span className="text-xs tabular-nums text-slate-500 dark:text-slate-400">
+                  {lang === 'vi' ? 'Độ khớp đối chiếu:' : 'Match certainty:'}{' '}
+                  <strong className="font-mono">{Math.round(verdict.confidence * 100)}%</strong>
+                </span>
+              )}
           </div>
           <p className="text-sm text-slate-900 dark:text-slate-100 mb-1.5 font-serif break-words [overflow-wrap:anywhere]">
             {displayCitationRaw}
@@ -367,14 +324,14 @@ function IssueCard({
                 data-testid="issue-observed-web-meta"
                 className="mt-2 px-3 py-2 rounded-lg bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800 text-xs space-y-0.5"
               >
-                <div className="font-mono text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                <div className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
                   {observedWeb.isArchived
                     ? lang === 'vi'
-                      ? 'Metadata Bản lưu Wayback Machine'
-                      : 'Wayback Machine Archived Metadata'
+                      ? 'Thông tin từ bản lưu Wayback Machine'
+                      : 'Wayback Archive Page Details'
                     : lang === 'vi'
-                      ? 'Metadata Trang Web Trực tiếp (HTML)'
-                      : 'Live Web Page Metadata (HTML)'}
+                      ? 'Thông tin đọc được từ trang web'
+                      : 'Web Page Details'}
                 </div>
                 {observedWeb.title && (
                   <div className="font-medium text-slate-800 dark:text-slate-200 break-words">
@@ -428,8 +385,8 @@ function IssueCard({
               <span className="flex items-center gap-2">
                 <Lock className="h-3.5 w-3.5 shrink-0" />
                 {lang === 'vi'
-                  ? 'Giải thích suy diễn, tiêu chí kiểm tra, độ tin cậy và nguồn đối chiếu có trong gói Pro / Ultra.'
-                  : 'Reasoning explanations, triggered rules, confidence and source lookups are available on Pro / Ultra.'}
+                  ? 'Nâng cấp gói Pro để xem chi tiết lý do sai lệch, đối chiếu bài gốc và hướng dẫn sửa nhanh.'
+                  : 'Upgrade to Pro to see why this citation was flagged, inspect matching library records, and see how to fix it.'}
               </span>
               <Link
                 to="/pricing"
@@ -443,8 +400,8 @@ function IssueCard({
             <div className="p-3 rounded-xl bg-white/90 dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 flex items-start gap-2.5">
               <Scale className="h-4 w-4 text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5" />
               <div>
-                <h4 className="text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-0.5">
-                  {lang === 'vi' ? 'Giải thích kiểm tra' : 'What this means'}
+                <h4 className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-0.5">
+                  {lang === 'vi' ? 'Giải thích kết quả' : 'What this means'}
                 </h4>
                 <p className="text-xs sm:text-sm text-slate-700 dark:text-slate-300">
                   {sanitizeReasoningForDisplay(getVerdictExplanation(verdict, lang), lang)}
@@ -456,8 +413,8 @@ function IssueCard({
           <div className="grid sm:grid-cols-2 gap-4">
             {verdict.mismatched_fields.length > 0 && (
               <div>
-                <h4 className="text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
-                  {lang === 'vi' ? 'Trường sai lệch' : 'Mismatched Fields'}
+                <h4 className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
+                  {lang === 'vi' ? 'Thông tin chưa khớp' : 'Mismatched Details'}
                 </h4>
                 <div className="flex flex-wrap gap-1.5">
                   {verdict.mismatched_fields.map((field) => (
@@ -475,8 +432,8 @@ function IssueCard({
 
             {canViewDeep && verdict.triggered_rules.length > 0 && (
               <div>
-                <h4 className="text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
-                  {lang === 'vi' ? 'Tiêu chí đánh giá' : 'Triggered Rules'}
+                <h4 className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
+                  {lang === 'vi' ? 'Tiêu chí kiểm tra' : 'Verification Checks'}
                 </h4>
                 <div className="flex flex-wrap gap-1.5">
                   {verdict.triggered_rules.map((rule) => (
@@ -489,52 +446,30 @@ function IssueCard({
                     </Badge>
                   ))}
                 </div>
-                <details
-                  data-testid="issue-technical-details"
-                  className="mt-2 rounded-lg border border-slate-200/70 dark:border-slate-800 bg-white/70 dark:bg-slate-900/70 px-2.5 py-1.5"
-                >
-                  <summary className="cursor-pointer select-none text-[11px] font-medium text-slate-500 dark:text-slate-400">
-                    {lang === 'vi' ? 'Chi tiết kỹ thuật' : 'Technical Details'}
-                  </summary>
-                  <div className="mt-1.5 flex flex-wrap gap-1.5">
-                    {verdict.triggered_rules.map((rule) => (
-                      <Badge
-                        key={`code-${rule}`}
-                        variant="outline"
-                        className="px-2 py-0.5 rounded text-[11px] font-mono bg-slate-50 dark:bg-slate-950 text-slate-600 dark:text-slate-300"
-                      >
-                        {rule}
-                      </Badge>
-                    ))}
-                  </div>
-                </details>
               </div>
             )}
           </div>
 
           {canViewDeep && sourceResults.length > 0 && (
             <div>
-              <h4 className="text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
-                {lang === 'vi' ? 'Nguồn đối chiếu' : 'Source Lookup'}
+              <h4 className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
+                {lang === 'vi' ? 'Thư viện đã đối chiếu' : 'Checked Libraries'}
               </h4>
               <div className="grid sm:grid-cols-2 gap-2">
                 {sourceResults.map((source, idx) => (
                   <div
                     key={idx}
-                    className="flex items-center justify-between px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 text-xs"
+                    className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 text-xs"
                   >
-                    <span className="flex items-center gap-2 font-medium text-slate-700 dark:text-slate-300">
+                    <span className="flex items-center gap-2 font-medium text-slate-700 dark:text-slate-300 min-w-0">
                       <SourceIcon source={source.source} />
-                      <span>
-                        {source.source?.toLowerCase() === 'vn_legal_registry' &&
-                        lang === 'en'
-                          ? 'VN Legal Registry'
-                          : getSourceDisplayName(source.source, lang, {
-                              triggered_rules: verdict.triggered_rules,
-                              external_ids: source.external_ids,
-                              venue: source.venue,
-                              title: source.title,
-                            })}
+                      <span className="truncate">
+                        {getSourceDisplayName(source.source, lang, {
+                          triggered_rules: verdict.triggered_rules,
+                          external_ids: source.external_ids,
+                          venue: source.venue,
+                          title: source.title,
+                        })}
                       </span>
                     </span>
                     {(() => {
@@ -550,7 +485,7 @@ function IssueCard({
                         (conf !== null && conf < 0.6);
                       if (isHighMatch) {
                         return (
-                          <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">
+                          <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold shrink-0">
                             {lang === 'vi' ? 'Khớp nguồn' : 'Matched'}
                           </span>
                         );
@@ -558,7 +493,7 @@ function IssueCard({
                       return (
                         <span
                           data-testid="issue-source-candidate-badge"
-                          className={`text-[11px] font-semibold px-1.5 py-0.5 rounded ${
+                          className={`text-[11px] font-semibold px-1.5 py-0.5 rounded shrink-0 ${
                             isLowCandidate
                               ? 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
                               : 'bg-amber-50 dark:bg-amber-950/70 text-amber-700 dark:text-amber-300'
@@ -567,11 +502,11 @@ function IssueCard({
                           {isLowCandidate
                             ? conf !== null
                               ? lang === 'vi'
-                                ? `Độ tin cậy thấp (${Math.round(conf * 100)}%)`
-                                : `Low Confidence (${Math.round(conf * 100)}%)`
+                                ? `Độ khớp thấp (${Math.round(conf * 100)}%)`
+                                : `Low match (${Math.round(conf * 100)}%)`
                               : lang === 'vi'
-                                ? 'Ứng viên'
-                                : 'Candidate'
+                                ? 'Tài liệu gần giống'
+                                : 'Similar work'
                             : lang === 'vi'
                               ? 'Khớp một phần'
                               : 'Partial Match'}
@@ -584,35 +519,34 @@ function IssueCard({
             </div>
           )}
 
-          {canViewDeep && verdict.confidence > 0 && (
-            <div data-testid="issue-analysis-certainty">
-              <div className="flex items-center justify-between gap-2 mb-1">
-                <h4 className="text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                  {lang === 'vi'
-                    ? `Độ chắc chắn của phân tích: ${Math.round(verdict.confidence * 100)}%`
-                    : `Analysis certainty: ${Math.round(verdict.confidence * 100)}%`}
-                </h4>
-                <span aria-hidden="true" className="sr-only">
-                  {lang === 'vi' ? 'Độ tin cậy' : 'Confidence'}
-                </span>
+          {canViewDeep &&
+            verdict.confidence > 0 &&
+            verdict.label !== 'suspected_hallucination' &&
+            verdict.label !== 'unresolved' && (
+              <div data-testid="issue-analysis-certainty">
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <h4 className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                    {lang === 'vi'
+                      ? `Độ khớp đối chiếu: ${Math.round(verdict.confidence * 100)}%`
+                      : `Match certainty: ${Math.round(verdict.confidence * 100)}%`}
+                  </h4>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Progress
+                    value={verdict.confidence * 100}
+                    className="flex-1 h-2"
+                    indicatorClassName={
+                      verdict.label === 'metadata_error'
+                        ? 'bg-amber-500 dark:bg-amber-400'
+                        : 'bg-indigo-500 dark:bg-indigo-400'
+                    }
+                  />
+                  <span className="text-xs font-mono tabular-nums font-semibold text-slate-600 dark:text-slate-300">
+                    {Math.round(verdict.confidence * 100)}%
+                  </span>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Progress
-                  value={verdict.confidence * 100}
-                  className="flex-1 h-2"
-                  indicatorClassName={
-                    verdict.label === 'suspected_hallucination' ||
-                    verdict.label === 'metadata_error'
-                      ? 'bg-slate-500 dark:bg-slate-400'
-                      : 'bg-indigo-500 dark:bg-indigo-400'
-                  }
-                />
-                <span className="text-xs font-mono font-semibold text-slate-600 dark:text-slate-300">
-                  {Math.round(verdict.confidence * 100)}%
-                </span>
-              </div>
-            </div>
-          )}
+            )}
 
           {/* Direct Action Link back into L1 Citation Inspector (BUG-29) */}
           <div className="flex justify-end pt-1">
@@ -671,19 +605,10 @@ function SeveritySection({
             <span className={`font-display font-bold text-sm ${config.textColor}`}>
               {lang === 'vi' ? config.labelVi : config.labelEn}
             </span>
-            <span className="ml-2 text-xs font-mono text-slate-500 dark:text-slate-400">
-              ({verdicts.length}{' '}
-              {lang === 'vi'
-                ? 'vấn đề'
-                : verdicts.length === 1
-                  ? 'issue'
-                  : 'issues'}
-              )
-            </span>
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          <span className={`text-sm font-mono font-bold ${config.textColor}`}>
+        <div className="flex items-center gap-2.5">
+          <span className={`text-xs font-mono tabular-nums font-bold px-2 py-0.5 rounded-full ${config.bgClass} ${config.textColor} border ${config.borderClass}`}>
             {verdicts.length}
           </span>
           {isOpen ? (
@@ -809,7 +734,7 @@ export function IssuesPage() {
     return (
       <div className="flex items-center justify-center py-16">
         <Loader2 className="h-8 w-8 text-indigo-600 dark:text-indigo-400 animate-spin" />
-        <span className="ml-3 text-slate-600 dark:text-slate-300 font-mono text-sm">
+        <span className="ml-3 text-slate-600 dark:text-slate-300 text-sm">
           {lang === 'vi' ? 'Đang tải danh mục vấn đề...' : 'Loading issues...'}
         </span>
       </div>
@@ -851,12 +776,9 @@ export function IssuesPage() {
         } gap-4`}
       >
         <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm">
-          <div className="flex items-center justify-between mb-1.5">
+          <div className="mb-1.5">
             <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
               {lang === 'vi' ? 'Tổng vấn đề' : 'Total Issues'}
-            </span>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-              01
             </span>
           </div>
           <p className="text-2xl font-bold font-mono tabular-nums text-slate-900 dark:text-slate-100">
@@ -865,12 +787,9 @@ export function IssuesPage() {
         </Card>
 
         <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-red-200/80 dark:border-red-900/70 shadow-sm">
-          <div className="flex items-center justify-between mb-1.5">
+          <div className="mb-1.5">
             <span className="text-xs font-medium text-red-600 dark:text-red-400">
               {getVerdictDisplay('suspected_hallucination', lang).label}
-            </span>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-red-50 dark:bg-red-950 text-red-700 dark:text-red-300">
-              02
             </span>
           </div>
           <p className="text-2xl font-bold font-mono tabular-nums text-red-600 dark:text-red-400">
@@ -879,12 +798,9 @@ export function IssuesPage() {
         </Card>
 
         <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-amber-200/80 dark:border-amber-900/70 shadow-sm">
-          <div className="flex items-center justify-between mb-1.5">
+          <div className="mb-1.5">
             <span className="text-xs font-medium text-amber-600 dark:text-amber-400">
               {getVerdictDisplay('metadata_error', lang).label}
-            </span>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300">
-              03
             </span>
           </div>
           <p className="text-2xl font-bold font-mono tabular-nums text-amber-600 dark:text-amber-400">
@@ -894,12 +810,9 @@ export function IssuesPage() {
 
         {issuesBySeverity.linking.length > 0 && (
           <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-indigo-200/80 dark:border-indigo-900/70 shadow-sm">
-            <div className="flex items-center justify-between mb-1.5">
+            <div className="mb-1.5">
               <span className="text-xs font-medium text-indigo-600 dark:text-indigo-400">
                 {lang === 'vi' ? 'Liên kết trong bài' : 'In-Text Linking'}
-              </span>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300">
-                04
               </span>
             </div>
             <p className="text-2xl font-bold font-mono tabular-nums text-indigo-600 dark:text-indigo-400">
@@ -910,12 +823,9 @@ export function IssuesPage() {
 
         {(issuesBySeverity.info.length > 0 || issuesBySeverity.linking.length === 0) && (
           <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm">
-            <div className="flex items-center justify-between mb-1.5">
+            <div className="mb-1.5">
               <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
                 {getVerdictDisplay('unresolved', lang).label}
-              </span>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                {issuesBySeverity.linking.length > 0 ? '05' : '04'}
               </span>
             </div>
             <p className="text-2xl font-bold font-mono tabular-nums text-slate-700 dark:text-slate-200">

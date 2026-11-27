@@ -83,32 +83,32 @@ function getStatusPillStyles(
   switch (node.status) {
     case 'success':
       return {
-        text: node.statusText ?? (isVi ? 'ĐẠT' : 'PASS'),
+        text: node.statusText ?? (isVi ? 'Đạt' : 'Match'),
         className:
           'bg-emerald-100/90 text-emerald-800 border-emerald-300/80 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800',
       };
     case 'warning':
       return {
-        text: node.statusText ?? (isVi ? 'CẢNH BÁO' : 'WARN'),
+        text: node.statusText ?? (isVi ? 'Lưu ý' : 'Note'),
         className:
           'bg-amber-100/90 text-amber-800 border-amber-300/80 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800',
       };
     case 'error':
       return {
-        text: node.statusText ?? (isVi ? 'LỖI' : 'FAIL'),
+        text: node.statusText ?? (isVi ? 'Cần kiểm tra' : 'Check'),
         className:
           'bg-red-100/90 text-red-800 border-red-300/80 dark:bg-red-950 dark:text-red-300 dark:border-red-800',
       };
     case 'no_match':
       return {
-        text: node.statusText ?? (isVi ? 'KHÔNG KHỚP' : 'NO HIT'),
+        text: node.statusText ?? (isVi ? 'Không có bản ghi' : 'No match'),
         className:
           'bg-slate-200/70 text-slate-600 border-slate-300 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700',
       };
     default: {
       if (node.type === 'reference') {
         return {
-          text: node.statusText ?? (isVi ? 'GỐC' : 'ROOT'),
+          text: node.statusText ?? (isVi ? 'Trích dẫn' : 'Citation'),
           className:
             'bg-indigo-100/90 text-indigo-800 border-indigo-300/80 dark:bg-indigo-950 dark:text-indigo-300 dark:border-indigo-800',
         };
@@ -120,19 +120,19 @@ function getStatusPillStyles(
             /resource|tài nguyên|pháp luật|statute/i.test(node.label));
         if (isResource) {
           return {
-            text: node.statusText ?? (isVi ? 'NGUỒN WEB' : 'RESOURCE'),
+            text: node.statusText ?? (isVi ? 'Nguồn tham khảo' : 'Source'),
             className:
               'bg-violet-100/90 text-violet-800 border-violet-300/80 dark:bg-violet-950 dark:text-violet-300 dark:border-violet-800',
           };
         }
         return {
-          text: node.statusText ?? (isVi ? 'CHỜ DUYỆT' : 'REVIEW'),
+          text: node.statusText ?? (isVi ? 'Cần xem thêm' : 'Review'),
           className:
             'bg-slate-200/80 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700',
         };
       }
       return {
-        text: node.statusText ?? (isVi ? 'THÔNG TIN' : 'INFO'),
+        text: node.statusText ?? (isVi ? 'Thông tin' : 'Info'),
         className:
           'bg-sky-100/80 text-sky-800 border-sky-300/80 dark:bg-sky-950 dark:text-sky-300 dark:border-sky-800',
       };
