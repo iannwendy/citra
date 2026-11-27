@@ -3,7 +3,7 @@
 
 \section{Tổng kết kết quả đạt được so với mục tiêu đề ra}
 
-Đồ án tốt nghiệp đã thiết kế, hiện thực và đánh giá thực nghiệm \textbf{CITRA} (\textit{v3.90.34}) --- nền tảng phần mềm lai Nơ-ron -- Ký hiệu có khả năng giải thích phục vụ chấm điểm tự động tính toàn vẹn trích dẫn (CIS), phát hiện tài liệu tham khảo bịa đặt và chuẩn hóa danh mục tham khảo. Bảng~\ref{tab:obj-summary} đối chiếu trực tiếp sản phẩm kỹ thuật và kết quả thực nghiệm với sáu mục tiêu SMART đặt ra tại Mục~\ref{sec:objectives}. Xuyên suốt tám tầng xử lý, cơ chế bảo vệ cốt lõi tổng hợp tại Hình~\ref{fig:decision-flow} (Chương~\ref{chap:architecture}) duy trì kỷ luật nguồn gốc nghiêm ngặt: cáo buộc ảo giác bắt buộc phải có bằng chứng bác bỏ cấu trúc tường minh (tên miền giả RFC 2606~\cite{rfc2606}, DOI bịa đặt/lai ghép, năm tương lai phi lý) hoặc phản hồi HTTP 200 rỗng sạch từ nhiều cơ sở dữ liệu trực tuyến, trong khi cạn hạn mức mạng, DOI khu vực không có CSL và tương đồng giáp ranh ($[0.40, 0.60)$) được định tuyến tất định sang \texttt{unresolved} để giảng viên thẩm định.
+Đồ án tốt nghiệp đã thiết kế, hiện thực và đánh giá thực nghiệm \textbf{CITRA} (\textit{v3.90.35}) --- nền tảng phần mềm lai Nơ-ron -- Ký hiệu có khả năng giải thích phục vụ chấm điểm tự động tính toàn vẹn trích dẫn (CIS), phát hiện tài liệu tham khảo bịa đặt và chuẩn hóa danh mục tham khảo. Bảng~\ref{tab:obj-summary} đối chiếu trực tiếp sản phẩm kỹ thuật và kết quả thực nghiệm với sáu mục tiêu SMART đặt ra tại Mục~\ref{sec:objectives}. Xuyên suốt tám tầng xử lý, cơ chế bảo vệ cốt lõi tổng hợp tại Hình~\ref{fig:decision-flow} (Chương~\ref{chap:architecture}) duy trì kỷ luật nguồn gốc nghiêm ngặt: cáo buộc ảo giác bắt buộc phải có bằng chứng bác bỏ cấu trúc tường minh (tên miền giả RFC 2606~\cite{rfc2606}, DOI bịa đặt/lai ghép, năm tương lai phi lý) hoặc phản hồi HTTP 200 rỗng sạch từ nhiều cơ sở dữ liệu trực tuyến, trong khi cạn hạn mức mạng, DOI khu vực không có CSL và tương đồng giáp ranh ($[0.40, 0.60)$) được định tuyến tất định sang \texttt{unresolved} để giảng viên thẩm định.
 
 {\setlength{\tabcolsep}{3.5pt}\renewcommand{\arraystretch}{1.12}
 \begin{longtable}{|C{0.14}|L{0.31}|L{0.55}|}
@@ -50,7 +50,7 @@ Ba bài học thực nghiệm cốt lõi rút ra từ Chương~\ref{chap:results
 \section{Hạn chế của hệ thống}
 \label{sec:limitations}
 
-Bên cạnh kết quả đạt được, phiên bản \texttt{3.90.34} vẫn tồn tại năm hạn chế kỹ thuật và thực nghiệm cụ thể:
+Bên cạnh kết quả đạt được, phiên bản \texttt{3.90.35} vẫn tồn tại năm hạn chế kỹ thuật và thực nghiệm cụ thể:
 {\setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}
 \begin{itemize}
     \item \textbf{L1 (Điểm mù đối chứng toàn văn sau tường phí):} Đối sánh ngữ nghĩa chỉ dựa trên tiêu đề và tóm tắt mở. Khi sinh viên viện dẫn một bảng số liệu hay định lý nằm sâu trong thân bài đóng phí mà tóm tắt không đề cập, \textbf{CITRA} chưa thể kiểm chứng suy diễn mức toàn văn.

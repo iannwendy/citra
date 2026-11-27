@@ -3,7 +3,7 @@
 
 \section{Summary of Achievements Against Objectives}
 
-This graduation project designed, implemented, and empirically evaluated \textbf{CITRA} (\textit{v3.90.34}), an explainable neuro-symbolic software platform for automated Citation Integrity Scoring (CIS), fabricated reference detection, and bibliography remediation. Table~\ref{tab:obj-summary} maps the delivered artifacts and verified experimental outcomes directly against the six SMART objectives defined in Section~\ref{sec:objectives}. Across all verification layers, the core architectural safeguard summarized in Figure~\ref{fig:decision-flow} (Chapter~\ref{chap:architecture}) enforces strict provenance discipline: substantive hallucination accusations require either positive structural refutation (RFC 2606 fake domains~\cite{rfc2606}, fabricated/chimeric DOIs, impossible future years) or clean HTTP 200 empty responses across multiple live registries, whereas network exhaustion, regional non-CSL DOIs, and borderline similarities ($[0.40, 0.60)$) route deterministically to \texttt{unresolved} for instructor review.
+This graduation project designed, implemented, and empirically evaluated \textbf{CITRA} (\textit{v3.90.35}), an explainable neuro-symbolic software platform for automated Citation Integrity Scoring (CIS), fabricated reference detection, and bibliography remediation. Table~\ref{tab:obj-summary} maps the delivered artifacts and verified experimental outcomes directly against the six SMART objectives defined in Section~\ref{sec:objectives}. Across all verification layers, the core architectural safeguard summarized in Figure~\ref{fig:decision-flow} (Chapter~\ref{chap:architecture}) enforces strict provenance discipline: substantive hallucination accusations require either positive structural refutation (RFC 2606 fake domains~\cite{rfc2606}, fabricated/chimeric DOIs, impossible future years) or clean HTTP 200 empty responses across multiple live registries, whereas network exhaustion, regional non-CSL DOIs, and borderline similarities ($[0.40, 0.60)$) route deterministically to \texttt{unresolved} for instructor review.
 
 {\setlength{\tabcolsep}{3.5pt}\renewcommand{\arraystretch}{1.12}
 \begin{longtable}{|C{0.14}|L{0.31}|L{0.55}|}
@@ -50,7 +50,7 @@ Three empirical lessons emerge from Chapter~\ref{chap:results}:
 \section{System Limitations}
 \label{sec:limitations}
 
-Despite strong empirical performance, version \texttt{3.90.34} exhibits five concrete engineering and evaluation limitations:
+Despite strong empirical performance, version \texttt{3.90.35} exhibits five concrete engineering and evaluation limitations:
 {\setlength{\itemsep}{1pt}
 \begin{itemize}
     \item \textbf{L1 (Paywalled Full-Text Claim Blindness):} Semantic claim alignment compares inline sentences against titles and open abstracts. When a student cites a specific figure, theorem, or table inside a closed-access article whose abstract omits that detail, \textbf{CITRA} cannot verify body-level entailment.

@@ -605,6 +605,7 @@ def test_billing_plan_features_have_zero_ml_or_dev_jargon() -> None:
         "serpapi",
         "override verdict",
         "high-throughput",
+        "tdtu",
     )
     all_en_bullets: list[str] = []
     all_vi_bullets: list[str] = []
@@ -626,10 +627,14 @@ def test_billing_plan_features_have_zero_ml_or_dev_jargon() -> None:
                 assert term not in low, f"Plan {tier!r} leaked {term!r} in: {txt!r}"
 
     joined_en = "\n".join(all_en_bullets)
+    joined_vi = "\n".join(all_vi_bullets)
     assert "Step-by-Step Visual Verification Breakdown" in joined_en
     assert "In-Document Citation Highlighting" in joined_en
     assert "Context & Claim Relevance Checking" in joined_en
     assert "faster priority processing" in joined_en.lower()
+    assert "(APA, IEEE, Harvard, BibTeX, RIS)" in joined_en
+    assert "(APA, IEEE, Harvard, BibTeX, RIS)" in joined_vi
+    assert "TDTU" not in joined_en and "TDTU" not in joined_vi
     assert any("tô sáng vị trí trích dẫn" in b.lower() for b in all_vi_bullets)
     assert any("ưu tiên xử lý nhanh hơn" in b.lower() for b in all_vi_bullets)
 
