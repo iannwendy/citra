@@ -3,6 +3,7 @@ import type {
   TriggeredRuleStat,
   ValidationLabel,
 } from '@/api/client';
+import { getVerdictDisplay } from '@/lib/academicTaxonomy';
 import { getRuleDisplayName } from '@/lib/verdictExplanation';
 
 export type ReviewSeverityKey = 'critical' | 'warning' | 'incomplete' | 'uncertain';
@@ -86,8 +87,8 @@ export function getTeacherIssueRuleLabel(
   }
   if (upper === 'R-HALLUCINATED-SOURCE') {
     return lang === 'vi'
-      ? 'Các kết quả tìm được có độ tương đồng thấp hơn ngưỡng tối thiểu'
-      : 'Retrieved candidates fall below the minimum similarity threshold';
+      ? 'Không tìm thấy ấn phẩm khớp trên các thư viện học thuật'
+      : 'No matching publication found in academic libraries';
   }
   const base = getRuleDisplayName(ruleId, lang);
   if (CHIMERIC_RULE_RE.test(base)) {
@@ -259,11 +260,11 @@ export function getTeacherReviewGuidance(
       headline:
         lang === 'vi'
           ? 'Không tìm thấy công trình khớp với trích dẫn này'
-          : 'No matching publication found across scholarly databases',
+          : 'No matching publication found in academic libraries',
       actionHint:
         lang === 'vi'
-          ? 'Kiểm tra xem sinh viên gõ sai tên bài hay tài liệu không có trong các CSDL đã tra cứu.'
-          : 'Check whether the student mistyped the title or the document is not indexed in the searched databases.',
+          ? 'Kiểm tra xem sinh viên gõ sai tên bài hay tài liệu không có trong các thư viện học thuật đã tra cứu.'
+          : 'Check whether the student mistyped the title or the document is not indexed in the checked academic libraries.',
       confirmButtonLabel: keepWarningBtn,
       confirmNewLabel: 'suspected_hallucination',
     };
@@ -347,10 +348,21 @@ export function getHumanVerdictMeta(
   badgeClass: string;
 } {
   const norm = (rawLabel || '').trim().toLowerCase();
-  switch (norm) {
+  if (norm === 'incomplete_metadata') {
+    return {
+      label: lang === 'vi' ? 'Thiếu quy cách trích dẫn' : 'Incomplete Reference',
+      colorHex: '#fb923c',
+      barClass: 'bg-orange-400',
+      badgeClass:
+        'bg-orange-50 dark:bg-orange-950/70 border-orange-200/80 dark:border-orange-800/80 text-orange-700 dark:text-orange-300',
+    };
+  }
+
+  const display = getVerdictDisplay(norm, lang);
+  switch (display.key) {
     case 'verified':
       return {
-        label: lang === 'vi' ? 'Hợp lệ' : 'Verified',
+        label: display.label,
         colorHex: '#10b981',
         barClass: 'bg-emerald-500',
         badgeClass:
@@ -358,23 +370,15 @@ export function getHumanVerdictMeta(
       };
     case 'metadata_error':
       return {
-        label: lang === 'vi' ? 'Sai lệch thông tin' : 'Metadata Discrepancy',
+        label: display.label,
         colorHex: '#f59e0b',
         barClass: 'bg-amber-500',
         badgeClass:
           'bg-amber-50 dark:bg-amber-950/70 border-amber-200/80 dark:border-amber-800/80 text-amber-700 dark:text-amber-300',
       };
-    case 'incomplete_metadata':
-      return {
-        label: lang === 'vi' ? 'Thiếu quy cách' : 'Incomplete Reference',
-        colorHex: '#fb923c',
-        barClass: 'bg-orange-400',
-        badgeClass:
-          'bg-orange-50 dark:bg-orange-950/70 border-orange-200/80 dark:border-orange-800/80 text-orange-700 dark:text-orange-300',
-      };
     case 'suspected_hallucination':
       return {
-        label: lang === 'vi' ? 'Nghi vấn ngụy tạo' : 'Suspected Fabrication',
+        label: display.label,
         colorHex: '#f43f5e',
         barClass: 'bg-rose-500',
         badgeClass:
@@ -382,17 +386,16 @@ export function getHumanVerdictMeta(
       };
     case 'resource':
       return {
-        label: lang === 'vi' ? 'Tài nguyên Web / Pháp luật' : 'Web / Legal Resource',
+        label: display.label,
         colorHex: '#0ea5e9',
         barClass: 'bg-sky-500',
         badgeClass:
           'bg-sky-50 dark:bg-sky-950/70 border-sky-200/80 dark:border-sky-800/80 text-sky-700 dark:text-sky-300',
       };
     case 'unresolved':
-    case 'unverified':
     default:
       return {
-        label: lang === 'vi' ? 'Chờ kiểm tra' : 'Needs Review',
+        label: display.label,
         colorHex: '#64748b',
         barClass: 'bg-slate-400',
         badgeClass:

@@ -7,7 +7,9 @@ import {
   getVerdictDisplay,
   normalizeMappingStatusKey,
   getMappingStatusDisplay,
+  getCisBand,
   formatCisScore,
+  getSourceDisplayName,
   formatLocalizedDate,
   formatLocalizedDateTime,
   formatIntentLabel,
@@ -23,6 +25,7 @@ import {
   formatAcademicAuthorShort,
   sanitizeReasoningForDisplay,
 } from './academicTaxonomy';
+import { validatePasswordClient } from './utils';
 import { DecisionSupportBanner } from '@/components/DecisionSupportBanner';
 
 describe('academicTaxonomy — unified verdict, mapping, CIS, dates, errors & notices', () => {
@@ -99,7 +102,39 @@ describe('academicTaxonomy — unified verdict, mapping, CIS, dates, errors & no
     });
   });
 
-  describe('formatCisScore', () => {
+  describe('getCisBand & formatCisScore', () => {
+    it('returns unified 4-tier CIS bands matching HelpModal thresholds (85+, 70–84, 50–69, <50) in VI and EN', () => {
+      const exVi = getCisBand(92, 'vi');
+      expect(exVi.key).toBe('excellent');
+      expect(exVi.label).toBe('Xuất sắc');
+      expect(exVi.badgeClass).toContain('emerald');
+      expect(exVi.dotClass).toContain('emerald');
+      expect(getCisBand(85, 'en').key).toBe('excellent');
+      expect(getCisBand(85, 'en').label).toBe('Excellent');
+
+      const goodVi = getCisBand(84.9, 'vi');
+      expect(goodVi.key).toBe('good');
+      expect(goodVi.label).toBe('Khá tốt');
+      expect(goodVi.textClass).toContain('indigo');
+      expect(getCisBand(70, 'en').key).toBe('good');
+      expect(getCisBand(70, 'en').label).toBe('Good');
+
+      const revVi = getCisBand(69.9, 'vi');
+      expect(revVi.key).toBe('review');
+      expect(revVi.label).toBe('Cần rà soát');
+      expect(revVi.textClass).toContain('amber');
+      expect(getCisBand(50, 'en').key).toBe('review');
+      expect(getCisBand(50, 'en').label).toBe('Needs Review');
+
+      const critVi = getCisBand(49.9, 'vi');
+      expect(critVi.key).toBe('critical');
+      expect(critVi.label).toBe('Cần kiểm tra kỹ');
+      expect(critVi.badgeClass).toContain('rose');
+      expect(getCisBand(0, 'en').key).toBe('critical');
+      expect(getCisBand(0, 'en').label).toBe('Needs Careful Review');
+      expect(getCisBand(Number.NaN, 'en').key).toBe('critical');
+    });
+
     it('formats numeric scores as XX.X / 100 (never %) and returns — for null/NaN/unscannable', () => {
       expect(formatCisScore(91.5)).toBe('91.5 / 100');
       expect(formatCisScore(100)).toBe('100.0 / 100');
@@ -110,6 +145,32 @@ describe('academicTaxonomy — unified verdict, mapping, CIS, dates, errors & no
       expect(formatCisScore(null)).toBe('—');
       expect(formatCisScore(undefined)).toBe('—');
       expect(formatCisScore(Number.NaN)).toBe('—');
+    });
+  });
+
+  describe('getSourceDisplayName', () => {
+    it('maps internal source keys to clean VI & EN human names with zero SQLite/ACL/CSL-JSON/REST API leaks', () => {
+      for (const localKey of ['local_db', 'local_acl', 'local_papers', 'known_papers']) {
+        expect(getSourceDisplayName(localKey, 'vi')).toBe('Thư viện học thuật CITRA');
+        expect(getSourceDisplayName(localKey, 'en')).toBe('CITRA Scholarly Library');
+      }
+      expect(getSourceDisplayName('crossref', 'en')).toBe('Crossref');
+      expect(getSourceDisplayName('openalex', 'en')).toBe('OpenAlex');
+      expect(getSourceDisplayName('doi_ra', 'vi')).toBe('Hệ thống đăng ký DOI quốc tế');
+      expect(getSourceDisplayName('doi', 'en')).toBe('Global DOI Registry');
+      expect(getSourceDisplayName('ncbi', 'en')).toBe('PubMed / bioRxiv');
+      expect(getSourceDisplayName('entrez', 'vi')).toBe('PubMed / bioRxiv');
+      expect(getSourceDisplayName('wayback', 'vi')).toBe('Kho lưu trữ web (Wayback)');
+      expect(getSourceDisplayName('wayback_html_meta', 'en')).toBe('Web Archive (Wayback)');
+      expect(getSourceDisplayName('web_html_meta', 'vi')).toBe('Trang web gốc');
+      expect(getSourceDisplayName('web_html_meta', 'en')).toBe('Source Web Page');
+
+      // Defensive normalization of legacy developer labels
+      expect(getSourceDisplayName('Crossref REST API', 'en')).toBe('Crossref');
+      expect(getSourceDisplayName('OpenAlex Scholarly Graph', 'en')).toBe('OpenAlex');
+      expect(getSourceDisplayName('Local ACL (SQLite FTS5)', 'vi')).toBe(
+        'Thư viện học thuật CITRA',
+      );
     });
   });
 
@@ -216,6 +277,114 @@ describe('academicTaxonomy — unified verdict, mapping, CIS, dates, errors & no
         'Lỗi tùy chỉnh',
       );
       expect(formatUserError(null, 'en')).toBe('Something went wrong. Please try again.');
+    });
+
+    it('translates backend HTTPException leaks (share token, auth codes, corrupt uploads, byte limits, DB/job recovery, admin & billing) cleanly in VI & EN', () => {
+      // Fixed share token regex bug
+      expect(formatUserError('API 400: Share token has expired', 'vi')).toBe(
+        'Liên kết chia sẻ không hợp lệ hoặc đã hết hạn.',
+      );
+      expect(formatUserError('API 400: Invalid share token structure', 'en')).toBe(
+        'This share link is invalid or has expired.',
+      );
+      expect(formatUserError('Invalid or tampered share token signature', 'vi')).toBe(
+        'Liên kết chia sẻ không hợp lệ hoặc đã hết hạn.',
+      );
+
+      // Machine error codes
+      expect(
+        formatUserError('API 403: {"detail":"ACCOUNT_NOT_ACTIVATED: Account is not activated"}', 'vi'),
+      ).toBe('Tài khoản chưa được kích hoạt. Vui lòng kiểm tra email để xác nhận.');
+      expect(formatUserError('ACCOUNT_NOT_ACTIVATED: Please activate', 'en')).toBe(
+        "Your account isn't activated yet. Please check your email for the activation link.",
+      );
+      expect(formatUserError('API 403: API_KEY_REQUIRES_PRO: Pro required', 'vi')).toBe(
+        'Tính năng tạo khóa API dành cho gói Pro trở lên.',
+      );
+      expect(formatUserError('API_KEY_REQUIRES_PRO: upgrade', 'en')).toBe(
+        'API keys are available on Pro plans and above.',
+      );
+      expect(formatUserError('PRIVACY_CONSENT_REQUIRED: consent missing', 'vi')).toBe(
+        'Vui lòng xác nhận đồng ý Chính sách bảo mật trước khi tiếp tục.',
+      );
+      expect(formatUserError('PRIVACY_CONSENT_REQUIRED: consent missing', 'en')).toBe(
+        'Please confirm the Privacy Policy before continuing.',
+      );
+
+      // Corrupt / invalid file uploads
+      expect(formatUserError('API 400: Invalid PDF file: missing %PDF- header', 'vi')).toBe(
+        'Tệp không đúng định dạng chuẩn hoặc bị lỗi. Vui lòng lưu lại tệp PDF/Word và thử tải lên lại.',
+      );
+      expect(
+        formatUserError('Invalid DOCX file: missing OOXML PK archive header', 'en'),
+      ).toBe(
+        "This file appears damaged or isn't a valid document format. Please re-save it and try again.",
+      );
+      expect(formatUserError('Invalid RIS file: missing TY - record header', 'vi')).toContain(
+        'Tệp không đúng định dạng chuẩn',
+      );
+
+      // Password UTF-8 byte & avatar limits (and client validator parity)
+      expect(formatUserError('Password cannot exceed 72 UTF-8 bytes.', 'vi')).toBe(
+        'Mật khẩu hơi dài (tối đa khoảng 50 ký tự nếu có dấu tiếng Việt). Vui lòng chọn mật khẩu ngắn hơn.',
+      );
+      expect(formatUserError('Password cannot exceed 72 UTF-8 bytes.', 'en')).toBe(
+        'Password is too long. Please use a shorter password (under 64 characters).',
+      );
+      const pwVi = validatePasswordClient('ễ'.repeat(30), 'vi');
+      expect(pwVi.valid).toBe(false);
+      expect(pwVi.error).not.toMatch(/72\s*byte/i);
+      const pwEn = validatePasswordClient('ễ'.repeat(30), 'en');
+      expect(pwEn.valid).toBe(false);
+      expect(pwEn.error).not.toMatch(/72\s*utf-?8/i);
+
+      expect(
+        formatUserError('Avatar file too large. Max size is 2097152 bytes (2MB)', 'vi'),
+      ).toBe('Ảnh đại diện vượt quá 2 MB. Vui lòng chọn ảnh nhẹ hơn.');
+      expect(
+        formatUserError('Avatar file too large. Max size is 2097152 bytes (2MB)', 'en'),
+      ).toBe('Profile photo exceeds the 2 MB limit. Please choose a smaller image.');
+
+      // Transient DB / orphaned job / duplicates / admin / billing
+      expect(formatUserError('API 503: Transient database disk I/O error', 'vi')).toBe(
+        'Hệ thống đang bận lưu dữ liệu. Vui lòng thử lại sau vài giây.',
+      );
+      expect(formatUserError('SQLite: database is locked', 'en')).toBe(
+        'The system is briefly busy. Please try again in a few seconds.',
+      );
+      expect(
+        formatUserError('Orphaned analysis job failed after exceeding recovery attempts', 'vi'),
+      ).toBe('Phiên kiểm tra trước bị gián đoạn. Vui lòng bấm kiểm tra lại bài viết.');
+      expect(formatUserError('Orphaned analysis job failed', 'en')).toBe(
+        'The previous check was interrupted. Please run the check again.',
+      );
+      expect(formatUserError('API 409: Username already exists', 'vi')).toBe(
+        'Tên đăng nhập này đã có người sử dụng.',
+      );
+      expect(formatUserError('API 409: Email already exists', 'en')).toBe(
+        'This email is already registered.',
+      );
+      expect(formatUserError('Cannot demote the last active admin', 'vi')).toBe(
+        'Không thể hạ quyền hoặc khóa quản trị viên hoạt động cuối cùng.',
+      );
+      expect(formatUserError('Cannot deactivate the last active admin', 'en')).toBe(
+        'You cannot demote or deactivate the last active administrator.',
+      );
+      expect(formatUserError("Promo code 'PRO20' already exists", 'vi')).toBe(
+        'Mã khuyến mãi này đã tồn tại.',
+      );
+      expect(formatUserError("Promo code 'PRO20' already exists", 'en')).toBe(
+        'This promo code already exists.',
+      );
+      expect(formatUserError('Transaction for vnp_TxnRef not found', 'vi')).toBe(
+        'Giao dịch thanh toán chưa hoàn tất. Vui lòng thử lại.',
+      );
+      expect(formatUserError('PCI-DSS violation: Only last 4 digits allowed', 'en')).toBe(
+        'Payment could not be completed. Please try again.',
+      );
+      expect(formatUserError('HTTP 400: UNKNOWN_CODE: Plain fallback text', 'en')).toBe(
+        'Plain fallback text',
+      );
     });
   });
 

@@ -1745,8 +1745,13 @@ export const api = {
     baseFilename?: string,
   ): Promise<void> => {
     const cleanName = (baseFilename || `essay_${id}`).replace(/\.[^/.]+$/, '');
+    const uiLang =
+      typeof document !== 'undefined' &&
+      document.documentElement.lang?.toLowerCase().startsWith('vi')
+        ? 'vi'
+        : 'en';
     return downloadAuthenticatedBlob(
-      `/essays/${id}/report?format=${format}`,
+      `/essays/${id}/report?format=${format}&lang=${uiLang}`,
       `${cleanName}_report.${format}`,
     );
   },
@@ -1757,8 +1762,13 @@ export const api = {
     baseFilename?: string,
   ): Promise<void> => {
     const cleanName = (baseFilename || `essay_${id}`).replace(/\.[^/.]+$/, '');
+    const uiLang =
+      typeof document !== 'undefined' &&
+      document.documentElement.lang?.toLowerCase().startsWith('vi')
+        ? 'vi'
+        : 'en';
     return downloadAuthenticatedBlob(
-      `/essays/${id}/export-healed-docx?style=${encodeURIComponent(style)}`,
+      `/essays/${id}/export-healed-docx?style=${encodeURIComponent(style)}&lang=${uiLang}`,
       `${cleanName}_auto_healed.docx`,
     );
   },

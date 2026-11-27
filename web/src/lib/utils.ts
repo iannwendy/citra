@@ -118,8 +118,8 @@ export function validatePasswordClient(
       reason: 'utf8_bytes',
       error:
         lang === 'vi'
-          ? 'Mật khẩu không được vượt quá 72 byte UTF-8.'
-          : 'Password must not exceed 72 UTF-8 bytes.',
+          ? 'Mật khẩu hơi dài (tối đa khoảng 50 ký tự nếu có dấu tiếng Việt). Vui lòng chọn mật khẩu ngắn hơn.'
+          : 'Password is too long. Please use a shorter password (under 64 characters).',
     };
   }
   return { valid: true };

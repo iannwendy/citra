@@ -18,14 +18,14 @@ const COPY: Record<
     compactText:
       'CITRA hỗ trợ đối chiếu trích dẫn — không tự động kết luận gian lận học thuật. Quyết định cuối cùng thuộc về giảng viên và người đánh giá.',
     cardText:
-      'Kết quả kiểm chứng được tổng hợp từ các cơ sở dữ liệu học thuật công khai nhằm hỗ trợ rà soát. Nhãn "Không tìm thấy nguồn" chỉ là cảnh báo cần kiểm tra lại bản gốc — không đồng nghĩa nguồn bị bịa đặt hay gian lận học thuật. Quyết định cuối cùng luôn thuộc về giảng viên và chuyên gia.',
+      'Kết quả kiểm tra được tổng hợp từ các thư viện học thuật công khai nhằm hỗ trợ rà soát. Nhãn "Không tìm thấy nguồn" chỉ là gợi ý cần kiểm tra lại bản gốc — không đồng nghĩa tài liệu không có thật hay gian lận học thuật. Quyết định cuối cùng luôn thuộc về giảng viên và chuyên gia.',
   },
   en: {
     title: 'Academic Decision-Support Notice',
     compactText:
       'CITRA assists human citation review — it does not conclude academic misconduct. Final judgment always rests with instructors and reviewers.',
     cardText:
-      'Verification results are compiled from public scholarly registries to assist academic review. A "Source Not Found" label is a review prompt to double-check the original source — not proof of fabrication or misconduct. Final judgment always rests with instructors and human reviewers.',
+      'Verification results are compiled from public academic libraries to assist human review. A "Source Not Found" label is a review prompt to double-check the original source — not proof of fabrication or misconduct. Final judgment always rests with instructors and human reviewers.',
   },
 };
 

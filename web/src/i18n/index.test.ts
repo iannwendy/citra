@@ -14,15 +14,15 @@ describe('i18n configuration and Task 5.1 translation fixes', () => {
   });
 
   it('defines override.errorToast in both en.json and vi.json and resolves via i18n.t', () => {
-    expect(en.override.errorToast).toBe('Failed to update verdict override. Please try again.');
+    expect(en.override.errorToast).toBe('Could not update the review result. Please try again.');
     expect(vi.override.errorToast).toBe(
-      'Không thể cập nhật phán quyết ghi đè. Vui lòng thử lại.',
+      'Không thể cập nhật kết quả kiểm tra. Vui lòng thử lại.',
     );
     expect(i18n.t('override.errorToast', { lng: 'en' })).toBe(
-      'Failed to update verdict override. Please try again.',
+      'Could not update the review result. Please try again.',
     );
     expect(i18n.t('override.errorToast', { lng: 'vi' })).toBe(
-      'Không thể cập nhật phán quyết ghi đè. Vui lòng thử lại.',
+      'Không thể cập nhật kết quả kiểm tra. Vui lòng thử lại.',
     );
   });
 

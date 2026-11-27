@@ -12,7 +12,10 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
   getRuleDisplayName,
+  getSourceDisplayName,
+  getVerdictDisplayName,
   getVerdictExplanation,
+  getSearchStepDescription,
   getPlainVerdictLabel,
   getPlainMappingLabel,
 } from '@/lib/verdictExplanation';
@@ -30,10 +33,10 @@ describe('R-INCOMPLETE-METADATA localization & VerdictBadge sub-label', () => {
       'Thiếu quy cách trích dẫn',
     );
     expect(getRuleDisplayName('R-URL-CONTENT-MISMATCH', 'en')).toContain(
-      'Cited web page title/metadata does not match',
+      'Cited web page title or details do not match',
     );
     expect(getRuleDisplayName('R-URL-CONTENT-MISMATCH', 'vi')).toContain(
-      'Tiêu đề hoặc metadata của trang URL không khớp',
+      'Tiêu đề hoặc thông tin của trang web không khớp',
     );
   });
 
@@ -50,12 +53,14 @@ describe('R-INCOMPLETE-METADATA localization & VerdictBadge sub-label', () => {
     const enExplanation = getVerdictExplanation(incompleteVerdict, 'en');
     expect(enExplanation).toContain('Incomplete bibliographic reference');
     expect(enExplanation).toContain('the authors, the publication year, and the venue');
-    expect(enExplanation).toContain('rather than a fabricated source');
+    expect(enExplanation).toContain('rather than an invalid source');
+    expect(enExplanation).not.toMatch(/\bfabricated\b/i);
 
     const viExplanation = getVerdictExplanation(incompleteVerdict, 'vi');
     expect(viExplanation).toContain('Thiếu quy cách trích dẫn');
     expect(viExplanation).toContain('tác giả, năm xuất bản và nơi công bố');
-    expect(viExplanation).toContain('không phải nguồn bịa đặt');
+    expect(viExplanation).toContain('thiếu sót về trình bày trích dẫn');
+    expect(viExplanation).not.toContain('bịa đặt');
   });
 
   it('renders Incomplete Reference / Thiếu quy cách trích dẫn in VerdictBadge only when R-INCOMPLETE-METADATA is triggered', async () => {
@@ -193,12 +198,12 @@ describe('R-INCOMPLETE-METADATA localization & VerdictBadge sub-label', () => {
 describe('Task 0.1: Plain-language verdict/mapping helpers & Solva CSS tokens', () => {
   it('maps SUSPECTED_HALLUCINATION and METADATA_ERROR to human-friendly plain-language labels with action hints', () => {
     const viSuspected = getPlainVerdictLabel('SUSPECTED_HALLUCINATION', 'vi');
-    expect(viSuspected.label).toBe('Không tìm thấy nguồn gốc');
+    expect(viSuspected.label).toBe('Không tìm thấy nguồn');
     expect(viSuspected.technicalCode).toBe('SUSPECTED_HALLUCINATION');
     expect(viSuspected.actionHint.trim().length).toBeGreaterThan(15);
 
     const enMeta = getPlainVerdictLabel('METADATA_ERROR', 'en');
-    expect(enMeta.label).toBe('Citation Details Mismatch');
+    expect(enMeta.label).toBe('Details Mismatch');
     expect(enMeta.technicalCode).toBe('METADATA_ERROR');
     expect(enMeta.actionHint.trim().length).toBeGreaterThan(15);
   });
@@ -235,16 +240,16 @@ describe('Task 0.1: Plain-language verdict/mapping helpers & Solva CSS tokens', 
       getPlainVerdictLabel('SUSPECTED_HALLUCINATION', 'en'),
     );
     expect(getPlainVerdictLabel('metadata_error', 'en').label).toBe(
-      'Citation Details Mismatch',
+      'Details Mismatch',
     );
 
     const unknownVi = getPlainVerdictLabel('FUTURE_UNKNOWN_STATE', 'vi');
-    expect(unknownVi.label).toBe('Cần kiểm tra thủ công');
+    expect(unknownVi.label).toBe('Chưa đủ dữ liệu');
     expect(unknownVi.technicalCode).toBe('FUTURE_UNKNOWN_STATE');
     expect(unknownVi.actionHint.trim().length).toBeGreaterThan(10);
 
     const emptyEn = getPlainVerdictLabel('', 'en');
-    expect(emptyEn.label).toBe('Needs Manual Check');
+    expect(emptyEn.label).toBe('Unverified');
     expect(emptyEn.technicalCode).toBe('UNRESOLVED');
   });
 
@@ -323,7 +328,7 @@ describe('Task 0.1: Plain-language verdict/mapping helpers & Solva CSS tokens', 
 
     await i18n.changeLanguage('vi');
     expect(getPlainVerdictLabel('SUSPECTED_HALLUCINATION').label).toBe(
-      'Không tìm thấy nguồn gốc',
+      'Không tìm thấy nguồn',
     );
     expect(getPlainMappingLabel('MISSING_REFERENCE').label).toBe(
       'Thiếu ở danh mục tham khảo',
@@ -331,8 +336,145 @@ describe('Task 0.1: Plain-language verdict/mapping helpers & Solva CSS tokens', 
     await i18n.changeLanguage('en');
 
     // Object.prototype keys like 'toString' or 'constructor' must fall back cleanly
-    expect(getPlainVerdictLabel('toString', 'en').label).toBe('Needs Manual Check');
+    expect(getPlainVerdictLabel('toString', 'en').label).toBe('Unverified');
     expect(getPlainMappingLabel('constructor', 'en').label).toBe('Needs Link Check');
+  });
+
+  it('Squad 1B: fixes EN singular/plural grammar & capitalization, removes local-library/accusatory/TDTU jargon, and aligns source & verdict display names', () => {
+    // Singular matched field -> capitalized sentence + "is consistent"
+    const singleMatched = makeVerdict({
+      label: 'verified',
+      matched_sources: [
+        {
+          source: 'local_db',
+          title: 'Attention Is All You Need',
+          authors: ['Ashish Vaswani'],
+          year: '2017',
+          doi: null,
+          url: null,
+          checked_at: '2026-11-27T00:00:00Z',
+          matched_fields: ['title'],
+        },
+      ],
+    });
+    const enSingle = getVerdictExplanation(singleMatched, 'en');
+    expect(enSingle).toContain('CITRA Scholarly Library');
+    expect(enSingle).toContain('. The title is consistent with the citation.');
+    expect(enSingle).not.toContain('the local library');
+    expect(enSingle).not.toContain('so no external search was needed');
+
+    const viSingle = getVerdictExplanation(singleMatched, 'vi');
+    expect(viSingle).toContain('Thư viện học thuật CITRA');
+    expect(viSingle).not.toContain('thư viện học thuật cục bộ');
+
+    // Plural matched field ("authors") and multi-field -> "are consistent"
+    const pluralAuthors = makeVerdict({
+      label: 'verified',
+      matched_sources: [
+        {
+          source: 'crossref',
+          checked_at: '2026-11-27T00:00:00Z',
+          matched_fields: ['authors'],
+        },
+      ],
+    });
+    expect(getVerdictExplanation(pluralAuthors, 'en')).toContain(
+      '. The authors are consistent with the citation.',
+    );
+
+    const multiMatched = makeVerdict({
+      label: 'verified',
+      matched_sources: [
+        {
+          source: 'openalex',
+          checked_at: '2026-11-27T00:00:00Z',
+          matched_fields: ['title', 'year'],
+        },
+      ],
+    });
+    expect(getVerdictExplanation(multiMatched, 'en')).toContain(
+      '. The title and the publication year are consistent with the citation.',
+    );
+
+    // Singular vs plural mismatched fields -> "does not match" vs "do not match"
+    const singleMismatch = makeVerdict({
+      label: 'metadata_error',
+      mismatched_fields: ['year'],
+      matched_sources: [
+        {
+          source: 'crossref',
+          checked_at: '2026-11-27T00:00:00Z',
+          matched_fields: ['title'],
+        },
+      ],
+    });
+    expect(getVerdictExplanation(singleMismatch, 'en')).toContain(
+      'but the publication year does not match the citation. Please review this detail.',
+    );
+
+    const pluralMismatch = makeVerdict({
+      label: 'metadata_error',
+      mismatched_fields: ['year', 'authors'],
+      matched_sources: [
+        {
+          source: 'crossref',
+          checked_at: '2026-11-27T00:00:00Z',
+          matched_fields: ['title'],
+        },
+      ],
+    });
+    expect(getVerdictExplanation(pluralMismatch, 'en')).toContain(
+      'but the publication year and the authors do not match the citation. Please review these details.',
+    );
+
+    // Clean search step descriptions for local DB & web
+    expect(getSearchStepDescription(singleMatched, 'en')).toBe(
+      'Matched against the CITRA Scholarly Library.',
+    );
+    expect(getSearchStepDescription(singleMatched, 'vi')).toBe(
+      'Đã đối chiếu và tìm thấy bản ghi khớp trong Thư viện học thuật CITRA.',
+    );
+
+    // Canonical getVerdictDisplayName without accusatory words
+    expect(getVerdictDisplayName('suspected_hallucination', 'vi')).toBe('Không tìm thấy nguồn');
+    expect(getVerdictDisplayName('metadata_error', 'vi')).toBe('Sai lệch thông tin');
+    expect(getVerdictDisplayName('metadata_error', 'en')).toBe('Details Mismatch');
+
+    // Clean human source names (VI & EN)
+    expect(getSourceDisplayName('local_db', 'vi')).toBe('Thư viện học thuật CITRA');
+    expect(getSourceDisplayName('doi_ra', 'vi')).toBe('Hệ thống đăng ký DOI quốc tế');
+    expect(getSourceDisplayName('doi_ra', 'en')).toBe('Global DOI Registry');
+    expect(getSourceDisplayName('ncbi_biorxiv', 'en')).toBe('PubMed / bioRxiv');
+    expect(getSourceDisplayName('web_html_meta', 'vi')).toBe('Trang web gốc');
+    expect(getSourceDisplayName('wayback_html_meta', 'en')).toBe('Web Archive (Wayback)');
+
+    // Zero accusatory / technical jargon in rule labels
+    const auditedRules = [
+      'R-CHIMERIC-DOI-MISMATCH',
+      'R-HALLUCINATED-SOURCE',
+      'R-FABRICATED-DOI',
+      'R-VN-LEGAL-FABRICATED',
+      'R-RATE-LIMITED-ABSTAIN',
+      'R-DEAD-URL',
+      'R-GLOBAL-DOI-RA-VERIFIED',
+      'R-DOI-RA-NO-CSL',
+      'R-API_EXHAUSTED',
+      'R-NO-CANDIDATE',
+      'R-ABSTENTION-BORDER',
+      'R-CROSS-LINGUAL-TITLE-MATCH',
+      'R-LOCAL_DB',
+      'R-LOCAL_DB_METADATA_ERROR',
+      'R-CONSENSUS-PARTIAL',
+      'R16_SYNTHETIC_PATTERN',
+    ];
+    for (const ruleId of auditedRules) {
+      const enRule = getRuleDisplayName(ruleId, 'en');
+      const viRule = getRuleDisplayName(ruleId, 'vi');
+      expect(enRule).not.toMatch(/chimeric|fabricated|hallucinat|TDTU|HTTP 429|HTTP 404|CSL-JSON|canonical/i);
+      expect(viRule).not.toMatch(
+        /ngụy tạo|bịa đặt|TDTU|HTTP 429|HTTP 404|CSL-JSON|Hạn ngạch API|ứng viên bài báo|trường metadata|vùng biên không chắc chắn|thư viện cục bộ/i,
+      );
+    }
   });
 
   it('defines scroll-padding-top: 88px, reduced-motion scroll-behavior: auto, high-contrast .solva-pro-card-surface, .solva-floral-banner-mask, and .citra-nowrap-tail in index.css while preserving self-hosted Sentient fonts', () => {

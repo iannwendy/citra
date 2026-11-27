@@ -125,21 +125,30 @@ describe('teacherGuidance', () => {
     expect(uEn.confirmButtonLabel).toBe('Flag Issue');
   });
 
-  it('humanizes raw snake_case verdict labels across VI and EN', () => {
-    expect(getHumanVerdictMeta('verified', 'vi').label).toBe('Hợp lệ');
+  it('humanizes raw snake_case verdict labels into canonical non-accusatory taxonomy across VI and EN', () => {
+    expect(getHumanVerdictMeta('verified', 'vi').label).toBe('Đã xác minh');
+    expect(getHumanVerdictMeta('verified', 'en').label).toBe('Verified');
     expect(getHumanVerdictMeta('suspected_hallucination', 'vi').label).toBe(
-      'Nghi vấn ngụy tạo',
+      'Không tìm thấy nguồn',
     );
-    expect(getHumanVerdictMeta('metadata_error', 'en').label).toBe(
-      'Metadata Discrepancy',
+    expect(getHumanVerdictMeta('suspected_hallucination', 'en').label).toBe(
+      'Source Not Found',
     );
-    expect(getHumanVerdictMeta('unresolved', 'en').label).toBe('Needs Review');
-    expect(getHumanVerdictMeta('resource', 'vi').label).toBe(
-      'Tài nguyên Web / Pháp luật',
-    );
+    expect(getHumanVerdictMeta('metadata_error', 'vi').label).toBe('Sai lệch thông tin');
+    expect(getHumanVerdictMeta('metadata_error', 'en').label).toBe('Details Mismatch');
+    expect(getHumanVerdictMeta('unresolved', 'vi').label).toBe('Chưa đủ dữ liệu');
+    expect(getHumanVerdictMeta('unresolved', 'en').label).toBe('Unverified');
+    expect(getHumanVerdictMeta('resource', 'vi').label).toBe('Nguồn Web / Văn bản');
+    expect(getHumanVerdictMeta('resource', 'en').label).toBe('Web / Legal Source');
+
+    // Zero accusatory or divergent 4th-taxonomy labels
+    for (const key of ['verified', 'metadata_error', 'suspected_hallucination', 'unresolved', 'resource']) {
+      expect(getHumanVerdictMeta(key, 'vi').label).not.toMatch(/ngụy tạo|bịa đặt/i);
+      expect(getHumanVerdictMeta(key, 'en').label).not.toMatch(/fabrication|discrepancy/i);
+    }
   });
 
-  it('BUG-01: filters positive/verified rules out of top citation issues and replaces spliced/chimeric jargon', () => {
+  it('BUG-01: filters positive/verified rules out of top citation issues and replaces spliced/chimeric & technical jargon', () => {
     expect(isPositiveOrNonIssueRule('R-LOCAL_DB_VERIFIED')).toBe(true);
     expect(isPositiveOrNonIssueRule('R-WELL-LINKED')).toBe(true);
     expect(isPositiveOrNonIssueRule('R-DOI-TITLE-AUTHOR')).toBe(true);
@@ -155,6 +164,16 @@ describe('teacherGuidance', () => {
     expect(getTeacherIssueRuleLabel('R-CHIMERIC-DOI-MISMATCH', 'en')).toBe(
       'Cited DOI points to a different publication',
     );
+    expect(getTeacherIssueRuleLabel('R-HALLUCINATED-SOURCE', 'en')).toBe(
+      'No matching publication found in academic libraries',
+    );
+    expect(getTeacherIssueRuleLabel('R-HALLUCINATED-SOURCE', 'vi')).toBe(
+      'Không tìm thấy ấn phẩm khớp trên các thư viện học thuật',
+    );
+    for (const ruleId of ['R-HALLUCINATED-SOURCE', 'R-RATE-LIMITED-ABSTAIN', 'R-DOI-RA-NO-CSL', 'R-CROSS-LINGUAL-TITLE-MATCH']) {
+      expect(getTeacherIssueRuleLabel(ruleId, 'en')).not.toMatch(/Retrieved candidates|HTTP 429|CSL-JSON|TDTU/i);
+      expect(getTeacherIssueRuleLabel(ruleId, 'vi')).not.toMatch(/ngụy tạo|HTTP 429|CSL-JSON|TDTU/i);
+    }
 
     const filteredVi = filterTopCitationIssueRules(
       [
@@ -178,6 +197,6 @@ describe('teacherGuidance', () => {
   it('BUG-23: uses non-accusatory VI phrasing for suspected_hallucination review hint', () => {
     const g = getTeacherReviewGuidance(makePending(), 'vi');
     expect(g.actionHint).not.toContain('tự bịa nguồn trích dẫn');
-    expect(g.actionHint).toContain('hay tài liệu không có trong các CSDL đã tra cứu');
+    expect(g.actionHint).toContain('hay tài liệu không có trong các thư viện học thuật đã tra cứu');
   });
 });

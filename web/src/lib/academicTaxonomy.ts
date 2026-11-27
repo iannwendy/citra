@@ -287,7 +287,7 @@ const MAPPING_STATUS_SPECS: Record<
     vi: {
       label: 'Thiếu nguồn',
       description:
-        'Đã trích dẫn trong bài viết nhưng chưa liệt kê ở danh mục Tài liệu tham khảo cuối bài; hãy bổ sung mục này vào cuối bài.',
+        'Đã trích dẫn trong bài viết nhưng chưa liệt kê ở danh mục tài liệu tham khảo cuối bài; hãy bổ sung mục này vào cuối bài.',
     },
     en: {
       label: 'No Reference',
@@ -371,12 +371,12 @@ const MAPPING_STATUS_SPECS: Record<
     vi: {
       label: 'Không áp dụng',
       description:
-        'Tệp chỉ chứa danh mục tài liệu tham khảo (BibTeX/RIS) nên không áp dụng liên kết trích dẫn trong văn bản.',
+        'Tệp chỉ chứa danh mục tài liệu tham khảo (.bib/.ris) nên không áp dụng liên kết trích dẫn trong văn bản.',
     },
     en: {
       label: 'Not Applicable',
       description:
-        'Bibliography-only submission — in-text cross-reference linking does not apply.',
+        'Reference-list-only file (.bib/.ris) — in-text cross-reference linking does not apply.',
     },
   },
 };
@@ -395,8 +395,94 @@ export function getMappingStatusDisplay(
 }
 
 // ============================================================================
-// 3. CIS Score Formatting (`XX.X / 100` — NEVER `%`)
+// 3. CIS Score Formatting (`XX.X / 100` — NEVER `%`) & Canonical Score Bands
 // ============================================================================
+
+export type CisBandKey = 'excellent' | 'good' | 'review' | 'critical';
+
+export interface CisBandDisplay {
+  key: CisBandKey;
+  label: string;
+  shortLabel: string;
+  badgeClass: string;
+  textClass: string;
+  dotClass: string;
+}
+
+const CIS_BAND_SPECS: Record<
+  CisBandKey,
+  {
+    vi: { label: string; shortLabel: string };
+    en: { label: string; shortLabel: string };
+    badgeClass: string;
+    textClass: string;
+    dotClass: string;
+  }
+> = {
+  excellent: {
+    vi: { label: 'Xuất sắc', shortLabel: 'Xuất sắc' },
+    en: { label: 'Excellent', shortLabel: 'Excellent' },
+    badgeClass:
+      'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800',
+    textClass: 'text-emerald-700 dark:text-emerald-400',
+    dotClass: 'bg-emerald-500',
+  },
+  good: {
+    vi: { label: 'Khá tốt', shortLabel: 'Khá tốt' },
+    en: { label: 'Good', shortLabel: 'Good' },
+    badgeClass:
+      'bg-indigo-50 text-indigo-700 border border-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-300 dark:border-indigo-800',
+    textClass: 'text-indigo-700 dark:text-indigo-300',
+    dotClass: 'bg-indigo-500',
+  },
+  review: {
+    vi: { label: 'Cần rà soát', shortLabel: 'Cần rà soát' },
+    en: { label: 'Needs Review', shortLabel: 'Needs Review' },
+    badgeClass:
+      'bg-amber-50 text-amber-800 border border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800',
+    textClass: 'text-amber-800 dark:text-amber-400',
+    dotClass: 'bg-amber-500',
+  },
+  critical: {
+    vi: { label: 'Cần kiểm tra kỹ', shortLabel: 'Kiểm tra kỹ' },
+    en: { label: 'Needs Careful Review', shortLabel: 'Careful Review' },
+    badgeClass:
+      'bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-800',
+    textClass: 'text-rose-700 dark:text-rose-400',
+    dotClass: 'bg-rose-500',
+  },
+};
+
+/**
+ * Canonical 4-tier CIS score bands aligned with HelpModal (`85–100`, `70–84`, `50–69`, `< 50`).
+ */
+export function getCisBand(score: number, lang: AcademicLang = 'en'): CisBandDisplay {
+  const safeScore = typeof score === 'number' && Number.isFinite(score)
+    ? Math.max(0, Math.min(100, score))
+    : 0;
+
+  let key: CisBandKey;
+  if (safeScore >= 85) {
+    key = 'excellent';
+  } else if (safeScore >= 70) {
+    key = 'good';
+  } else if (safeScore >= 50) {
+    key = 'review';
+  } else {
+    key = 'critical';
+  }
+
+  const spec = CIS_BAND_SPECS[key];
+  const copy = lang === 'vi' ? spec.vi : spec.en;
+  return {
+    key,
+    label: copy.label,
+    shortLabel: copy.shortLabel,
+    badgeClass: spec.badgeClass,
+    textClass: spec.textClass,
+    dotClass: spec.dotClass,
+  };
+}
 
 export function formatCisScore(
   score: number | null | undefined,
@@ -408,6 +494,188 @@ export function formatCisScore(
   const decimals = opts?.decimals ?? 1;
   const clamped = Math.max(0, Math.min(100, score));
   return `${clamped.toFixed(decimals)} / 100`;
+}
+
+// ============================================================================
+// 3B. Clean Human Source Display Names (VI & EN)
+// ============================================================================
+
+export interface SourceDisplayContext {
+  triggered_rules?: string[];
+  external_ids?: Record<string, string>;
+  venue?: string | null;
+  title?: string | null;
+}
+
+export const SOURCE_DISPLAY_LABELS: Record<string, { en: string; vi: string }> = {
+  crossref: { en: 'Crossref', vi: 'Crossref' },
+  crossref_rest_api: { en: 'Crossref', vi: 'Crossref' },
+  openalex: { en: 'OpenAlex', vi: 'OpenAlex' },
+  openalex_scholarly_graph: { en: 'OpenAlex', vi: 'OpenAlex' },
+  datacite: {
+    en: 'DataCite (Zenodo / Figshare / OSF)',
+    vi: 'DataCite (Kho dữ liệu nghiên cứu mở)',
+  },
+  doi_ra: {
+    en: 'Global DOI Registry',
+    vi: 'Hệ thống đăng ký DOI quốc tế',
+  },
+  doi: {
+    en: 'Global DOI Registry',
+    vi: 'Hệ thống đăng ký DOI quốc tế',
+  },
+  doaj: {
+    en: 'DOAJ (Open Access Journals)',
+    vi: 'DOAJ (Danh mục tạp chí truy cập mở)',
+  },
+  openaire_hal: {
+    en: 'OpenAIRE / HAL Open Science',
+    vi: 'OpenAIRE / HAL Khoa học mở',
+  },
+  ncbi_biorxiv: { en: 'PubMed / bioRxiv', vi: 'PubMed / bioRxiv' },
+  ncbi: { en: 'PubMed / bioRxiv', vi: 'PubMed / bioRxiv' },
+  entrez: { en: 'PubMed / bioRxiv', vi: 'PubMed / bioRxiv' },
+  pubmed: { en: 'PubMed', vi: 'PubMed' },
+  biorxiv: { en: 'bioRxiv', vi: 'bioRxiv' },
+  medrxiv: { en: 'medRxiv', vi: 'medRxiv' },
+  dblp: {
+    en: 'DBLP',
+    vi: 'DBLP (Thư viện Khoa học Máy tính)',
+  },
+  arxiv: {
+    en: 'arXiv',
+    vi: 'arXiv (Kho bài nghiên cứu mở)',
+  },
+  openlibrary: {
+    en: 'Open Library / Google Books',
+    vi: 'Open Library / Google Books (Thư viện sách)',
+  },
+  europepmc: {
+    en: 'Europe PMC (PubMed)',
+    vi: 'Europe PMC (Thư viện Y sinh)',
+  },
+  huggingface: {
+    en: 'Hugging Face',
+    vi: 'Hugging Face (Kho tài nguyên AI)',
+  },
+  tech_standard: {
+    en: 'Technical Standards & Software (RFC / PyPI / NPM / GitHub)',
+    vi: 'Tiêu chuẩn kỹ thuật & Phần mềm (RFC / PyPI / NPM / GitHub)',
+  },
+  vn_tech_standard: {
+    en: 'Vietnamese National Standards (TCVN / QCVN)',
+    vi: 'Tiêu chuẩn / Quy chuẩn Quốc gia (TCVN / QCVN)',
+  },
+  vn_textbook_registry: {
+    en: 'Vietnamese University Textbook Registry',
+    vi: 'Danh mục giáo trình đại học Việt Nam',
+  },
+  wikidata_opencitations: {
+    en: 'Wikidata / OpenCitations',
+    vi: 'Wikidata / OpenCitations (Thư viện trích dẫn mở)',
+  },
+  wikidata_opencitatio: {
+    en: 'Wikidata / OpenCitations',
+    vi: 'Wikidata / OpenCitations (Thư viện trích dẫn mở)',
+  },
+  serpapi: { en: 'Google Scholar', vi: 'Google Scholar' },
+  google_scholar: { en: 'Google Scholar', vi: 'Google Scholar' },
+  semanticscholar: { en: 'Semantic Scholar', vi: 'Semantic Scholar' },
+  semantic_scholar: { en: 'Semantic Scholar', vi: 'Semantic Scholar' },
+  acl: {
+    en: 'Scholarly Linguistics Archive',
+    vi: 'Thư viện nghiên cứu Ngôn ngữ học',
+  },
+  coreapi: {
+    en: 'CORE Open Research',
+    vi: 'CORE (Thư viện nghiên cứu mở)',
+  },
+  local_db: {
+    en: 'CITRA Scholarly Library',
+    vi: 'Thư viện học thuật CITRA',
+  },
+  local_acl: {
+    en: 'CITRA Scholarly Library',
+    vi: 'Thư viện học thuật CITRA',
+  },
+  local_papers: {
+    en: 'CITRA Scholarly Library',
+    vi: 'Thư viện học thuật CITRA',
+  },
+  known_papers: {
+    en: 'CITRA Scholarly Library',
+    vi: 'Thư viện học thuật CITRA',
+  },
+  vn_legal_registry: {
+    en: 'Vietnamese Legal Registry',
+    vi: 'Thư viện văn bản pháp luật Việt Nam',
+  },
+  vn_legal: {
+    en: 'Vietnamese Legal Registry',
+    vi: 'Thư viện văn bản pháp luật Việt Nam',
+  },
+  web_html_meta: {
+    en: 'Source Web Page',
+    vi: 'Trang web gốc',
+  },
+  wayback_html_meta: {
+    en: 'Web Archive (Wayback)',
+    vi: 'Kho lưu trữ web (Wayback)',
+  },
+  wayback: {
+    en: 'Web Archive (Wayback)',
+    vi: 'Kho lưu trữ web (Wayback)',
+  },
+  github: { en: 'GitHub', vi: 'GitHub' },
+};
+
+export function getSourceDisplayName(
+  source: string,
+  lang: AcademicLang = 'en',
+  context?: SourceDisplayContext,
+): string {
+  const raw = String(source ?? '').trim();
+  if (!raw) return raw;
+  const key = raw.toLowerCase().replace(/[\s-]+/g, '_');
+
+  if (key === 'tech_standard' && context) {
+    const rules = context.triggered_rules ?? [];
+    const ext = context.external_ids ?? {};
+    if (
+      rules.includes('R-VN-STANDARD-VERIFIED') ||
+      Boolean(ext.vn_standard_code) ||
+      /\b(?:TCVN|QCVN)\b/i.test(`${context.title ?? ''} ${context.venue ?? ''}`)
+    ) {
+      return SOURCE_DISPLAY_LABELS.vn_tech_standard[lang];
+    }
+    if (
+      rules.includes('R-VN-TEXTBOOK-VERIFIED') ||
+      Boolean(ext.vn_textbook_id) ||
+      /\b(?:NXB|Nhà xuất bản|Giáo trình)\b/i.test(`${context.title ?? ''} ${context.venue ?? ''}`)
+    ) {
+      return SOURCE_DISPLAY_LABELS.vn_textbook_registry[lang];
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(SOURCE_DISPLAY_LABELS, key)) {
+    return SOURCE_DISPLAY_LABELS[key][lang];
+  }
+  if (/sqlite|fts5|local[\s_-]*(?:db|acl|papers)|known[\s_-]*papers/i.test(raw)) {
+    return SOURCE_DISPLAY_LABELS.local_db[lang];
+  }
+  if (/crossref\s+rest\s+api/i.test(raw)) {
+    return SOURCE_DISPLAY_LABELS.crossref[lang];
+  }
+  if (/openalex\s+scholarly\s+graph/i.test(raw)) {
+    return SOURCE_DISPLAY_LABELS.openalex[lang];
+  }
+  if (/ncbi|entrez/i.test(raw)) {
+    return SOURCE_DISPLAY_LABELS.ncbi[lang];
+  }
+  if (/wayback/i.test(raw)) {
+    return SOURCE_DISPLAY_LABELS.wayback[lang];
+  }
+  return raw;
 }
 
 // ============================================================================
@@ -641,25 +909,26 @@ function unwrapApiAndJsonEnvelope(raw: string): string {
     try {
       const parsed = JSON.parse(text) as Record<string, unknown>;
       if (typeof parsed.detail === 'string' && parsed.detail.trim()) {
-        return parsed.detail.trim();
-      }
-      if (Array.isArray(parsed.detail) && parsed.detail.length > 0) {
+        text = parsed.detail.trim();
+      } else if (Array.isArray(parsed.detail) && parsed.detail.length > 0) {
         const first = parsed.detail[0] as Record<string, unknown> | string;
-        if (typeof first === 'string' && first.trim()) return first.trim();
-        if (first && typeof first === 'object' && typeof first.msg === 'string') {
-          return first.msg.trim();
+        if (typeof first === 'string' && first.trim()) {
+          text = first.trim();
+        } else if (first && typeof first === 'object' && typeof first.msg === 'string') {
+          text = first.msg.trim();
         }
-      }
-      if (typeof parsed.message === 'string' && parsed.message.trim()) {
-        return parsed.message.trim();
-      }
-      if (typeof parsed.error === 'string' && parsed.error.trim()) {
-        return parsed.error.trim();
+      } else if (typeof parsed.message === 'string' && parsed.message.trim()) {
+        text = parsed.message.trim();
+      } else if (typeof parsed.error === 'string' && parsed.error.trim()) {
+        text = parsed.error.trim();
       }
     } catch {
       // Not valid JSON — keep cleaned string
     }
   }
+
+  // Strip any nested API/HTTP status prefix that lived inside the unwrapped JSON field
+  text = text.replace(/^(?:(?:API|HTTP)\s+\d{3}(?:\s+[A-Za-z -]+?)?\s*:\s*)+/i, '').trim();
   return text;
 }
 
@@ -676,6 +945,31 @@ const ERROR_MAPPING_RULES: ErrorMappingRule[] = [
     en: 'Incorrect username/email or password. Please try again.',
   },
   {
+    pattern: /account_not_activated\b|account\s+is\s+not\s+activated/i,
+    vi: 'Tài khoản chưa được kích hoạt. Vui lòng kiểm tra email để xác nhận.',
+    en: "Your account isn't activated yet. Please check your email for the activation link.",
+  },
+  {
+    pattern: /account_deactivated\b|account\s+(?:is|has\s+been)\s+deactivated/i,
+    vi: 'Tài khoản của bạn đã bị tạm khóa. Vui lòng liên hệ quản trị viên.',
+    en: 'Your account has been deactivated. Please contact an administrator.',
+  },
+  {
+    pattern: /api_key_requires_pro\b/i,
+    vi: 'Tính năng tạo khóa API dành cho gói Pro trở lên.',
+    en: 'API keys are available on Pro plans and above.',
+  },
+  {
+    pattern: /privacy_consent_required\b/i,
+    vi: 'Vui lòng xác nhận đồng ý Chính sách bảo mật trước khi tiếp tục.',
+    en: 'Please confirm the Privacy Policy before continuing.',
+  },
+  {
+    pattern: /google_not_configured\b|google_client_id|google_client_secret/i,
+    vi: 'Đăng nhập bằng Google hiện tạm ngưng. Vui lòng đăng nhập bằng email hoặc tên đăng nhập.',
+    en: 'Google sign-in is currently unavailable. Please sign in with your email or username.',
+  },
+  {
     pattern: /invalid\s+activation\s+token|activation\s+(?:token|link).*(?:invalid|expired)/i,
     vi: 'Liên kết kích hoạt không hợp lệ hoặc đã hết hạn.',
     en: 'This activation link is invalid or has expired.',
@@ -687,7 +981,8 @@ const ERROR_MAPPING_RULES: ErrorMappingRule[] = [
     en: 'This password reset link is invalid or has expired.',
   },
   {
-    pattern: /invalid\s+share\s+token\s+format|share\s+(?:link|token)\s+(?:not\s+found|invalid|expired)/i,
+    pattern:
+      /invalid\s+(?:or\s+tampered\s+)?share\s+token|share\s+(?:link|token)\b.*(?:not\s+found|invalid|expired|structure|tampered|signature)/i,
     vi: 'Liên kết chia sẻ không hợp lệ hoặc đã hết hạn.',
     en: 'This share link is invalid or has expired.',
   },
@@ -697,9 +992,90 @@ const ERROR_MAPPING_RULES: ErrorMappingRule[] = [
     en: 'Invalid class join code. Please check with your instructor.',
   },
   {
+    pattern: /promo\s+code\b.*already\s+exists/i,
+    vi: 'Mã khuyến mãi này đã tồn tại.',
+    en: 'This promo code already exists.',
+  },
+  {
     pattern: /promo\s+code\b.*(?:not\s+found|expired|invalid)/i,
     vi: 'Mã giảm giá không tồn tại hoặc đã hết hạn.',
     en: 'Promo code not found or expired.',
+  },
+  {
+    pattern:
+      /missing\s+%pdf-\s+header|missing\s+ooxml\s+pk|ooxml\s+security|missing\s+ty\s+-|missing\s+@entry|invalid\s+(?:pdf|docx|bibtex|ris)\s+file|corrupt/i,
+    vi: 'Tệp không đúng định dạng chuẩn hoặc bị lỗi. Vui lòng lưu lại tệp PDF/Word và thử tải lên lại.',
+    en: "This file appears damaged or isn't a valid document format. Please re-save it and try again.",
+  },
+  {
+    pattern: /72\s+(?:utf-?8\s+)?bytes?|72\s+byte/i,
+    vi: 'Mật khẩu hơi dài (tối đa khoảng 50 ký tự nếu có dấu tiếng Việt). Vui lòng chọn mật khẩu ngắn hơn.',
+    en: 'Password is too long. Please use a shorter password (under 64 characters).',
+  },
+  {
+    pattern: /2097152\s+bytes|avatar.*(?:too\s+large|max\s+size|size)/i,
+    vi: 'Ảnh đại diện vượt quá 2 MB. Vui lòng chọn ảnh nhẹ hơn.',
+    en: 'Profile photo exceeds the 2 MB limit. Please choose a smaller image.',
+  },
+  {
+    pattern: /invalid\s+image\s+file|content\s+does\s+not\s+match\s+declared\s+type|unsupported\s+image/i,
+    vi: 'Tệp ảnh đại diện không hợp lệ. Vui lòng chọn ảnh JPG, PNG hoặc WEBP.',
+    en: 'Invalid profile photo. Please upload a valid JPG, PNG, or WEBP image.',
+  },
+  {
+    pattern: /page\s+limit\s+exceeded/i,
+    vi: 'Tài liệu vượt quá số trang tối đa của gói hiện tại. Vui lòng chia nhỏ tệp hoặc nâng cấp gói.',
+    en: "This document exceeds your plan's page limit. Please shorten the file or upgrade your plan.",
+  },
+  {
+    pattern: /(?:pdf|docx|document|file)\s+(?:is\s+)?too\s+large|exceeds\s+plan\s+file\s+size\s+limit/i,
+    vi: 'Tệp vượt quá dung lượng cho phép của gói hiện tại. Vui lòng nén tệp hoặc nâng cấp gói.',
+    en: "This file exceeds your plan's file size limit. Please use a smaller file or upgrade your plan.",
+  },
+  {
+    pattern: /exporting\s+reports\s+in\s+.*is\s+a\s+pro/i,
+    vi: 'Tính năng tải báo cáo định dạng này dành cho gói Pro trở lên.',
+    en: 'Exporting reports in this format is available on Pro plans and above.',
+  },
+  {
+    pattern: /transient\s+database\s+disk\s+i\/o|database\s+is\s+locked/i,
+    vi: 'Hệ thống đang bận lưu dữ liệu. Vui lòng thử lại sau vài giây.',
+    en: 'The system is briefly busy. Please try again in a few seconds.',
+  },
+  {
+    pattern: /orphaned\s+analysis\s+job\s+failed|analysis\s+failed\s+before\s+report\s+generation/i,
+    vi: 'Phiên kiểm tra trước bị gián đoạn. Vui lòng bấm kiểm tra lại bài viết.',
+    en: 'The previous check was interrupted. Please run the check again.',
+  },
+  {
+    pattern: /username\s+already\s+(?:exists|taken|in\s+use)/i,
+    vi: 'Tên đăng nhập này đã có người sử dụng.',
+    en: 'This username is already taken.',
+  },
+  {
+    pattern: /email\s+(?:address\s+)?already\s+(?:exists|registered|in\s+use)/i,
+    vi: 'Email này đã được đăng ký tài khoản khác.',
+    en: 'This email is already registered.',
+  },
+  {
+    pattern: /current\s+password\s+is\s+incorrect/i,
+    vi: 'Mật khẩu hiện tại chưa đúng. Vui lòng kiểm tra lại.',
+    en: 'Your current password is incorrect. Please try again.',
+  },
+  {
+    pattern: /linked\s+to\s+google\s+sign-?in\s+and\s+cannot\s+be\s+changed/i,
+    vi: 'Email này đang liên kết với tài khoản Google nên không thể thay đổi.',
+    en: 'This email is linked to Google Sign-In and cannot be changed.',
+  },
+  {
+    pattern: /cannot\s+(?:demote|deactivate)\s+the\s+last\s+active\s+admin/i,
+    vi: 'Không thể hạ quyền hoặc khóa quản trị viên hoạt động cuối cùng.',
+    en: 'You cannot demote or deactivate the last active administrator.',
+  },
+  {
+    pattern: /vnp_txnref|vnp_securehash|pci-dss|payment_status=unpaid|vnpay\s+amount\s+mismatch|\[vnpay\s+code/i,
+    vi: 'Giao dịch thanh toán chưa hoàn tất. Vui lòng thử lại.',
+    en: 'Payment could not be completed. Please try again.',
   },
   {
     pattern: /please\s+wait\s+(\d+)\s+seconds?\s+before\s+requesting\s+another\s+password\s+setup\s+email/i,
@@ -707,14 +1083,44 @@ const ERROR_MAPPING_RULES: ErrorMappingRule[] = [
     en: (m) => `You recently sent a request. Please wait ${m[1]} seconds before trying again.`,
   },
   {
+    pattern: /too\s+many\s+authentication\s+attempts/i,
+    vi: 'Bạn đã thử quá nhiều lần. Vui lòng đợi một phút rồi thử lại.',
+    en: 'Too many sign-in attempts. Please wait a minute and try again.',
+  },
+  {
     pattern: /checkout\s+session\s+not\s+found/i,
     vi: 'Không tìm thấy phiên thanh toán. Vui lòng bắt đầu lại từ trang Bảng giá.',
     en: 'Checkout session not found. Please start again from the Pricing page.',
   },
   {
+    pattern: /invalid\s+authorization\s+header|invalid\s+token\s+payload|\bsession\s+not\s+found\b|token\s+expired/i,
+    vi: 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.',
+    en: 'Your session has expired. Please sign in again.',
+  },
+  {
     pattern: /essay\s+not\s+found/i,
     vi: 'Không tìm thấy báo cáo này. Tài liệu có thể đã bị xóa hoặc đường dẫn không đúng.',
     en: 'Report not found. This document may have been deleted or the link is no longer valid.',
+  },
+  {
+    pattern: /only\s+users\s+with\s+role\s+['"]?user['"]?\s+can\s+be\s+added\s+as\s+students/i,
+    vi: 'Chỉ có thể thêm tài khoản sinh viên vào lớp học.',
+    en: 'Only student accounts can be added to a class.',
+  },
+  {
+    pattern: /only\s+student\s+accounts\s+can\s+self-?enroll/i,
+    vi: 'Chỉ tài khoản sinh viên mới có thể tự tham gia lớp bằng mã lớp.',
+    en: 'Only student accounts can join a class using a join code.',
+  },
+  {
+    pattern: /override\s+permission\s+is\s+disabled|students\s+are\s+not\s+permitted\s+to\s+override/i,
+    vi: 'Tài khoản của bạn không có quyền cập nhật kết quả kiểm tra.',
+    en: 'Your account does not have permission to update review results.',
+  },
+  {
+    pattern: /teacher\s+access\s+required/i,
+    vi: 'Tính năng này chỉ dành cho tài khoản giảng viên.',
+    en: 'This feature requires an instructor account.',
   },
   {
     pattern: /access\s+denied|not\s+your\s+class|permission\s+denied|admin\s+access\s+required/i,
@@ -725,11 +1131,6 @@ const ERROR_MAPPING_RULES: ErrorMappingRule[] = [
     pattern: /failed\s+to\s+fetch|networkerror|load\s+failed|err_network/i,
     vi: 'Không thể kết nối máy chủ. Vui lòng kiểm tra mạng và thử lại.',
     en: 'Unable to reach the server. Please check your connection and try again.',
-  },
-  {
-    pattern: /account\s+is\s+deactivated/i,
-    vi: 'Tài khoản của bạn đã bị tạm khóa. Vui lòng liên hệ quản trị viên.',
-    en: 'Your account has been deactivated. Please contact an administrator.',
   },
   {
     pattern: /monthly_quota_exceeded|monthly\s+quota\s+exceeded/i,
@@ -768,7 +1169,9 @@ export function formatUserError(
     return defaultFallback;
   }
 
-  return cleaned;
+  // Strip any remaining ALL_CAPS machine error-code prefix (e.g. "SOME_CODE: message")
+  const strippedCode = cleaned.replace(/^[A-Z][A-Z0-9_]{2,}\s*:\s*/, '').trim();
+  return strippedCode || defaultFallback;
 }
 
 // ============================================================================

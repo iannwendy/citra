@@ -102,8 +102,9 @@ export function MappingStatusBadgeCompact({ status }: { status: MappingStatus | 
     <span
       className={`mapping-badge shrink-0 ${className} w-6 h-6 flex items-center justify-center`}
       title={`${display.label} — ${display.description}`}
+      aria-label={display.label}
     >
-      <Icon className="h-3 w-3 shrink-0" />
+      <Icon className="h-3 w-3 shrink-0" aria-hidden="true" />
     </span>
   );
 }
