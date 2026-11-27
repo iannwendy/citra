@@ -36,6 +36,7 @@ import {
   normalizeVerdictKey,
   getVerdictDisplay,
   getMappingStatusDisplay,
+  getCisBand,
   formatCisScore,
   formatCitationStyleLabel,
   formatAcademicAuthorShort,
@@ -53,7 +54,7 @@ import { useRole } from '@/hooks/useRole';
 import {
   Loader2,
   AlertCircle,
-  Scale,
+  Info,
   Check,
   AlertTriangle,
   XCircle,
@@ -79,7 +80,6 @@ import {
   SymmetricChevron,
   SoftTextSwap,
   SubtleNumber,
-  StreamingText,
   ScoreRing,
   DirectionalStageSlide,
   useSlidingPill,
@@ -251,41 +251,27 @@ export function ReportSummaryAndNavBar({
     (report.linking_summary?.duplicate_reference ?? 0) === 0 &&
     (report.linking_summary?.style_inconsistent ?? 0) === 0;
 
+  const cisBand = getCisBand(cisScore, lang);
   const cisHealthPill = unscannable
     ? {
         text: lang === 'vi' ? 'N/A · Không thể quét' : 'N/A · Not Scannable',
         className:
           'bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700',
       }
-    : cisScore >= 90
-      ? {
-          text: lang === 'vi' ? '✓ Rất đáng tin cậy' : '✓ Highly Reliable',
-          className:
-            'bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-950/70 dark:text-emerald-300 dark:border-emerald-800',
-        }
-      : cisScore >= 75
-        ? {
-            text:
-              lang === 'vi'
-                ? 'Khá tốt · Cần rà soát nhẹ'
-                : 'Good · Minor Review',
-            className:
-              'bg-indigo-50 text-indigo-800 border-indigo-200 dark:bg-indigo-950/70 dark:text-indigo-300 dark:border-indigo-800',
-          }
-        : cisScore >= 50
-          ? {
-              text: lang === 'vi' ? '⚠ Cần kiểm tra kỹ' : '⚠ Needs Review',
-              className:
-                'bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/70 dark:text-amber-300 dark:border-amber-800',
-            }
-          : {
-              text:
-                lang === 'vi'
-                  ? '⚠ Nhiều mục cần rà soát'
-                  : '⚠ High Review Priority',
-              className:
-                'bg-red-50 text-red-800 border-red-200 dark:bg-red-950/70 dark:text-red-300 dark:border-red-800',
-            };
+    : {
+        text: cisBand.label,
+        className: cisBand.badgeClass,
+      };
+
+  const cisRingColor = unscannable
+    ? '#94a3b8'
+    : cisBand.key === 'excellent'
+      ? '#10b981'
+      : cisBand.key === 'good'
+        ? '#6366f1'
+        : cisBand.key === 'review'
+          ? '#f59e0b'
+          : '#ef4444';
 
   const { containerRef: tabListRef, pillStyle } = useSlidingPill<HTMLDivElement>(
     `${activeLayer}-${lang}-${canDocument}-${canConsistency}-${canTrace}`,
@@ -316,20 +302,13 @@ export function ReportSummaryAndNavBar({
           value={unscannable ? 0 : cisScore}
           size={40}
           thickness={4.2}
-          color={
-            unscannable
-              ? '#94a3b8'
-              : cisScore >= 90
-                ? '#10b981'
-                : cisScore >= 75
-                  ? '#6366f1'
-                  : cisScore >= 50
-                    ? '#f59e0b'
-                    : '#ef4444'
-          }
+          color={cisRingColor}
         />
         <div className="flex flex-col justify-center">
           <div className="flex items-center gap-2 flex-wrap leading-none">
+            <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+              {lang === 'vi' ? 'Điểm trích dẫn' : 'Citation Score'}
+            </span>
             <span
               data-testid="report-cis-score-value"
               className="text-lg sm:text-[19px] font-extrabold tracking-tight tabular-nums text-slate-900 dark:text-white leading-none"
@@ -512,7 +491,7 @@ export function ReportSummaryAndNavBar({
           </button>
         )}
 
-        {/* Tab 4: Consistency (L5) */}
+        {/* Tab 4: Citation Link Check (L5) */}
         {canConsistency ? (
           onChangeWorkspaceMode ? (
             <button
@@ -527,7 +506,7 @@ export function ReportSummaryAndNavBar({
               }`}
             >
               <ListChecks className="h-3.5 w-3.5 shrink-0" />
-              <span>{lang === 'vi' ? 'Nhất quán' : 'Consistency'}</span>
+              <span>{lang === 'vi' ? 'Khớp trích dẫn' : 'Link Check'}</span>
               {consistencyAllMatched && (
                 <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0" />
               )}
@@ -544,7 +523,7 @@ export function ReportSummaryAndNavBar({
               }`}
             >
               <ListChecks className="h-3.5 w-3.5 shrink-0" />
-              <span>{lang === 'vi' ? 'Nhất quán' : 'Consistency'}</span>
+              <span>{lang === 'vi' ? 'Khớp trích dẫn' : 'Link Check'}</span>
               {consistencyAllMatched && (
                 <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0" />
               )}
@@ -558,14 +537,14 @@ export function ReportSummaryAndNavBar({
             data-testid="locked-consistency-btn"
             onClick={() =>
               handleLockedClick(
-                'Kiểm tra thiếu / thừa (Gói Pro)',
-                'Consistency Check (Pro)',
+                'Kiểm tra khớp trích dẫn (Gói Pro)',
+                'Citation Link Check (Pro)',
               )
             }
             className={`${tabBase} text-slate-400 dark:text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400`}
           >
             <Lock className="h-3 w-3 shrink-0" />
-            <span>{lang === 'vi' ? 'Nhất quán' : 'Consistency'}</span>
+            <span>{lang === 'vi' ? 'Khớp trích dẫn' : 'Link Check'}</span>
           </button>
         )}
 
@@ -609,8 +588,8 @@ export function ReportSummaryAndNavBar({
             data-testid="locked-graph-btn"
             onClick={() =>
               handleLockedClick(
-                'Sơ đồ luồng kiểm chứng (Gói Pro)',
-                'Citation Verification Network (Pro)',
+                'Sơ đồ liên kết trích dẫn (Gói Pro)',
+                'Citation Network Map (Pro)',
               )
             }
             className={`${tabBase} text-slate-400 dark:text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400`}
@@ -620,7 +599,7 @@ export function ReportSummaryAndNavBar({
           </button>
         )}
 
-        {/* Tab 6: Logic Trace / Verification Reasoning (L3) */}
+        {/* Tab 6: Check Details / Summary (L3) */}
         {canTrace ? (
           <Link
             to={`/verification/report/${essayId}/trace`}
@@ -633,7 +612,7 @@ export function ReportSummaryAndNavBar({
             }`}
           >
             <Layers className="h-3.5 w-3.5 shrink-0" />
-            <span>{lang === 'vi' ? 'Cách kiểm tra' : 'Verification'}</span>
+            <span>{lang === 'vi' ? 'Chi tiết kiểm tra' : 'Check Details'}</span>
           </Link>
         ) : (
           <button
@@ -643,14 +622,14 @@ export function ReportSummaryAndNavBar({
             data-testid="locked-trace-btn"
             onClick={() =>
               handleLockedClick(
-                'Chi tiết cách hệ thống kiểm chứng (Gói Pro)',
-                'Verification Reasoning (Pro)',
+                'Chi tiết kiểm tra trích dẫn (Gói Pro)',
+                'Check Details (Pro)',
               )
             }
             className={`${tabBase} text-slate-400 dark:text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400`}
           >
             <Lock className="h-3 w-3 shrink-0" />
-            <span>{lang === 'vi' ? 'Cách kiểm tra' : 'Verification'}</span>
+            <span>{lang === 'vi' ? 'Chi tiết kiểm tra' : 'Check Details'}</span>
           </button>
         )}
       </div>
@@ -676,7 +655,7 @@ interface MetadataFields {
 interface SymbolicRuleDisplay {
   code: string;
   name: string;
-  condition: string;
+  explanation: string;
   status: 'passed' | 'warning' | 'failed';
 }
 
@@ -696,36 +675,6 @@ type CrossLingualFeaturesExt = NonNullable<Verdict['features']> & {
   semantic_similarity?: number;
   cross_lingual_direction?: string;
 };
-
-const VI_DIACRITIC_RE =
-  /[ăâđêôơưáàảãạắằẳẵặấầẩẫậéèẻẽẹếềểễệíìỉĩịóòỏõọốồổỗộớờởỡợúùủũụứừửữựýỳỷỹỵ]/i;
-
-function detectCrossLingualDirection(
-  citedSample: string,
-  canonicalSample: string,
-  explicitDir?: string,
-): 'VI → EN' | 'EN → VI' | 'VI ↔ EN' {
-  if (explicitDir) {
-    const up = explicitDir.toUpperCase();
-    if (up.includes('VI') && up.includes('EN')) {
-      if (up.indexOf('VI') < up.indexOf('EN') && (up.includes('->') || up.includes('→') || up.includes('_TO_'))) {
-        return 'VI → EN';
-      }
-      if (up.indexOf('EN') < up.indexOf('VI') && (up.includes('->') || up.includes('→') || up.includes('_TO_'))) {
-        return 'EN → VI';
-      }
-    }
-  }
-  const citedHasVi = VI_DIACRITIC_RE.test(citedSample);
-  const canonicalHasVi = VI_DIACRITIC_RE.test(canonicalSample);
-  if (citedHasVi && !canonicalHasVi && canonicalSample.trim().length > 0) {
-    return 'VI → EN';
-  }
-  if (!citedHasVi && canonicalHasVi && citedSample.trim().length > 0) {
-    return 'EN → VI';
-  }
-  return 'VI ↔ EN';
-}
 
 function formatRevisionVerdictLabel(
   rawLabel: string | null | undefined,
@@ -799,452 +748,527 @@ const RULE_CATALOG: Record<
   {
     nameVi: string;
     nameEn: string;
-    condition: string;
+    explanationVi: string;
+    explanationEn: string;
     status: 'passed' | 'warning' | 'failed';
   }
 > = {
   'R-DOI-TITLE-AUTHOR': {
-    nameVi: 'Xác thực tuyệt đối DOI + Tiêu đề + Tác giả',
-    nameEn: 'Exact DOI + Title + Author Match',
-    condition: 'IF doi_exact_match == 1.0 AND title_sim >= 0.90 AND author_jaccard >= 0.70 THEN VERIFIED',
+    nameVi: 'Khớp mã DOI, tiêu đề và tác giả',
+    nameEn: 'DOI, Title, and Authors Match',
+    explanationVi: 'Mã DOI khớp chính xác với bản gốc, đồng thời tiêu đề và danh sách tác giả đều trùng khớp.',
+    explanationEn: 'The cited DOI matches the published record, and both the title and authors align closely.',
     status: 'passed',
   },
   'R-WELL-LINKED': {
-    nameVi: 'Khớp đa trường độ tin cậy cao',
-    nameEn: 'High-Confidence Multi-Field Match',
-    condition: 'IF title_sim_fuzzy >= 0.88 AND author_jaccard >= 0.75 AND year_distance == 0 THEN VERIFIED',
+    nameVi: 'Khớp chặt chẽ tiêu đề, tác giả và năm xuất bản',
+    nameEn: 'Strong Match Across Citation Details',
+    explanationVi: 'Trích dẫn khớp chặt chẽ với tài liệu gốc về tiêu đề, tác giả và năm xuất bản.',
+    explanationEn: 'The citation matches a published record closely across title, authors, and publication year.',
     status: 'passed',
   },
   'R-WELL-LINKED-MODERATE': {
-    nameVi: 'Khớp tiêu đề & tác giả mức khá',
-    nameEn: 'Moderate Title & Author Match',
-    condition: 'IF title_sim_fuzzy >= 0.80 AND author_jaccard >= 0.60 AND year_distance <= 1 THEN VERIFIED',
+    nameVi: 'Khớp tốt tiêu đề và tác giả',
+    nameEn: 'Good Title & Author Match',
+    explanationVi: 'Trích dẫn khớp với tài liệu gốc về tác giả, năm và tiêu đề ở mức tốt.',
+    explanationEn: 'The citation matches a published work by author and year with close title wording.',
     status: 'passed',
   },
   'R-LOCAL_DB_VERIFIED': {
-    nameVi: 'Xác thực trực tiếp từ CSDL ACL / Known Papers nội bộ',
-    nameEn: 'Verified in Local ACL / Known Papers Index',
-    condition: 'IF local_fts5_hit == TRUE AND title_sim >= 0.90 AND year_distance == 0 THEN VERIFIED',
+    nameVi: 'Khớp chính xác trong Thư viện học thuật CITRA',
+    nameEn: 'Verified in CITRA Scholarly Library',
+    explanationVi: 'Tiêu đề, tác giả và năm xuất bản khớp chính xác với bản ghi trong Thư viện học thuật CITRA.',
+    explanationEn: 'Title, authors, and publication year match a verified record in the CITRA Scholarly Library.',
     status: 'passed',
   },
   'R-LOCAL_DB_GOOD_MATCH': {
-    nameVi: 'Khớp tốt trong CSDL nội bộ',
-    nameEn: 'Strong Local Index Candidate Match',
-    condition: 'IF local_fts5_hit == TRUE AND title_sim >= 0.82 AND author_jaccard >= 0.65 THEN VERIFIED',
+    nameVi: 'Khớp độ chính xác cao trong Thư viện học thuật CITRA',
+    nameEn: 'Strong Match in CITRA Scholarly Library',
+    explanationVi: 'Xác nhận tiêu đề và tác giả khớp ở mức cao trong Thư viện học thuật CITRA.',
+    explanationEn: 'High title and author agreement confirmed in the CITRA Scholarly Library.',
     status: 'passed',
   },
   'R-LOCAL_DB': {
-    nameVi: 'Truy hồi từ chỉ mục SQLite FTS5 nội bộ',
-    nameEn: 'Local SQLite FTS5 Index Hit',
-    condition: 'IF source IN ("local_db", "known_papers") AND candidate_confidence >= 0.70 THEN PASS',
+    nameVi: 'Tìm thấy trong Thư viện học thuật CITRA',
+    nameEn: 'Matched in CITRA Scholarly Library',
+    explanationVi: 'Đã tìm thấy bản ghi công trình trong Thư viện học thuật CITRA.',
+    explanationEn: 'Publication record retrieved from the CITRA Scholarly Library.',
     status: 'passed',
   },
   'R-LOCAL_DB_ONLY': {
-    nameVi: 'Đối chiếu độc lập trên CSDL nội bộ',
-    nameEn: 'Standalone Local Database Verification',
-    condition: 'IF external_apis == OFFLINE AND local_db_confidence >= 0.80 THEN VERIFIED',
+    nameVi: 'Xác nhận qua Thư viện học thuật CITRA',
+    nameEn: 'Verified via CITRA Scholarly Library',
+    explanationVi: 'Đã xác nhận trực tiếp trên Thư viện học thuật CITRA khi các thư viện trực tuyến bên ngoài tạm bận.',
+    explanationEn: 'Verified in the CITRA Scholarly Library while external online libraries were temporarily unavailable.',
     status: 'passed',
   },
   'R-KNOWN-PAPER': {
-    nameEn: 'Canonical Benchmark Publication Match',
-    nameVi: 'Công trình kinh điển trong tập chuẩn',
-    condition: 'IF source == "known_papers" AND title_sim >= 0.92 THEN VERIFIED',
+    nameEn: 'Widely Cited Published Work Verified',
+    nameVi: 'Khớp công trình học thuật chuẩn',
+    explanationVi: 'Khớp với công trình nghiên cứu đã được lưu chuẩn trong Thư viện học thuật CITRA.',
+    explanationEn: 'Matches a widely cited published work in the CITRA Scholarly Library.',
     status: 'passed',
   },
   'R-KNOWN-PAPER-NO-TITLE': {
-    nameEn: 'Known Seminal Paper (In-Text Author-Year Match)',
-    nameVi: 'Công trình kinh điển (Khớp Tác giả - Năm trong bài)',
-    condition: 'IF source == "known_papers" AND author_year_match == TRUE THEN VERIFIED',
+    nameEn: 'Matched Published Work by Author & Year',
+    nameVi: 'Khớp công trình học thuật theo tác giả và năm',
+    explanationVi: 'Trích dẫn trong bài khớp với công trình trong Thư viện học thuật CITRA theo tên tác giả và năm xuất bản.',
+    explanationEn: 'In-text citation matches a published work in the CITRA Scholarly Library by author and year.',
     status: 'passed',
   },
   'R-SINGLE-SOURCE-VERIFIED': {
-    nameEn: 'Single Scholarly Registry High-Confidence Match',
-    nameVi: 'Xác thực độ tin cậy cao từ CSDL học thuật đơn nguồn',
-    condition: 'IF live_source_consensus >= 1 AND title_sim_fuzzy >= 0.90 AND author_jaccard >= 0.80 AND year_distance <= 1 THEN VERIFIED',
+    nameEn: 'High-Confidence Library Match',
+    nameVi: 'Khớp độ chính xác cao từ thư viện học thuật',
+    explanationVi: 'Đã xác nhận trên thư viện học thuật trực tuyến với tiêu đề, tác giả và năm xuất bản khớp ở mức cao.',
+    explanationEn: 'Verified in an online academic library with strong agreement on title, authors, and publication year.',
     status: 'passed',
   },
   'R-SINGLE-SOURCE-PARTIAL': {
-    nameEn: 'Single Registry Match with Metadata Discrepancy',
-    nameVi: 'Khớp CSDL học thuật nhưng sai lệch Metadata (Năm/Tác giả/Tiêu đề)',
-    condition: 'IF live_source_consensus >= 1 AND title_sim >= 0.60 AND (author_jaccard < 0.50 OR year_distance > 1) THEN METADATA_ERROR',
+    nameEn: 'Library Match with Details Discrepancy',
+    nameVi: 'Tìm thấy trong thư viện nhưng thông tin chưa khớp',
+    explanationVi: 'Tìm thấy hồ sơ công trình trên thư viện học thuật nhưng năm xuất bản, tác giả hoặc tiêu đề chưa khớp hoàn toàn.',
+    explanationEn: 'Found the published record in an academic library, but the author, year, or title differs slightly.',
     status: 'warning',
   },
   'R-VN-LEGAL-FORMAT': {
-    nameEn: 'Legal / Statutory Document Format Verified',
-    nameVi: 'Xác thực định dạng Văn bản Pháp luật / Quy phạm',
-    condition: 'IF is_legal_statutory_reference == TRUE THEN VERIFIED',
+    nameEn: 'Legal / Statutory Document Format',
+    nameVi: 'Định dạng văn bản quy phạm pháp luật',
+    explanationVi: 'Khớp định dạng trích dẫn văn bản quy phạm pháp luật chính thức.',
+    explanationEn: 'Matches official statutory or government legal document citation format.',
     status: 'passed',
   },
   'R-LEGAL-DOCUMENT': {
-    nameEn: 'Vietnamese Statutory / Regulatory Document Classification',
-    nameVi: 'Phân loại Văn bản Quy phạm Pháp luật Việt Nam (TDTU §2.6.1)',
-    condition: 'IF matched_pattern == "vn_legal_document" THEN ROUTE_VN_LEGAL_VERIFIER',
+    nameEn: 'Vietnamese Statutory Legal Document',
+    nameVi: 'Văn bản quy phạm pháp luật Việt Nam',
+    explanationVi: 'Nhận diện văn bản quy phạm pháp luật Việt Nam (Luật, Bộ luật, Nghị định, Thông tư, Nghị quyết, Quyết định).',
+    explanationEn: 'Recognized Vietnamese statutory instrument (Law, Code, Decree, Circular, Resolution, or Decision).',
     status: 'passed',
   },
   'R-VN-LEGAL-VERIFIED': {
-    nameEn: 'Vietnamese Statutory Code & Authority Verified',
-    nameVi: 'Xác thực Số hiệu, Năm ban hành & Thẩm quyền Văn bản Pháp luật VN',
-    condition: 'IF statute_code_match == TRUE AND issuing_authority_match == TRUE THEN VERIFIED',
+    nameEn: 'Verified in Vietnamese Legal Registry',
+    nameVi: 'Xác nhận trên Thư viện văn bản pháp luật Việt Nam',
+    explanationVi: 'Đã xác nhận số hiệu, năm ban hành và cơ quan ban hành đối chiếu với Thư viện văn bản pháp luật Việt Nam.',
+    explanationEn: 'Verified document number, promulgation year, and issuing authority against the Vietnamese Legal Registry.',
     status: 'passed',
   },
   'R-VN-LEGAL-SUPERSEDED': {
-    nameEn: 'Vietnamese Statute Verified (Superseded / Expired Notice)',
-    nameVi: 'Cảnh báo hiệu lực: Văn bản Pháp luật đã hết hiệu lực / được thay thế',
-    condition: 'IF statute_in_registry == TRUE AND is_superseded == TRUE THEN WARN_SUPERSEDED',
+    nameEn: 'Superseded Vietnamese Legal Document',
+    nameVi: 'Văn bản pháp luật đã hết hiệu lực hoặc bị thay thế',
+    explanationVi: 'Luật hoặc Nghị định được trích dẫn đã hết hiệu lực hoặc được thay thế bởi văn bản pháp luật mới hơn.',
+    explanationEn: 'The cited Vietnamese law or decree has been superseded or replaced by a newer legal document.',
     status: 'warning',
   },
   'R-VN-LEGAL-MISMATCH': {
-    nameEn: 'Vietnamese Statutory Number / Year / Authority Mismatch',
-    nameVi: 'Sai lệch Số hiệu, Năm ban hành hoặc Cơ quan ban hành Văn bản Pháp luật VN',
-    condition: 'IF statute_year_conflict == TRUE OR authority_conflict == TRUE THEN METADATA_ERROR',
+    nameEn: 'Vietnamese Legal Document Details Mismatch',
+    nameVi: 'Sai lệch thông tin văn bản pháp luật Việt Nam',
+    explanationVi: 'Tìm thấy văn bản pháp luật tương ứng nhưng năm ban hành, số hiệu hoặc cơ quan ban hành chưa khớp.',
+    explanationEn: 'Found the matching Vietnamese legal document, but the promulgation year, number, or issuing agency differs.',
     status: 'failed',
   },
   'R-BOOK-EDITION-VERIFIED': {
-    nameEn: 'Canonical Book / Monograph Edition Verified',
-    nameVi: 'Xác thực ấn bản Sách chuyên khảo / Giáo trình (Edition Match)',
-    condition: 'IF openlibrary_edition_match == TRUE AND title_sim >= 0.90 AND author_jaccard >= 0.70 THEN VERIFIED',
+    nameEn: 'Book or Textbook Edition Verified',
+    nameVi: 'Xác nhận ấn bản sách hoặc giáo trình',
+    explanationVi: 'Đã xác nhận ấn bản giáo trình hoặc sách chuyên khảo đối chiếu với OpenLibrary và Google Books.',
+    explanationEn: 'Verified book or textbook edition against OpenLibrary and Google Books.',
     status: 'passed',
   },
   'R-GLOBAL-DOI-RA-VERIFIED': {
-    nameEn: 'Global DOI Registration Agency Verified (JaLC/CNKI/mEDRA/KISTI)',
-    nameVi: 'Xác thực Cơ quan Đăng ký DOI Quốc tế (JaLC/CNKI/mEDRA/KISTI)',
-    condition: 'IF source == "doi_ra" AND doi_exact_match == TRUE AND title_sim >= 0.85 THEN VERIFIED',
+    nameEn: 'Verified via Global DOI Registry',
+    nameVi: 'Xác nhận qua Hệ thống đăng ký DOI quốc tế',
+    explanationVi: 'Đã xác nhận mã DOI và thông tin công trình qua Hệ thống đăng ký DOI quốc tế.',
+    explanationEn: 'Verified through the Global DOI Registry (DataCite, JaLC, mEDRA, KISTI, CNKI) with matching details.',
     status: 'passed',
   },
   'R-HF-VERIFIED': {
-    nameEn: 'Hugging Face Hub Model / Dataset / Paper Verified',
-    nameVi: 'Xác thực Mô hình / Bộ dữ liệu / Bài báo trên Hugging Face Hub',
-    condition: 'IF source == "huggingface" AND title_sim >= 0.85 THEN VERIFIED',
+    nameEn: 'Verified on Hugging Face',
+    nameVi: 'Xác nhận tài nguyên trên Hugging Face',
+    explanationVi: 'Đã xác nhận mô hình, bộ dữ liệu hoặc bài nghiên cứu tương ứng trên Hugging Face.',
+    explanationEn: 'Verified AI model, dataset, or research paper record on Hugging Face.',
     status: 'passed',
   },
   'R-RFC-VERIFIED': {
-    nameEn: 'IETF RFC Standard / PyPI / NPM / GitHub Verified',
-    nameVi: 'Xác thực Chuẩn IETF RFC / Gói phần mềm PyPI / NPM / GitHub',
-    condition: 'IF source == "tech_standard" AND title_sim >= 0.80 THEN VERIFIED',
+    nameEn: 'Verified Technical Standard or Repository',
+    nameVi: 'Xác nhận tiêu chuẩn kỹ thuật hoặc mã nguồn',
+    explanationVi: 'Đã xác nhận tiêu chuẩn kỹ thuật (IETF RFC), thư viện phần mềm (PyPI / NPM) hoặc kho mã nguồn GitHub.',
+    explanationEn: 'Verified technical standard (IETF RFC), software package (PyPI / NPM), or public GitHub repository.',
     status: 'passed',
   },
   'R-GITHUB-VERIFIED': {
-    nameEn: 'GitHub Public Repository & CITATION.cff Verified',
-    nameVi: 'Xác thực Kho mã nguồn GitHub & Hồ sơ CITATION.cff',
-    condition: 'IF source == "tech_standard" AND github_repo != NULL AND title_sim >= 0.80 THEN VERIFIED',
+    nameEn: 'Verified GitHub Repository',
+    nameVi: 'Xác nhận kho mã nguồn GitHub',
+    explanationVi: 'Đã xác nhận kho mã nguồn GitHub công khai và thông tin trích dẫn tương ứng.',
+    explanationEn: 'Verified public GitHub repository and citation metadata.',
     status: 'passed',
   },
   'R-PACKAGE-VERIFIED': {
-    nameEn: 'PyPI / NPM Software Package Registry Verified',
-    nameVi: 'Xác thực Gói thư viện Mã nguồn mở trên PyPI / NPM Registry',
-    condition: 'IF source == "tech_standard" AND (npm_package != NULL OR pypi_package != NULL) THEN VERIFIED',
+    nameEn: 'Verified Software Package (PyPI / NPM)',
+    nameVi: 'Xác nhận gói phần mềm (PyPI / NPM)',
+    explanationVi: 'Đã xác nhận thông tin phát hành gói phần mềm và tác giả trên PyPI hoặc NPM.',
+    explanationEn: 'Verified software package release details and authors on PyPI or NPM.',
     status: 'passed',
   },
   'R-WIKIDATA-VERIFIED': {
-    nameEn: 'Wikidata Knowledge Graph / OpenCitations Verified',
-    nameVi: 'Xác thực Chuẩn quốc tế / Cẩm nang lâm sàng / DOI qua Wikidata & OpenCitations',
-    condition: 'IF source == "wikidata_opencitations" AND title_sim >= 0.80 THEN VERIFIED',
+    nameEn: 'Verified via Wikidata / OpenCitations',
+    nameVi: 'Xác nhận qua Wikidata / OpenCitations',
+    explanationVi: 'Đã xác nhận tiêu chuẩn quốc tế (ISO/IEC, NIST, IEEE, OWASP, WCAG), tài liệu hướng dẫn hoặc mã DOI qua Wikidata và OpenCitations.',
+    explanationEn: 'Verified international standard, reference manual, or DOI via Wikidata and OpenCitations.',
     status: 'passed',
   },
   'R-WAYBACK-ARCHIVED': {
-    nameEn: 'Wayback Machine Archival Snapshot Verified (Link Rot Rescued)',
-    nameVi: 'Xác thực Bản lưu trữ Internet Archive Wayback Machine (Link Rot)',
-    condition: 'IF url_status == "archived_alive" AND archive_url != NULL THEN WARN_LINK_ROT_NOT_HALLUCINATION',
+    nameEn: 'Web Archive Copy Found',
+    nameVi: 'Tìm thấy bản lưu trữ web dự phòng',
+    explanationVi: 'Trang web gốc hiện không còn mở được, nhưng đã tìm thấy bản lưu trữ hợp lệ trên Internet Archive.',
+    explanationEn: 'The original web page is no longer reachable, but a saved historical copy was found on Internet Archive.',
     status: 'warning',
   },
   'R-RETRACTED-PAPER': {
-    nameEn: 'Retracted Publication Alert (Retraction Watch / Crossref)',
-    nameVi: 'CẢNH BÁO NGHIÊM TRỌNG: Bài báo đã bị rút hồi (Retracted Paper)',
-    condition: 'IF is_retracted == TRUE THEN METADATA_ERROR (FLAG_RETRACTED_PAPER)',
+    nameEn: 'Retracted Publication Notice',
+    nameVi: 'Cảnh báo: Bài báo đã bị rút bài',
+    explanationVi: 'Ấn phẩm này đã chính thức bị rút bài theo ghi nhận từ nhà xuất bản và thư viện học thuật. Bạn nên cân nhắc thay bằng nguồn khác.',
+    explanationEn: 'This publication has been officially retracted by its publisher or scholarly registry. Consider replacing it.',
     status: 'failed',
   },
   'R-CONSENSUS-FULL': {
-    nameVi: 'Đồng thuận đa nguồn học thuật (≥ 2 CSDL)',
-    nameEn: 'Multi-Source Scholarly Consensus (≥ 2 DBs)',
-    condition: 'IF source_consensus >= 2 AND metadata_conflict == FALSE THEN BOOST_CONFIDENCE(+0.10)',
+    nameVi: 'Được xác nhận đồng thời trên nhiều thư viện học thuật',
+    nameEn: 'Confirmed by Multiple Academic Libraries',
+    explanationVi: 'Nhiều thư viện học thuật cùng xác nhận trùng khớp về tiêu đề, tác giả và năm xuất bản.',
+    explanationEn: 'Multiple academic libraries agree on the title, authors, and publication year.',
     status: 'passed',
   },
   'R-CONSENSUS-PARTIAL': {
-    nameVi: 'Đồng thuận một phần giữa các nguồn',
-    nameEn: 'Partial Cross-Database Consensus',
-    condition: 'IF matched_sources >= 1 AND partial_field_agreement == TRUE THEN WARN',
+    nameVi: 'Tìm thấy trên thư viện nhưng một vài chi tiết chưa khớp',
+    nameEn: 'Matched in Libraries with Some Details Differing',
+    explanationVi: 'Các thư viện học thuật đã tìm thấy công trình này nhưng một vài thông tin (như năm hoặc tác giả) chưa khớp.',
+    explanationEn: 'Academic libraries found this publication, but some citation details differ from the published record.',
     status: 'warning',
   },
   'R-DOI-TITLE-MISMATCH': {
-    nameVi: 'Xung đột giữa DOI và Tiêu đề bài báo',
-    nameEn: 'DOI vs. Title Cross-Check Conflict',
-    condition: 'IF doi_resolved == TRUE AND title_sim_fuzzy < 0.65 THEN METADATA_ERROR',
+    nameVi: 'Khớp mã DOI nhưng tiêu đề chưa khớp',
+    nameEn: 'DOI Matched, Title Differs',
+    explanationVi: 'Mã DOI dẫn đến bài báo có thật, nhưng tiêu đề bạn ghi trong bài khác với bản gốc.',
+    explanationEn: 'The DOI points to a real publication, but the title in your citation differs from the published record.',
     status: 'warning',
   },
   'R-KNOWN-AUTHOR-TITLE-MISMATCH': {
-    nameVi: 'Tác giả có thật nhưng sai lệch Metadata / Năm / Tiêu đề',
-    nameEn: 'Known Author with Metadata / Year / Title Drift',
-    condition: 'IF author_matched == TRUE AND (year_distance > 0 OR title_sim < 0.85) THEN METADATA_ERROR',
+    nameVi: 'Tác giả khớp nhưng thông tin bài báo có sai lệch',
+    nameEn: 'Author Recognized, Details Differ',
+    explanationVi: 'Đã tìm thấy tác giả trong thư viện học thuật nhưng năm xuất bản hoặc tiêu đề có khác biệt so với bản gốc.',
+    explanationEn: 'The author was found in academic libraries, but the cited year or title differs from the published record.',
     status: 'warning',
   },
   'R-KNOWN-AUTHOR-WEAK-EVIDENCE': {
-    nameVi: 'Tác giả khớp một phần nhưng thiếu bằng chứng nguồn',
-    nameEn: 'Known Author with Weak Bibliographic Evidence',
-    condition: 'IF author_jaccard >= 0.50 AND candidate_confidence < 0.65 THEN METADATA_ERROR',
+    nameVi: 'Tác giả khớp nhưng thông tin công trình chưa đủ rõ',
+    nameEn: 'Author Recognized, Source Details Uncertain',
+    explanationVi: 'Tìm thấy tên tác giả nhưng thông tin bài báo trong thư viện còn khác nhiều so với trích dẫn của bạn.',
+    explanationEn: 'The author was found, but the matching record differs noticeably from your citation details.',
     status: 'warning',
   },
   'R-WEAK-EVIDENCE': {
-    nameVi: 'Độ tương đồng ứng viên thấp (Weak Evidence)',
-    nameEn: 'Low Candidate Similarity Score',
-    condition: 'IF max_candidate_confidence BETWEEN [0.40, 0.70) THEN METADATA_ERROR',
+    nameVi: 'Thông tin đối chiếu chưa đủ khớp',
+    nameEn: 'Partial Match Only — Manual Check Suggested',
+    explanationVi: 'Tìm thấy vài tài liệu gần giống nhưng độ khớp còn thấp nên chưa thể tự động xác nhận.',
+    explanationEn: 'Some similar titles were found, but the details are too different to confirm automatically.',
     status: 'warning',
   },
   'R-CONTENT-ALIGNMENT': {
-    nameVi: 'Ngữ cảnh trích dẫn khớp nội dung nguồn',
-    nameEn: 'In-Text Context Semantic Alignment',
-    condition: 'IF context_abstract_cosine >= 0.65 THEN PASS',
+    nameVi: 'Ngữ cảnh trích dẫn phù hợp với nội dung nguồn',
+    nameEn: 'Context Matches Source Summary',
+    explanationVi: 'Đoạn văn trích dẫn trong bài phù hợp về nội dung với tóm tắt của tài liệu gốc.',
+    explanationEn: 'The sentence where this source is cited aligns well with the summary of the published work.',
     status: 'passed',
   },
   'R-CROSS-LINGUAL-ALIGNMENT': {
-    nameVi: 'Căn chỉnh ngữ nghĩa đa ngôn ngữ Việt ↔ Anh (Cross-Lingual Semantic Alignment)',
-    nameEn: 'Vietnamese ↔ English Cross-Lingual Semantic Alignment',
-    condition: 'IF cross_lingual_detected == TRUE AND content_alignment_score >= 0.35 THEN VERIFIED',
+    nameVi: 'Khớp nội dung song ngữ Việt ↔ Anh',
+    nameEn: 'Cross-Language Meaning Match (VI ↔ EN)',
+    explanationVi: 'Đoạn văn tiếng Việt trong bài phù hợp về nội dung với tóm tắt tiếng Anh của bài báo gốc.',
+    explanationEn: 'The Vietnamese sentence in your essay aligns in meaning with the English summary of the cited paper.',
     status: 'passed',
   },
   'R-CROSS-LINGUAL-TITLE-MATCH': {
-    nameVi: 'Tiêu đề bài báo nước ngoài bị dịch sang tiếng Việt (Thiếu tiêu đề gốc)',
-    nameEn: 'Translated Foreign-Language Title Without Original Title (TDTU Guideline)',
-    condition: 'IF cross_lingual_title_detected == TRUE AND cross_lingual_title_sim >= 0.58 THEN METADATA_ERROR (title)',
+    nameVi: 'Tiêu đề bài báo nước ngoài đang bị dịch sang tiếng Việt',
+    nameEn: 'Foreign-Language Title Was Translated',
+    explanationVi: 'Tiêu đề dịch tiếng Việt khớp nội dung với bài báo gốc tiếng Anh. Theo thông lệ học thuật, hãy giữ nguyên tiêu đề gốc bằng tiếng nước ngoài (có thể ghi thêm bản dịch trong ngoặc vuông).',
+    explanationEn: 'The translated title matches an English published work. Academic citation guidelines recommend keeping the original title (optionally adding a translation in brackets).',
     status: 'warning',
   },
   'R-CONTENT-MISMATCH': {
-    nameVi: 'Ngữ cảnh trích dẫn mâu thuẫn với tóm tắt bài gốc',
-    nameEn: 'In-Text Claim vs. Source Abstract Mismatch',
-    condition: 'IF context_abstract_cosine < 0.30 THEN WARN_CONTENT_DRIFT',
+    nameVi: 'Ngữ cảnh trích dẫn có thể khác chủ đề bài gốc',
+    nameEn: 'Context May Differ from Source Topic',
+    explanationVi: 'Tiêu đề khớp nhưng đoạn văn trích dẫn trong bài có nội dung khá khác với tóm tắt tài liệu gốc — hãy kiểm tra lại.',
+    explanationEn: 'The title matches, but the surrounding sentence in your essay appears unrelated to the source summary. Please confirm this is the intended source.',
     status: 'warning',
   },
   'R-STYLE-INCONSISTENT': {
-    nameVi: 'Sai lệch chuẩn định dạng trích dẫn (APA/IEEE)',
-    nameEn: 'Citation Formatting Style Inconsistency',
-    condition: 'IF citation_style != dominant_document_style THEN APPLY_STYLE_PENALTY',
+    nameVi: 'Chưa thống nhất kiểu định dạng trích dẫn',
+    nameEn: 'Mixed Citation Formatting Style',
+    explanationVi: 'Cách trình bày trích dẫn này khác với chuẩn chung của toàn bài viết.',
+    explanationEn: 'This citation uses a different formatting style from the rest of your document.',
     status: 'warning',
   },
   'R-WEB-RESOURCE': {
-    nameVi: 'Tài nguyên Web / URL phi học thuật',
-    nameEn: 'Non-Scholarly Web URL Resource',
-    condition: 'IF has_url == TRUE AND no_doi == TRUE AND no_academic_venue == TRUE THEN RESOURCE',
+    nameVi: 'Tài nguyên web hoặc tài liệu kỹ thuật',
+    nameEn: 'Web or Technical Documentation',
+    explanationVi: 'Nhận diện là trang hướng dẫn trực tuyến, tài liệu kỹ thuật hoặc trang web tham khảo.',
+    explanationEn: 'Recognized as an online guide, official web page, or technical specification.',
     status: 'passed',
   },
   'R-URL-RESOURCE': {
-    nameVi: 'Liên kết URL trực tiếp',
-    nameEn: 'Direct URL Reference',
-    condition: 'IF citation_type == "url" THEN RESOURCE',
+    nameVi: 'Trích dẫn đường dẫn web trực tiếp',
+    nameEn: 'Direct Web Link Reference',
+    explanationVi: 'Nhận diện là đường dẫn trang web hoặc kho mã nguồn trực tiếp.',
+    explanationEn: 'Recognized as a direct web page or software repository link.',
     status: 'passed',
   },
   'R-FAKE-URL': {
-    nameVi: 'URL hoặc tên miền không tồn tại / giả mạo',
-    nameEn: 'Unresolvable or Fabricated URL',
-    condition: 'IF url_status >= 400 OR domain_resolvable == FALSE THEN SUSPECTED_HALLUCINATION',
+    nameVi: 'Liên kết web là địa chỉ mẫu hoặc không hợp lệ',
+    nameEn: 'Unrecognized or Placeholder Web Link',
+    explanationVi: 'Đường dẫn sử dụng tên miền mẫu (như example.com, test.com) hoặc không thuộc nguồn tài liệu thực tế.',
+    explanationEn: 'The web address uses a placeholder domain (such as example.com or test.com) rather than a live publication source.',
     status: 'failed',
   },
   'R-FABRICATED-DOI': {
-    nameVi: 'Mã DOI không tồn tại trên hệ thống Crossref/DataCite',
-    nameEn: 'Non-Existent / Fabricated DOI Prefix',
-    condition: 'IF cited_doi != NULL AND crossref_doi_lookup == 404 THEN SUSPECTED_HALLUCINATION',
+    nameVi: 'Mã DOI chưa được đăng ký',
+    nameEn: 'Unregistered DOI Format',
+    explanationVi: 'Mã DOI sử dụng tiền tố thử nghiệm hoặc chưa được đăng ký trên các hệ thống DOI chính thức.',
+    explanationEn: 'The cited DOI uses an unrecognized or test prefix not found in official DOI registries.',
     status: 'failed',
   },
   'R-FAKE-AUTHOR': {
-    nameVi: 'Tổ hợp Tác giả + Công trình không tồn tại',
-    nameEn: 'Unverifiable Author-Publication Combination',
-    condition: 'IF author_jaccard == 0.0 AND max_title_sim < 0.45 THEN SUSPECTED_HALLUCINATION',
+    nameVi: 'Tên tác giả có dạng mẫu thử hoặc chưa khớp nguồn',
+    nameEn: 'Placeholder or Unmatched Author Name',
+    explanationVi: 'Tên tác giả có dạng ví dụ minh họa hoặc chưa khớp với tác giả nào trong thư viện học thuật.',
+    explanationEn: 'The author name looks like a placeholder or does not match a published author in academic libraries.',
     status: 'failed',
   },
   'R-FUTURE-YEAR': {
-    nameVi: 'Năm xuất bản vượt quá thời điểm hiện tại',
-    nameEn: 'Impossibly Future Publication Year',
-    condition: 'IF cited_year > current_year + 1 THEN SUSPECTED_HALLUCINATION',
+    nameVi: 'Năm xuất bản ở tương lai',
+    nameEn: 'Future Publication Year',
+    explanationVi: 'Năm xuất bản lớn hơn năm hiện tại — vui lòng kiểm tra lại xem có lỗi gõ năm không.',
+    explanationEn: 'The listed publication year is in the future — please check for a year typo.',
     status: 'failed',
   },
   'R-FUTURE-YEAR-KNOWN-AUTHOR': {
-    nameEn: 'Publication Year Discrepancy on Known Work',
-    nameVi: 'Sai năm xuất bản (lệch năm so với bản gốc)',
-    condition: 'IF title_sim >= 0.85 AND abs(cited_year - actual_year) >= 1 THEN METADATA_ERROR',
+    nameEn: 'Future Year for Known Author',
+    nameVi: 'Năm xuất bản ở tương lai (đã tìm thấy tác giả)',
+    explanationVi: 'Năm xuất bản lớn hơn năm hiện tại nhưng tác giả có trong thư viện — có thể là lỗi gõ nhầm năm.',
+    explanationEn: 'The publication year is in the future, though the author is recognized — likely a year typo.',
     status: 'warning',
   },
   'R-AMBIGUOUS-MAPPING': {
-    nameEn: 'Ambiguous In-Text to Bibliography Mapping',
-    nameVi: 'Ánh xạ trích dẫn trong bài và danh mục tài liệu nhập nhằng',
-    condition: 'IF mapping_status == "ambiguous_mapping" THEN UNRESOLVED (CAP_CONFIDENCE <= 0.55)',
+    nameEn: 'Matches Multiple Reference Entries',
+    nameVi: 'Trích dẫn có thể trùng nhiều mục tham khảo',
+    explanationVi: 'Không thể xác định chắc chắn trích dẫn trong bài đang nối tới mục nào trong danh mục tài liệu tham khảo.',
+    explanationEn: 'This in-text citation could match more than one entry in your reference list.',
     status: 'warning',
   },
   'R-ABSTENTION-BORDER': {
-    nameEn: 'Abstention Border Zone (Uncertain Similarity)',
-    nameVi: 'Vùng biên từ chối phán quyết (Độ tương đồng chưa đủ kết luận)',
-    condition: 'IF 0.40 <= title_sim_max <= 0.60 THEN UNRESOLVED',
+    nameEn: 'Uncertain Match — Manual Check Needed',
+    nameVi: 'Độ khớp trung bình — cần bạn tự kiểm tra',
+    explanationVi: 'Tìm thấy một tài liệu có nét tương đồng nhưng chưa đủ chắc chắn để tự động xác nhận.',
+    explanationEn: 'Found a somewhat similar publication, but not close enough to confirm automatically.',
     status: 'warning',
   },
   'R-DOMAIN-EXCEPTION': {
-    nameEn: 'Domain / Broken Link Exception on Verified Record',
-    nameVi: 'Ngoại lệ liên kết lỗi trên công trình có thật trong CSDL',
-    condition: 'IF scholarly_record_exists == TRUE AND (url_status == "dead_link" OR title_sim < 0.60) THEN FLAG_DOMAIN_EXCEPTION',
+    nameEn: 'DOI Matched, Title or Link Needs Review',
+    nameVi: 'Mã DOI khớp nhưng tiêu đề hoặc liên kết cần xem lại',
+    explanationVi: 'Mã DOI khớp với bài báo có thật, nhưng tiêu đề có sai lệch hoặc đường dẫn đính kèm không mở được.',
+    explanationEn: 'The DOI resolves to a real publication, though the title differs or the attached link could not be opened.',
     status: 'warning',
   },
   'R-INCOMPLETE-METADATA': {
-    nameEn: 'Incomplete Bibliographic Reference (Missing Author / Year / Venue)',
-    nameVi: 'Thiếu quy cách trích dẫn học thuật (Thiếu Tác giả / Năm / Nơi công bố)',
-    condition: 'IF is_incomplete == TRUE AND has_resolvable_id == FALSE THEN METADATA_ERROR',
+    nameEn: 'Incomplete Citation Details',
+    nameVi: 'Thiếu thông tin trích dẫn',
+    explanationVi: 'Mục tài liệu tham khảo còn thiếu thông tin quan trọng (tác giả, năm xuất bản, nơi công bố hoặc mã định danh) — hãy bổ sung cho đầy đủ.',
+    explanationEn: 'This reference entry is missing required details such as author, publication year, venue, or identifier — please complete it.',
     status: 'warning',
   },
   'R-URL-CONTENT-MISMATCH': {
-    nameEn: 'Cited Web Page Title / Metadata Mismatch',
-    nameVi: 'Nội dung / Tiêu đề trang URL không khớp tiêu đề trích dẫn',
-    condition: 'IF url_status == "alive" AND html_meta_title_sim < 0.20 THEN METADATA_ERROR',
+    nameEn: 'Web Page Title Does Not Match Citation',
+    nameVi: 'Tiêu đề trang web không khớp với trích dẫn',
+    explanationVi: 'Đường dẫn vẫn mở được nhưng tiêu đề trang web đích không khớp với tiêu đề bạn ghi trong bài.',
+    explanationEn: 'The web link opens, but the page title at that address does not match the title in your citation.',
     status: 'warning',
   },
   'R-BROKEN-LINK': {
-    nameEn: 'Broken / Unreachable Citation URL (HTTP 404/410/DNS)',
-    nameVi: 'Liên kết URL trích dẫn bị hỏng hoặc không thể truy cập (HTTP 404/410)',
-    condition: 'IF url_status == "dead_link" AND scholarly_record_verified == TRUE THEN PENALIZE_IDENTIFIER_VALIDITY',
+    nameEn: 'Attached Link Unreachable on Verified Paper',
+    nameVi: 'Đường dẫn đính kèm không mở được (bài báo có thật)',
+    explanationVi: 'Công trình học thuật có thật nhưng đường dẫn đính kèm trong trích dẫn hiện không thể truy cập.',
+    explanationEn: 'The publication itself exists, but the web link included in your citation currently cannot be opened.',
     status: 'warning',
   },
   'R-DEAD-URL': {
-    nameEn: 'Dead Citation URL with No Scholarly Record',
-    nameVi: 'URL trích dẫn chết và không tồn tại hồ sơ học thuật',
-    condition: 'IF url_status == "dead_link" AND count(matched_candidates) == 0 THEN SUSPECTED_HALLUCINATION',
+    nameEn: 'Link Unreachable & No Matching Publication',
+    nameVi: 'Đường dẫn không mở được và chưa tìm thấy bài gốc',
+    explanationVi: 'Đường dẫn trích dẫn hiện không mở được và chưa tìm thấy công trình học thuật nào khớp.',
+    explanationEn: 'The cited web link could not be opened and no matching publication was found across academic libraries.',
     status: 'failed',
   },
   'R-NONEXISTENT-DOI': {
-    nameEn: 'Non-Existent DOI in Scholarly Registries',
-    nameVi: 'Mã DOI không tồn tại trên các CSDL học thuật',
-    condition: 'IF cited_doi != NULL AND doi_exact_match == FALSE AND title_sim_max < 0.60 THEN SUSPECTED_HALLUCINATION',
+    nameEn: 'DOI Not Found in Official Registries',
+    nameVi: 'Mã DOI không tìm thấy trên hệ thống đăng ký',
+    explanationVi: 'Mã DOI bạn ghi không tìm thấy bản ghi công trình nào trên các hệ thống đăng ký học thuật.',
+    explanationEn: 'The cited DOI could not be resolved to any published record across academic registries.',
     status: 'failed',
   },
   'R-NO-SCHOLARLY-RECORD': {
-    nameEn: 'Zero Records Across Live Scholarly Registries',
-    nameVi: 'Không tồn tại bản ghi trên hệ thống CSDL học thuật trực tuyến',
-    condition: 'IF clean_empty_registries >= 2 AND count(candidates) == 0 THEN SUSPECTED_HALLUCINATION',
+    nameEn: 'No Record Found Across Academic Libraries',
+    nameVi: 'Không tìm thấy bản ghi trên các thư viện học thuật',
+    explanationVi: 'Đã tra cứu trên nhiều thư viện học thuật trực tuyến nhưng không tìm thấy bản ghi nào khớp.',
+    explanationEn: 'Multiple online academic libraries were searched cleanly and returned no matching publication.',
     status: 'failed',
   },
   'R-HALLUCINATED-SOURCE': {
-    nameEn: 'Hallucinated / Unverifiable Source Evidence',
-    nameVi: 'Nguồn trích dẫn có dấu hiệu bị AI bịa đặt (Hallucinated Source)',
-    condition: 'IF title_sim_max < 0.40 AND author_jaccard < 0.30 AND doi_exact_match == FALSE THEN SUSPECTED_HALLUCINATION',
+    nameEn: 'No Matching Publication Found',
+    nameVi: 'Không tìm thấy tài liệu khớp trong thư viện học thuật',
+    explanationVi: 'Chưa tìm thấy tài liệu nào trên các thư viện học thuật khớp với tiêu đề, tác giả hoặc mã DOI trong bài.',
+    explanationEn: 'No candidate found across checked academic libraries closely matched the cited title, authors, or DOI.',
     status: 'failed',
   },
   'R-NO-CANDIDATE': {
-    nameEn: 'Zero Candidates Retrieved Across Scholarly DBs',
-    nameVi: 'Không tìm thấy ứng viên nào trên các CSDL học thuật',
-    condition: 'IF count(candidates_across_all_sources) == 0 THEN SUSPECTED_HALLUCINATION / UNRESOLVED',
+    nameEn: 'No Matching Record Found',
+    nameVi: 'Không tìm thấy tài liệu tương ứng',
+    explanationVi: 'Không tìm thấy công trình nào khớp trên các thư viện học thuật đã tra cứu.',
+    explanationEn: 'No matching publication was found across checked academic libraries.',
     status: 'failed',
   },
   'R-FAIL-ALL': {
-    nameEn: 'External Scholarly APIs Unavailable / Timed Out',
-    nameVi: 'Các cổng API học thuật bên ngoài lỗi kết nối hoặc quá thời gian chờ',
-    condition: 'IF sources_succeeded == 0 AND sources_failed > 0 THEN UNRESOLVED',
+    nameEn: 'Online Libraries Temporarily Unavailable',
+    nameVi: 'Các thư viện trực tuyến tạm thời không phản hồi',
+    explanationVi: 'Các thư viện học thuật trực tuyến gặp lỗi kết nối trong lúc kiểm tra — vui lòng đối chiếu thủ công hoặc thử lại sau.',
+    explanationEn: 'External academic libraries could not be reached during this check — please verify manually or retry shortly.',
     status: 'warning',
   },
   'R-VN-STANDARD-VERIFIED': {
-    nameEn: 'Vietnamese National Technical Standard / Regulation (TCVN/QCVN) Verified',
-    nameVi: 'Xác thực Tiêu chuẩn / Quy chuẩn Kỹ thuật Quốc gia Việt Nam (TCVN / QCVN)',
-    condition: 'IF source == "tech_standard" AND standard_code IN ("TCVN", "QCVN") THEN VERIFIED',
+    nameEn: 'Vietnamese National Standard Verified (TCVN / QCVN)',
+    nameVi: 'Xác nhận Tiêu chuẩn / Quy chuẩn Quốc gia (TCVN / QCVN)',
+    explanationVi: 'Đã xác nhận Tiêu chuẩn hoặc Quy chuẩn Kỹ thuật Quốc gia đối chiếu với danh mục TCVN / QCVN.',
+    explanationEn: 'Verified Vietnamese national technical standard or regulation against the TCVN / QCVN catalog.',
     status: 'passed',
   },
   'R-VN-TEXTBOOK-VERIFIED': {
-    nameEn: 'Vietnamese University Textbook / Monograph Registry Verified',
-    nameVi: 'Xác thực Danh mục Giáo trình / Sách chuyên khảo Đại học Việt Nam',
-    condition: 'IF source == "tech_standard" AND textbook_registry_hit == TRUE AND title_sim >= 0.85 THEN VERIFIED',
+    nameEn: 'Vietnamese University Textbook Verified',
+    nameVi: 'Xác nhận Giáo trình Đại học Việt Nam',
+    explanationVi: 'Đã xác nhận giáo trình đại học hoặc sách chuyên khảo tiếng Việt đối chiếu với danh mục chuẩn.',
+    explanationEn: 'Verified Vietnamese university textbook or monograph against the curated textbook catalog.',
     status: 'passed',
   },
   'R-VN-LEGAL-FABRICATED': {
-    nameEn: 'Fabricated Vietnamese Statutory Number or Issuing Authority',
-    nameVi: 'Số hiệu hoặc Cơ quan ban hành Văn bản Pháp luật VN không tồn tại / bịa đặt',
-    condition: 'IF statute_code_fabricated == TRUE OR authority_invalid == TRUE THEN SUSPECTED_HALLUCINATION',
+    nameEn: 'Legal Document Number Not Found',
+    nameVi: 'Không tìm thấy số hiệu văn bản pháp luật này',
+    explanationVi: 'Số hiệu, năm ban hành hoặc cơ quan ban hành văn bản pháp luật này chưa được tìm thấy trên hệ thống văn bản pháp luật chính thức.',
+    explanationEn: 'The cited legal document number, promulgation year, or issuing authority could not be confirmed in the official legal registry.',
     status: 'failed',
   },
   'R-LEGAL-STATUTE-VERIFIED': {
-    nameEn: 'Official Legal Statute / Regulatory Document Verified',
-    nameVi: 'Xác thực Văn bản Quy phạm Pháp luật chính thức',
-    condition: 'IF legal_registry_match == TRUE THEN VERIFIED',
+    nameEn: 'Official Legal Document Verified',
+    nameVi: 'Xác nhận văn bản quy phạm pháp luật chính thức',
+    explanationVi: 'Đã xác nhận thông tin văn bản quy phạm pháp luật đối chiếu với thư viện pháp luật chính thức.',
+    explanationEn: 'Verified legal document details against the official legal registry.',
     status: 'passed',
   },
   'R-LEGAL-STATUTE-ERROR': {
-    nameEn: 'Legal Statute Metadata Discrepancy or Superseded Regulation',
-    nameVi: 'Sai lệch Metadata hoặc hiệu lực Văn bản Quy phạm Pháp luật',
-    condition: 'IF legal_metadata_conflict == TRUE THEN METADATA_ERROR',
+    nameEn: 'Legal Document Details or Validity Issue',
+    nameVi: 'Sai lệch thông tin hoặc hiệu lực văn bản pháp luật',
+    explanationVi: 'Trích dẫn văn bản pháp luật bị lệch số hiệu/năm ban hành hoặc đang dẫn chiếu quy định đã hết hiệu lực.',
+    explanationEn: 'This legal citation has a number/year discrepancy or references a superseded regulation.',
     status: 'warning',
   },
   'R-RATE-LIMITED-ABSTAIN': {
-    nameEn: 'Scholarly API Rate-Limit Abstention (HTTP 429 Guard)',
-    nameVi: 'Từ chối phán quyết tạm thời do giới hạn băng thông API (HTTP 429)',
-    condition: 'IF http_429_rate_limited == TRUE AND candidates == 0 THEN UNRESOLVED',
+    nameEn: 'Online Libraries Temporarily Busy',
+    nameVi: 'Thư viện trực tuyến tạm bận — chuyển sang rà soát thủ công',
+    explanationVi: 'Các thư viện học thuật trực tuyến tạm thời giới hạn lượt tra cứu, nên hệ thống chuyển mục này sang rà soát thủ công thay vì báo lỗi.',
+    explanationEn: 'Academic libraries briefly limited lookup traffic, so CITRA marked this entry for manual review instead of flagging an issue.',
     status: 'warning',
   },
   'R-VENUE-MISMATCH': {
-    nameEn: 'Publication Venue / Journal Discrepancy',
-    nameVi: 'Sai lệch Nơi công bố (Tạp chí / Hội nghị)',
-    condition: 'IF title_sim >= 0.85 AND venue_sim < 0.40 THEN METADATA_ERROR',
+    nameEn: 'Journal or Conference Name Differs',
+    nameVi: 'Sai lệch tên tạp chí hoặc hội nghị',
+    explanationVi: 'Tên tạp chí hoặc hội nghị bạn ghi khác với nơi công bố chính thức của tài liệu.',
+    explanationEn: 'The cited journal or conference name differs from the published venue record.',
     status: 'warning',
   },
   'R-TITLE-MISMATCH': {
-    nameEn: 'Cited Title Discrepancy on Matched Author-Year Work',
-    nameVi: 'Sai lệch Tiêu đề trên công trình khớp Tác giả & Năm',
-    condition: 'IF author_jaccard >= 0.70 AND year_distance == 0 AND title_sim < 0.75 THEN METADATA_ERROR',
+    nameEn: 'Title Differs from Published Record',
+    nameVi: 'Sai lệch tiêu đề so với bản gốc',
+    explanationVi: 'Tác giả và năm xuất bản khớp với tài liệu có thật, nhưng tiêu đề bạn ghi khác với tiêu đề gốc.',
+    explanationEn: 'The author and year match a published work, but the cited title differs from the official title.',
     status: 'warning',
   },
   'R-YEAR-MISMATCH': {
-    nameEn: 'Publication Year Discrepancy Against Canonical Record',
-    nameVi: 'Sai lệch Năm xuất bản so với bản ghi chuẩn',
-    condition: 'IF title_sim >= 0.85 AND year_distance >= 1 THEN METADATA_ERROR',
+    nameEn: 'Publication Year Mismatch',
+    nameVi: 'Sai lệch năm xuất bản',
+    explanationVi: 'Đã tìm thấy tài liệu gốc nhưng năm xuất bản bạn ghi trong bài chưa khớp.',
+    explanationEn: 'Found the matching publication, but the cited year differs from the published record.',
     status: 'warning',
   },
   'R-DOI-METADATA-MISMATCH': {
-    nameEn: 'Resolved DOI Metadata Discrepancy',
-    nameVi: 'Mã DOI hợp lệ nhưng sai lệch Metadata công trình',
-    condition: 'IF doi_exact_match == TRUE AND (title_sim < 0.80 OR year_distance > 1) THEN METADATA_ERROR',
+    nameEn: 'Cited DOI Differs from Published Record',
+    nameVi: 'Mã DOI trích dẫn khác với bản gốc',
+    explanationVi: 'Tiêu đề và tác giả khớp với bài báo có thật nhưng mã DOI trong bài khác với mã DOI chính thức.',
+    explanationEn: 'The publication title and authors match, but the cited DOI differs from the official DOI of this work.',
     status: 'warning',
   },
   'R-DOI-CONFLICT': {
-    nameEn: 'Cross-Registry DOI Metadata Conflict',
-    nameVi: 'Xung đột Metadata của mã DOI giữa các CSDL',
-    condition: 'IF doi_resolved == TRUE AND cross_source_conflict == TRUE THEN METADATA_ERROR',
+    nameEn: 'Conflicting DOI Across Academic Libraries',
+    nameVi: 'Mã DOI khác nhau giữa các thư viện học thuật',
+    explanationVi: 'Các thư viện học thuật ghi nhận mã DOI khác nhau cho cùng công trình này — hãy kiểm tra lại mã DOI chính thức.',
+    explanationEn: 'Different academic libraries list conflicting DOI identifiers for this matched publication.',
     status: 'warning',
   },
   'R-CHIMERIC-DOI-MISMATCH': {
-    nameEn: 'Chimeric / Spliced DOI Resolves to Different Publication',
-    nameVi: 'Trích dẫn ghép nối (Chimeric): DOI trỏ tới một công trình hoàn toàn khác',
-    condition: 'IF doi_resolved == TRUE AND title_sim_fuzzy < 0.35 AND author_jaccard < 0.25 THEN SUSPECTED_HALLUCINATION',
+    nameEn: 'DOI Points to a Different Publication',
+    nameVi: 'Mã DOI trỏ sang một bài báo khác',
+    explanationVi: 'Mã DOI bạn ghi dẫn đến một công trình hoàn toàn khác với tiêu đề và tác giả trong trích dẫn.',
+    explanationEn: 'The cited DOI resolves to a completely different publication than the title and authors listed in your citation.',
     status: 'failed',
   },
   'R-LOCAL_DB_METADATA_ERROR': {
-    nameEn: 'Local Scholarly Library Match with Metadata Discrepancy',
-    nameVi: 'Khớp CSDL học thuật nội bộ nhưng sai lệch trường Metadata',
-    condition: 'IF local_fts5_hit == TRUE AND (year_distance > 0 OR author_jaccard < 0.60) THEN METADATA_ERROR',
+    nameEn: 'Matched Source with Details Mismatch',
+    nameVi: 'Tìm thấy bài gốc nhưng thông tin chưa khớp',
+    explanationVi: 'Đã tìm thấy bài báo trong Thư viện học thuật CITRA, nhưng năm xuất bản hoặc danh sách tác giả trong bài khác với bản gốc.',
+    explanationEn: 'Found this publication in the CITRA Scholarly Library, but the cited year or author list differs from the published record.',
     status: 'warning',
   },
   'R-NON-SCHOLARLY-RESOURCE': {
-    nameEn: 'Non-Scholarly Web Resource or Technical Documentation',
-    nameVi: 'Tài nguyên Web phi học thuật hoặc Tài liệu kỹ thuật trực tuyến',
-    condition: 'IF is_web_documentation == TRUE AND has_scholarly_venue == FALSE THEN RESOURCE',
+    nameEn: 'Web Page or Online Documentation',
+    nameVi: 'Trang web hoặc tài liệu trực tuyến',
+    explanationVi: 'Tài liệu tham khảo trỏ tới trang web thông thường hoặc tài liệu hướng dẫn kỹ thuật thay vì bài báo học thuật.',
+    explanationEn: 'Points to a general web page, blog, or technical guide rather than a peer-reviewed journal article.',
     status: 'passed',
   },
   'R-UNINDEXED-BOOK-OR-SOURCE': {
-    nameEn: 'Unindexed Regional Monograph, Thesis, or Print Source',
-    nameVi: 'Sách chuyên khảo, Luận văn hoặc Nguồn bản in địa phương chưa lập chỉ mục số',
-    condition: 'IF print_monograph_pattern == TRUE AND live_candidates == 0 THEN UNRESOLVED',
+    nameEn: 'Print Book, Textbook, or Local Thesis',
+    nameVi: 'Sách in, giáo trình hoặc luận văn chưa có bản trực tuyến',
+    explanationVi: 'Trích dẫn có dạng sách in, giáo trình nội bộ hoặc luận văn chưa được lập chỉ mục trên các thư viện trực tuyến.',
+    explanationEn: 'Appears to be a print textbook, thesis, or regional monograph that is not indexed in online academic libraries.',
     status: 'warning',
   },
   'R-SOFTWARE-PACKAGE-VERIFIED': {
-    nameEn: 'Software Package Release Metadata Verified (PyPI / NPM / CRAN)',
-    nameVi: 'Xác thực Metadata Gói phần mềm trên PyPI / NPM / CRAN',
-    condition: 'IF source == "tech_standard" AND package_registry_match == TRUE THEN VERIFIED',
+    nameEn: 'Verified Software Package Release',
+    nameVi: 'Xác nhận phiên bản gói phần mềm',
+    explanationVi: 'Đã xác nhận thông tin và phiên bản gói phần mềm mã nguồn mở trên PyPI hoặc NPM.',
+    explanationEn: 'Verified open-source software package details and release version on PyPI or NPM.',
     status: 'passed',
   },
   'R-WIKIDATA-STANDARD-VERIFIED': {
-    nameEn: 'Technical Standard or Manual Verified via Wikidata Knowledge Graph',
-    nameVi: 'Xác thực Tiêu chuẩn kỹ thuật / Cẩm nang qua Wikidata Knowledge Graph',
-    condition: 'IF source == "wikidata_opencitations" AND standard_entity_match == TRUE THEN VERIFIED',
+    nameEn: 'Verified Technical Standard on Wikidata',
+    nameVi: 'Xác nhận tiêu chuẩn kỹ thuật trên Wikidata',
+    explanationVi: 'Đã xác nhận tiêu chuẩn kỹ thuật hoặc đặc tả chính thức trên Wikidata.',
+    explanationEn: 'Verified technical standard or official specification entry on Wikidata.',
     status: 'passed',
   },
   'R-OPENCITATIONS-VERIFIED': {
-    nameEn: 'Citation Provenance Verified via OpenCitations COCI Index',
-    nameVi: 'Xác thực phả hệ trích dẫn qua chỉ mục OpenCitations COCI',
-    condition: 'IF opencitations_coci_hit == TRUE AND doi_exact_match == TRUE THEN VERIFIED',
+    nameEn: 'Citation Link Verified via OpenCitations',
+    nameVi: 'Xác nhận liên kết trích dẫn trên OpenCitations',
+    explanationVi: 'Đã xác nhận thông tin xuất bản và liên kết thư mục của mã DOI qua OpenCitations.',
+    explanationEn: 'Verified DOI publication and bibliographic links through OpenCitations.',
     status: 'passed',
   },
   'R-API_EXHAUSTED': {
-    nameEn: 'External API Quota Exhausted (Cache-Adjusted Confidence)',
-    nameVi: 'Hết hạn mức API bên ngoài (Điều chỉnh độ tin cậy từ bộ nhớ đệm)',
-    condition: 'IF external_api_quota_exhausted == TRUE THEN ADJUST_CONFIDENCE',
+    nameEn: 'Online Library Lookup Limit Reached',
+    nameVi: 'Thư viện trực tuyến tạm đạt giới hạn tra cứu',
+    explanationVi: 'Một số thư viện học thuật trực tuyến tạm đạt giới hạn truy vấn nên mức độ khớp đã được điều chỉnh phù hợp.',
+    explanationEn: 'One or more online academic libraries temporarily limited lookups; match confidence was adjusted accordingly.',
     status: 'warning',
   },
 };
@@ -1650,8 +1674,8 @@ export function getVerdictBadgeVisuals(
       return {
         text: isIncompleteMeta
           ? lang === 'vi'
-            ? '⚠ Thiếu quy cách trích dẫn'
-            : '⚠ Incomplete Reference'
+            ? '⚠ Thiếu thông tin trích dẫn'
+            : '⚠ Incomplete Citation'
           : `⚠ ${display.label}`,
         badgeClass:
           'verdict-badge-metadata-error bg-amber-100/90 text-amber-800 border border-amber-300 dark:bg-amber-950/90 dark:text-amber-300 dark:border-amber-700 font-bold',
@@ -1753,7 +1777,7 @@ function getLinkBadgeVisuals(
   verdict: Verdict,
   lang: 'vi' | 'en'
 ): LinkBadgeInfo | null {
-  const { status, code } = resolveVerdictUrlStatus(verdict);
+  const { status } = resolveVerdictUrlStatus(verdict);
   if (!status) return null;
   const isUrlContentMismatch = (verdict.triggered_rules ?? []).includes(
     'R-URL-CONTENT-MISMATCH',
@@ -1766,14 +1790,14 @@ function getLinkBadgeVisuals(
           status,
           text:
             lang === 'vi'
-              ? `⚠ HTTP ${code || 200} · Sai nội dung trang`
-              : `⚠ HTTP ${code || 200} · Wrong Page`,
+              ? '⚠ Sai nội dung trang'
+              : '⚠ Wrong Page',
           badgeClass:
             'bg-amber-50 text-amber-800 border border-amber-300 dark:bg-amber-950/70 dark:text-amber-300 dark:border-amber-800 font-semibold',
           title:
             lang === 'vi'
-              ? `HTTP ${code || 200} phản hồi thành công nhưng trỏ tới trang web có tiêu đề khác với tài liệu trích dẫn`
-              : `HTTP ${code || 200} resolved to a different page title than claimed in the citation`,
+              ? 'Đường dẫn vẫn mở được nhưng dẫn tới trang web có tiêu đề khác với tài liệu trích dẫn'
+              : 'The link opens, but leads to a web page with a different title than cited',
         };
       }
       return {
@@ -1783,58 +1807,58 @@ function getLinkBadgeVisuals(
           'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/70 dark:text-emerald-300 dark:border-emerald-800 font-semibold',
         title:
           lang === 'vi'
-            ? `Liên kết URL hoạt động bình thường (HTTP ${code || 200} OK)`
-            : `Citation URL resolved successfully (HTTP ${code || 200} OK)`,
+            ? 'Đường dẫn mở được bình thường'
+            : 'Citation link opens normally',
       };
     case 'restricted_alive':
       return {
         status,
         text:
           lang === 'vi'
-            ? `🔒 Truy cập hạn chế (HTTP ${code || 403})`
-            : `🔒 Restricted Access (HTTP ${code || 403})`,
+            ? '🔒 Truy cập hạn chế'
+            : '🔒 Restricted Access',
         badgeClass:
           'bg-teal-50 text-teal-700 border border-teal-200 dark:bg-teal-950/70 dark:text-teal-300 dark:border-teal-800 font-semibold',
         title:
           lang === 'vi'
-            ? `Liên kết tồn tại nhưng trang nhà xuất bản chặn truy cập tự động (HTTP ${code || 403})`
-            : `Publisher paywall / bot-filtered URL is reachable with restricted access (HTTP ${code || 403})`,
+            ? 'Trang web tồn tại nhưng hạn chế truy cập tự động — vui lòng bấm mở trực tiếp'
+            : 'Website exists but restricts automated preview — please open it directly',
       };
     case 'archived_alive':
       return {
         status,
-        text: lang === 'vi' ? '🏛️ Lưu trữ Wayback' : '🏛️ Wayback Archived',
+        text: lang === 'vi' ? 'Bản lưu trữ web' : 'Web Archive',
         badgeClass:
           'bg-amber-50 text-amber-800 border border-amber-300 dark:bg-amber-950/70 dark:text-amber-300 dark:border-amber-800 font-semibold',
         title:
           lang === 'vi'
-            ? `URL gốc bị lỗi Link Rot nhưng đã xác thực có bản lưu trên Internet Archive Wayback Machine${verdict.archive_url ? ` (${verdict.archive_url})` : ''}`
-            : `Live URL suffered link rot, but verified archival snapshot exists on Internet Archive Wayback Machine${verdict.archive_url ? ` (${verdict.archive_url})` : ''}`,
+            ? `Trang gốc hiện không còn mở được, nhưng đã tìm thấy bản lưu trữ trên Internet Archive${verdict.archive_url ? ` (${verdict.archive_url})` : ''}`
+            : `The original link no longer opens, but a saved copy was found on Internet Archive${verdict.archive_url ? ` (${verdict.archive_url})` : ''}`,
       };
     case 'dead_link':
       return {
         status,
         text:
           lang === 'vi'
-            ? `✕ Liên kết lỗi (HTTP ${code || 404})`
-            : `✕ Broken Link (HTTP ${code || 404})`,
+            ? '✕ Liên kết không mở được'
+            : '✕ Broken Link',
         badgeClass:
           'bg-red-50 text-red-700 border border-red-200 dark:bg-red-950/70 dark:text-red-300 dark:border-red-800 font-semibold',
         title:
           lang === 'vi'
-            ? `Liên kết URL bị hỏng hoặc không tồn tại (HTTP ${code || 404} / DNS Error)`
-            : `Broken or unreachable citation URL (HTTP ${code || 404} / DNS Error)`,
+            ? 'Đường dẫn hiện không mở được hoặc trang không còn tồn tại'
+            : 'This link could not be opened or no longer exists',
       };
     case 'fake_domain':
       return {
         status,
-        text: lang === 'vi' ? '✕ URL không hợp lệ' : '✕ Invalid URL',
+        text: lang === 'vi' ? '✕ Liên kết không hợp lệ' : '✕ Invalid Link',
         badgeClass:
           'bg-red-50 text-red-700 border border-red-200 dark:bg-red-950/70 dark:text-red-300 dark:border-red-800 font-semibold',
         title:
           lang === 'vi'
-            ? 'Tên miền URL không phân giải được hoặc không hợp lệ'
-            : 'Unresolvable or placeholder URL domain',
+            ? 'Tên miền của đường dẫn không hợp lệ hoặc không tồn tại'
+            : 'This link uses an invalid or placeholder domain',
       };
   }
 }
@@ -1845,10 +1869,6 @@ function formatEssaySourceDisplay(
   verdict: Verdict,
   ms?: Verdict['matched_sources'][number],
 ): string {
-  const lower = (sourceKey || '').toLowerCase();
-  if (lower === 'vn_legal_registry' && lang === 'en') {
-    return 'VN Legal Registry';
-  }
   return getSourceDisplayName(sourceKey, lang, {
     triggered_rules: verdict.triggered_rules,
     external_ids: ms?.external_ids,
@@ -1882,21 +1902,21 @@ function buildLocalizedReasoning(verdict: Verdict, lang: 'vi' | 'en'): string {
     }
     return verdict.override_note
       ? lang === 'vi'
-        ? `[Ghi đè bởi Giảng viên: ${verdict.override_note}] — ${cleanLegalReasoning}`
-        : `[Teacher Override: ${verdict.override_note}] — ${cleanLegalReasoning}`
+        ? `Ghi chú của giảng viên: ${verdict.override_note} — ${cleanLegalReasoning}`
+        : `Instructor note: ${verdict.override_note} — ${cleanLegalReasoning}`
       : cleanLegalReasoning;
   }
 
   const fieldMapVi: Record<string, string> = {
     title: 'tiêu đề',
-    authors: 'nhóm tác giả',
+    authors: 'tác giả',
     author: 'tác giả',
     year: 'năm xuất bản',
     venue: 'nơi công bố',
     doi: 'mã DOI',
-    url: 'đường dẫn URL',
-    retracted: 'trạng thái thu hồi bài báo (Retracted)',
-    retracted_paper: 'trạng thái thu hồi bài báo (Retracted)',
+    url: 'đường dẫn',
+    retracted: 'trạng thái rút bài',
+    retracted_paper: 'trạng thái rút bài',
   };
   const fieldMapEn: Record<string, string> = {
     title: 'title',
@@ -1905,9 +1925,9 @@ function buildLocalizedReasoning(verdict: Verdict, lang: 'vi' | 'en'): string {
     year: 'publication year',
     venue: 'venue',
     doi: 'DOI',
-    url: 'URL',
-    retracted: 'retraction status (Retracted)',
-    retracted_paper: 'retraction status (Retracted)',
+    url: 'link',
+    retracted: 'retraction status',
+    retracted_paper: 'retraction status',
   };
 
   const allNonWebSources = (verdict.matched_sources ?? []).filter((s) => {
@@ -1956,7 +1976,7 @@ function buildLocalizedReasoning(verdict: Verdict, lang: 'vi' | 'en'): string {
           (verdict.mismatched_fields ?? []).flatMap((f) => {
             const k = f.toLowerCase();
             return k === 'author' || k === 'authors' ? ['author', 'authors'] : [k];
-          })
+          }),
         );
 
   const matchedFields = [
@@ -1967,9 +1987,9 @@ function buildLocalizedReasoning(verdict: Verdict, lang: 'vi' | 'en'): string {
           .map((f) =>
             lang === 'vi'
               ? fieldMapVi[f.toLowerCase()] ?? f
-              : fieldMapEn[f.toLowerCase()] ?? f
-          )
-      )
+              : fieldMapEn[f.toLowerCase()] ?? f,
+          ),
+      ),
     ),
   ];
 
@@ -1978,148 +1998,83 @@ function buildLocalizedReasoning(verdict: Verdict, lang: 'vi' | 'en'): string {
       (verdict.mismatched_fields ?? []).map((f) =>
         lang === 'vi'
           ? fieldMapVi[f.toLowerCase()] ?? f
-          : fieldMapEn[f.toLowerCase()] ?? f
-      )
+          : fieldMapEn[f.toLowerCase()] ?? f,
+      ),
     ),
   ];
 
-  // Extract neural context alignment score from features or raw reasoning if present
-  const neuralMatch = verdict.reasoning?.match(
-    /content alignment score=([\d.]+)\s*\((low|medium|high)\)/i
-  );
-  const featAlignScore = verdict.features?.content_alignment_score;
-  const neuralScore =
-    featAlignScore && featAlignScore > 0
-      ? featAlignScore.toFixed(2)
-      : neuralMatch
-        ? neuralMatch[1]
-        : null;
-
-  const { status: urlStatus, code: urlCode } = resolveVerdictUrlStatus(verdict);
+  const { status: urlStatus } = resolveVerdictUrlStatus(verdict);
   const isUrlContentMismatch = (verdict.triggered_rules ?? []).includes(
     'R-URL-CONTENT-MISMATCH',
   );
   const observedWeb = extractObservedWebMeta(verdict);
-
-  const hasScholarlyCandidate = verdict.features?.has_scholarly_candidate !== false;
-  const hasAnyTitleSim =
-    verdict.features?.title_sim_fuzzy !== undefined ||
-    verdict.features?.title_sim_semantic !== undefined ||
-    verdict.features?.cross_lingual_title_sim !== undefined;
-  const titleSim =
-    hasScholarlyCandidate && hasAnyTitleSim
-      ? Math.max(
-          verdict.features?.title_sim_fuzzy ?? 0,
-          verdict.features?.title_sim_semantic ?? 0,
-          verdict.features?.cross_lingual_title_sim ?? 0,
-        )
-      : undefined;
-  const authorSim = hasScholarlyCandidate
-    ? verdict.features?.author_jaccard
-    : undefined;
-  const htmlMetaSim = verdict.features?.html_meta_title_sim;
+  const isRetracted =
+    Boolean(verdict.is_retracted) ||
+    (verdict.triggered_rules ?? []).includes('R-RETRACTED-PAPER');
 
   if (lang === 'vi') {
-    const telemetryParts: string[] = [];
-    if (titleSim !== undefined) {
-      telemetryParts.push(`độ tương đồng tiêu đề = ${titleSim.toFixed(2)}`);
-    }
-    if (typeof htmlMetaSim === 'number') {
-      telemetryParts.push(`khớp tiêu đề trang HTML = ${htmlMetaSim.toFixed(2)}`);
-    }
-    if (authorSim !== undefined) {
-      telemetryParts.push(`tác giả = ${authorSim.toFixed(2)}`);
-    }
-    if (neuralScore) {
-      const pct = Math.round(Number(neuralScore) * 100);
-      telemetryParts.push(`mức độ liên quan ngữ cảnh: ${pct}%`);
-    }
-    if (urlStatus === 'alive') {
-      telemetryParts.push(
-        isUrlContentMismatch
-          ? `kiểm tra liên kết = HTTP ${urlCode || 200} — sai nội dung trang`
-          : 'kiểm tra liên kết = Liên kết hoạt động',
-      );
-    } else if (urlStatus === 'restricted_alive') {
-      telemetryParts.push(
-        `kiểm tra liên kết = Truy cập hạn chế [HTTP ${urlCode || 403}]`
-      );
-    } else if (urlStatus === 'archived_alive') {
-      telemetryParts.push(
-        'kiểm tra liên kết = Đã lưu trữ trên Wayback Machine'
-      );
-    } else if (urlStatus === 'dead_link') {
-      telemetryParts.push(
-        `kiểm tra liên kết = HTTP ${urlCode || 404} — liên kết không truy cập được`
-      );
-    } else if (urlStatus === 'fake_domain') {
-      telemetryParts.push('kiểm tra liên kết = tên miền không hợp lệ');
-    }
-    const isRetracted =
-      Boolean(verdict.is_retracted) ||
-      (verdict.triggered_rules ?? []).includes('R-RETRACTED-PAPER');
     const retractionPrefixVi = isRetracted
-      ? '⚠️ CẢNH BÁO NGHIÊM TRỌNG: Bài báo này đã bị rút hồi chính thức (RETRACTED PAPER). Không sử dụng làm nguồn trích dẫn khoa học! '
+      ? '⚠️ Cảnh báo: Bài báo này đã bị tạp chí chính thức rút bài. Bạn nên cân nhắc thay bằng nguồn khác đáng tin cậy hơn. '
       : '';
-    const telemetrySuffix =
-      telemetryParts.length > 0 ? ` — ${telemetryParts.join(' · ')}.` : '';
+    const brokenLinkSentenceVi =
+      urlStatus === 'dead_link'
+        ? ' Đường dẫn đính kèm hiện không mở được — hãy kiểm tra lại liên kết.'
+        : urlStatus === 'fake_domain'
+          ? ' Đường dẫn đính kèm sử dụng tên miền không hợp lệ — hãy cập nhật lại.'
+          : '';
 
     let mainText = '';
     if (verdict.label === 'resource') {
       if (isLegalStatute) {
         const legalSrc =
-          sources[0] || 'Cơ sở dữ liệu văn bản quy phạm pháp luật Việt Nam';
-        mainText = `Văn bản quy phạm pháp luật đã được đối chiếu và xác thực qua ${legalSrc}. Mục này không tính điểm phạt vào chỉ số CIS.${telemetrySuffix}`;
+          sources[0] || 'Thư viện văn bản pháp luật Việt Nam';
+        mainText = `Văn bản quy phạm pháp luật đã được xác nhận trên ${legalSrc}. Mục này không ảnh hưởng đến điểm trích dẫn của bạn.${brokenLinkSentenceVi}`;
       } else if (observedWeb?.title) {
-        mainText = `Tài nguyên Web trực tuyến hợp lệ: đã trích xuất metadata trang HTML («${observedWeb.title}»${observedWeb.venue ? ` · ${observedWeb.venue}` : ''}). Mục này được phân loại là tài nguyên tham khảo trực tuyến và không tính điểm phạt vào chỉ số CIS.${telemetrySuffix}`;
+        mainText = `Đây là nguồn trang web ("${observedWeb.title}"${observedWeb.venue ? ` · ${observedWeb.venue}` : ''}) chứ không phải bài báo học thuật, nên không ảnh hưởng đến điểm trích dẫn của bạn.${brokenLinkSentenceVi}`;
       } else {
-        mainText = `Phát hiện tài nguyên Web / văn bản tham khảo trực tuyến. Mục này được phân loại là nguồn web / văn bản và không tính điểm phạt vào chỉ số CIS.${telemetrySuffix}`;
+        mainText = `Đây là nguồn trang web hoặc tài liệu trực tuyến, không ảnh hưởng đến điểm trích dẫn của bạn.${brokenLinkSentenceVi}`;
       }
     } else if (verdict.mapping_status === 'missing_reference') {
       mainText =
-        'Trích dẫn xuất hiện trong phần nội dung bài viết nhưng bị khuyết mục tương ứng trong danh mục tài liệu tham khảo cuối bài.';
+        'Trích dẫn này có xuất hiện trong bài viết nhưng chưa được liệt kê ở danh mục Tài liệu tham khảo cuối bài. Hãy bổ sung mục này vào cuối bài.';
     } else if (verdict.label === 'verified') {
       const srcStr =
         sources.length > 0
           ? sources.join(' và ')
-          : 'cơ sở dữ liệu học thuật';
+          : 'Thư viện học thuật CITRA';
       const fldStr =
         matchedFields.length > 0
           ? matchedFields.join(', ')
           : 'tiêu đề, tác giả và năm xuất bản';
-      const brokenLinkNoteVi =
-        urlStatus === 'dead_link'
-          ? ' Lưu ý: Công trình học thuật có thật nhưng đường dẫn URL đính kèm bị hỏng (HTTP 404/DNS).'
-          : '';
-      mainText = `Trích dẫn khớp chính xác với công trình trong ${srcStr}. Các trường thông tin (${fldStr}) nhất quán với bản ghi gốc.${brokenLinkNoteVi}${telemetrySuffix}`;
+      mainText = `Đã tìm thấy bài gốc trên ${srcStr}. Các thông tin (${fldStr}) đều khớp với trích dẫn trong bài.${brokenLinkSentenceVi}`;
     } else if (verdict.label === 'metadata_error') {
       if (isUrlContentMismatch) {
         const obsTitleNoteVi = observedWeb?.title
-          ? ` Trang web thực tế tại URL có tiêu đề: «${observedWeb.title}»${observedWeb.venue ? ` — ${observedWeb.venue}` : ''}.`
+          ? ` Trang web thực tế tại liên kết có tiêu đề "${observedWeb.title}"${observedWeb.venue ? ` (${observedWeb.venue})` : ''}.`
           : '';
-        mainText = `Đường dẫn URL phản hồi hợp lệ (HTTP ${urlCode || 200}), nhưng nội dung/tiêu đề trang web không khớp với tiêu đề tài liệu được trích dẫn.${obsTitleNoteVi} Vui lòng kiểm tra lại liên kết URL hoặc cập nhật đúng tiêu đề trang đích.${telemetrySuffix}`;
+        mainText = `Đường dẫn vẫn mở được nhưng tiêu đề trang web không khớp với trích dẫn trong bài.${obsTitleNoteVi} Hãy kiểm tra lại xem đường dẫn có trỏ đúng nguồn hay không.`;
       } else if ((verdict.triggered_rules ?? []).includes('R-INCOMPLETE-METADATA')) {
         const missingStrVi =
           mismatchedFields.length > 0
-            ? ` (thiếu ${mismatchedFields.join(', ')})`
+            ? ` (${mismatchedFields.join(', ')})`
             : '';
-        mainText = `Thiếu quy cách trích dẫn học thuật${missingStrVi}: mục tham khảo chưa đủ thông tin định danh (tác giả, năm xuất bản, nơi công bố hoặc DOI/URL). Đây là lỗi trình bày trích dẫn — vui lòng bổ sung đầy đủ thông tin.${telemetrySuffix}`;
+        mainText = `Mục tham khảo này còn thiếu thông tin${missingStrVi}. Hãy bổ sung đầy đủ tác giả, năm xuất bản, nơi công bố hoặc mã DOI/đường dẫn.`;
       } else if (
         (verdict.triggered_rules ?? []).includes('R-CROSS-LINGUAL-TITLE-MATCH') ||
         verdict.features?.cross_lingual_title_detected
       ) {
         const xlSimPct = verdict.features?.cross_lingual_title_sim
-          ? ` (${Math.round(verdict.features.cross_lingual_title_sim * 100)}% tương đồng ngữ nghĩa Việt ↔ Anh)`
+          ? ` (khớp ${Math.round(verdict.features.cross_lingual_title_sim * 100)}%)`
           : '';
-        mainText = `Tiêu đề tiếng Việt dịch thuật khớp ngữ nghĩa với công trình gốc tiếng Anh${xlSimPct}, nhưng nên giữ nguyên tiêu đề gốc bằng tiếng nước ngoài (có thể kèm [Bản dịch tiếng Việt] trong ngoặc vuông).${telemetrySuffix}`;
+        mainText = `Tiêu đề tiếng Việt bạn ghi khớp nội dung với bài báo gốc tiếng Anh${xlSimPct}. Theo thông lệ học thuật, hãy giữ nguyên tiêu đề gốc bằng tiếng nước ngoài (có thể ghi thêm bản dịch trong ngoặc vuông).`;
       } else {
         const srcStr =
           sources.length > 0 ? ` trên ${sources.join(' và ')}` : '';
         const errFldStr =
           mismatchedFields.length > 0
             ? mismatchedFields.join(', ')
-            : 'thông tin thư mục (năm xuất bản / tiêu đề)';
-        mainText = `Tìm thấy công trình học thuật tương ứng${srcStr}, nhưng phát hiện sai lệch ở trường: ${errFldStr}. Vui lòng đối chiếu và hiệu đính lại theo bản ghi gốc.${telemetrySuffix}`;
+            : 'năm xuất bản hoặc tiêu đề';
+        mainText = `Đã tìm thấy tài liệu gốc${srcStr}, nhưng thông tin ${errFldStr} trong bài chưa khớp. Hãy xem bảng bên dưới và sửa lại theo bản gốc.${brokenLinkSentenceVi}`;
       }
     } else if (verdict.label === 'suspected_hallucination') {
       const isChimeric = (verdict.triggered_rules ?? []).includes(
@@ -2128,21 +2083,21 @@ function buildLocalizedReasoning(verdict: Verdict, lang: 'vi' | 'en'): string {
       const chimSrc = (verdict.matched_sources ?? []).find((s) => s.title);
       if (isChimeric && chimSrc?.title) {
         const chimMeta = [chimSrc.authors?.[0], chimSrc.year].filter(Boolean).join(', ');
-        mainText = `Mã DOI trích dẫn trỏ tới một công trình khác: «${chimSrc.title}»${chimMeta ? ` (${chimMeta})` : ''}, khác biệt với tiêu đề, tác giả và nơi công bố trong bài viết. Cần đối chiếu lại bản gốc.${telemetrySuffix}`;
+        mainText = `Mã DOI bạn ghi đang trỏ tới một công trình khác: "${chimSrc.title}"${chimMeta ? ` (${chimMeta})` : ''}. Hãy kiểm tra lại mã DOI hoặc bản gốc.`;
       } else {
-        mainText = `Không tìm thấy công trình học thuật khớp với trích dẫn này trên hệ thống 15+ cơ sở dữ liệu học thuật & kỹ thuật đối chiếu. Cần kiểm tra lại nguồn gốc tài liệu trước khi sử dụng.${telemetrySuffix}`;
+        mainText = `Không tìm thấy tài liệu nào khớp trên hơn 15 thư viện học thuật uy tín. Đây có thể là sách in, tài liệu nội bộ hoặc lỗi gõ thông tin — hãy kiểm tra lại bản gốc trước khi nộp.${brokenLinkSentenceVi}`;
       }
     } else {
       const srcStr =
         sources.length > 0
-          ? `Tìm thấy ứng viên tiềm năng trên ${sources.join(', ')}, nhưng bằng chứng siêu dữ liệu chưa đủ mạnh để xác nhận tự động.`
-          : 'Chưa đủ dữ liệu từ các nguồn truy hồi để xác minh tự động trích dẫn này.';
-      mainText = `${srcStr} Khuyến nghị kiểm tra thủ công thêm.${telemetrySuffix}`;
+          ? `Tìm thấy tài liệu có khả năng liên quan trên ${sources.join(', ')}, nhưng thông tin chưa đủ giống để tự động xác nhận.`
+          : 'Chưa đủ thông tin để tự động xác nhận trích dẫn này.';
+      mainText = `${srcStr} Bạn nên tự đối chiếu lại với bản gốc.${brokenLinkSentenceVi}`;
     }
 
     const cleanedVi = (
       verdict.override_note
-        ? `[Ghi đè bởi Giảng viên: ${verdict.override_note}] — ${retractionPrefixVi}${mainText}`
+        ? `Ghi chú của giảng viên: ${verdict.override_note} — ${retractionPrefixVi}${mainText}`
         : `${retractionPrefixVi}${mainText}`
     )
       .replace(/\)\)+/g, ')')
@@ -2150,101 +2105,70 @@ function buildLocalizedReasoning(verdict: Verdict, lang: 'vi' | 'en'): string {
     return cleanedVi;
   }
 
-  // English ('en') — 100% pure English
-  const telemetryPartsEn: string[] = [];
-  if (titleSim !== undefined) {
-    telemetryPartsEn.push(`title similarity = ${titleSim.toFixed(2)}`);
-  }
-  if (typeof htmlMetaSim === 'number') {
-    telemetryPartsEn.push(`HTML page title similarity = ${htmlMetaSim.toFixed(2)}`);
-  }
-  if (authorSim !== undefined) {
-    telemetryPartsEn.push(`author similarity = ${authorSim.toFixed(2)}`);
-  }
-  if (neuralScore) {
-    const pct = Math.round(Number(neuralScore) * 100);
-    telemetryPartsEn.push(`context relevance: ${pct}%`);
-  }
-  if (urlStatus === 'alive') {
-    telemetryPartsEn.push(
-      isUrlContentMismatch
-        ? `link check = HTTP ${urlCode || 200} — wrong page content`
-        : 'link check = Link Active',
-    );
-  } else if (urlStatus === 'restricted_alive') {
-    telemetryPartsEn.push(
-      `link check = Restricted Access [HTTP ${urlCode || 403}]`
-    );
-  } else if (urlStatus === 'archived_alive') {
-    telemetryPartsEn.push(
-      'link check = Wayback Machine snapshot verified'
-    );
-  } else if (urlStatus === 'dead_link') {
-    telemetryPartsEn.push(`link check = HTTP ${urlCode || 404} — broken link`);
-  } else if (urlStatus === 'fake_domain') {
-    telemetryPartsEn.push('link check = invalid domain');
-  }
-  const isRetractedEn =
-    Boolean(verdict.is_retracted) ||
-    (verdict.triggered_rules ?? []).includes('R-RETRACTED-PAPER');
-  const retractionPrefixEn = isRetractedEn
-    ? '⚠️ CRITICAL WARNING: This publication has been officially RETRACTED. Do not cite as valid scientific evidence! '
+  // English ('en') — plain, empathetic human guidance
+  const retractionPrefixEn = isRetracted
+    ? '⚠️ Warning: This publication has been officially retracted by its publisher. Consider replacing it with another source. '
     : '';
-  const telemetrySuffixEn =
-    telemetryPartsEn.length > 0 ? ` — ${telemetryPartsEn.join(' · ')}.` : '';
+  const brokenLinkSentenceEn =
+    urlStatus === 'dead_link'
+      ? ' Note: the attached link currently does not open — please check or update the URL.'
+      : urlStatus === 'fake_domain'
+        ? ' Note: the attached link uses an invalid domain — please update it.'
+        : '';
 
   let mainTextEn = '';
   if (verdict.label === 'resource') {
     if (isLegalStatute) {
-      const legalSrcEn = sources[0] || 'VN Legal Registry';
-      mainTextEn = `Official statutory / legal document verified against ${legalSrcEn}. Excluded from the CIS penalty calculation.${telemetrySuffixEn}`;
+      const legalSrcEn = sources[0] || 'Vietnamese Legal Registry';
+      mainTextEn = `Official legal or regulatory document verified against the ${legalSrcEn}. Legal references do not affect your citation score.${brokenLinkSentenceEn}`;
     } else if (observedWeb?.title) {
-      mainTextEn = `Verified live web resource: extracted HTML metadata (“${observedWeb.title}”${observedWeb.venue ? ` · ${observedWeb.venue}` : ''}). Classified as a web resource and excluded from the CIS penalty calculation.${telemetrySuffixEn}`;
+      mainTextEn = `Recognized as a live web page ("${observedWeb.title}"${observedWeb.venue ? ` · ${observedWeb.venue}` : ''}) rather than a journal article. It does not affect your citation score.${brokenLinkSentenceEn}`;
     } else {
-      mainTextEn = `Non-scholarly Web / API resource detected. Classified as a web / legal resource and excluded from the CIS penalty calculation.${telemetrySuffixEn}`;
+      mainTextEn = `Recognized as a web page or online document rather than a journal article. It does not affect your citation score.${brokenLinkSentenceEn}`;
     }
   } else if (verdict.mapping_status === 'missing_reference') {
     mainTextEn =
-      'This in-text citation does not have a corresponding entry in the bibliography section.';
+      'You cited this source in your essay, but it is missing from the reference list at the end. Please add the full entry.';
   } else if (verdict.label === 'verified') {
     const srcStr =
-      sources.length > 0 ? sources.join(' and ') : 'scholarly databases';
+      sources.length > 0 ? sources.join(' and ') : 'the CITRA Scholarly Library';
     const fldStr =
       matchedFields.length > 0
         ? matchedFields.join(', ')
         : 'title, authors, and publication year';
-    const brokenLinkNoteEn =
-      urlStatus === 'dead_link'
-        ? ' Note: the scholarly publication exists, but the cited URL is broken (HTTP 404/DNS).'
-        : '';
-    mainTextEn = `The citation matches a canonical publication in ${srcStr}. Verified fields (${fldStr}) are consistent with the source record.${brokenLinkNoteEn}${telemetrySuffixEn}`;
+    const isSingularMatched =
+      matchedFields.length === 1 && matchedFields[0] !== 'authors';
+    mainTextEn = `Matched with the published work in ${srcStr}. The ${fldStr} ${isSingularMatched ? 'matches' : 'match'} your citation.${brokenLinkSentenceEn}`;
   } else if (verdict.label === 'metadata_error') {
     if (isUrlContentMismatch) {
       const obsTitleNoteEn = observedWeb?.title
-        ? ` The actual web page at this URL is titled “${observedWeb.title}”${observedWeb.venue ? ` — ${observedWeb.venue}` : ''}.`
+        ? ` The actual web page at this link is titled "${observedWeb.title}"${observedWeb.venue ? ` (${observedWeb.venue})` : ''}.`
         : '';
-      mainTextEn = `The cited URL is reachable (HTTP ${urlCode || 200}), but the web page title and metadata do not match the claimed citation title.${obsTitleNoteEn} Please verify that the URL points to the intended resource.${telemetrySuffixEn}`;
+      mainTextEn = `This link opens, but the destination page title does not match your citation.${obsTitleNoteEn} Please confirm that the link points to the right source.`;
     } else if ((verdict.triggered_rules ?? []).includes('R-INCOMPLETE-METADATA')) {
       const missingStrEn =
         mismatchedFields.length > 0
-          ? ` (missing ${mismatchedFields.join(', ')})`
+          ? ` (${mismatchedFields.join(', ')})`
           : '';
-      mainTextEn = `Incomplete bibliographic reference${missingStrEn}: this entry lacks required scholarly identifiers (author, publication year, academic venue, or DOI/URL). Please complete the citation details.${telemetrySuffixEn}`;
+      mainTextEn = `This citation is missing required details${missingStrEn}. Please add the author, publication year, venue, or DOI/link to complete it.`;
     } else if (
       (verdict.triggered_rules ?? []).includes('R-CROSS-LINGUAL-TITLE-MATCH') ||
       verdict.features?.cross_lingual_title_detected
     ) {
       const xlSimPctEn = verdict.features?.cross_lingual_title_sim
-        ? ` (${Math.round(verdict.features.cross_lingual_title_sim * 100)}% VI↔EN semantic match)`
+        ? ` (${Math.round(verdict.features.cross_lingual_title_sim * 100)}% match)`
         : '';
-      mainTextEn = `Translated Vietnamese title semantically matches the canonical English publication${xlSimPctEn}, but academic citation guidelines recommend preserving the original foreign-language title (optionally followed by [Vietnamese translation] in brackets).${telemetrySuffixEn}`;
+      mainTextEn = `Your translated title matches the original English published work${xlSimPctEn}. Academic citation guidelines recommend keeping the original title (optionally adding a translation in brackets).`;
     } else {
       const srcStr = sources.length > 0 ? ` in ${sources.join(' and ')}` : '';
       const errFldStr =
         mismatchedFields.length > 0
           ? mismatchedFields.join(', ')
-          : 'metadata fields (year / title)';
-      mainTextEn = `Found a corresponding publication${srcStr}, but detected discrepancies in: ${errFldStr}. Please review against the canonical record.${telemetrySuffixEn}`;
+          : 'publication year or title';
+      const isPluralErr =
+        mismatchedFields.length > 1 ||
+        (mismatchedFields.length === 1 && mismatchedFields[0] === 'authors');
+      mainTextEn = `We found this published work${srcStr}, but the ${errFldStr} in your essay ${isPluralErr ? 'do not' : 'does not'} match the published record. Check the table below to update it.${brokenLinkSentenceEn}`;
     }
   } else if (verdict.label === 'suspected_hallucination') {
     const isChimericEn = (verdict.triggered_rules ?? []).includes(
@@ -2253,20 +2177,20 @@ function buildLocalizedReasoning(verdict: Verdict, lang: 'vi' | 'en'): string {
     const chimSrcEn = (verdict.matched_sources ?? []).find((s) => s.title);
     if (isChimericEn && chimSrcEn?.title) {
       const chimMetaEn = [chimSrcEn.authors?.[0], chimSrcEn.year].filter(Boolean).join(', ');
-      mainTextEn = `Cited DOI resolves to a different publication: “${chimSrcEn.title}”${chimMetaEn ? ` (${chimMetaEn})` : ''}, differing from the claimed title, authors, and venue. Please verify against the original source.${telemetrySuffixEn}`;
+      mainTextEn = `The cited DOI points to a different published work: "${chimSrcEn.title}"${chimMetaEn ? ` (${chimMetaEn})` : ''}. Please verify the DOI against your original source.`;
     } else {
-      mainTextEn = `No matching publication was found across 15+ checked scholarly & technical databases. Please verify the original source manually before citing.${telemetrySuffixEn}`;
+      mainTextEn = `No matching published work was found across more than 15 academic libraries. This could be a print book, a typo, or an unindexed source — please double-check the original before submitting.${brokenLinkSentenceEn}`;
     }
   } else {
     mainTextEn =
       sources.length > 0
-        ? `A potential candidate was found in ${sources.join(', ')}, but bibliographic evidence is insufficient for automatic verification. Manual review recommended.${telemetrySuffixEn}`
-        : `Insufficient bibliographic evidence across queried databases to automatically verify this citation. Manual review recommended.${telemetrySuffixEn}`;
+        ? `Found a possible match in ${sources.join(', ')}, but not close enough to confirm automatically. Please check the original source manually.${brokenLinkSentenceEn}`
+        : `Not enough information to verify this citation automatically. Please check the original source manually.${brokenLinkSentenceEn}`;
   }
 
   const cleanedEn = (
     verdict.override_note
-      ? `[Instructor Override: ${verdict.override_note}] — ${retractionPrefixEn}${mainTextEn}`
+      ? `Instructor note: ${verdict.override_note} — ${retractionPrefixEn}${mainTextEn}`
       : `${retractionPrefixEn}${mainTextEn}`
   )
     .replace(/\)\)+/g, ')')
@@ -2382,8 +2306,13 @@ function enrichVerdictItem(
     matchedInText?.page_num ||
     matchedRef?.cited_on_pages?.[0] ||
     matchedRef?.page_num ||
-    1;
-  const pageLabel = lang === 'vi' ? `tr. ${pageNum}` : `p. ${pageNum}`;
+    null;
+  const pageLabel =
+    pageNum && pageNum > 0
+      ? lang === 'vi'
+        ? `tr. ${pageNum}`
+        : `p. ${pageNum}`
+      : '';
 
   // Separate scholarly/legal/standard sources from web_html_meta / wayback_html_meta
   const nonWebSources = (verdict.matched_sources ?? []).filter((s) => {
@@ -2422,7 +2351,11 @@ function enrichVerdictItem(
   ) {
     const citedYrNum = parseInt(citedMeta.year, 10);
     if (!Number.isNaN(citedYrNum)) {
-      inferredActualYear = `${citedYrNum - Math.round(validYearDistance)} (Δ=${validYearDistance}y)`;
+      const dist = Math.round(validYearDistance);
+      inferredActualYear =
+        lang === 'vi'
+          ? `${citedYrNum - dist} (lệch ${dist} năm)`
+          : `${citedYrNum - dist} (${dist} ${dist === 1 ? 'yr' : 'yrs'} off)`;
     }
   }
 
@@ -2443,8 +2376,8 @@ function enrichVerdictItem(
 
   const undeclaredWebText =
     lang === 'vi'
-      ? 'Trang web không khai báo thẻ này'
-      : 'Not declared in page metadata';
+      ? 'Trang web không ghi thông tin này'
+      : 'Not listed on this web page';
 
   let retrievedMeta: MetadataFields | null = null;
   if (hasCanonicalRecord && bestSource) {
@@ -2561,24 +2494,24 @@ function enrichVerdictItem(
       if (field === 'doi' && citedMeta.doi === '—') {
         return {
           status: 'missing',
-          label: lang === 'vi' ? '— Thiếu' : '— Missing',
+          label: lang === 'vi' ? '— Không ghi' : '— Not provided',
         };
       }
       return {
         status: 'missing',
-        label: lang === 'vi' ? 'Tài nguyên Web' : 'Web Resource',
+        label: lang === 'vi' ? 'Nguồn web' : 'Web Page',
       };
     }
 
     if (field === 'title') {
       if (isUrlContentMismatch) {
-        return { status: 'mismatch', label: lang === 'vi' ? 'Lệch' : 'Diff' };
+        return { status: 'mismatch', label: 'Mismatch' };
       }
       if (!observedWeb.title) {
-        return { status: 'missing', label: 'Web' };
+        return { status: 'missing', label: lang === 'vi' ? 'Nguồn web' : 'Web Page' };
       }
       if (/^https?:\/\//i.test(citedMeta.title.trim())) {
-        return { status: 'match', label: lang === 'vi' ? 'Khớp' : 'Match' };
+        return { status: 'match', label: 'Match' };
       }
       const tokenSim = computeWebTextSim(citedMeta.title, observedWeb.title);
       const bestSim =
@@ -2586,25 +2519,25 @@ function enrichVerdictItem(
           ? Math.max(tokenSim, verdict.features.html_meta_title_sim)
           : tokenSim;
       if (bestSim >= 0.65) {
-        return { status: 'match', label: lang === 'vi' ? 'Khớp' : 'Match' };
+        return { status: 'match', label: 'Match' };
       }
       if (bestSim >= 0.3) {
         return {
           status: 'partial',
-          label: lang === 'vi' ? 'Khớp phần' : 'Partial',
+          label: 'Partial',
         };
       }
-      return { status: 'mismatch', label: lang === 'vi' ? 'Lệch' : 'Diff' };
+      return { status: 'mismatch', label: 'Mismatch' };
     }
 
     if (field === 'authors') {
       if (!observedWeb.authors || observedWeb.authors.length === 0) {
-        return { status: 'missing', label: 'Web' };
+        return { status: 'missing', label: lang === 'vi' ? 'Nguồn web' : 'Web Page' };
       }
       if (citedMeta.authors === '—') {
         return {
           status: 'partial',
-          label: lang === 'vi' ? 'Đã trích xuất' : 'Retrieved',
+          label: 'Retrieved',
         };
       }
       const aSim = computeWebAuthorSim(
@@ -2612,25 +2545,25 @@ function enrichVerdictItem(
         observedWeb.authors.join(', '),
       );
       if (aSim >= 0.65) {
-        return { status: 'match', label: lang === 'vi' ? 'Khớp' : 'Match' };
+        return { status: 'match', label: 'Match' };
       }
       if (aSim >= 0.3) {
         return {
           status: 'partial',
-          label: lang === 'vi' ? 'Khớp phần' : 'Partial',
+          label: 'Partial',
         };
       }
-      return { status: 'mismatch', label: lang === 'vi' ? 'Lệch' : 'Diff' };
+      return { status: 'mismatch', label: 'Mismatch' };
     }
 
     if (field === 'year') {
       if (!observedWeb.year) {
-        return { status: 'missing', label: 'Web' };
+        return { status: 'missing', label: lang === 'vi' ? 'Nguồn web' : 'Web Page' };
       }
       if (citedMeta.year === '—') {
         return {
           status: 'partial',
-          label: lang === 'vi' ? 'Đã trích xuất' : 'Retrieved',
+          label: 'Retrieved',
         };
       }
       const citedYr = parseInt(citedMeta.year, 10);
@@ -2640,47 +2573,47 @@ function enrichVerdictItem(
         !Number.isNaN(obsYr) &&
         Math.abs(citedYr - obsYr) <= 1
       ) {
-        return { status: 'match', label: lang === 'vi' ? 'Khớp' : 'Match' };
+        return { status: 'match', label: 'Match' };
       }
-      return { status: 'mismatch', label: lang === 'vi' ? 'Lệch' : 'Diff' };
+      return { status: 'mismatch', label: 'Mismatch' };
     }
 
     if (field === 'venue') {
       if (!observedWeb.venue) {
-        return { status: 'missing', label: 'Web' };
+        return { status: 'missing', label: lang === 'vi' ? 'Nguồn web' : 'Web Page' };
       }
       if (citedMeta.venue === '—') {
         return {
           status: 'partial',
-          label: lang === 'vi' ? 'Đã trích xuất' : 'Retrieved',
+          label: 'Retrieved',
         };
       }
       const vSim = computeWebTextSim(citedMeta.venue, observedWeb.venue);
       if (vSim >= 0.65) {
-        return { status: 'match', label: lang === 'vi' ? 'Khớp' : 'Match' };
+        return { status: 'match', label: 'Match' };
       }
       if (vSim >= 0.3) {
         return {
           status: 'partial',
-          label: lang === 'vi' ? 'Khớp phần' : 'Partial',
+          label: 'Partial',
         };
       }
-      return { status: 'mismatch', label: lang === 'vi' ? 'Lệch' : 'Diff' };
+      return { status: 'mismatch', label: 'Mismatch' };
     }
 
     // field === 'doi'
     if (!observedWeb.doi) {
-      return { status: 'missing', label: 'Web' };
+      return { status: 'missing', label: lang === 'vi' ? 'Nguồn web' : 'Web Page' };
     }
     if (citedMeta.doi === '—') {
       return {
         status: 'partial',
-        label: lang === 'vi' ? 'Đã trích xuất' : 'Retrieved',
+        label: 'Retrieved',
       };
     }
     return citedMeta.doi.toLowerCase() === observedWeb.doi.toLowerCase()
-      ? { status: 'match', label: lang === 'vi' ? 'Khớp' : 'Match' }
-      : { status: 'mismatch', label: lang === 'vi' ? 'Lệch' : 'Diff' };
+      ? { status: 'match', label: '100% Match' }
+      : { status: 'mismatch', label: 'Mismatch' };
   };
 
   const hasLegalMismatch = (verdict.triggered_rules ?? []).includes(
@@ -2693,43 +2626,44 @@ function enrichVerdictItem(
 
   const computeTitleStatus = (): { status: FieldStatus; label?: string } => {
     if (isUrlContentMismatch) {
-      return { status: 'mismatch', label: lang === 'vi' ? 'Lệch' : 'Diff' };
+      return { status: 'mismatch', label: 'Mismatch' };
     }
     if (isWebResourceMode || useObservedWebMeta) {
       return computeWebFieldStatus('title');
     }
     if (!retrievedMeta && isIncompleteMeta) {
       if (mismatchedFieldsSet.has('title') || citedMeta.title === '—') {
-        return { status: 'partial', label: lang === 'vi' ? 'Thiếu' : 'Missing' };
+        return { status: 'partial', label: 'Missing' };
       }
-      return { status: 'missing', label: lang === 'vi' ? 'Đã ghi' : 'Provided' };
+      return { status: 'missing', label: 'Provided' };
     }
     if (!retrievedMeta) return unmatchedNeutralStatus();
     if (isLegalRule && verdict.label === 'resource' && !mismatchedFieldsSet.has('title')) {
-      return { status: 'match', label: '100% Match' };
+      return { status: 'match', label: 'Match' };
     }
     if (mismatchedFieldsSet.has('title')) {
       if (titleSim >= 0.5) {
-        return { status: 'partial', label: `${Math.round(titleSim * 100)}% Sim` };
+        return { status: 'partial', label: `${Math.round(titleSim * 100)}% Match` };
       }
-      return { status: 'mismatch', label: 'Diff' };
+      return { status: 'mismatch', label: 'Mismatch' };
     }
-    if (
-      titleSim >= 0.96 ||
-      (!hasExplicitTitleSim && matchedFieldsSet.has('title')) ||
-      (verdict.label === 'verified' && titleSim >= 0.85)
-    ) {
+    if (titleSim >= 0.98) {
       return { status: 'match', label: '100% Match' };
     }
-    if (titleSim >= 0.5) {
-      return { status: 'partial', label: `${Math.round(titleSim * 100)}% Sim` };
+    if (
+      titleSim >= 0.85 ||
+      (!hasExplicitTitleSim && matchedFieldsSet.has('title')) ||
+      verdict.label === 'verified'
+    ) {
+      return { status: 'match', label: 'Match' };
     }
-    return verdict.label === 'verified'
-      ? { status: 'match', label: '100% Match' }
-      : {
-          status: 'mismatch',
-          label: titleSim > 0 ? `${Math.round(titleSim * 100)}% Sim` : 'Diff',
-        };
+    if (titleSim >= 0.5) {
+      return { status: 'partial', label: `${Math.round(titleSim * 100)}% Match` };
+    }
+    return {
+      status: 'mismatch',
+      label: titleSim > 0 ? `${Math.round(titleSim * 100)}% Match` : 'Mismatch',
+    };
   };
 
   const computeAuthorsStatus = (): { status: FieldStatus; label?: string } => {
@@ -2742,9 +2676,9 @@ function enrichVerdictItem(
         mismatchedFieldsSet.has('author') ||
         citedMeta.authors === '—'
       ) {
-        return { status: 'partial', label: lang === 'vi' ? 'Thiếu' : 'Missing' };
+        return { status: 'partial', label: 'Missing' };
       }
-      return { status: 'missing', label: lang === 'vi' ? 'Đã ghi' : 'Provided' };
+      return { status: 'missing', label: 'Provided' };
     }
     if (citedMeta.authors === '—') return { status: 'missing' };
     if (!retrievedMeta) return unmatchedNeutralStatus();
@@ -2755,26 +2689,29 @@ function enrichVerdictItem(
       !mismatchedFieldsSet.has('author') &&
       !hasLegalMismatch
     ) {
-      return { status: 'match', label: '100% Match' };
+      return { status: 'match', label: 'Match' };
     }
     if (mismatchedFieldsSet.has('authors') || mismatchedFieldsSet.has('author')) {
       return authorSim >= 0.45
-        ? { status: 'partial', label: `${Math.round(authorSim * 100)}% Sim` }
-        : { status: 'mismatch', label: 'Diff' };
+        ? { status: 'partial', label: `${Math.round(authorSim * 100)}% Match` }
+        : { status: 'mismatch', label: 'Mismatch' };
+    }
+    if (authorSim >= 0.98) {
+      return { status: 'match', label: '100% Match' };
     }
     if (
-      authorSim >= 0.95 ||
+      authorSim >= 0.85 ||
       (!hasExplicitAuthorSim && matchedFieldsSet.has('authors')) ||
       verdict.label === 'verified'
     ) {
-      return { status: 'match', label: '100% Match' };
+      return { status: 'match', label: 'Match' };
     }
     if (authorSim >= 0.45) {
-      return { status: 'partial', label: `${Math.round(authorSim * 100)}% Sim` };
+      return { status: 'partial', label: `${Math.round(authorSim * 100)}% Match` };
     }
     return {
       status: 'mismatch',
-      label: authorSim > 0 ? `${Math.round(authorSim * 100)}% Sim` : 'Diff',
+      label: authorSim > 0 ? `${Math.round(authorSim * 100)}% Match` : 'Mismatch',
     };
   };
 
@@ -2793,9 +2730,9 @@ function enrichVerdictItem(
     }
     if (!retrievedMeta && isIncompleteMeta) {
       if (mismatchedFieldsSet.has('year') || citedMeta.year === '—') {
-        return { status: 'partial', label: lang === 'vi' ? 'Thiếu' : 'Missing' };
+        return { status: 'partial', label: 'Missing' };
       }
-      return { status: 'missing', label: lang === 'vi' ? 'Đã ghi' : 'Provided' };
+      return { status: 'missing', label: 'Provided' };
     }
     if (citedMeta.year === '—') return { status: 'missing' };
     if (!retrievedMeta) return unmatchedNeutralStatus();
@@ -2803,7 +2740,7 @@ function enrichVerdictItem(
       mismatchedFieldsSet.has('year') ||
       (validYearDistance !== undefined && validYearDistance > 0)
     ) {
-      return { status: 'mismatch', label: 'Diff' };
+      return { status: 'mismatch', label: 'Mismatch' };
     }
     if (retrievedMeta.year !== '—') {
       const citedYr = parseInt(citedMeta.year, 10);
@@ -2811,7 +2748,7 @@ function enrichVerdictItem(
       if (!Number.isNaN(citedYr) && !Number.isNaN(retYr)) {
         return citedYr === retYr
           ? { status: 'match', label: '100% Match' }
-          : { status: 'mismatch', label: 'Diff' };
+          : { status: 'mismatch', label: 'Mismatch' };
       }
     }
     if (
@@ -2819,7 +2756,7 @@ function enrichVerdictItem(
       verdict.label === 'verified' ||
       (isLegalRule && verdict.label === 'resource' && !hasLegalMismatch)
     ) {
-      return { status: 'match', label: '100% Match' };
+      return { status: 'match', label: 'Match' };
     }
     return { status: 'partial', label: 'Checked' };
   };
@@ -2830,9 +2767,9 @@ function enrichVerdictItem(
     }
     if (!retrievedMeta && isIncompleteMeta) {
       if (mismatchedFieldsSet.has('venue') || citedMeta.venue === '—') {
-        return { status: 'partial', label: lang === 'vi' ? 'Thiếu' : 'Missing' };
+        return { status: 'partial', label: 'Missing' };
       }
-      return { status: 'missing', label: lang === 'vi' ? 'Đã ghi' : 'Provided' };
+      return { status: 'missing', label: 'Provided' };
     }
     if (citedMeta.venue === '—' && (!retrievedMeta || retrievedMeta.venue === '—')) {
       return { status: 'missing' };
@@ -2841,9 +2778,9 @@ function enrichVerdictItem(
       return { status: 'missing' };
     }
     if (!retrievedMeta) return unmatchedNeutralStatus();
-    if (mismatchedFieldsSet.has('venue')) return { status: 'mismatch', label: 'Diff' };
+    if (mismatchedFieldsSet.has('venue')) return { status: 'mismatch', label: 'Mismatch' };
     if (isLegalRule && verdict.label === 'resource' && !hasLegalMismatch) {
-      return { status: 'match', label: '100% Match' };
+      return { status: 'match', label: 'Match' };
     }
     if (citedMeta.venue === '—') return { status: 'missing' };
 
@@ -2852,12 +2789,12 @@ function enrichVerdictItem(
     const effectiveVenueSim = Math.max(verdict.features?.venue_sim ?? 0, lexicalVenueSim);
 
     if (BOGUS_VENUE_RE.test(citedMeta.venue) && effectiveVenueSim < 0.5) {
-      return { status: 'mismatch', label: 'Diff' };
+      return { status: 'mismatch', label: 'Mismatch' };
     }
 
     if (!hasExplicitBestVenue && retrievedMeta.venue !== citedMeta.venue) {
       return verdict.label === 'verified'
-        ? { status: 'match', label: '100% Match' }
+        ? { status: 'match', label: 'Match' }
         : { status: 'partial', label: 'Indexed' };
     }
 
@@ -2870,16 +2807,19 @@ function enrichVerdictItem(
       ) {
         return { status: 'partial', label: 'Preprint' };
       }
-      return { status: 'mismatch', label: 'Diff' };
+      return { status: 'mismatch', label: 'Mismatch' };
     }
 
-    if (effectiveVenueSim >= 0.5) {
+    if (effectiveVenueSim >= 0.98) {
       return { status: 'match', label: '100% Match' };
     }
-    if (effectiveVenueSim >= 0.25) {
-      return { status: 'partial', label: `${Math.round(effectiveVenueSim * 100)}% Sim` };
+    if (effectiveVenueSim >= 0.5) {
+      return { status: 'match', label: 'Match' };
     }
-    return { status: 'mismatch', label: 'Diff' };
+    if (effectiveVenueSim >= 0.25) {
+      return { status: 'partial', label: `${Math.round(effectiveVenueSim * 100)}% Match` };
+    }
+    return { status: 'mismatch', label: 'Mismatch' };
   };
 
   const computeDoiStatus = (): { status: FieldStatus; label?: string } => {
@@ -2888,24 +2828,24 @@ function enrichVerdictItem(
     }
     if (!retrievedMeta && isIncompleteMeta) {
       if (mismatchedFieldsSet.has('doi')) {
-        return { status: 'partial', label: lang === 'vi' ? 'Thiếu' : 'Missing' };
+        return { status: 'partial', label: 'Missing' };
       }
       if (citedMeta.doi === '—') {
         return { status: 'missing' };
       }
-      return { status: 'missing', label: lang === 'vi' ? 'Đã ghi' : 'Provided' };
+      return { status: 'missing', label: 'Provided' };
     }
     if (citedMeta.doi === '—' && (!retrievedMeta || retrievedMeta.doi === '—')) {
       return { status: 'missing' };
     }
     if (!retrievedMeta) {
       if (mismatchedFieldsSet.has('doi') || hasDoiRuleConflict) {
-        return { status: 'mismatch', label: 'Diff' };
+        return { status: 'mismatch', label: 'Mismatch' };
       }
       return unmatchedNeutralStatus();
     }
     if (mismatchedFieldsSet.has('doi') || hasDoiRuleConflict) {
-      return { status: 'mismatch', label: 'Diff' };
+      return { status: 'mismatch', label: 'Mismatch' };
     }
     if (citedMeta.doi === '—' && retrievedMeta.doi !== '—') {
       return { status: 'partial', label: 'Retrieved' };
@@ -2925,7 +2865,7 @@ function enrichVerdictItem(
       ) {
         return { status: 'partial', label: 'Preprint DOI' };
       }
-      return { status: 'mismatch', label: 'Diff' };
+      return { status: 'mismatch', label: 'Mismatch' };
     }
 
     if (citedMeta.doi !== '—' && Boolean(verdict.features?.doi_exact_match)) {
@@ -2939,28 +2879,25 @@ function enrichVerdictItem(
     return { status: 'missing' };
   };
 
-  const { status: urlStatus, code: urlCode } = resolveVerdictUrlStatus(verdict);
+  const { status: urlStatus } = resolveVerdictUrlStatus(verdict);
 
   const computeUrlStatus = (): { status: FieldStatus; label?: string } => {
     if (isUrlContentMismatch) {
       return {
         status: 'partial',
-        label: lang === 'vi' ? 'Sai nội dung trang' : 'Wrong Page',
+        label: 'Wrong Page',
       };
     }
     if (urlStatus === 'alive') {
       return {
         status: 'match',
-        label: lang === 'vi' ? 'Liên kết hoạt động' : 'Link Active',
+        label: 'Link Active',
       };
     }
     if (urlStatus === 'restricted_alive') {
       return {
         status: 'match',
-        label:
-          lang === 'vi'
-            ? `Truy cập hạn chế (HTTP ${urlCode || 403})`
-            : `Restricted Access (HTTP ${urlCode || 403})`,
+        label: 'Restricted Access',
       };
     }
     if (urlStatus === 'archived_alive') {
@@ -2969,26 +2906,26 @@ function enrichVerdictItem(
     if (urlStatus === 'dead_link') {
       return {
         status: 'mismatch',
-        label:
-          lang === 'vi'
-            ? `Liên kết lỗi (HTTP ${urlCode || 404})`
-            : `Broken Link (HTTP ${urlCode || 404})`,
+        label: 'Broken Link',
       };
     }
     if (urlStatus === 'fake_domain') {
       return {
         status: 'mismatch',
-        label: lang === 'vi' ? 'Tên miền không hợp lệ' : 'Invalid Domain',
+        label: 'Invalid Domain',
       };
     }
     if (mismatchedFieldsSet.has('url')) {
       return { status: 'mismatch', label: 'Broken Link' };
     }
     if (citedMeta.url === '—' && (!retrievedMeta || retrievedMeta.url === '—')) {
-      return { status: 'missing' };
+      return {
+        status: 'missing',
+        label: lang === 'vi' ? '— Không ghi' : '— Not provided',
+      };
     }
     if (!retrievedMeta && isIncompleteMeta && citedMeta.url !== '—') {
-      return { status: 'missing', label: lang === 'vi' ? 'Đã ghi' : 'Provided' };
+      return { status: 'missing', label: 'Provided' };
     }
     const citedUrlIsDoi = /^https?:\/\/(?:dx\.)?doi\.org\//i.test(citedMeta.url);
     if (!retrievedMeta && !isWebResourceMode) {
@@ -3002,18 +2939,28 @@ function enrichVerdictItem(
       if (doiEval.status === 'mismatch') {
         return { status: 'mismatch', label: 'Broken Link' };
       }
+      if (doiEval.status === 'match') {
+        return { status: 'match', label: 'Verified Link' };
+      }
     }
-    if (
-      citedMeta.url !== '—' &&
-      (verdict.label === 'verified' || verdict.label === 'resource')
-    ) {
+    const isStrongPaperMatch =
+      verdict.label === 'verified' ||
+      verdict.label === 'resource' ||
+      (Boolean(verdict.features?.doi_exact_match) && titleSim >= 0.95);
+    if (citedMeta.url !== '—' && isStrongPaperMatch) {
       return { status: 'match', label: 'Verified Link' };
     }
     if (citedMeta.url === '—' && retrievedMeta && retrievedMeta.url !== '—') {
-      if (verdict.label === 'verified' || verdict.label === 'resource') {
+      if (isStrongPaperMatch || (titleSim >= 0.9 && !mismatchedFieldsSet.has('url'))) {
         return { status: 'match', label: 'Resolved URL' };
       }
       return { status: 'partial', label: 'Resolved URL' };
+    }
+    if (citedMeta.url === '—') {
+      return {
+        status: 'missing',
+        label: lang === 'vi' ? '— Không ghi' : '— Not provided',
+      };
     }
     return { status: 'partial', label: 'Unverified' };
   };
@@ -3079,7 +3026,7 @@ function enrichVerdictItem(
       return {
         code: cleanCode,
         name: lang === 'vi' ? meta.nameVi : meta.nameEn,
-        condition: meta.condition,
+        explanation: lang === 'vi' ? meta.explanationVi : meta.explanationEn,
         status: isOverallUnconfirmed && meta.status === 'passed' ? 'warning' : meta.status,
       };
     }
@@ -3094,13 +3041,10 @@ function enrichVerdictItem(
             : 'warning';
       const statusFromOutcome: 'passed' | 'warning' | 'failed' =
         isOverallUnconfirmed && rawStatus === 'passed' ? 'warning' : rawStatus;
-      const condText = inspectorDef.conditions
-        .map((c) => `${c.field} ${c.operator} ${c.value}`)
-        .join(' AND ');
       return {
         code: cleanCode,
         name: lang === 'vi' ? inspectorDef.nameVi : inspectorDef.name,
-        condition: `IF ${condText} THEN ${inspectorDef.conclusion}`,
+        explanation: lang === 'vi' ? inspectorDef.descriptionVi : inspectorDef.description,
         status: statusFromOutcome,
       };
     }
@@ -3114,14 +3058,17 @@ function enrichVerdictItem(
       code: cleanCode,
       name:
         lang === 'vi'
-          ? `Quy tắc kiểm định ${cleanCode}`
-          : `Symbolic Verification Rule ${cleanCode}`,
-      condition: `IF ${cleanCode} THEN ${verdict.label.toUpperCase()}`,
+          ? 'Tiêu chí đối chiếu bổ sung'
+          : 'Additional Verification Check',
+      explanation:
+        lang === 'vi'
+          ? 'Hệ thống đã áp dụng thêm một tiêu chí kiểm tra cho trích dẫn này.'
+          : 'An additional verification check was applied to this citation.',
       status: fallbackStatus,
     };
   });
 
-  // Build Federated Sources List (combining actual matched_sources with the standard scholarly engines)
+  // Build Checked Sources List (combining actual matched_sources with standard scholarly libraries)
   const isNonScholarlyResourceUnrouted =
     (isWebResourceMode || isLegalRule || verdict.label === 'resource') &&
     verdict.features?.has_scholarly_candidate === false;
@@ -3130,24 +3077,38 @@ function enrichVerdictItem(
       key: 'local',
       label:
         lang === 'vi'
-          ? 'CSDL ACL / Bài báo Kinh điển Nội bộ (SQLite FTS5)'
-          : 'Local ACL / Known Papers (SQLite FTS5)',
+          ? 'Thư viện học thuật CITRA'
+          : 'CITRA Scholarly Library',
       matchTokens: ['local', 'known', 'acl'],
     },
-    { key: 'crossref', label: 'Crossref REST API', matchTokens: ['crossref'] },
-    { key: 'openalex', label: 'OpenAlex Scholarly Graph', matchTokens: ['openalex'] },
+    { key: 'crossref', label: 'Crossref', matchTokens: ['crossref'] },
+    { key: 'openalex', label: 'OpenAlex', matchTokens: ['openalex'] },
     { key: 'datacite', label: 'DataCite (Zenodo / Figshare / OSF)', matchTokens: ['datacite', 'zenodo', 'figshare'] },
-    { key: 'doaj', label: 'DOAJ (Directory of Open Access Journals)', matchTokens: ['doaj'] },
-    { key: 'openaire_hal', label: 'OpenAIRE Graph / HAL Open Science', matchTokens: ['openaire', 'hal'] },
-    { key: 'ncbi_biorxiv', label: 'NCBI Entrez / bioRxiv / medRxiv', matchTokens: ['ncbi', 'biorxiv', 'medrxiv'] },
-    { key: 'dblp', label: 'DBLP Computer Science Bibliography', matchTokens: ['dblp'] },
-    { key: 'arxiv', label: 'arXiv Preprint Repository', matchTokens: ['arxiv'] },
+    { key: 'doaj', label: 'DOAJ', matchTokens: ['doaj'] },
+    { key: 'openaire_hal', label: 'OpenAIRE / HAL', matchTokens: ['openaire', 'hal'] },
+    { key: 'ncbi_biorxiv', label: 'PubMed / bioRxiv / medRxiv', matchTokens: ['ncbi', 'biorxiv', 'medrxiv'] },
+    { key: 'dblp', label: 'DBLP', matchTokens: ['dblp'] },
+    { key: 'arxiv', label: 'arXiv', matchTokens: ['arxiv'] },
     { key: 'openlibrary', label: 'OpenLibrary / Google Books', matchTokens: ['openlibrary', 'google_books'] },
     { key: 'europepmc', label: 'Europe PMC / PubMed', matchTokens: ['europepmc', 'pubmed'] },
-    { key: 'huggingface', label: 'Hugging Face Hub (Models / Datasets / Papers)', matchTokens: ['huggingface'] },
-    { key: 'tech_standard', label: 'IETF RFC / PyPI / NPM / GitHub', matchTokens: ['tech_standard', 'rfc', 'pypi', 'npm', 'github'] },
-    { key: 'wikidata_opencitations', label: 'Wikidata Knowledge Graph / OpenCitations', matchTokens: ['wikidata', 'opencitations'] },
-    { key: 'doi_ra', label: 'Global DOI Registration Agency (CSL-JSON)', matchTokens: ['doi_ra', 'jalc', 'cnki', 'medra'] },
+    { key: 'huggingface', label: 'Hugging Face', matchTokens: ['huggingface'] },
+    {
+      key: 'tech_standard',
+      label:
+        lang === 'vi'
+          ? 'Tiêu chuẩn kỹ thuật & Mã nguồn'
+          : 'Technical Standards & Repositories',
+      matchTokens: ['tech_standard', 'rfc', 'pypi', 'npm', 'github'],
+    },
+    { key: 'wikidata_opencitations', label: 'Wikidata / OpenCitations', matchTokens: ['wikidata', 'opencitations'] },
+    {
+      key: 'doi_ra',
+      label:
+        lang === 'vi'
+          ? 'Hệ thống đăng ký DOI quốc tế'
+          : 'Global DOI Registry',
+      matchTokens: ['doi_ra', 'jalc', 'cnki', 'medra'],
+    },
   ];
 
   const usedSourceIndices = new Set<number>();
@@ -3534,31 +3495,66 @@ export function EssayPage() {
 
   const localizeFieldBadgeLabel = (rawLabel?: string, fallbackEn = ''): string => {
     const label = rawLabel || fallbackEn;
-    if (lang !== 'vi') return label;
-    const simMatch = label.match(/^(\d+)%\s*Sim$/i);
-    if (simMatch) return `Tương đồng ${simMatch[1]}%`;
+    const simMatch = label.match(/^(\d+)%\s*(?:Sim|Match)$/i);
+    if (simMatch) {
+      return lang === 'vi' ? `Khớp ${simMatch[1]}%` : `${simMatch[1]}% Match`;
+    }
+    if (lang !== 'vi') {
+      const mapEn: Record<string, string> = {
+        '100% Match': 'Exact Match',
+        Match: 'Match',
+        Partial: 'Partial',
+        Diff: 'Mismatch',
+        Mismatch: 'Mismatch',
+        Missing: 'Missing',
+        '— Missing': '— Missing',
+        Provided: 'Provided',
+        'Web Resource': 'Web Page',
+        'Web Page': 'Web Page',
+        'Wrong Page': 'Wrong Page',
+        Checked: 'Checked',
+        Indexed: 'Found',
+        Retrieved: 'Found',
+        'Wayback Archived': 'Web Archive',
+        'Fake Domain': 'Invalid Link',
+        'Invalid Domain': 'Invalid Link',
+        'Link Active': 'Link Active',
+        'Restricted Access': 'Restricted Access',
+        'Broken Link': 'Broken Link',
+        'Verified Link': 'Verified Link',
+        'Resolved URL': 'Found Link',
+        Preprint: 'Preprint',
+        'Preprint DOI': 'Preprint',
+        Unverified: 'Unverified',
+      };
+      return mapEn[label] ?? label;
+    }
     const mapVi: Record<string, string> = {
       '100% Match': 'Khớp 100%',
       Match: 'Khớp',
       Partial: 'Khớp một phần',
       Diff: 'Sai lệch',
+      Mismatch: 'Sai lệch',
       Missing: 'Thiếu',
       '— Missing': '— Thiếu',
       Provided: 'Đã ghi',
-      'Web Resource': 'Tài nguyên Web',
+      'Web Resource': 'Nguồn web',
+      'Web Page': 'Nguồn web',
       'Wrong Page': 'Sai nội dung trang',
       Checked: 'Đã kiểm tra',
-      Indexed: 'Đã lập chỉ mục',
-      Retrieved: 'Đã truy xuất',
-      'Wayback Archived': 'Lưu trữ Wayback',
-      'Fake Domain': 'Tên miền không hợp lệ',
-      'Invalid Domain': 'Tên miền không hợp lệ',
+      Indexed: 'Đã tìm thấy',
+      Retrieved: 'Đã tìm thấy',
+      'Đã trích xuất': 'Đã tìm thấy',
+      'Wayback Archived': 'Bản lưu trữ web',
+      'Fake Domain': 'Liên kết không hợp lệ',
+      'Invalid Domain': 'Liên kết không hợp lệ',
       'Link Active': 'Liên kết hoạt động',
-      'Broken Link': 'Liên kết hỏng',
+      'Restricted Access': 'Truy cập hạn chế',
+      'Broken Link': 'Liên kết không mở được',
       'Verified Link': 'Liên kết hợp lệ',
-      'Resolved URL': 'Đã phân giải URL',
-      Preprint: 'Bản tiền ấn phẩm',
-      'Preprint DOI': 'DOI tiền ấn phẩm',
+      'Resolved URL': 'Liên kết tìm được',
+      Preprint: 'Bản thảo chưa xuất bản',
+      'Preprint DOI': 'Bản thảo chưa xuất bản',
       Unverified: 'Chưa xác minh',
     };
     return mapVi[label] ?? label;
@@ -3571,23 +3567,23 @@ export function EssayPage() {
     switch (fieldInfo.status) {
       case 'match':
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-mono font-semibold whitespace-nowrap shrink-0 bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-sans font-semibold whitespace-nowrap shrink-0 bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
             <Check className="h-3 w-3 shrink-0" />{' '}
-            {localizeFieldBadgeLabel(fieldInfo.label, '100% Match')}
+            {localizeFieldBadgeLabel(fieldInfo.label, 'Match')}
           </span>
         );
       case 'partial':
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-mono font-semibold whitespace-nowrap shrink-0 bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-sans font-semibold whitespace-nowrap shrink-0 bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
             <AlertTriangle className="h-3 w-3 shrink-0" />{' '}
             {localizeFieldBadgeLabel(fieldInfo.label, 'Partial')}
           </span>
         );
       case 'mismatch':
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-mono font-semibold whitespace-nowrap shrink-0 bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300 border border-red-200 dark:border-red-800">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-sans font-semibold whitespace-nowrap shrink-0 bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300 border border-red-200 dark:border-red-800">
             <XCircle className="h-3 w-3 shrink-0" />{' '}
-            {localizeFieldBadgeLabel(fieldInfo.label, 'Diff')}
+            {localizeFieldBadgeLabel(fieldInfo.label, 'Mismatch')}
           </span>
         );
       case 'missing': {
@@ -3597,7 +3593,7 @@ export function EssayPage() {
             ? '— Thiếu'
             : '— Missing';
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-mono font-semibold whitespace-nowrap shrink-0 bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-sans font-semibold whitespace-nowrap shrink-0 bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
             {displayMissing}
           </span>
         );
@@ -3626,7 +3622,7 @@ export function EssayPage() {
               <h2 className="font-display text-lg sm:text-xl font-bold text-slate-900 dark:text-slate-100">
                 {lang === 'vi'
                   ? 'Phân tích tài liệu không thành công'
-                  : 'Manuscript Analysis Failed'}
+                  : 'Document Analysis Failed'}
               </h2>
               <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed break-words">
                 {friendlyErrorMessage || rawErrorMessage}
@@ -3634,14 +3630,14 @@ export function EssayPage() {
               <div className="flex flex-wrap items-center gap-3 pt-2">
                 <Link
                   to="/upload"
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-mono font-semibold bg-indigo-600 hover:bg-indigo-700 text-white transition-colors"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-sans font-semibold bg-indigo-600 hover:bg-indigo-700 text-white transition-colors"
                 >
                   <ArrowUpRight className="h-4 w-4" />
                   {lang === 'vi' ? 'Tải lên lại' : 'Upload Again'}
                 </Link>
                 <Link
                   to="/history"
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-mono font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-colors"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-sans font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-colors"
                 >
                   {lang === 'vi' ? 'Quay lại Lịch sử' : 'Back to History'}
                 </Link>
@@ -3731,6 +3727,28 @@ export function EssayPage() {
   const sameFamilyRevisions = (activeRevisionDiff?.available_revisions ?? []).filter(
     (rev) => rev.is_same_stem !== false && !/acl_sandbox/i.test(rev.filename),
   );
+  const normalizeRevisionChangeKey = (raw?: string | null): string => {
+    const cleaned = (raw || '').trim().toLowerCase();
+    if (!cleaned || cleaned === 'none') return '';
+    if (cleaned === 'removed' || cleaned === 'deleted') return 'removed';
+    if (cleaned === 'added' || cleaned === 'new') return 'added';
+    return normalizeVerdictKey(cleaned);
+  };
+  const isUnchangedRevisionEntry = (chg: {
+    before_label?: string | null;
+    after_label?: string | null;
+  }): boolean => {
+    const beforeKey = normalizeRevisionChangeKey(chg.before_label);
+    const afterKey = normalizeRevisionChangeKey(chg.after_label);
+    if (beforeKey && afterKey && beforeKey === afterKey) return true;
+    const beforeLbl = formatRevisionVerdictLabel(chg.before_label, lang);
+    const afterLbl = formatRevisionVerdictLabel(chg.after_label, lang);
+    return Boolean(beforeLbl && beforeLbl !== '—' && beforeLbl === afterLbl);
+  };
+  const allRevisionChanges = activeRevisionDiff?.citation_changes ?? [];
+  const actualRevisionChanges = allRevisionChanges.filter(
+    (chg) => !isUnchangedRevisionEntry(chg),
+  );
   const hasRevisionCountChanges = Boolean(
     activeRevisionDiff?.counts_before &&
       activeRevisionDiff?.counts_after &&
@@ -3747,8 +3765,8 @@ export function EssayPage() {
     activeRevisionDiff &&
       Math.abs(activeRevisionDiff.cis_delta ?? 0) < 0.05 &&
       (activeRevisionDiff.resolved_issues_count ?? 0) === 0 &&
-      (activeRevisionDiff.new_issues_count ?? 0) === 0 &&
-      (activeRevisionDiff.citation_changes?.length ?? 0) === 0 &&
+      actualRevisionChanges.length === 0 &&
+      (allRevisionChanges.length > 0 || (activeRevisionDiff.new_issues_count ?? 0) === 0) &&
       !hasRevisionCountChanges,
   );
 
@@ -3777,6 +3795,8 @@ export function EssayPage() {
     const cleanField = (val?: string | null) =>
       val &&
       val !== '—' &&
+      val !== 'Trang web không ghi thông tin này' &&
+      val !== 'Not listed on this web page' &&
       val !== 'Trang web không khai báo thẻ này' &&
       val !== 'Not declared in page metadata'
         ? val.trim()
@@ -3833,7 +3853,7 @@ export function EssayPage() {
         onOpenRemediation={() => setRemediationOpen(true)}
       />
 
-      {/* Legacy Vietnamese Encoding (TCVN3/VNI) & Page-Selective OCR Recovery Diagnostics */}
+      {/* Legacy Vietnamese Font & Scanned-Page Text Recovery Notices */}
       {(Boolean(docDiag?.legacy_encoding_detected) ||
         (docDiag?.ocr_pages_recovered?.length ?? 0) > 0) && (
         <div
@@ -3848,8 +3868,8 @@ export function EssayPage() {
               <Sparkles className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
               <span>
                 {lang === 'vi'
-                  ? `Đã tự động chuyển mã bảng mã tiếng Việt cũ (${String(docDiag.legacy_encoding_detected).toUpperCase()} → Unicode NFC)`
-                  : `Auto-transcoded legacy Vietnamese encoding (${String(docDiag.legacy_encoding_detected).toUpperCase()} → Unicode NFC)`}
+                  ? 'Đã tự động chuyển đổi phông chữ tiếng Việt cũ sang chuẩn hiện đại để đọc chính xác hơn.'
+                  : 'Automatically converted legacy Vietnamese fonts so citations could be read accurately.'}
               </span>
             </div>
           )}
@@ -3861,8 +3881,8 @@ export function EssayPage() {
               <FileText className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
               <span>
                 {lang === 'vi'
-                  ? `Đã khôi phục văn bản bằng OCR (Tesseract vie+eng) tại trang: ${docDiag!.ocr_pages_recovered!.join(', ')}`
-                  : `Recovered text via Tesseract OCR (vie+eng) on page(s): ${docDiag!.ocr_pages_recovered!.join(', ')}`}
+                  ? `Đã tự động nhận dạng chữ từ các trang dạng ảnh (trang ${docDiag!.ocr_pages_recovered!.join(', ')}).`
+                  : `Automatically extracted text from scanned pages (pages ${docDiag!.ocr_pages_recovered!.join(', ')}).`}
               </span>
             </div>
           )}
@@ -3887,8 +3907,8 @@ export function EssayPage() {
                   </span>
                   <h3 className="text-sm sm:text-base font-bold text-amber-950 dark:text-amber-100">
                     {lang === 'vi'
-                      ? 'Phát hiện Tài liệu PDF dạng Ảnh quét (Thiếu lớp văn bản)'
-                      : 'Scanned / Image-Only PDF Detected (Missing Digital Text Layer)'}
+                      ? 'Không thể đọc chữ trong tệp PDF này (dạng ảnh quét)'
+                      : 'This PDF appears to be scanned images and cannot be read'}
                   </h3>
                 </div>
                 <p className="text-xs sm:text-sm text-amber-900/90 dark:text-amber-200/90 leading-relaxed max-w-3xl">
@@ -3896,21 +3916,11 @@ export function EssayPage() {
                 </p>
                 <div className="flex flex-wrap items-center gap-3 pt-1 text-xs text-amber-800 dark:text-amber-300">
                   <span>
-                    • {lang === 'vi' ? 'Số trang thiếu lớp chữ' : 'Scanned pages'}:{' '}
+                    • {lang === 'vi' ? 'Số trang dạng ảnh quét' : 'Scanned pages'}:{' '}
                     <strong>
                       {docDiag?.scanned_pages_count ?? report.num_pages}/{report.num_pages}
                     </strong>
                   </span>
-                  {typeof docDiag?.avg_chars_per_page === 'number' &&
-                    docDiag.avg_chars_per_page >= 0 && (
-                      <span>
-                        • {lang === 'vi' ? 'Mật độ ký tự trung bình' : 'Avg extractable chars/page'}:{' '}
-                        <strong>
-                          {docDiag.avg_chars_per_page}{' '}
-                          {lang === 'vi' ? 'ký tự/trang' : 'chars/page'}
-                        </strong>
-                      </span>
-                    )}
                 </div>
               </div>
             </div>
@@ -3921,8 +3931,8 @@ export function EssayPage() {
               >
                 <ArrowUpRight className="h-4 w-4" />
                 {lang === 'vi'
-                  ? 'Tải lên bản .DOCX / PDF số hóa'
-                  : 'Upload Native .DOCX / Digital PDF'}
+                  ? 'Tải lên tệp Word (.docx) hoặc PDF gốc'
+                  : 'Upload Word (.docx) or Text PDF'}
               </Link>
             </div>
           </div>
@@ -3947,7 +3957,7 @@ export function EssayPage() {
             <span className="inline-flex items-center gap-2 min-w-0">
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-600 text-white shrink-0">
                 <GitBranch className="h-3 w-3" />
-                v1 → v2
+                {lang === 'vi' ? 'Bản trước → Bản này' : 'Previous draft → Current draft'}
               </span>
               <span className="font-semibold text-slate-800 dark:text-slate-200 truncate">
                 {formatCisScore(activeRevisionDiff.cis_before ?? 0)} →{' '}
@@ -3972,19 +3982,23 @@ export function EssayPage() {
             <div className="flex flex-wrap items-center gap-2.5 min-w-0 text-xs sm:text-[13px]">
               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-indigo-600 text-white">
                 <GitBranch className="h-3 w-3 shrink-0" />
-                v1 → v2
+                {lang === 'vi' ? 'Bản trước → Bản này' : 'Previous draft → Current draft'}
               </span>
               <span className="text-slate-700 dark:text-slate-300">
-                {lang === 'vi' ? 'So sánh với bản cũ:' : 'Compared against:'}{' '}
+                {lang === 'vi' ? 'So sánh với bản trước:' : 'Compared with previous draft:'}{' '}
                 <strong className="text-slate-900 dark:text-white">
-                  #{activeRevisionDiff.previous_essay_id} — {activeRevisionDiff.previous_filename}
+                  {activeRevisionDiff.previous_filename}
                 </strong>
               </span>
 
               {sameFamilyRevisions.length > 1 && (
                 <select
                   data-testid="revision-compare-select"
-                  aria-label="Select previous revision to compare"
+                  aria-label={
+                    lang === 'vi'
+                      ? 'Chọn bản trước để so sánh'
+                      : 'Select previous draft to compare'
+                  }
                   value={activeRevisionDiff.previous_essay_id ?? ''}
                   disabled={loadingRevisionDiff}
                   onChange={(e) => {
@@ -3995,8 +4009,7 @@ export function EssayPage() {
                 >
                   {sameFamilyRevisions.map((rev) => (
                     <option key={rev.essay_id} value={rev.essay_id}>
-                      #{rev.essay_id}{' '}
-                      {rev.filename.length > 18 ? `${rev.filename.slice(0, 16)}...` : rev.filename}{' '}
+                      {rev.filename.length > 22 ? `${rev.filename.slice(0, 20)}...` : rev.filename}{' '}
                       ({formatCisScore(rev.cis_score)})
                     </option>
                   ))}
@@ -4076,7 +4089,7 @@ export function EssayPage() {
                     <>
                       {deltaVerified !== 0 && (
                         <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-300">
-                          <span>{lang === 'vi' ? 'Hợp lệ:' : 'Verified:'}</span>
+                          <span>{lang === 'vi' ? 'Đã xác minh:' : 'Verified:'}</span>
                           <strong>{afterVerified}</strong>
                           <span
                             data-testid="revision-delta-verified"
@@ -4150,7 +4163,7 @@ export function EssayPage() {
                 to={`/verification/report/${activeRevisionDiff.previous_essay_id}`}
                 className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:text-indigo-600 transition-colors"
               >
-                {lang === 'vi' ? 'Mở bản cũ' : 'Open v1'}
+                {lang === 'vi' ? 'Mở bản trước' : 'Open previous draft'}
                 <ArrowUpRight className="h-3.5 w-3.5" />
               </Link>
             </div>
@@ -4161,10 +4174,16 @@ export function EssayPage() {
               data-testid="revision-diff-details-panel"
               className="mt-3 pt-3 border-t border-indigo-200/70 dark:border-indigo-800/60 space-y-2.5"
             >
-              {activeRevisionDiff.citation_changes &&
-              activeRevisionDiff.citation_changes.length > 0 ? (
+              {actualRevisionChanges.length === 0 && (
+                <p className="text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                  {lang === 'vi'
+                    ? 'Không phát sinh lỗi mới so với bản trước.'
+                    : 'No new issues compared to the previous draft.'}
+                </p>
+              )}
+              {allRevisionChanges.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 max-h-60 overflow-y-auto pr-1">
-                  {activeRevisionDiff.citation_changes.map((chg, idx) => {
+                  {allRevisionChanges.map((chg, idx) => {
                     const extChg = chg as typeof chg & {
                       composite_label?: string | null;
                     };
@@ -4174,12 +4193,15 @@ export function EssayPage() {
                         ? rawComposite
                         : `[${rawComposite}]`
                       : null;
+                    const isUnchanged = isUnchangedRevisionEntry(chg);
                     const isGood =
-                      chg.transition === 'fixed' ||
-                      chg.transition === 'removed_hallucination' ||
-                      chg.transition === 'fixed_and_reformatted' ||
-                      (chg.after_label === 'verified' && chg.before_label !== 'verified');
+                      !isUnchanged &&
+                      (chg.transition === 'fixed' ||
+                        chg.transition === 'removed_hallucination' ||
+                        chg.transition === 'fixed_and_reformatted' ||
+                        (chg.after_label === 'verified' && chg.before_label !== 'verified'));
                     const isRegression =
+                      !isUnchanged &&
                       !isGood &&
                       (chg.after_label === 'suspected_hallucination' ||
                         chg.transition === 'regressed' ||
@@ -4189,38 +4211,46 @@ export function EssayPage() {
                         key={idx}
                         data-testid={`revision-change-item-${idx}`}
                         className={`p-3 rounded-xl border text-xs flex flex-col gap-1 ${
-                          isGood
-                            ? 'bg-emerald-50/70 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800/70'
-                            : isRegression
-                              ? 'bg-rose-50/70 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800/70'
-                              : 'bg-amber-50/70 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800/70'
+                          isUnchanged
+                            ? 'bg-slate-50/80 dark:bg-slate-900/60 border-slate-200 dark:border-slate-700/70'
+                            : isGood
+                              ? 'bg-emerald-50/70 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800/70'
+                              : isRegression
+                                ? 'bg-rose-50/70 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800/70'
+                                : 'bg-amber-50/70 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800/70'
                         }`}
                       >
                         <div className="flex items-center justify-between gap-2 font-semibold flex-wrap">
                           <span
                             className={
-                              isGood
-                                ? 'text-emerald-700 dark:text-emerald-300'
-                                : isRegression
-                                  ? 'text-rose-700 dark:text-rose-300'
-                                  : 'text-amber-700 dark:text-amber-300'
+                              isUnchanged
+                                ? 'text-slate-600 dark:text-slate-400'
+                                : isGood
+                                  ? 'text-emerald-700 dark:text-emerald-300'
+                                  : isRegression
+                                    ? 'text-rose-700 dark:text-rose-300'
+                                    : 'text-amber-700 dark:text-amber-300'
                             }
                           >
-                            {chg.transition === 'removed_hallucination'
+                            {isUnchanged
                               ? lang === 'vi'
-                                ? '✓ Đã gỡ nguồn không xác thực'
-                                : '✓ Removed Unverified Source'
-                              : isGood
+                                ? 'Chưa thay đổi'
+                                : 'Unchanged'
+                              : chg.transition === 'removed_hallucination'
                                 ? lang === 'vi'
-                                  ? '✓ Đã sửa thành công'
-                                  : '✓ Repaired to Verified'
-                                : isRegression
+                                  ? '✓ Đã gỡ nguồn chưa xác minh'
+                                  : '✓ Removed Unverified Source'
+                                : isGood
                                   ? lang === 'vi'
-                                    ? '✕ Phát sinh lỗi mới'
-                                    : '✕ New Issue Detected'
-                                  : lang === 'vi'
-                                    ? '⚠ Cần kiểm tra thêm'
-                                    : '⚠ Needs Attention'}
+                                    ? '✓ Đã sửa & xác minh'
+                                    : '✓ Fixed & Verified'
+                                  : isRegression
+                                    ? lang === 'vi'
+                                      ? '✕ Phát sinh lỗi mới'
+                                      : '✕ New Issue Detected'
+                                    : lang === 'vi'
+                                      ? '⚠ Cần kiểm tra thêm'
+                                      : '⚠ Needs Attention'}
                           </span>
                           <span className="text-[10px] px-2 py-0.5 rounded bg-white/80 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
                             {formatRevisionVerdictLabel(chg.before_label, lang)} →{' '}
@@ -4248,8 +4278,8 @@ export function EssayPage() {
               ) : (
                 <p className="text-xs text-slate-600 dark:text-slate-400">
                   {lang === 'vi'
-                    ? `Đã đối chiếu tự động giữa #${activeRevisionDiff.previous_essay_id} (${formatCisScore(activeRevisionDiff.cis_before ?? 0)}) và #${activeRevisionDiff.current_essay_id} (${formatCisScore(activeRevisionDiff.cis_after ?? 0)}).`
-                    : `Automatically compared #${activeRevisionDiff.previous_essay_id} and #${activeRevisionDiff.current_essay_id}.`}
+                    ? `Không phát sinh lỗi mới so với bản trước (${activeRevisionDiff.previous_filename}).`
+                    : `No new issues compared to the previous draft (${activeRevisionDiff.previous_filename}).`}
                 </p>
               )}
             </div>
@@ -4276,13 +4306,17 @@ export function EssayPage() {
             >
               <span>
                 {lang === 'vi'
-                  ? `So với bản cũ (#${activeRevisionDiff.previous_essay_id} — ${activeRevisionDiff.previous_filename}): Không đổi`
-                  : `Compared to #${activeRevisionDiff.previous_essay_id} — ${activeRevisionDiff.previous_filename}: No changes`}
+                  ? `Không phát sinh lỗi mới so với bản trước (${activeRevisionDiff.previous_filename})`
+                  : `No new issues compared to the previous draft (${activeRevisionDiff.previous_filename})`}
               </span>
               {sameFamilyRevisions.length > 1 && (
                 <select
                   data-testid="revision-compare-select"
-                  aria-label="Select previous revision to compare"
+                  aria-label={
+                    lang === 'vi'
+                      ? 'Chọn bản trước để so sánh'
+                      : 'Select previous draft to compare'
+                  }
                   value={activeRevisionDiff.previous_essay_id ?? ''}
                   disabled={loadingRevisionDiff}
                   onChange={(e) => {
@@ -4293,8 +4327,7 @@ export function EssayPage() {
                 >
                   {sameFamilyRevisions.map((rev) => (
                     <option key={rev.essay_id} value={rev.essay_id}>
-                      #{rev.essay_id}{' '}
-                      {rev.filename.length > 16 ? `${rev.filename.slice(0, 14)}...` : rev.filename}
+                      {rev.filename.length > 20 ? `${rev.filename.slice(0, 18)}...` : rev.filename}
                     </option>
                   ))}
                 </select>
@@ -4303,7 +4336,7 @@ export function EssayPage() {
                 to={`/verification/report/${activeRevisionDiff.previous_essay_id}`}
                 className="inline-flex items-center gap-0.5 font-medium text-indigo-600 dark:text-indigo-400 hover:underline"
               >
-                <span>{lang === 'vi' ? 'Mở bản cũ' : 'Open v1'}</span>
+                <span>{lang === 'vi' ? 'Mở bản trước' : 'Open previous draft'}</span>
                 <ArrowUpRight className="h-3 w-3" />
               </Link>
             </div>
@@ -4431,7 +4464,9 @@ export function EssayPage() {
                             </label>
                           )}
                           <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 shrink-0 tabular-nums">
-                            {filteredItems.length}/{enrichedItems.length}
+                            {lang === 'vi'
+                              ? `${filteredItems.length} / ${enrichedItems.length} mục`
+                              : `${filteredItems.length} of ${enrichedItems.length}`}
                           </span>
                         </div>
 
@@ -4514,7 +4549,7 @@ export function EssayPage() {
                   <div
                     className="flex-1 p-3 sm:p-3.5 space-y-2 min-h-0 max-h-[520px] lg:max-h-none overflow-y-auto"
                     role="listbox"
-                    aria-label="Extracted Citations"
+                    aria-label={lang === 'vi' ? 'Danh sách trích dẫn' : 'Citation list'}
                   >
                     {(() => {
                       const isAttentionItem = (it: EnrichedCitationItem) =>
@@ -4583,9 +4618,11 @@ export function EssayPage() {
                                   {cit.inText}
                                 </span>
                               </div>
-                              <span className="text-[11px] text-slate-400 shrink-0">
-                                {cit.pageLabel}
-                              </span>
+                              {cit.pageLabel && (
+                                <span className="text-[11px] text-slate-400 shrink-0">
+                                  {cit.pageLabel}
+                                </span>
+                              )}
                             </div>
 
                             <p className="text-xs text-slate-600 dark:text-slate-400 line-clamp-1 mb-2 break-words [overflow-wrap:anywhere]">
@@ -4683,8 +4720,12 @@ export function EssayPage() {
                             {activeItem.marker}
                           </code>
                         </span>
-                        <span>•</span>
-                        <span>{activeItem.pageLabel}</span>
+                        {activeItem.pageLabel && (
+                          <>
+                            <span>•</span>
+                            <span>{activeItem.pageLabel}</span>
+                          </>
+                        )}
                       </div>
                       <h3 className="font-sans text-lg sm:text-xl font-bold leading-snug text-slate-900 dark:text-white break-words [overflow-wrap:anywhere]">
                         <SoftTextSwap text={activeItem.citedMeta.title} />
@@ -4729,7 +4770,7 @@ export function EssayPage() {
                     }`}
                   >
                     <div className="flex items-start gap-2.5">
-                      <Scale
+                      <Info
                         className={`h-4 w-4 shrink-0 mt-0.5 ${
                           activeItem.verdict.label === 'suspected_hallucination'
                             ? 'text-red-600 dark:text-red-400'
@@ -4740,9 +4781,9 @@ export function EssayPage() {
                       />
                       <div className="text-xs sm:text-sm leading-relaxed text-slate-800 dark:text-slate-200 flex-1 min-w-0">
                         <span className="font-semibold text-slate-900 dark:text-white mr-1.5">
-                          {lang === 'vi' ? 'Tóm tắt kiểm tra:' : 'Summary:'}
+                          {lang === 'vi' ? 'Tóm tắt:' : 'Summary:'}
                         </span>{' '}
-                        <StreamingText text={activeItem.explanationText} />
+                        <span>{activeItem.explanationText}</span>
 
                         {canViewDeepTrace &&
                           (() => {
@@ -4773,16 +4814,6 @@ export function EssayPage() {
                               hasCrossLingualRule;
                             if (!shouldRenderCrossLingual) return null;
 
-                            const citedSample = `${activeItem.citedMeta.title} ${activeItem.verdict.context || ''} ${activeItem.verdict.citation_raw || ''}`;
-                            const canonicalSample =
-                              activeItem.retrievedMeta?.title ||
-                              activeItem.verdict.matched_sources?.[0]?.title ||
-                              '';
-                            const direction = detectCrossLingualDirection(
-                              citedSample,
-                              canonicalSample,
-                              f?.cross_lingual_direction,
-                            );
                             const onnxSim = Math.max(
                               f?.cross_lingual_title_sim ?? 0,
                               f?.title_sim_semantic ?? 0,
@@ -4794,50 +4825,38 @@ export function EssayPage() {
                             return (
                               <div
                                 data-testid="essay-bridged-concepts"
-                                className="mt-2 pt-2 border-t border-slate-200/70 dark:border-slate-800 flex flex-wrap items-center gap-1.5"
+                                className="mt-2 pt-2 border-t border-slate-200/70 dark:border-slate-800 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-600 dark:text-slate-400"
                               >
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-indigo-100 text-indigo-800 border border-indigo-200 dark:bg-indigo-950/80 dark:text-indigo-200 dark:border-indigo-800">
-                                  {direction}
-                                </span>
                                 {bridgedConcepts.length > 0 ? (
                                   <>
-                                    <span className="text-[10px] font-semibold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+                                    <span className="font-medium text-slate-600 dark:text-slate-300">
                                       {lang === 'vi'
-                                        ? 'Cầu nối Khái niệm Học thuật:'
-                                        : 'Academic Concept Bridge:'}
+                                        ? 'Khớp nội dung Việt–Anh:'
+                                        : 'Cross-language match:'}
                                     </span>
                                     {bridgedConcepts.slice(0, 5).map((pair, idx) => (
                                       <span
                                         key={idx}
-                                        className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] bg-indigo-50 text-indigo-700 border border-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-300 dark:border-indigo-800/70"
+                                        className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] bg-indigo-50/80 text-indigo-700 border border-indigo-200/70 dark:bg-indigo-950/50 dark:text-indigo-300 dark:border-indigo-800/60"
                                       >
                                         {pair}
                                       </span>
                                     ))}
                                     {onnxPct !== null && (
-                                      <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold bg-teal-50 text-teal-700 border border-teal-200 dark:bg-teal-950/60 dark:text-teal-300 dark:border-teal-800/70">
-                                        {lang === 'vi' ? `Việt ↔ Anh · ${onnxPct}%` : `VI ↔ EN · ${onnxPct}%`}
+                                      <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                                        ({onnxPct}%)
                                       </span>
                                     )}
                                   </>
                                 ) : (
-                                  <div
+                                  <span
                                     data-testid="essay-onnx-cross-lingual-badge"
-                                    className="flex flex-wrap items-center gap-1.5"
+                                    className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-600 dark:text-slate-300"
                                   >
-                                    <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold bg-teal-50 text-teal-800 border border-teal-200 dark:bg-teal-950/70 dark:text-teal-200 dark:border-teal-800">
-                                      {lang === 'vi'
-                                        ? 'Đối chiếu ngữ nghĩa Việt ↔ Anh'
-                                        : 'VI ↔ EN Cross-Lingual Semantic Match'}
-                                    </span>
-                                    {onnxPct !== null && (
-                                      <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-300 dark:border-indigo-800/70">
-                                        {lang === 'vi'
-                                          ? `Tương đồng đa ngôn ngữ: ${onnxPct}%`
-                                          : `Cross-Lingual Sim: ${onnxPct}%`}
-                                      </span>
-                                    )}
-                                  </div>
+                                    {lang === 'vi'
+                                      ? `Khớp nội dung Việt–Anh${onnxPct !== null ? ` (${onnxPct}%)` : ''}`
+                                      : `Cross-language match${onnxPct !== null ? ` (${onnxPct}%)` : ''}`}
+                                  </span>
                                 )}
                               </div>
                             );
@@ -4874,8 +4893,8 @@ export function EssayPage() {
                               canCopyClean
                                 ? undefined
                                 : lang === 'vi'
-                                  ? 'Không tìm thấy bản ghi chuẩn trong thư viện để sao chép'
-                                  : 'No canonical library record was found to copy'
+                                  ? 'Chưa tìm thấy nguồn gốc khớp để sao chép trích dẫn chuẩn'
+                                  : 'No verified source found to copy a formatted citation'
                             }
                             onClick={() => {
                               if (canCopyClean) {
@@ -4917,7 +4936,7 @@ export function EssayPage() {
                               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
                             >
                               <span>
-                                {lang === 'vi' ? 'Mở bài báo gốc' : 'Open Source Paper'}
+                                {lang === 'vi' ? 'Mở nguồn gốc' : 'Open Original Source'}
                               </span>
                               <ExternalLink className="h-3.5 w-3.5" />
                             </a>
@@ -4939,18 +4958,18 @@ export function EssayPage() {
                         <thead className="hidden sm:table-header-group lg:hidden xl:table-header-group">
                           <tr className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 text-[11px] font-semibold uppercase text-slate-500 dark:text-slate-400">
                             <th className="py-2.5 px-3 w-[96px]">
-                              {lang === 'vi' ? 'Trường' : 'Field'}
+                              {lang === 'vi' ? 'Thông tin' : 'Field'}
                             </th>
                             <th className="py-2.5 px-3">
-                              {lang === 'vi' ? 'Trích dẫn trong bài' : 'Cited in Manuscript'}
+                              {lang === 'vi' ? 'Trích dẫn trong bài' : 'Cited in Essay'}
                             </th>
                             <th className="py-2.5 px-3">
                               {lang === 'vi'
-                                ? 'Bản ghi chuẩn truy xuất'
-                                : 'Canonical Retrieved'}
+                                ? 'Dữ liệu gốc tìm được'
+                                : 'Published Record'}
                             </th>
                             <th className="py-2.5 px-3 w-[160px] min-w-[140px] whitespace-nowrap text-right">
-                              {lang === 'vi' ? 'Trạng thái' : 'Status'}
+                              {lang === 'vi' ? 'Kết quả' : 'Status'}
                             </th>
                           </tr>
                         </thead>
@@ -5034,7 +5053,7 @@ export function EssayPage() {
                                   </td>
                                   <td className="py-0.5 sm:py-2.5 lg:py-0.5 xl:py-2.5 px-0 sm:px-3 lg:px-0 xl:px-3 text-slate-900 dark:text-slate-100 font-medium align-top break-words [overflow-wrap:anywhere] sm:table-cell lg:block xl:table-cell">
                                     <span className="sm:hidden lg:block xl:hidden block text-[10px] uppercase text-slate-400 mb-0.5">
-                                      {lang === 'vi' ? 'Trích dẫn trong bài' : 'Cited in Manuscript'}
+                                      {lang === 'vi' ? 'Trích dẫn trong bài' : 'Cited in Essay'}
                                     </span>
                                     {(() => {
                                       const safeCitedUrl =
@@ -5059,8 +5078,8 @@ export function EssayPage() {
                                   <td className="py-0.5 sm:py-2.5 lg:py-0.5 xl:py-2.5 px-0 sm:px-3 lg:px-0 xl:px-3 text-slate-700 dark:text-slate-300 align-top break-words [overflow-wrap:anywhere] sm:table-cell lg:block xl:table-cell">
                                     <span className="sm:hidden lg:block xl:hidden block text-[10px] uppercase text-slate-400 mb-0.5">
                                       {lang === 'vi'
-                                        ? 'Bản ghi chuẩn truy xuất'
-                                        : 'Canonical Retrieved'}
+                                        ? 'Dữ liệu gốc tìm được'
+                                        : 'Published Record'}
                                     </span>
                                     {activeItem.retrievedMeta ? (
                                       (() => {
@@ -5102,8 +5121,8 @@ export function EssayPage() {
                                               ) && (
                                                 <span className="block text-[11px] font-sans text-amber-700 dark:text-amber-400 font-medium">
                                                   {lang === 'vi'
-                                                    ? 'HTTP 200 hoạt động nhưng trỏ tới tiêu đề trang web khác'
-                                                    : 'HTTP 200 resolved to a different page title'}
+                                                    ? 'Đường dẫn vẫn mở được nhưng dẫn tới trang có tiêu đề khác'
+                                                    : 'Link opens, but leads to a page with a different title'}
                                                 </span>
                                               )}
                                             </div>
@@ -5111,9 +5130,9 @@ export function EssayPage() {
                                         }
                                         if (
                                           activeItem.retrievedMeta[key] ===
-                                            'Trang web không khai báo thẻ này' ||
+                                            'Trang web không ghi thông tin này' ||
                                           activeItem.retrievedMeta[key] ===
-                                            'Not declared in page metadata'
+                                            'Not listed on this web page'
                                         ) {
                                           return (
                                             <span className="text-slate-500 dark:text-slate-400 italic">
@@ -5147,14 +5166,14 @@ export function EssayPage() {
                                         'restricted_alive' ? (
                                         <span className="text-slate-600 dark:text-slate-300">
                                           {lang === 'vi'
-                                            ? 'Tài nguyên web hợp lệ (tường lửa/chặn bot — không đọc được thẻ HTML)'
-                                            : 'Verified web resource (bot-protected — HTML meta unavailable)'}
+                                            ? 'Trang web hạn chế truy cập tự động — vui lòng bấm mở trực tiếp'
+                                            : 'This website restricts automated preview — please open it directly'}
                                         </span>
                                       ) : (
                                         <span className="text-slate-600 dark:text-slate-300">
                                           {lang === 'vi'
-                                            ? 'Tài nguyên web trực tiếp (không có thẻ metadata HTML)'
-                                            : 'Direct web resource (no HTML metadata tags)'}
+                                            ? 'Trang web hợp lệ (không có thông tin mô tả sẵn)'
+                                            : 'Live web page (no summary details listed)'}
                                         </span>
                                       )
                                     ) : (activeItem.verdict.triggered_rules ?? []).includes(
@@ -5162,14 +5181,14 @@ export function EssayPage() {
                                       ) ? (
                                       <span className="text-amber-700 dark:text-amber-400 italic">
                                         {lang === 'vi'
-                                          ? 'Chưa đủ thông tin quy cách để tra cứu bản ghi chuẩn'
-                                          : 'Insufficient citation metadata for canonical lookup'}
+                                          ? 'Thiếu thông tin (tác giả/năm/tiêu đề) để tìm nguồn gốc'
+                                          : 'Not enough citation details to look up this source'}
                                       </span>
                                     ) : (
                                       <span className="text-slate-500 dark:text-slate-400 italic">
                                         {lang === 'vi'
-                                          ? 'Không tìm thấy bản ghi chuẩn'
-                                          : 'No canonical record found'}
+                                          ? 'Không tìm thấy dữ liệu gốc'
+                                          : 'No published record found'}
                                       </span>
                                     )}
                                   </td>
@@ -5203,15 +5222,19 @@ export function EssayPage() {
                                 : 'Related body passage (not explicitly cited)'
                               : lang === 'vi'
                                 ? 'Đoạn trích dẫn trong bài của bạn'
-                                : 'In-Text Context'}{' '}
-                            <span className="normal-case font-semibold">
-                              ({activeItem.pageLabel})
-                            </span>
+                                : 'In-Text Context'}
+                            {activeItem.pageLabel && (
+                              <>
+                                {' '}
+                                <span className="normal-case font-semibold">
+                                  ({activeItem.pageLabel})
+                                </span>
+                              </>
+                            )}
                           </span>
                           {isDocxFilename(report.filename) && (
                             <span className="text-[10px] font-medium px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
                               Word (.docx)
-                              <span className="sr-only"> WORD DOCX · OPENXML</span>
                             </span>
                           )}
                         </div>
@@ -5234,15 +5257,15 @@ export function EssayPage() {
                     );
                   })()}
 
-                  {/* Instructor Override Bar (Directly accessible for Teachers & Admins) */}
+                  {/* Instructor Review Bar (Directly accessible for Teachers & Admins) */}
                   {canOverride && (
                     <div className="p-3.5 rounded-xl bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200/80 dark:border-indigo-800/70 flex flex-wrap items-center justify-between gap-3 text-xs">
                       <div className="flex items-center gap-2 text-indigo-900 dark:text-indigo-200">
                         <Shield className="h-4 w-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
                         <span className="font-medium">
                           {lang === 'vi'
-                            ? 'Quyền Giảng viên: Ghi đè kết quả kiểm định kèm ghi chú.'
-                            : 'Instructor Controls: Override verdict with mandatory audit note.'}
+                            ? 'Dành cho Giảng viên: Bạn có thể điều chỉnh kết quả đánh giá và để lại ghi chú.'
+                            : 'Instructor Review: Adjust this result and leave a short review note.'}
                         </span>
                       </div>
                       <OverrideControls
@@ -5252,7 +5275,7 @@ export function EssayPage() {
                     </div>
                   )}
 
-                  {/* TIER 3: Progressive Disclosure Drawer — Deep AI Rules, 15+ Sources & Evidence Graph (Closed by Default!) */}
+                  {/* TIER 3: Progressive Disclosure Drawer — Checked Sources, Verification Checks & Decision Flow (Closed by Default!) */}
                   <div
                     data-testid="deep-verification-drawer"
                     data-open={deepDrawerOpen ? 'true' : 'false'}
@@ -5269,8 +5292,8 @@ export function EssayPage() {
                         <Microscope className="h-4 w-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
                         <span className="truncate">
                           {lang === 'vi'
-                            ? 'Xem chi tiết kiểm chứng chuyên sâu (Nguồn tra cứu & Quy tắc AI)'
-                            : 'View Deep Verification Details (Scholarly Sources & AI Rules)'}
+                            ? 'Xem chi tiết đối chiếu nguồn & tiêu chí kiểm tra'
+                            : 'View Verification Details (Sources & Checks)'}
                         </span>
                       </span>
                       <span className="inline-flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400 shrink-0">
@@ -5300,8 +5323,8 @@ export function EssayPage() {
                             <>
                               <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600 dark:text-slate-400">
                                 <span>
-                                  {lang === 'vi' ? 'Độ tin cậy:' : 'Conf:'}{' '}
-                                  <strong className="font-mono text-slate-900 dark:text-white">
+                                  {lang === 'vi' ? 'Mức độ khớp:' : 'Match Confidence:'}{' '}
+                                  <strong className="font-sans font-bold text-slate-900 dark:text-white">
                                     {activeItem.confidencePct}%
                                   </strong>
                                 </span>
@@ -5311,8 +5334,8 @@ export function EssayPage() {
                                 >
                                   <span>
                                     {lang === 'vi'
-                                      ? 'Mở trang Quy trình kiểm chứng'
-                                      : 'Open Full Verification Trace'}
+                                      ? 'Mở trang Chi tiết kiểm tra'
+                                      : 'Open Full Check Details'}
                                   </span>
                                   <ArrowUpRight className="h-3.5 w-3.5" />
                                 </Link>
@@ -5341,12 +5364,12 @@ export function EssayPage() {
                                   >
                                     <GitBranch className="h-3 w-3 shrink-0 text-violet-500" />
                                     <span className="truncate">
-                                      {lang === 'vi' ? '3. Sơ đồ suy luận' : '3. Decision Flow'}
+                                      {lang === 'vi' ? '3. Sơ đồ kiểm tra' : '3. Decision Flow'}
                                     </span>
                                   </TabsTrigger>
                                 </TabsList>
 
-                                {/* Multi-Source Federation (Matched first; empty 0.00 DBs collapsed by default) */}
+                                {/* Multi-Source Lookup Results (Matched first; unmatched collapsed by default) */}
                                 <TabsContent value="sources" className="mt-3 space-y-2.5">
                                   {(() => {
                                     const matchedOrPartialSources = activeItem.sources.filter(
@@ -5358,37 +5381,44 @@ export function EssayPage() {
 
                                     const renderSourceCard = (src: SourceRetrievalItem) => {
                                       const localizeFieldToken = (f: string) => {
-                                        if (lang !== 'vi') return f;
                                         const low = f.toLowerCase();
-                                        if (low === 'title') return 'tiêu đề';
-                                        if (low === 'authors' || low === 'author') return 'tác giả';
-                                        if (low === 'year') return 'năm';
-                                        if (low === 'venue') return 'nơi công bố';
+                                        if (lang === 'vi') {
+                                          if (low === 'title') return 'tiêu đề';
+                                          if (low === 'authors' || low === 'author') return 'tác giả';
+                                          if (low === 'year') return 'năm xuất bản';
+                                          if (low === 'venue') return 'nơi công bố';
+                                          if (low === 'doi') return 'mã DOI';
+                                          if (low === 'url') return 'đường dẫn';
+                                          return f;
+                                        }
+                                        if (low === 'doi') return 'DOI';
+                                        if (low === 'url') return 'URL';
                                         return f;
                                       };
                                       const joinedFields = src.matchedFields
                                         .map(localizeFieldToken)
                                         .join(', ');
+                                      const scorePct = `${Math.round(Number(src.score) * 100)}%`;
                                       const subtitleText =
                                         src.status === 'matched'
                                           ? lang === 'vi'
-                                            ? `Đã khớp · Tương đồng: ${src.score}${joinedFields ? ` · Thông tin đối chiếu: ${joinedFields}` : ''}`
-                                            : `Matched · Sim: ${src.score}${joinedFields ? ` · Record fields: ${joinedFields}` : ''}`
+                                            ? `Đã khớp · Độ khớp: ${scorePct}${joinedFields ? ` · Khớp: ${joinedFields}` : ''}`
+                                            : `Matched · Match: ${scorePct}${joinedFields ? ` · Matched: ${joinedFields}` : ''}`
                                           : src.status === 'candidate_insufficient'
                                             ? lang === 'vi'
-                                              ? `Ứng viên tham khảo · Tương đồng: ${src.score}${joinedFields ? ` · Thông tin bản ghi: ${joinedFields}` : ''}`
-                                              : `Candidate · Sim: ${src.score}${joinedFields ? ` · Record fields: ${joinedFields}` : ''}`
+                                              ? `Ứng viên tham khảo · Độ khớp: ${scorePct}${joinedFields ? ` · Thông tin đối chiếu: ${joinedFields}` : ''}`
+                                              : `Candidate · Match: ${scorePct}${joinedFields ? ` · Record fields: ${joinedFields}` : ''}`
                                             : src.status === 'partial'
                                               ? lang === 'vi'
-                                                ? `Đã truy vấn · Tương đồng: ${src.score}${joinedFields ? ` · Thông tin bản ghi: ${joinedFields}` : ''}`
-                                                : `Queried · Sim: ${src.score}${joinedFields ? ` · Record fields: ${joinedFields}` : ''}`
+                                                ? `Khớp một phần · Độ khớp: ${scorePct}${joinedFields ? ` · Thông tin đối chiếu: ${joinedFields}` : ''}`
+                                                : `Partial match · Match: ${scorePct}${joinedFields ? ` · Record fields: ${joinedFields}` : ''}`
                                               : src.notRouted
                                                 ? lang === 'vi'
-                                                  ? 'Không định tuyến · Tài nguyên phi học thuật'
-                                                  : 'Not Routed · Non-scholarly resource'
+                                                  ? 'Không cần dò (nguồn web / văn bản pháp luật)'
+                                                  : 'Skipped — web or legal source'
                                                 : lang === 'vi'
-                                                  ? `Đã truy vấn · Không có bản ghi trùng`
-                                                  : `Queried · No matching record`;
+                                                  ? 'Đã tra cứu · Không có bản ghi trùng'
+                                                  : 'Checked · No matching record';
                                       const isFullWidthCandidate =
                                         src.status !== 'not_found' &&
                                         (matchedOrPartialSources.length === 1 ||
@@ -5437,11 +5467,11 @@ export function EssayPage() {
                                                       : 'Candidate'
                                                     : src.notRouted
                                                       ? lang === 'vi'
-                                                        ? 'Không định tuyến'
-                                                        : 'Not Routed'
+                                                        ? 'Không áp dụng'
+                                                        : 'N/A'
                                                       : lang === 'vi'
                                                         ? 'Không khớp'
-                                                        : 'No Hit'}
+                                                        : 'Not Found'}
                                             </span>
                                           </div>
                                           <p className="text-[11px] text-slate-500 dark:text-slate-400 break-words">
@@ -5481,8 +5511,8 @@ export function EssayPage() {
                                         ) : (
                                           <p className="text-xs text-slate-500 dark:text-slate-400 italic">
                                             {lang === 'vi'
-                                              ? 'Không có cơ sở dữ liệu học thuật nào trả về bản ghi khớp.'
-                                              : 'No scholarly database returned a matching record.'}
+                                              ? 'Không có thư viện học thuật nào trả về bản ghi khớp.'
+                                              : 'No academic library returned a matching record.'}
                                           </p>
                                         )}
 
@@ -5490,8 +5520,8 @@ export function EssayPage() {
                                           <details className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/50 p-2.5">
                                             <summary className="cursor-pointer select-none text-xs font-medium text-slate-600 dark:text-slate-300">
                                               {lang === 'vi'
-                                                ? `Xem thêm ${emptySources.length} cơ sở dữ liệu đã dò tìm (không khớp)`
-                                                : `Show ${emptySources.length} other checked databases (no match)`}
+                                                ? `Xem thêm ${emptySources.length} thư viện học thuật khác đã tra cứu`
+                                                : `Show ${emptySources.length} other checked academic libraries`}
                                             </summary>
                                             <div className="mt-2.5 grid grid-cols-1 sm:grid-cols-2 gap-2 min-w-0">
                                               {emptySources.map(renderSourceCard)}
@@ -5503,7 +5533,7 @@ export function EssayPage() {
                                   })()}
                                 </TabsContent>
 
-                                {/* Symbolic Rules Trace (Formulas & Telemetry tucked under collapsible Technical Details) */}
+                                {/* Verification Checks (Plain-language titles & empathetic explanations — zero R-* code pills or IF/THEN pseudo-code) */}
                                 <TabsContent value="rules" className="mt-3">
                                   <div className="space-y-2.5">
                                     {activeItem.rules.map((rule) => (
@@ -5517,15 +5547,10 @@ export function EssayPage() {
                                               : 'bg-red-50/50 dark:bg-red-950/30 border-red-200 dark:border-red-800/70'
                                         }`}
                                       >
-                                        <div className="flex items-center justify-between gap-2 mb-1">
-                                          <div className="flex items-center gap-2 min-w-0">
-                                            <span className="px-2 py-0.5 rounded bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 font-mono font-bold text-[11px] shrink-0">
-                                              {rule.code}
-                                            </span>
-                                            <span className="font-semibold text-slate-900 dark:text-white truncate">
-                                              {rule.name}
-                                            </span>
-                                          </div>
+                                        <div className="flex items-start justify-between gap-2 mb-1">
+                                          <span className="font-semibold text-slate-900 dark:text-white leading-snug">
+                                            {rule.name}
+                                          </span>
                                           <span
                                             className={`text-[11px] font-bold shrink-0 ${
                                               rule.status === 'passed'
@@ -5548,140 +5573,11 @@ export function EssayPage() {
                                                   : '✕ Unmatched'}
                                           </span>
                                         </div>
-                                        <details className="mt-1.5">
-                                          <summary className="cursor-pointer select-none text-[11px] font-medium text-slate-500 dark:text-slate-400">
-                                            {lang === 'vi'
-                                              ? 'Thông số kỹ thuật'
-                                              : 'Technical Details'}
-                                          </summary>
-                                          <p className="mt-1 font-mono text-slate-600 dark:text-slate-300 text-[11px] pl-1 break-words">
-                                            {rule.condition}
-                                          </p>
-                                        </details>
+                                        <p className="text-[11.5px] text-slate-600 dark:text-slate-300 leading-relaxed">
+                                          {rule.explanation}
+                                        </p>
                                       </div>
                                     ))}
-
-                                    {(activeItem.verdict.features || activeItem.linkBadge) && (
-                                      <details className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs">
-                                        <summary className="cursor-pointer select-none font-semibold text-slate-700 dark:text-slate-200">
-                                          {lang === 'vi'
-                                            ? 'Thông số kỹ thuật (Chỉ số đối sánh chi tiết)'
-                                            : 'Technical Details (Detailed Matching Telemetry)'}
-                                        </summary>
-                                        <div className="mt-2 font-mono text-[11px] text-slate-600 dark:text-slate-400 flex flex-wrap items-center gap-x-4 gap-y-1">
-                                          {activeItem.verdict.features?.title_sim_fuzzy !==
-                                            undefined && (
-                                            <span>
-                                              title_fuzzy=
-                                              {activeItem.verdict.features.title_sim_fuzzy.toFixed(2)}
-                                            </span>
-                                          )}
-                                          {activeItem.verdict.features?.title_sim_semantic !==
-                                            undefined &&
-                                            activeItem.verdict.features.title_sim_semantic > 0 && (
-                                              <span>
-                                                title_semantic=
-                                                {activeItem.verdict.features.title_sim_semantic.toFixed(
-                                                  2,
-                                                )}
-                                              </span>
-                                            )}
-                                          {typeof activeItem.verdict.features?.html_meta_title_sim ===
-                                            'number' && (
-                                            <span>
-                                              html_meta_title_sim=
-                                              {activeItem.verdict.features.html_meta_title_sim.toFixed(
-                                                2,
-                                              )}
-                                            </span>
-                                          )}
-                                          {activeItem.verdict.features?.author_jaccard !==
-                                            undefined && (
-                                            <span>
-                                              author_jaccard=
-                                              {activeItem.verdict.features.author_jaccard.toFixed(2)}
-                                            </span>
-                                          )}
-                                          {activeItem.verdict.features?.year_distance !== undefined &&
-                                            activeItem.verdict.features.year_distance < 900 &&
-                                            activeItem.verdict.features?.has_scholarly_candidate !==
-                                              false && (
-                                              <span>
-                                                year_dist={activeItem.verdict.features.year_distance}
-                                              </span>
-                                            )}
-                                          {(activeItem.verdict.features?.cross_lingual_detected ||
-                                            activeItem.verdict.features
-                                              ?.cross_lingual_title_detected) && (
-                                            <span>cross_lingual_detected=true</span>
-                                          )}
-                                          {typeof activeItem.verdict.features
-                                            ?.cross_lingual_title_sim === 'number' &&
-                                            activeItem.verdict.features.cross_lingual_title_sim >
-                                              0 && (
-                                              <span>
-                                                cross_lingual_title_sim=
-                                                {activeItem.verdict.features.cross_lingual_title_sim.toFixed(
-                                                  2,
-                                                )}
-                                              </span>
-                                            )}
-                                          {activeItem.verdict.features?.venue_sim !== undefined &&
-                                            activeItem.verdict.features.venue_sim > 0 && (
-                                              <span>
-                                                venue_sim=
-                                                {activeItem.verdict.features.venue_sim.toFixed(2)}
-                                              </span>
-                                            )}
-                                          {activeItem.verdict.features?.doi_exact_match !==
-                                            undefined && (
-                                            <span>
-                                              doi_match=
-                                              {String(activeItem.verdict.features.doi_exact_match)}
-                                            </span>
-                                          )}
-                                          {activeItem.verdict.features?.source_consensus !==
-                                            undefined && (
-                                            <span>
-                                              consensus=
-                                              {activeItem.verdict.features.source_consensus}
-                                            </span>
-                                          )}
-                                          {activeItem.verdict.features?.content_alignment_score !==
-                                            undefined &&
-                                            activeItem.verdict.features.content_alignment_score >
-                                              0 && (
-                                              <span>
-                                                content_align=
-                                                {activeItem.verdict.features.content_alignment_score.toFixed(
-                                                  2,
-                                                )}
-                                                {activeItem.verdict.features
-                                                  .content_alignment_confidence
-                                                  ? ` (${activeItem.verdict.features.content_alignment_confidence})`
-                                                  : ''}
-                                              </span>
-                                            )}
-                                          {activeItem.linkBadge && (
-                                            <span
-                                              className={
-                                                (
-                                                  activeItem.verdict.triggered_rules ?? []
-                                                ).includes('R-URL-CONTENT-MISMATCH')
-                                                  ? 'text-amber-700 dark:text-amber-400 font-semibold'
-                                                  : activeItem.linkBadge.status === 'alive' ||
-                                                      activeItem.linkBadge.status ===
-                                                        'restricted_alive'
-                                                    ? 'text-emerald-700 dark:text-emerald-400 font-semibold'
-                                                    : 'text-red-600 dark:text-red-400 font-semibold'
-                                              }
-                                            >
-                                              link_status={activeItem.linkBadge.text}
-                                            </span>
-                                          )}
-                                        </div>
-                                      </details>
-                                    )}
                                   </div>
                                 </TabsContent>
 
@@ -5691,14 +5587,14 @@ export function EssayPage() {
                                 </TabsContent>
                               </Tabs>
 
-                              {/* Raw Extracted Reference String */}
+                              {/* Original Reference in Essay */}
                               <div className="p-3 rounded-xl bg-slate-50/80 dark:bg-slate-900/60 border border-slate-200/70 dark:border-slate-800 text-xs">
-                                <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 block mb-1">
+                                <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block mb-1">
                                   {lang === 'vi'
-                                    ? 'Chuỗi trích dẫn gốc trong tài liệu'
-                                    : 'Raw Extracted Reference String'}
+                                    ? 'Nội dung trích dẫn trích từ bài'
+                                    : 'Original Reference in Essay'}
                                 </span>
-                                <p className="font-mono text-slate-700 dark:text-slate-300 break-words leading-relaxed">
+                                <p className="text-slate-700 dark:text-slate-300 break-words leading-relaxed">
                                   {activeItem.verdict.citation_raw}
                                 </p>
                               </div>
@@ -5711,13 +5607,13 @@ export function EssayPage() {
                               <div className="text-xs sm:text-[13px] text-slate-800 dark:text-slate-200 flex-1 min-w-[200px]">
                                 <strong className="text-slate-900 dark:text-white">
                                   {lang === 'vi'
-                                    ? 'Mở khóa Chi tiết Kiểm chứng Chuyên sâu (Gói Pro): '
-                                    : 'Unlock Deep Verification Details (Pro Plan): '}
+                                    ? 'Mở khóa Chi tiết kiểm tra (Gói Pro): '
+                                    : 'Unlock Detailed Check Breakdown (Pro Plan): '}
                                 </strong>
                                 <span>
                                   {lang === 'vi'
-                                    ? `Xem toàn bộ kết quả đối chiếu từ 15+ CSDL học thuật quốc tế, ${SYMBOLIC_RULES_COUNT} tiêu chí đánh giá & Sơ đồ suy luận.`
-                                    : `Inspect federated lookups across 15+ scholarly registries, ${SYMBOLIC_RULES_COUNT} verification rules & interactive Decision Flow.`}
+                                    ? `Xem toàn bộ kết quả đối chiếu từ hơn 15 thư viện học thuật uy tín, ${SYMBOLIC_RULES_COUNT} tiêu chí kiểm tra và sơ đồ giải thích từng bước.`
+                                    : `View lookup results across 15+ academic libraries, ${SYMBOLIC_RULES_COUNT} verification checks, and a step-by-step decision flow.`}
                                 </span>
                               </div>
                               <button
@@ -5726,8 +5622,8 @@ export function EssayPage() {
                                 onClick={() => {
                                   setLockedFeatureName(
                                     lang === 'vi'
-                                      ? 'Chi tiết Kiểm chứng Chuyên sâu & Sơ đồ Suy luận (Gói Pro)'
-                                      : 'Deep Verification Details & Interactive Decision Flow',
+                                      ? 'Chi tiết kiểm tra & Sơ đồ giải thích (Gói Pro)'
+                                      : 'Detailed Check Breakdown & Decision Flow',
                                   );
                                   setUpgradeOpen(true);
                                 }}

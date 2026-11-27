@@ -56,10 +56,10 @@ export function EssayActionBar({
   const lang = i18n.language?.startsWith('vi') ? 'vi' : 'en';
   const isVi = lang === 'vi';
 
-  const remediationLabel = isVi ? 'Chuẩn hóa Tài liệu tham khảo' : 'Remediation Engine';
+  const remediationLabel = isVi ? 'Gợi ý sửa trích dẫn' : 'Fix Suggestions';
   const remediationSubtitle = isVi
-    ? 'Tự động chuẩn hóa (APA / IEEE / TDTU)'
-    : 'Auto-Fix Style (APA / IEEE / TDTU)';
+    ? 'Gợi ý chỉnh sửa & định dạng chuẩn (APA / IEEE)'
+    : 'Fix suggestions & formatting (APA / IEEE)';
 
   const basePath = `/verification/report/${essayId}`;
   const currentPath = location.pathname;
@@ -278,8 +278,8 @@ export function EssayActionBar({
             onClick={() =>
               handleLockedClick(
                 isVi
-                  ? 'Kiểm tra thiếu / thừa trích dẫn'
-                  : 'Citation Consistency & Orphan Analysis',
+                  ? 'Kiểm tra khớp trích dẫn'
+                  : 'In-Text & Reference Link Check',
               )
             }
             className={lockedTabBtnClass}
@@ -346,7 +346,7 @@ export function EssayActionBar({
             className={tabBtnClass(true)}
           >
             <GitBranch className="h-3.5 w-3.5 text-violet-500 shrink-0" />
-            <span>{isVi ? 'Chi tiết kiểm chứng' : 'How We Verified'}</span>
+            <span>{isVi ? 'Chi tiết kiểm tra' : 'Check Details'}</span>
           </Link>
         )}
 

@@ -1,14 +1,14 @@
 import { useTranslation } from "react-i18next"
 import type { Verdict } from "@/api/client"
 import { cn } from "@/lib/utils"
-import { FileCode, CheckCircle, XCircle, AlertTriangle } from "lucide-react"
+import { ListChecks, CheckCircle, XCircle, AlertTriangle } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { getVerdictDisplay, normalizeVerdictKey } from "@/lib/academicTaxonomy"
 
 /* ============================================================
-   SourceLogic — Rule Inspector Component
-   Based on UX/UI Concept Section 15: Rule Inspector
+   CITRA — Verification Checks Inspector Component
+   Plain-language bilingual verification explanations
    ============================================================ */
 
 export interface RuleDefinition {
@@ -40,279 +40,253 @@ interface RuleInspectorProps {
 export const RULE_DEFINITIONS: Record<string, RuleDefinition> = {
   "R-FAKE-URL": {
     id: "R-FAKE-URL",
-    name: "Fake URL Detection",
-    nameVi: "Phát hiện URL giả định",
-    description: "URL domain is clearly fake/non-academic (example.com, test.com, localhost, etc.)",
-    descriptionVi: "Tên miền URL rõ ràng là giả định hoặc không phải nguồn học thuật (example.com, test.com, localhost...)",
+    name: "Unrecognized or Placeholder Web Link",
+    nameVi: "Liên kết web là địa chỉ mẫu hoặc không hợp lệ",
+    description: "The cited web address uses a placeholder domain (such as example.com or test.com) rather than an active publication source.",
+    descriptionVi: "Đường dẫn sử dụng tên miền mẫu (như example.com, test.com) thay vì trang web tài liệu thực tế.",
     conditions: [
-      { field: "url_domain", operator: "IN", value: "[fake_domains]" },
+      { field: "url_domain", operator: "IN", value: "[placeholder_domains]" },
     ],
     conclusion: "SUSPECTED_HALLUCINATION",
   },
   "R-FABRICATED-DOI": {
     id: "R-FABRICATED-DOI",
-    name: "Fabricated DOI Pattern",
-    nameVi: "Phát hiện mẫu DOI ngụy tạo",
-    description: "DOI matches known fabricated DOI pattern (invalid publisher prefix like 10.1234, 10.9999)",
-    descriptionVi: "Mã DOI khớp mẫu giả tạo đã biết (tiền tố nhà xuất bản không hợp lệ như 10.1234, 10.9999)",
+    name: "Unregistered DOI Format",
+    nameVi: "Mã DOI chưa được đăng ký",
+    description: "The cited DOI uses a test or unrecognized publisher prefix (such as 10.1234 or 10.9999) that does not match a registered publication.",
+    descriptionVi: "Mã DOI sử dụng tiền tố thử nghiệm hoặc chưa được đăng ký chính thức (như 10.1234, 10.9999).",
     conditions: [
-      { field: "doi_pattern", operator: "MATCHES", value: "[fabricated_patterns]" },
+      { field: "doi_pattern", operator: "MATCHES", value: "[unregistered_prefix]" },
     ],
     conclusion: "SUSPECTED_HALLUCINATION",
   },
   "R-FAKE-AUTHOR": {
     id: "R-FAKE-AUTHOR",
-    name: "Fake Author Name",
-    nameVi: "Phát hiện tên tác giả giả tạo",
-    description: "Author name matches fake/fabricated patterns (fictional, example, test author, etc.)",
-    descriptionVi: "Tên tác giả khớp mẫu hư cấu hoặc ví dụ thử nghiệm",
+    name: "Placeholder Author Name",
+    nameVi: "Tên tác giả có dạng mẫu thử",
+    description: "The author name looks like a sample or placeholder name rather than a published author.",
+    descriptionVi: "Tên tác giả có dạng ví dụ minh họa hoặc chưa khớp với tên tác giả thực tế.",
     conditions: [
-      { field: "author_pattern", operator: "MATCHES", value: "[fake_author_regex]" },
+      { field: "author_pattern", operator: "MATCHES", value: "[placeholder_author]" },
     ],
     conclusion: "SUSPECTED_HALLUCINATION",
   },
   "R-FUTURE-YEAR": {
     id: "R-FUTURE-YEAR",
-    name: "Future Year Detection",
-    nameVi: "Phát hiện năm xuất bản tương lai",
-    description: "Citation year is in the future with unknown author - likely fabricated",
-    descriptionVi: "Năm xuất bản nằm trong tương lai với tác giả không xác định — khả năng cao là ngụy tạo",
+    name: "Future Publication Year",
+    nameVi: "Năm xuất bản ở tương lai",
+    description: "The listed publication year is in the future and no matching author record was found. Please check for a typo.",
+    descriptionVi: "Năm xuất bản lớn hơn năm hiện tại và chưa tìm thấy tác giả tương ứng — vui lòng kiểm tra lại xem có lỗi gõ năm không.",
     conditions: [
       { field: "cited_year", operator: ">", value: "current_year" },
-      { field: "author", operator: "NOT IN", value: "[known_authors]" },
     ],
     conclusion: "SUSPECTED_HALLUCINATION",
   },
   "R-FUTURE-YEAR-KNOWN-AUTHOR": {
     id: "R-FUTURE-YEAR-KNOWN-AUTHOR",
-    name: "Future Year - Known Author",
-    nameVi: "Năm xuất bản tương lai (Tác giả đã biết)",
-    description: "Citation year is in the future but author is known - likely metadata error",
-    descriptionVi: "Năm xuất bản nằm trong tương lai nhưng tác giả có thực — khả năng là lỗi gõ năm metadata",
+    name: "Future Year for Known Author",
+    nameVi: "Năm xuất bản ở tương lai (đã tìm thấy tác giả)",
+    description: "The publication year is in the future, though the author is recognized — likely a year typo.",
+    descriptionVi: "Năm xuất bản lớn hơn năm hiện tại nhưng tác giả có trong thư viện — có thể là lỗi gõ nhầm năm.",
     conditions: [
       { field: "cited_year", operator: ">", value: "current_year" },
-      { field: "author", operator: "IN", value: "[known_authors]" },
     ],
     conclusion: "METADATA_ERROR",
   },
   "R-DOI-TITLE-AUTHOR": {
     id: "R-DOI-TITLE-AUTHOR",
-    name: "DOI + Title + Author Match",
-    nameVi: "Khớp DOI + Tiêu đề + Tác giả",
-    description: "Exact DOI match with high title similarity and author overlap",
-    descriptionVi: "Khớp chính xác mã DOI kèm độ tương đồng tiêu đề và tác giả cao",
+    name: "DOI, Title, and Authors Match",
+    nameVi: "Khớp mã DOI, tiêu đề và tác giả",
+    description: "The cited DOI matches the published record, and both the title and authors align closely.",
+    descriptionVi: "Mã DOI khớp chính xác với bản gốc, đồng thời tiêu đề và danh sách tác giả đều trùng khớp.",
     conditions: [
       { field: "doi_exact_match", operator: "=", value: "true" },
-      { field: "title_sim", operator: ">=", value: "0.70" },
-      { field: "author_jaccard", operator: ">=", value: "0.40" },
     ],
     conclusion: "VERIFIED",
   },
   "R-WELL-LINKED": {
     id: "R-WELL-LINKED",
-    name: "Well-Linked Citation (High Similarity)",
-    nameVi: "Trích dẫn liên kết chuẩn (Độ tương đồng cao)",
-    description: "Citation is author-year matched with high title similarity",
-    descriptionVi: "Trích dẫn khớp liên kết tác giả - năm kèm độ tương đồng tiêu đề cao",
+    name: "Strong Match Across Citation Details",
+    nameVi: "Khớp chặt chẽ tiêu đề, tác giả và năm xuất bản",
+    description: "The citation matches a published record closely across title, authors, and publication year.",
+    descriptionVi: "Trích dẫn khớp chặt chẽ với tài liệu gốc về tiêu đề, tác giả và năm xuất bản.",
     conditions: [
       { field: "mapping_status", operator: "=", value: "matched" },
-      { field: "title_sim", operator: ">=", value: "0.70" },
     ],
     conclusion: "VERIFIED",
   },
   "R-WELL-LINKED-MODERATE": {
     id: "R-WELL-LINKED-MODERATE",
-    name: "Well-Linked Citation (Moderate Similarity)",
-    nameVi: "Trích dẫn liên kết chuẩn (Độ tương đồng khá)",
-    description: "Citation is author-year matched with moderate title similarity",
-    descriptionVi: "Trích dẫn khớp liên kết tác giả - năm với độ tương đồng tiêu đề mức khá",
+    name: "Good Match with Minor Wording Differences",
+    nameVi: "Khớp tốt tiêu đề và tác giả",
+    description: "The citation matches a published work by author and year with close title wording.",
+    descriptionVi: "Trích dẫn khớp với tài liệu gốc về tác giả, năm và tiêu đề ở mức tốt.",
     conditions: [
       { field: "mapping_status", operator: "=", value: "matched" },
-      { field: "title_sim", operator: "BETWEEN", value: "[0.50, 0.70)" },
     ],
     conclusion: "VERIFIED (with metadata note)",
   },
   "R-DOI-TITLE-MISMATCH": {
     id: "R-DOI-TITLE-MISMATCH",
-    name: "DOI Match with Title Mismatch",
-    nameVi: "Khớp DOI nhưng sai lệch tiêu đề",
-    description: "DOI resolves but title similarity is moderate",
-    descriptionVi: "Mã DOI phân giải thành công nhưng tiêu đề bài báo có sai lệch",
+    name: "DOI Matched, Title Differs",
+    nameVi: "Khớp mã DOI nhưng tiêu đề chưa khớp",
+    description: "The DOI points to a real publication, but the title in your citation differs from the published record.",
+    descriptionVi: "Mã DOI dẫn đến bài báo có thật, nhưng tiêu đề bạn ghi trong bài khác với bản gốc.",
     conditions: [
       { field: "doi_exact_match", operator: "=", value: "true" },
-      { field: "title_sim", operator: "BETWEEN", value: "[0.50, 0.70)" },
     ],
     conclusion: "METADATA_ERROR",
   },
   "R-DOI-CONFLICT": {
     id: "R-DOI-CONFLICT",
-    name: "Cross-Registry DOI Conflict",
-    nameVi: "Xung đột mã DOI giữa các CSDL học thuật",
-    description: "Multiple scholarly registries returned conflicting canonical DOI identifiers for the matched publication",
-    descriptionVi: "Các cơ sở dữ liệu học thuật trả về mã định danh DOI chính thức mâu thuẫn nhau cho cùng ấn phẩm",
+    name: "Conflicting DOI Across Academic Libraries",
+    nameVi: "Mã DOI khác nhau giữa các thư viện học thuật",
+    description: "Different academic libraries list conflicting DOI identifiers for this matched publication.",
+    descriptionVi: "Các thư viện học thuật ghi nhận mã DOI khác nhau cho cùng công trình này — hãy kiểm tra lại mã DOI chính thức.",
     category: "warning",
     conditions: [
-      { field: "distinct_canonical_dois", operator: ">", value: "1" },
-      { field: "title_sim_fuzzy", operator: ">=", value: "0.85" },
+      { field: "distinct_dois", operator: ">", value: "1" },
     ],
     conclusion: "METADATA_ERROR",
   },
   "R-VENUE-MISMATCH": {
     id: "R-VENUE-MISMATCH",
-    name: "Publication Venue Conflict",
-    nameVi: "Sai lệch nơi công bố (Tạp chí / Hội nghị)",
-    description: "Cited journal or conference conflicts with canonical publication venue metadata",
-    descriptionVi: "Tên tạp chí hoặc hội nghị trích dẫn mâu thuẫn với nơi công bố chính thức của công trình",
+    name: "Journal or Conference Name Differs",
+    nameVi: "Sai lệch tên tạp chí hoặc hội nghị",
+    description: "The cited journal or conference name differs from the published venue record.",
+    descriptionVi: "Tên tạp chí hoặc hội nghị bạn ghi khác với nơi công bố chính thức của tài liệu.",
     conditions: [
-      { field: "venue_sim", operator: "<", value: "0.25" },
-      { field: "is_preprint_pair", operator: "=", value: "false" },
+      { field: "venue_match", operator: "=", value: "false" },
     ],
     conclusion: "METADATA_ERROR",
   },
   "R-CHIMERIC-DOI-MISMATCH": {
     id: "R-CHIMERIC-DOI-MISMATCH",
-    name: "Spliced / Chimeric DOI Hallucination",
-    nameVi: "Ngụy tạo ghép nối DOI (Chimeric DOI)",
-    description: "Cited DOI resolves to a completely unrelated publication (low title and author similarity)",
-    descriptionVi: "Mã DOI trích dẫn trỏ tới một ấn phẩm hoàn toàn khác (độ tương đồng tiêu đề và tác giả cực thấp)",
+    name: "DOI Points to a Different Publication",
+    nameVi: "Mã DOI trỏ sang một bài báo khác",
+    description: "The cited DOI resolves to a completely different publication than the title and authors listed in your citation.",
+    descriptionVi: "Mã DOI bạn ghi dẫn đến một công trình hoàn toàn khác với tiêu đề và tác giả trong trích dẫn.",
     conditions: [
-      { field: "doi_exact_match", operator: "=", value: "true" },
-      { field: "title_sim", operator: "<", value: "0.35" },
-      { field: "author_jaccard", operator: "<", value: "0.20" },
+      { field: "doi_mismatch", operator: "=", value: "true" },
     ],
     conclusion: "SUSPECTED_HALLUCINATION",
   },
   "R-CONSENSUS-FULL": {
     id: "R-CONSENSUS-FULL",
-    name: "Full Source Consensus",
-    nameVi: "Đồng thuận đa nguồn hoàn toàn",
-    description: "Multiple sources agree on title, author, and year",
-    descriptionVi: "Nhiều cơ sở dữ liệu học thuật đồng thuận về tiêu đề, tác giả và năm xuất bản",
+    name: "Confirmed by Multiple Academic Libraries",
+    nameVi: "Được xác nhận đồng thời trên nhiều thư viện học thuật",
+    description: "Multiple academic libraries agree on the title, authors, and publication year.",
+    descriptionVi: "Nhiều thư viện học thuật cùng xác nhận trùng khớp về tiêu đề, tác giả và năm xuất bản.",
     conditions: [
       { field: "consensus", operator: ">=", value: "2" },
-      { field: "title_sim", operator: ">=", value: "0.70" },
-      { field: "author_jaccard", operator: ">=", value: "0.40" },
-      { field: "year_distance", operator: "<=", value: "1" },
     ],
     conclusion: "VERIFIED",
   },
   "R-CONSENSUS-PARTIAL": {
     id: "R-CONSENSUS-PARTIAL",
-    name: "Partial Source Consensus",
-    nameVi: "Đồng thuận đa nguồn một phần",
-    description: "Multiple sources agree but some fields differ",
-    descriptionVi: "Nhiều cơ sở dữ liệu khớp tiêu đề nhưng có sai lệch ở một số trường metadata",
+    name: "Matched in Libraries with Some Details Differing",
+    nameVi: "Tìm thấy trên thư viện nhưng một vài chi tiết chưa khớp",
+    description: "Multiple academic libraries found this publication, but some citation details differ from the published record.",
+    descriptionVi: "Các thư viện học thuật đã tìm thấy công trình này nhưng một vài thông tin (như năm hoặc tác giả) chưa khớp.",
     conditions: [
       { field: "consensus", operator: ">=", value: "2" },
-      { field: "title_sim", operator: ">=", value: "0.70" },
     ],
     conclusion: "METADATA_ERROR",
   },
   "R-KNOWN-AUTHOR-TITLE-MISMATCH": {
     id: "R-KNOWN-AUTHOR-TITLE-MISMATCH",
-    name: "Known Author with Title Mismatch",
-    nameVi: "Tác giả đã biết nhưng lệch tiêu đề",
-    description: "Known academic author but title similarity is moderate",
-    descriptionVi: "Tác giả học thuật có thực nhưng độ tương đồng tiêu đề chỉ ở mức trung bình",
+    name: "Author Recognized, Title Differs",
+    nameVi: "Tác giả khớp nhưng tiêu đề có sai lệch",
+    description: "The author was found in academic libraries, but the cited title differs from the published record.",
+    descriptionVi: "Đã tìm thấy tác giả trong thư viện học thuật nhưng tiêu đề trích dẫn có khác biệt so với bản gốc.",
     conditions: [
-      { field: "author", operator: "IN", value: "[known_authors]" },
-      { field: "title_sim", operator: "BETWEEN", value: "[0.30, 0.70)" },
-      { field: "sources_succeeded", operator: ">", value: "0" },
+      { field: "author_match", operator: "=", value: "true" },
     ],
     conclusion: "METADATA_ERROR",
   },
   "R-KNOWN-AUTHOR-WEAK-EVIDENCE": {
     id: "R-KNOWN-AUTHOR-WEAK-EVIDENCE",
-    name: "Known Author - Weak Evidence",
-    nameVi: "Tác giả đã biết — Bằng chứng yếu",
-    description: "Known author found but evidence is weak (low similarity scores)",
-    descriptionVi: "Tìm thấy tác giả có thực nhưng điểm tương đồng với ấn phẩm thấp",
+    name: "Author Recognized, Source Details Uncertain",
+    nameVi: "Tác giả khớp nhưng thông tin công trình chưa đủ rõ",
+    description: "The author was found, but the matching record differs noticeably from your citation details.",
+    descriptionVi: "Tìm thấy tên tác giả nhưng thông tin bài báo trong thư viện còn khác nhiều so với trích dẫn của bạn.",
     conditions: [
-      { field: "author", operator: "IN", value: "[known_authors]" },
-      { field: "title_sim", operator: "BETWEEN", value: "[0.20, 0.70)" },
-      { field: "sources_found", operator: ">", value: "0" },
+      { field: "author_match", operator: "=", value: "true" },
     ],
     conclusion: "METADATA_ERROR",
   },
   "R-TITLE-MISMATCH": {
     id: "R-TITLE-MISMATCH",
-    name: "Known Work Title Discrepancy",
-    nameVi: "Sai lệch tiêu đề công trình đã biết",
-    description: "Author and year match a known publication, but the cited title differs",
-    descriptionVi: "Tác giả và năm khớp với công trình đã biết nhưng tiêu đề trích dẫn bị sai lệch",
+    name: "Title Differs from Published Record",
+    nameVi: "Sai lệch tiêu đề so với bản gốc",
+    description: "The author and year match a published work, but the cited title differs from the official title.",
+    descriptionVi: "Tác giả và năm xuất bản khớp với tài liệu có thật, nhưng tiêu đề bạn ghi khác với tiêu đề gốc.",
     conditions: [
       { field: "author_year_match", operator: "=", value: "true" },
-      { field: "title_sim", operator: "<", value: "0.85" },
     ],
     conclusion: "METADATA_ERROR",
   },
   "R-CONTENT-ALIGNMENT": {
     id: "R-CONTENT-ALIGNMENT",
-    name: "Neural Content Alignment",
-    nameVi: "Tương đồng ngữ nghĩa nội dung (Neural)",
-    description: "Neural layer verified semantic alignment between citation context and source content",
-    descriptionVi: "Tầng Neural xác nhận ngữ cảnh trích dẫn khớp ngữ nghĩa với nội dung tóm tắt nguồn",
+    name: "Context Matches Source Summary",
+    nameVi: "Ngữ cảnh trích dẫn phù hợp với nội dung nguồn",
+    description: "The sentence where this source is cited aligns well with the summary of the published work.",
+    descriptionVi: "Đoạn văn trích dẫn trong bài phù hợp về nội dung với tóm tắt của tài liệu gốc.",
     conditions: [
-      { field: "content_alignment_score", operator: ">", value: "0" },
-      { field: "content_is_aligned", operator: "=", value: "true" },
-      { field: "title_sim", operator: ">=", value: "0.50" },
+      { field: "content_aligned", operator: "=", value: "true" },
     ],
     conclusion: "VERIFIED",
   },
   "R-CROSS-LINGUAL-ALIGNMENT": {
     id: "R-CROSS-LINGUAL-ALIGNMENT",
-    name: "Cross-Lingual Semantic Alignment (VI↔EN)",
-    nameVi: "Tương đồng ngữ nghĩa xuyên ngôn ngữ Việt ↔ Anh",
-    description: "Verified cross-lingual semantic alignment between Vietnamese in-text context and English abstract via academic concept bridge",
-    descriptionVi: "Xác minh tương đồng ngữ nghĩa xuyên ngôn ngữ giữa ngữ cảnh tiếng Việt trong bài và tóm tắt tiếng Anh qua cầu nối thuật ngữ học thuật",
+    name: "Cross-Language Meaning Match (VI ↔ EN)",
+    nameVi: "Khớp nội dung song ngữ Việt ↔ Anh",
+    description: "The Vietnamese sentence in your essay aligns in meaning with the English summary of the cited paper.",
+    descriptionVi: "Đoạn văn tiếng Việt trong bài phù hợp về nội dung với tóm tắt tiếng Anh của bài báo gốc.",
     conditions: [
-      { field: "cross_lingual_detected", operator: "=", value: "true" },
-      { field: "content_alignment_score", operator: ">=", value: "0.25" },
+      { field: "cross_lingual_match", operator: "=", value: "true" },
     ],
     conclusion: "VERIFIED",
   },
   "R-CROSS-LINGUAL-TITLE-MATCH": {
     id: "R-CROSS-LINGUAL-TITLE-MATCH",
-    name: "Translated Title Match (TDTU Foreign-Title Rule)",
-    nameVi: "Tiêu đề dịch tiếng Việt (Vi phạm quy tắc giữ nguyên tiêu đề gốc TDTU)",
-    description: "Vietnamese translated title semantically matches the English source (>= 0.58 (lexicon + multilingual ONNX INT8)), but TDTU citation rules require preserving the original foreign-language title",
-    descriptionVi: "Tiêu đề dịch tiếng Việt khớp ngữ nghĩa với bài báo gốc tiếng Anh (>= 0.58 (lexicon + multilingual ONNX INT8)), nhưng quy định TDTU yêu cầu giữ nguyên tiêu đề tiếng nước ngoài",
+    name: "Foreign-Language Title Was Translated",
+    nameVi: "Tiêu đề bài báo nước ngoài đang bị dịch sang tiếng Việt",
+    description: "The Vietnamese title matches an English published work in meaning. Academic citation guidelines recommend keeping the original publication title (with an optional translation in brackets).",
+    descriptionVi: "Tiêu đề dịch tiếng Việt khớp nội dung với bài báo gốc tiếng Anh. Theo thông lệ trích dẫn học thuật, hãy giữ nguyên tiêu đề gốc bằng tiếng nước ngoài (có thể ghi thêm bản dịch trong ngoặc vuông).",
     conditions: [
-      { field: "cross_lingual_title_detected", operator: "=", value: "true" },
-      { field: "cross_lingual_title_sim", operator: ">=", value: "0.58 (lexicon + multilingual ONNX INT8)" },
+      { field: "translated_title", operator: "=", value: "true" },
     ],
     conclusion: "METADATA_ERROR",
   },
   "R-CONTENT-MISMATCH": {
     id: "R-CONTENT-MISMATCH",
-    name: "Content Mismatch",
-    nameVi: "Sai lệch ngữ nghĩa nội dung trích dẫn",
-    description: "Title matches but neural content alignment failed - potential misattribution",
-    descriptionVi: "Tiêu đề khớp nhưng đối sánh ngữ nghĩa nội dung thất bại — nghi vấn gán ghép sai nguồn",
+    name: "Context May Differ from Source Topic",
+    nameVi: "Ngữ cảnh trích dẫn có thể khác chủ đề bài gốc",
+    description: "The title matches, but the surrounding sentence in your essay appears unrelated to the source summary. Please confirm this is the intended source.",
+    descriptionVi: "Tiêu đề khớp nhưng đoạn văn trích dẫn trong bài có nội dung khá khác với tóm tắt tài liệu gốc — hãy kiểm tra lại xem có trích nhầm nguồn không.",
     conditions: [
-      { field: "content_is_aligned", operator: "=", value: "false" },
-      { field: "content_alignment_score", operator: ">=", value: "0.30" },
-      { field: "title_sim", operator: ">=", value: "0.70" },
+      { field: "content_aligned", operator: "=", value: "false" },
     ],
     conclusion: "SUSPECTED_HALLUCINATION",
   },
   "R-STYLE-INCONSISTENT": {
     id: "R-STYLE-INCONSISTENT",
-    name: "Citation Style Inconsistency",
-    nameVi: "Không đồng nhất chuẩn trích dẫn",
-    description: "In-text citation style does not match detected document style",
-    descriptionVi: "Định dạng trích dẫn trong bài không đồng nhất với chuẩn trích dẫn chung của tài liệu",
+    name: "Mixed Citation Formatting Style",
+    nameVi: "Chưa thống nhất kiểu định dạng trích dẫn",
+    description: "This citation uses a different formatting style from the rest of your document.",
+    descriptionVi: "Cách trình bày trích dẫn này khác với chuẩn chung của toàn bài viết.",
     conditions: [
-      { field: "style_profile", operator: "=", value: "MIXED" },
+      { field: "style_consistent", operator: "=", value: "false" },
     ],
     conclusion: "Confidence penalty applied",
   },
   "R-AMBIGUOUS-MAPPING": {
     id: "R-AMBIGUOUS-MAPPING",
-    name: "Ambiguous Citation-Reference Mapping",
-    nameVi: "Liên kết trích dẫn – tham khảo nhập nhằng",
-    description: "Linker could not determine which reference entry matches the citation",
-    descriptionVi: "Bộ liên kết không thể phân biệt chính xác mục tài liệu tham khảo nào khớp với trích dẫn trong bài",
+    name: "Matches Multiple Reference Entries",
+    nameVi: "Trích dẫn có thể trùng nhiều mục tham khảo",
+    description: "This in-text citation could match more than one entry in your reference list.",
+    descriptionVi: "Không thể xác định chắc chắn trích dẫn trong bài đang nối tới mục nào trong danh mục tài liệu tham khảo.",
     conditions: [
       { field: "mapping_status", operator: "=", value: "ambiguous_mapping" },
     ],
@@ -320,58 +294,54 @@ export const RULE_DEFINITIONS: Record<string, RuleDefinition> = {
   },
   "R-ABSTENTION-BORDER": {
     id: "R-ABSTENTION-BORDER",
-    name: "Abstention Border Zone",
-    nameVi: "Vùng biên từ chối phán quyết (Abstention)",
-    description: "Title similarity is in the uncertain range - system refuses to conclude",
-    descriptionVi: "Độ tương đồng tiêu đề nằm trong vùng biên không chắc chắn — hệ thống chuyển sang chờ duyệt thủ công",
+    name: "Uncertain Match — Manual Check Needed",
+    nameVi: "Độ khớp trung bình — cần bạn tự kiểm tra",
+    description: "Found a somewhat similar publication, but not close enough to confirm automatically.",
+    descriptionVi: "Tìm thấy một tài liệu có nét tương đồng nhưng chưa đủ chắc chắn để tự động xác nhận.",
     conditions: [
-      { field: "title_sim", operator: "BETWEEN", value: "[0.40, 0.50]" },
+      { field: "match_confidence", operator: "=", value: "borderline" },
     ],
     conclusion: "UNRESOLVED",
   },
   "R-DOMAIN-EXCEPTION": {
     id: "R-DOMAIN-EXCEPTION",
-    name: "Domain Exception",
-    nameVi: "Ngoại lệ chuyên ngành",
-    description: "DOI matches but title similarity is low - URL may be broken",
-    descriptionVi: "Mã DOI khớp nhưng độ tương đồng tiêu đề thấp hoặc URL liên kết gặp sự cố",
+    name: "DOI Matched, Title or Link Needs Review",
+    nameVi: "Mã DOI khớp nhưng tiêu đề hoặc liên kết cần xem lại",
+    description: "The DOI resolves to a real publication, though the title differs or the attached web link could not be opened.",
+    descriptionVi: "Mã DOI khớp với bài báo có thật, nhưng tiêu đề có sai lệch hoặc đường dẫn đính kèm gặp lỗi.",
     conditions: [
       { field: "doi_exact_match", operator: "=", value: "true" },
-      { field: "title_sim", operator: "<", value: "0.50" },
-      { field: "consensus", operator: ">=", value: "2" },
     ],
     conclusion: "METADATA_ERROR (flagged)",
   },
   "R-FAIL-ALL": {
     id: "R-FAIL-ALL",
-    name: "All APIs Failed",
-    nameVi: "Tất cả API tra cứu thất bại",
-    description: "All external APIs failed completely - no evidence available",
-    descriptionVi: "Tất cả API học thuật bên ngoài đều lỗi kết nối — không đủ bằng chứng kết luận",
+    name: "Online Libraries Temporarily Unavailable",
+    nameVi: "Các thư viện trực tuyến tạm thời không phản hồi",
+    description: "External academic libraries could not be reached during this check — please verify manually or retry shortly.",
+    descriptionVi: "Các thư viện học thuật trực tuyến gặp lỗi kết nối trong lúc kiểm tra — vui lòng đối chiếu thủ công hoặc thử lại sau.",
     conditions: [
-      { field: "sources_failed", operator: ">", value: "0" },
       { field: "sources_succeeded", operator: "=", value: "0" },
     ],
     conclusion: "UNRESOLVED",
   },
   "R-RATE-LIMITED-ABSTAIN": {
     id: "R-RATE-LIMITED-ABSTAIN",
-    name: "Rate-Limit Abstention Guard (HTTP 429)",
-    nameVi: "Bảo vệ từ chối phán quyết do giới hạn tần suất (HTTP 429)",
-    description: "External scholarly APIs returned HTTP 429 rate-limit responses — system abstains instead of flagging suspected hallucination",
-    descriptionVi: "Các API học thuật tạm thời giới hạn tần suất truy cập (HTTP 429) — hệ thống chuyển sang chờ rà soát thay vì gắn cờ ngụy tạo oan",
+    name: "Online Libraries Temporarily Busy",
+    nameVi: "Thư viện trực tuyến tạm bận — chuyển sang rà soát thủ công",
+    description: "Academic libraries briefly limited lookup traffic, so CITRA marked this entry for manual review instead of flagging an issue.",
+    descriptionVi: "Các thư viện học thuật trực tuyến tạm thời giới hạn lượt tra cứu, nên hệ thống chuyển mục này sang rà soát thủ công thay vì báo lỗi.",
     conditions: [
-      { field: "rate_limited_sources", operator: ">", value: "0" },
-      { field: "candidates", operator: "=", value: "0" },
+      { field: "libraries_busy", operator: "=", value: "true" },
     ],
     conclusion: "UNRESOLVED",
   },
   "R-NO-CANDIDATE": {
     id: "R-NO-CANDIDATE",
-    name: "No Matching Candidates",
-    nameVi: "Không tìm thấy ứng viên bài báo",
-    description: "No candidates found across queried scholarly & technical databases",
-    descriptionVi: "Không tìm thấy ứng viên nào khớp trên các cơ sở dữ liệu học thuật và kỹ thuật đã truy vấn",
+    name: "No Matching Record Found",
+    nameVi: "Không tìm thấy tài liệu tương ứng",
+    description: "No matching publication was found across the checked academic libraries and technical repositories.",
+    descriptionVi: "Không tìm thấy công trình nào khớp trên các thư viện học thuật và kho tài liệu đã tra cứu.",
     conditions: [
       { field: "candidates", operator: "=", value: "0" },
     ],
@@ -379,10 +349,10 @@ export const RULE_DEFINITIONS: Record<string, RuleDefinition> = {
   },
   "R-RETRACTED-PAPER": {
     id: "R-RETRACTED-PAPER",
-    name: "Retracted Publication Warning",
-    nameVi: "Cảnh báo bài báo đã bị rút (Retracted)",
-    description: "Cited publication has been officially RETRACTED in scholarly registries (Retraction Watch / OpenAlex / Crossref)",
-    descriptionVi: "Ấn phẩm được trích dẫn đã chính thức BỊ RÚT BÀI trên cơ sở dữ liệu học thuật (Retraction Watch / OpenAlex / Crossref)",
+    name: "Retracted Publication Notice",
+    nameVi: "Cảnh báo: Bài báo đã bị rút bài",
+    description: "This publication has been officially retracted in scholarly registries (Retraction Watch / OpenAlex / Crossref). Consider replacing it.",
+    descriptionVi: "Ấn phẩm này đã chính thức bị rút bài theo ghi nhận từ nhà xuất bản và thư viện học thuật (Retraction Watch / OpenAlex / Crossref).",
     conditions: [
       { field: "is_retracted", operator: "=", value: "true" },
     ],
@@ -390,360 +360,329 @@ export const RULE_DEFINITIONS: Record<string, RuleDefinition> = {
   },
   "R-WAYBACK-ARCHIVED": {
     id: "R-WAYBACK-ARCHIVED",
-    name: "Wayback Machine Archive Recovery",
-    nameVi: "Khôi phục bản lưu trữ Wayback Machine",
-    description: "Original URL experienced link rot (HTTP 404/DNS), but a valid historical snapshot was verified on Internet Archive Wayback Machine",
-    descriptionVi: "URL gốc bị hỏng (HTTP 404/DNS) nhưng đã xác minh được bản chụp lịch sử hợp lệ trên Internet Archive Wayback Machine",
+    name: "Web Archive Copy Found",
+    nameVi: "Tìm thấy bản lưu trữ web dự phòng",
+    description: "The original web page is no longer reachable, but a saved historical copy was verified on Internet Archive.",
+    descriptionVi: "Trang web gốc hiện không còn mở được, nhưng đã tìm thấy bản lưu trữ hợp lệ trên Internet Archive.",
     conditions: [
-      { field: "url_status", operator: "=", value: "archived_alive" },
-      { field: "archive_snapshot", operator: "!=", value: "null" },
+      { field: "archive_snapshot", operator: "=", value: "available" },
     ],
     conclusion: "VERIFIED (Archived Resource)",
   },
   "R-GLOBAL-DOI-RA-VERIFIED": {
     id: "R-GLOBAL-DOI-RA-VERIFIED",
-    name: "Global DOI Registration Agency Verified",
-    nameVi: "Xác minh Cơ quan Đăng ký DOI Toàn cầu",
-    description: "Verified via Global DOI Registration Agency (DataCite, JaLC, mEDRA, KISTI, CNKI) & CSL-JSON Content Negotiation",
-    descriptionVi: "Đã xác minh qua Cơ quan Đăng ký DOI Toàn cầu (DataCite, JaLC, mEDRA, KISTI, CNKI) & CSL-JSON",
+    name: "Verified via Global DOI Registry",
+    nameVi: "Xác nhận qua Hệ thống đăng ký DOI quốc tế",
+    description: "Verified through the Global DOI Registry (DataCite, JaLC, mEDRA, KISTI, CNKI) with matching publication details.",
+    descriptionVi: "Đã xác nhận mã DOI và thông tin công trình qua Hệ thống đăng ký DOI quốc tế.",
     conditions: [
-      { field: "doi_ra_status", operator: "=", value: "registered" },
-      { field: "csl_json_title_sim", operator: ">=", value: "0.85" },
+      { field: "doi_registered", operator: "=", value: "true" },
     ],
     conclusion: "VERIFIED",
   },
   "R-HF-VERIFIED": {
     id: "R-HF-VERIFIED",
-    name: "Hugging Face Hub Model / Dataset / Paper Verified",
-    nameVi: "Xác minh Mô hình / Bộ dữ liệu / Bài báo Hugging Face Hub",
-    description: "Verified AI model, dataset repository, or daily paper on Hugging Face Hub API",
-    descriptionVi: "Đã xác minh mô hình AI, kho dữ liệu hoặc bài báo trên Hugging Face Hub API",
+    name: "Verified on Hugging Face",
+    nameVi: "Xác nhận tài nguyên trên Hugging Face",
+    description: "Verified AI model, dataset, or research paper record on Hugging Face.",
+    descriptionVi: "Đã xác nhận mô hình, bộ dữ liệu hoặc bài nghiên cứu tương ứng trên Hugging Face.",
     conditions: [
       { field: "source", operator: "=", value: "huggingface" },
-      { field: "title_sim_fuzzy", operator: ">=", value: "0.85" },
     ],
     conclusion: "VERIFIED",
   },
   "R-RFC-VERIFIED": {
     id: "R-RFC-VERIFIED",
-    name: "IETF RFC / PyPI / NPM / GitHub Verified",
-    nameVi: "Xác minh chuẩn IETF RFC / PyPI / NPM / GitHub",
-    description: "Verified technical standard (RFC Editor / IETF Datatracker), software package (PyPI / NPM Registry), or GitHub repository (CITATION.cff)",
-    descriptionVi: "Đã xác minh tiêu chuẩn kỹ thuật (RFC Editor / IETF), gói phần mềm (PyPI / NPM) hoặc kho mã nguồn GitHub (CITATION.cff)",
+    name: "Verified Technical Standard or Repository",
+    nameVi: "Xác nhận tiêu chuẩn kỹ thuật hoặc mã nguồn",
+    description: "Verified technical standard (IETF RFC), software package (PyPI / NPM), or public GitHub repository.",
+    descriptionVi: "Đã xác nhận tiêu chuẩn kỹ thuật (IETF RFC), thư viện phần mềm (PyPI / NPM) hoặc kho mã nguồn GitHub.",
     conditions: [
       { field: "source", operator: "=", value: "tech_standard" },
-      { field: "title_sim_fuzzy", operator: ">=", value: "0.80" },
     ],
     conclusion: "VERIFIED",
   },
   "R-GITHUB-VERIFIED": {
     id: "R-GITHUB-VERIFIED",
-    name: "GitHub Repository & CITATION.cff Verified",
-    nameVi: "Xác minh kho mã nguồn GitHub & CITATION.cff",
-    description: "Verified public GitHub repository metadata and CITATION.cff citation file via GitHub REST API",
-    descriptionVi: "Đã xác minh metadata kho mã nguồn GitHub công khai và tệp CITATION.cff qua GitHub REST API",
+    name: "Verified GitHub Repository",
+    nameVi: "Xác nhận kho mã nguồn GitHub",
+    description: "Verified public GitHub repository and citation metadata.",
+    descriptionVi: "Đã xác nhận kho mã nguồn GitHub công khai và thông tin trích dẫn tương ứng.",
     conditions: [
-      { field: "source", operator: "=", value: "tech_standard" },
-      { field: "github_repo", operator: "!=", value: "null" },
+      { field: "source", operator: "=", value: "github" },
     ],
     conclusion: "VERIFIED",
   },
   "R-PACKAGE-VERIFIED": {
     id: "R-PACKAGE-VERIFIED",
-    name: "PyPI / NPM Package Registry Verified",
-    nameVi: "Xác minh gói phần mềm PyPI / NPM Registry",
-    description: "Verified software package release metadata and maintainers via PyPI or NPM Registry API",
-    descriptionVi: "Đã xác minh metadata phát hành gói phần mềm và tác giả qua PyPI hoặc NPM Registry API",
+    name: "Verified Software Package (PyPI / NPM)",
+    nameVi: "Xác nhận gói phần mềm (PyPI / NPM)",
+    description: "Verified software package release details and authors on PyPI or NPM.",
+    descriptionVi: "Đã xác nhận thông tin phát hành gói phần mềm và tác giả trên PyPI hoặc NPM.",
     conditions: [
-      { field: "source", operator: "=", value: "tech_standard" },
-      { field: "package_registry", operator: "IN", value: "[pypi, npm]" },
+      { field: "source", operator: "=", value: "package_registry" },
     ],
     conclusion: "VERIFIED",
   },
   "R-SOFTWARE-PACKAGE-VERIFIED": {
     id: "R-SOFTWARE-PACKAGE-VERIFIED",
-    name: "Software Package Release Verified",
-    nameVi: "Xác minh bản phát hành gói phần mềm",
-    description: "Verified open-source software package metadata and release version via PyPI / NPM / Cargo Registry",
-    descriptionVi: "Đã xác minh metadata và phiên bản phát hành gói phần mềm mã nguồn mở qua PyPI / NPM",
+    name: "Verified Software Package Release",
+    nameVi: "Xác nhận phiên bản gói phần mềm",
+    description: "Verified open-source software package details and release version on PyPI or NPM.",
+    descriptionVi: "Đã xác nhận thông tin và phiên bản gói phần mềm mã nguồn mở trên PyPI hoặc NPM.",
     conditions: [
-      { field: "source", operator: "=", value: "tech_standard" },
-      { field: "package_registry", operator: "IN", value: "[pypi, npm]" },
+      { field: "source", operator: "=", value: "package_registry" },
     ],
     conclusion: "VERIFIED",
   },
   "R-WIKIDATA-VERIFIED": {
     id: "R-WIKIDATA-VERIFIED",
-    name: "Wikidata Knowledge Graph / OpenCitations Verified",
-    nameVi: "Xác minh Wikidata Knowledge Graph / OpenCitations",
-    description: "Verified international standard (ISO/IEC, NIST SP, IEEE 802, OWASP, WCAG), clinical manual (DSM-5, ICD-11), or DOI via Wikidata & OpenCitations",
-    descriptionVi: "Đã xác minh tiêu chuẩn quốc tế (ISO/IEC, NIST SP, IEEE 802, OWASP, WCAG), cẩm nang y khoa hoặc DOI qua Wikidata & OpenCitations",
+    name: "Verified via Wikidata / OpenCitations",
+    nameVi: "Xác nhận qua Wikidata / OpenCitations",
+    description: "Verified international standard (ISO/IEC, NIST, IEEE, OWASP, WCAG), reference manual, or DOI via Wikidata and OpenCitations.",
+    descriptionVi: "Đã xác nhận tiêu chuẩn quốc tế (ISO/IEC, NIST, IEEE, OWASP, WCAG), tài liệu hướng dẫn hoặc mã DOI qua Wikidata và OpenCitations.",
     conditions: [
       { field: "source", operator: "=", value: "wikidata_opencitations" },
-      { field: "title_sim_fuzzy", operator: ">=", value: "0.80" },
     ],
     conclusion: "VERIFIED",
   },
   "R-WIKIDATA-STANDARD-VERIFIED": {
     id: "R-WIKIDATA-STANDARD-VERIFIED",
-    name: "Wikidata Technical Standard Verified",
-    nameVi: "Xác minh tiêu chuẩn kỹ thuật trên Wikidata",
-    description: "Verified technical standard or specification entity via Wikidata Knowledge Graph",
-    descriptionVi: "Đã xác minh thực thể tiêu chuẩn kỹ thuật hoặc đặc tả qua Wikidata Knowledge Graph",
+    name: "Verified Technical Standard on Wikidata",
+    nameVi: "Xác nhận tiêu chuẩn kỹ thuật trên Wikidata",
+    description: "Verified technical standard or official specification entry on Wikidata.",
+    descriptionVi: "Đã xác nhận tiêu chuẩn kỹ thuật hoặc đặc tả chính thức trên Wikidata.",
     conditions: [
-      { field: "source", operator: "=", value: "wikidata_opencitations" },
-      { field: "entity_type", operator: "=", value: "standard" },
+      { field: "source", operator: "=", value: "wikidata" },
     ],
     conclusion: "VERIFIED",
   },
   "R-OPENCITATIONS-VERIFIED": {
     id: "R-OPENCITATIONS-VERIFIED",
-    name: "OpenCitations COCI Graph Verified",
-    nameVi: "Xác minh đồ thị trích dẫn OpenCitations COCI",
-    description: "Verified DOI citation provenance and bibliographic links via OpenCitations COCI API",
-    descriptionVi: "Đã xác minh nguồn gốc trích dẫn DOI và liên kết thư mục qua OpenCitations COCI API",
+    name: "Citation Link Verified via OpenCitations",
+    nameVi: "Xác nhận liên kết trích dẫn trên OpenCitations",
+    description: "Verified DOI publication and bibliographic links through OpenCitations.",
+    descriptionVi: "Đã xác nhận thông tin xuất bản và liên kết thư mục của mã DOI qua OpenCitations.",
     conditions: [
       { field: "source", operator: "=", value: "opencitations" },
-      { field: "doi_exact_match", operator: "=", value: "true" },
     ],
     conclusion: "VERIFIED",
   },
   "R-WEAK-EVIDENCE": {
     id: "R-WEAK-EVIDENCE",
-    name: "Weak Evidence Fallback",
-    nameVi: "Bằng chứng đối chiếu yếu",
-    description: "Some candidates found but similarity scores are too low for verification",
-    descriptionVi: "Tìm thấy một số ứng viên nhưng điểm tương đồng quá thấp để xác nhận",
+    name: "Partial Match Only — Manual Check Suggested",
+    nameVi: "Thông tin đối chiếu chưa đủ khớp",
+    description: "Some similar titles were found, but the details are too different to confirm automatically.",
+    descriptionVi: "Tìm thấy vài tài liệu gần giống nhưng độ khớp còn thấp nên chưa thể tự động xác nhận.",
     conditions: [
-      { field: "title_sim", operator: "<", value: "0.70" },
-      { field: "author_jaccard", operator: "<", value: "0.40" },
+      { field: "match_strength", operator: "=", value: "low" },
     ],
     conclusion: "UNRESOLVED",
   },
   "R-LOCAL_DB_VERIFIED": {
     id: "R-LOCAL_DB_VERIFIED",
-    name: "Local Scholarly Index Verified",
-    nameVi: "Xác minh khớp chính xác trên CSDL học thuật cục bộ",
-    description: "Exact title, author, and publication year verified in local scholarly database",
-    descriptionVi: "Tiêu đề, tác giả và năm xuất bản khớp chính xác trong cơ sở dữ liệu học thuật cục bộ",
+    name: "Verified in CITRA Scholarly Library",
+    nameVi: "Khớp chính xác trong Thư viện học thuật CITRA",
+    description: "Title, authors, and publication year match a verified record in the CITRA Scholarly Library.",
+    descriptionVi: "Tiêu đề, tác giả và năm xuất bản khớp chính xác với bản ghi trong Thư viện học thuật CITRA.",
     conditions: [
-      { field: "source", operator: "IN", value: "[local_db, known_papers]" },
-      { field: "title_sim_fuzzy", operator: ">=", value: "0.95" },
-      { field: "author_jaccard", operator: ">=", value: "0.80" },
+      { field: "source", operator: "=", value: "CITRA Scholarly Library" },
     ],
     conclusion: "VERIFIED",
   },
   "R-LOCAL_DB_GOOD_MATCH": {
     id: "R-LOCAL_DB_GOOD_MATCH",
-    name: "Strong Local Index Match",
-    nameVi: "Khớp độ tương đồng cao trên CSDL cục bộ",
-    description: "High title and author similarity confirmed in local scholarly database",
-    descriptionVi: "Xác nhận độ tương đồng tiêu đề và tác giả cao trong cơ sở dữ liệu học thuật cục bộ",
+    name: "Strong Match in CITRA Scholarly Library",
+    nameVi: "Khớp độ chính xác cao trong Thư viện học thuật CITRA",
+    description: "High title and author agreement confirmed in the CITRA Scholarly Library.",
+    descriptionVi: "Xác nhận tiêu đề và tác giả khớp ở mức cao trong Thư viện học thuật CITRA.",
     conditions: [
-      { field: "source", operator: "IN", value: "[local_db, known_papers]" },
-      { field: "title_sim_fuzzy", operator: ">=", value: "0.85" },
-      { field: "author_jaccard", operator: ">=", value: "0.50" },
+      { field: "source", operator: "=", value: "CITRA Scholarly Library" },
     ],
     conclusion: "VERIFIED",
   },
   "R-LOCAL_DB_METADATA_ERROR": {
     id: "R-LOCAL_DB_METADATA_ERROR",
-    name: "Local Scholarly Index Metadata Discrepancy",
-    nameVi: "Sai lệch Metadata so với CSDL học thuật cục bộ",
-    description: "Matched a paper in the local scholarly index, but cited year or author list differs from the canonical record",
-    descriptionVi: "Khớp bài báo trong chỉ mục học thuật cục bộ nhưng năm xuất bản hoặc danh sách tác giả bị sai lệch",
+    name: "Matched Source with Details Mismatch",
+    nameVi: "Tìm thấy bài gốc nhưng thông tin chưa khớp",
+    description: "Found this publication in the CITRA Scholarly Library, but the cited year or author list differs from the published record.",
+    descriptionVi: "Đã tìm thấy bài báo trong Thư viện học thuật CITRA, nhưng năm xuất bản hoặc danh sách tác giả trong bài khác với bản gốc.",
     conditions: [
-      { field: "source", operator: "=", value: "local_db" },
-      { field: "title_sim_fuzzy", operator: ">=", value: "0.85" },
-      { field: "mismatched_fields", operator: "!=", value: "[]" },
+      { field: "source", operator: "=", value: "CITRA Scholarly Library" },
     ],
     conclusion: "METADATA_ERROR",
   },
   "R-LOCAL_DB": {
     id: "R-LOCAL_DB",
-    name: "Local Database Provenance",
-    nameVi: "Nguồn gốc từ CSDL học thuật cục bộ",
-    description: "Candidate retrieved from local SQLite FTS5 scholarly paper index",
-    descriptionVi: "Ứng viên được truy xuất từ chỉ mục bài báo học thuật SQLite FTS5 cục bộ",
+    name: "Matched in CITRA Scholarly Library",
+    nameVi: "Tìm thấy trong Thư viện học thuật CITRA",
+    description: "Publication record retrieved from the CITRA Scholarly Library.",
+    descriptionVi: "Đã tìm thấy bản ghi công trình trong Thư viện học thuật CITRA.",
     conditions: [
-      { field: "used_local_db", operator: "=", value: "true" },
+      { field: "source", operator: "=", value: "CITRA Scholarly Library" },
     ],
     conclusion: "VERIFIED",
   },
   "R-LOCAL_DB_ONLY": {
     id: "R-LOCAL_DB_ONLY",
-    name: "Standalone Local Database Verification",
-    nameVi: "Xác minh độc lập qua CSDL cục bộ",
-    description: "Verified via local scholarly index while external APIs were unavailable",
-    descriptionVi: "Xác minh qua chỉ mục học thuật cục bộ khi các API bên ngoài không phản hồi",
+    name: "Verified via CITRA Scholarly Library",
+    nameVi: "Xác nhận qua Thư viện học thuật CITRA",
+    description: "Verified in the CITRA Scholarly Library while external online libraries were temporarily unavailable.",
+    descriptionVi: "Đã xác nhận trực tiếp trên Thư viện học thuật CITRA khi các thư viện trực tuyến bên ngoài tạm bận.",
     conditions: [
-      { field: "used_local_db", operator: "=", value: "true" },
-      { field: "external_apis", operator: "=", value: "0" },
+      { field: "source", operator: "=", value: "CITRA Scholarly Library" },
     ],
     conclusion: "VERIFIED",
   },
   "R-API_EXHAUSTED": {
     id: "R-API_EXHAUSTED",
-    name: "External API Quota Exhausted",
-    nameVi: "Cạn hạn ngạch API bên ngoài",
-    description: "One or more external scholarly APIs reached rate/quota limits; confidence adjusted accordingly",
-    descriptionVi: "Một hoặc nhiều API học thuật bên ngoài đạt giới hạn tần suất truy vấn; đã điều chỉnh độ tin cậy tương ứng",
+    name: "Online Library Lookup Limit Reached",
+    nameVi: "Thư viện trực tuyến tạm đạt giới hạn tra cứu",
+    description: "One or more online academic libraries temporarily limited lookups; match confidence was adjusted accordingly.",
+    descriptionVi: "Một số thư viện học thuật trực tuyến tạm đạt giới hạn truy vấn nên mức độ khớp đã được điều chỉnh phù hợp.",
     conditions: [
-      { field: "api_exhausted", operator: "=", value: "true" },
+      { field: "libraries_limited", operator: "=", value: "true" },
     ],
     conclusion: "Confidence penalty applied",
   },
   "R-KNOWN-PAPER": {
     id: "R-KNOWN-PAPER",
-    name: "Known Seminal Publication",
-    nameVi: "Công trình nghiên cứu kinh điển đã biết",
-    description: "Matches canonical benchmark paper in curated seminal publications registry",
-    descriptionVi: "Khớp với bài báo chuẩn trong danh mục các công trình nghiên cứu kinh điển",
+    name: "Widely Cited Published Work Verified",
+    nameVi: "Khớp công trình học thuật chuẩn",
+    description: "Matches a widely cited published work in the CITRA Scholarly Library.",
+    descriptionVi: "Khớp với công trình nghiên cứu đã được lưu chuẩn trong Thư viện học thuật CITRA.",
     conditions: [
-      { field: "source", operator: "=", value: "known_papers" },
-      { field: "title_sim_fuzzy", operator: ">=", value: "0.85" },
+      { field: "source", operator: "=", value: "CITRA Scholarly Library" },
     ],
     conclusion: "VERIFIED",
   },
   "R-KNOWN-PAPER-NO-TITLE": {
     id: "R-KNOWN-PAPER-NO-TITLE",
-    name: "Known Seminal Paper (Author-Year Match)",
-    nameVi: "Công trình kinh điển (Khớp Tác giả - Năm)",
-    description: "In-text citation matches canonical seminal publication by author and year",
-    descriptionVi: "Trích dẫn trong bài khớp với công trình kinh điển theo tác giả và năm xuất bản",
+    name: "Matched Published Work by Author & Year",
+    nameVi: "Khớp công trình học thuật theo tác giả và năm",
+    description: "In-text citation matches a published work in the CITRA Scholarly Library by author and year.",
+    descriptionVi: "Trích dẫn trong bài khớp với công trình trong Thư viện học thuật CITRA theo tên tác giả và năm xuất bản.",
     conditions: [
-      { field: "source", operator: "=", value: "known_papers" },
       { field: "author_year_match", operator: "=", value: "true" },
     ],
     conclusion: "VERIFIED",
   },
   "R-SINGLE-SOURCE-VERIFIED": {
     id: "R-SINGLE-SOURCE-VERIFIED",
-    name: "Single Registry High-Confidence Match",
-    nameVi: "Khớp độ tin cậy cao từ CSDL đơn lẻ",
-    description: "Verified by a live scholarly registry with strong title, author, and year agreement",
-    descriptionVi: "Đã xác minh trên cơ sở dữ liệu học thuật trực tuyến với độ khớp tiêu đề, tác giả và năm cao",
+    name: "High-Confidence Library Match",
+    nameVi: "Khớp độ chính xác cao từ thư viện học thuật",
+    description: "Verified in an online academic library with strong agreement on title, authors, and publication year.",
+    descriptionVi: "Đã xác nhận trên thư viện học thuật trực tuyến với tiêu đề, tác giả và năm xuất bản khớp ở mức cao.",
     conditions: [
-      { field: "consensus", operator: ">=", value: "1" },
-      { field: "title_sim_fuzzy", operator: ">=", value: "0.90" },
-      { field: "author_jaccard", operator: ">=", value: "0.80" },
-      { field: "year_distance", operator: "<=", value: "1" },
+      { field: "library_match", operator: "=", value: "high" },
     ],
     conclusion: "VERIFIED",
   },
   "R-SINGLE-SOURCE-PARTIAL": {
     id: "R-SINGLE-SOURCE-PARTIAL",
-    name: "Single Registry Match with Metadata Discrepancy",
-    nameVi: "Khớp CSDL đơn lẻ nhưng lệch Metadata",
-    description: "Scholarly record found on live registry but has author, year, or title discrepancy",
-    descriptionVi: "Tìm thấy hồ sơ học thuật trên cơ sở dữ liệu trực tuyến nhưng có sai lệch tác giả, năm hoặc tiêu đề",
+    name: "Library Match with Details Discrepancy",
+    nameVi: "Tìm thấy trong thư viện nhưng thông tin chưa khớp",
+    description: "Found the published record in an academic library, but the author, year, or title differs slightly.",
+    descriptionVi: "Tìm thấy hồ sơ công trình trên thư viện học thuật nhưng năm xuất bản, tác giả hoặc tiêu đề chưa khớp hoàn toàn.",
     conditions: [
-      { field: "consensus", operator: ">=", value: "1" },
-      { field: "title_sim", operator: ">=", value: "0.60" },
+      { field: "library_match", operator: "=", value: "partial" },
     ],
     conclusion: "METADATA_ERROR",
   },
   "R-BROKEN-LINK": {
     id: "R-BROKEN-LINK",
-    name: "Broken Citation URL on Verified Work",
-    nameVi: "Đường dẫn URL bị hỏng trên bài báo hợp lệ",
-    description: "Cited URL returned HTTP 404/410 or failed DNS, though the scholarly paper exists",
-    descriptionVi: "URL trích dẫn trả về lỗi HTTP 404/410 hoặc DNS dù ấn phẩm học thuật thực sự tồn tại",
+    name: "Attached Link Unreachable on Verified Paper",
+    nameVi: "Đường dẫn đính kèm không mở được (bài báo có thật)",
+    description: "The publication itself exists, but the web link included in your citation currently cannot be opened.",
+    descriptionVi: "Công trình học thuật có thật nhưng đường dẫn đính kèm trong trích dẫn hiện không thể truy cập.",
     conditions: [
-      { field: "url_status", operator: "=", value: "dead_link" },
-      { field: "scholarly_record", operator: "=", value: "verified" },
+      { field: "url_reachable", operator: "=", value: "false" },
     ],
     conclusion: "METADATA_ERROR (flagged)",
   },
   "R-DEAD-URL": {
     id: "R-DEAD-URL",
-    name: "Dead Citation URL with No Scholarly Record",
-    nameVi: "URL chết và không có hồ sơ học thuật",
-    description: "Cited URL is unreachable/404 and no matching scholarly paper exists across registries",
-    descriptionVi: "URL trích dẫn không thể truy cập (404) và không tồn tại bài báo học thuật nào khớp",
+    name: "Link Unreachable & No Matching Publication",
+    nameVi: "Đường dẫn không mở được và chưa tìm thấy bài gốc",
+    description: "The cited web link could not be opened and no matching publication was found across academic libraries.",
+    descriptionVi: "Đường dẫn trích dẫn hiện không mở được và chưa tìm thấy công trình học thuật nào khớp.",
     conditions: [
-      { field: "url_status", operator: "=", value: "dead_link" },
-      { field: "title_sim", operator: "<", value: "0.60" },
+      { field: "url_reachable", operator: "=", value: "false" },
     ],
     conclusion: "SUSPECTED_HALLUCINATION",
   },
   "R-NONEXISTENT-DOI": {
     id: "R-NONEXISTENT-DOI",
-    name: "Non-Existent DOI in Scholarly Registries",
-    nameVi: "Mã DOI không tồn tại trên hệ thống đăng ký",
-    description: "Cited DOI failed to resolve to the cited work across live scholarly registries",
-    descriptionVi: "Mã DOI được trích dẫn không phân giải được tới bài báo nào trên các cơ sở dữ liệu học thuật",
+    name: "DOI Not Found in Official Registries",
+    nameVi: "Mã DOI không tìm thấy trên hệ thống đăng ký",
+    description: "The cited DOI could not be resolved to any published record across academic registries.",
+    descriptionVi: "Mã DOI bạn ghi không tìm thấy bản ghi công trình nào trên các hệ thống đăng ký học thuật.",
     conditions: [
-      { field: "doi_exact_match", operator: "=", value: "false" },
-      { field: "title_sim", operator: "<", value: "0.60" },
+      { field: "doi_found", operator: "=", value: "false" },
     ],
     conclusion: "SUSPECTED_HALLUCINATION",
   },
   "R-NO-SCHOLARLY-RECORD": {
     id: "R-NO-SCHOLARLY-RECORD",
-    name: "Zero Records in Scholarly Registries",
-    nameVi: "Không tồn tại bản ghi trên CSDL học thuật",
-    description: "Multiple live scholarly registries responded cleanly (HTTP 200) with zero matching records",
-    descriptionVi: "Nhiều cơ sở dữ liệu học thuật phản hồi thành công (HTTP 200) nhưng không có bản ghi nào khớp",
+    name: "No Record Found Across Academic Libraries",
+    nameVi: "Không tìm thấy bản ghi trên các thư viện học thuật",
+    description: "Multiple online academic libraries were searched cleanly and returned no matching publication.",
+    descriptionVi: "Đã tra cứu trên nhiều thư viện học thuật trực tuyến nhưng không tìm thấy bản ghi nào khớp.",
     conditions: [
-      { field: "clean_empty_registries", operator: ">=", value: "2" },
       { field: "candidates", operator: "=", value: "0" },
     ],
     conclusion: "SUSPECTED_HALLUCINATION",
   },
   "R-HALLUCINATED-SOURCE": {
     id: "R-HALLUCINATED-SOURCE",
-    name: "Hallucinated / Unverifiable Source Evidence",
-    nameVi: "Bằng chứng nguồn có dấu hiệu ngụy tạo (Hallucination)",
-    description: "Retrieved candidates have extremely low title and author similarity below abstention threshold",
-    descriptionVi: "Các ứng viên tìm được có độ tương đồng tiêu đề và tác giả cực thấp dưới ngưỡng tối thiểu",
+    name: "No Matching Publication Found",
+    nameVi: "Không tìm thấy tài liệu khớp trong thư viện học thuật",
+    description: "No candidate found across checked academic libraries closely matched the cited title, authors, or DOI.",
+    descriptionVi: "Chưa tìm thấy tài liệu nào trên các thư viện học thuật khớp với tiêu đề, tác giả hoặc mã DOI trong bài.",
     conditions: [
-      { field: "title_sim", operator: "<", value: "0.40" },
-      { field: "author_jaccard", operator: "<", value: "0.30" },
-      { field: "doi_exact_match", operator: "=", value: "false" },
+      { field: "match_found", operator: "=", value: "false" },
     ],
     conclusion: "SUSPECTED_HALLUCINATION",
   },
   "R-NON-SCHOLARLY-RESOURCE": {
     id: "R-NON-SCHOLARLY-RESOURCE",
-    name: "Non-Scholarly Web Resource",
-    nameVi: "Tài nguyên web phi học thuật",
-    description: "Reference points to a general web page, blog, or software documentation rather than a peer-reviewed publication",
-    descriptionVi: "Tài liệu tham khảo trỏ tới trang web thông thường hoặc tài liệu kỹ thuật thay vì ấn phẩm học thuật",
+    name: "Web Page or Online Documentation",
+    nameVi: "Trang web hoặc tài liệu trực tuyến",
+    description: "Points to a general web page, blog, or technical guide rather than a peer-reviewed journal article.",
+    descriptionVi: "Tài liệu tham khảo trỏ tới trang web thông thường hoặc tài liệu hướng dẫn kỹ thuật thay vì bài báo học thuật.",
     conditions: [
-      { field: "resource_category", operator: "=", value: "non_scholarly" },
+      { field: "resource_type", operator: "=", value: "web" },
     ],
     conclusion: "UNRESOLVED",
   },
   "R-UNINDEXED-BOOK-OR-SOURCE": {
     id: "R-UNINDEXED-BOOK-OR-SOURCE",
-    name: "Unindexed Regional Book / Print Monograph",
-    nameVi: "Sách in / Giáo trình khu vực chưa lập chỉ mục số",
-    description: "Citation appears to be a regional print textbook, thesis, or monograph not indexed in global APIs",
-    descriptionVi: "Trích dẫn có dạng sách in, giáo trình nội bộ hoặc luận văn chưa được lập chỉ mục trên các API quốc tế",
+    name: "Print Book, Textbook, or Local Thesis",
+    nameVi: "Sách in, giáo trình hoặc luận văn chưa có bản trực tuyến",
+    description: "Appears to be a print textbook, thesis, or regional monograph that is not indexed in online academic libraries.",
+    descriptionVi: "Trích dẫn có dạng sách in, giáo trình nội bộ hoặc luận văn chưa được lập chỉ mục trên các thư viện trực tuyến.",
     conditions: [
-      { field: "is_book_or_thesis_pattern", operator: "=", value: "true" },
-      { field: "candidates", operator: "=", value: "0" },
+      { field: "print_source_pattern", operator: "=", value: "true" },
     ],
     conclusion: "UNRESOLVED",
   },
   "R-URL-RESOURCE": {
     id: "R-URL-RESOURCE",
-    name: "Direct URL Reference",
-    nameVi: "Trích dẫn URL trực tiếp",
-    description: "Non-academic web link or software repository URL",
-    descriptionVi: "Đường dẫn trang web hoặc kho mã nguồn phần mềm trực tiếp",
+    name: "Direct Web Link Reference",
+    nameVi: "Trích dẫn đường dẫn web trực tiếp",
+    description: "Recognized as a direct web page or software repository link.",
+    descriptionVi: "Nhận diện là đường dẫn trang web hoặc kho mã nguồn trực tiếp.",
     conditions: [
-      { field: "citation_type", operator: "=", value: "url_resource" },
+      { field: "citation_type", operator: "=", value: "url" },
     ],
     conclusion: "VERIFIED (Resource)",
   },
   "R-WEB-RESOURCE": {
     id: "R-WEB-RESOURCE",
-    name: "Web / Technical Documentation Resource",
-    nameVi: "Tài nguyên Web / Tài liệu kỹ thuật",
-    description: "Technical documentation, API guide, or non-scholarly web reference",
-    descriptionVi: "Tài liệu hướng dẫn kỹ thuật, đặc tả API hoặc tài nguyên web",
+    name: "Web or Technical Documentation",
+    nameVi: "Tài nguyên web hoặc tài liệu kỹ thuật",
+    description: "Recognized as an online guide, official web page, or technical specification.",
+    descriptionVi: "Nhận diện là trang hướng dẫn trực tuyến, tài liệu kỹ thuật hoặc trang web tham khảo.",
     conditions: [
       { field: "resource_type", operator: "=", value: "web_documentation" },
     ],
@@ -753,8 +692,8 @@ export const RULE_DEFINITIONS: Record<string, RuleDefinition> = {
     id: "R-VN-LEGAL-FORMAT",
     name: "Legal / Statutory Document Format",
     nameVi: "Định dạng văn bản quy phạm pháp luật",
-    description: "Matches official statutory or government legal document citation format",
-    descriptionVi: "Khớp định dạng trích dẫn văn bản quy phạm pháp luật chính thức",
+    description: "Matches official statutory or government legal document citation format.",
+    descriptionVi: "Khớp định dạng trích dẫn văn bản quy phạm pháp luật chính thức.",
     conditions: [
       { field: "is_legal_reference", operator: "=", value: "true" },
     ],
@@ -764,8 +703,8 @@ export const RULE_DEFINITIONS: Record<string, RuleDefinition> = {
     id: "R-LEGAL-DOCUMENT",
     name: "Vietnamese Statutory Legal Document",
     nameVi: "Văn bản quy phạm pháp luật Việt Nam",
-    description: "Detected Vietnamese statutory instrument (Law, Code, Decree, Circular, Resolution, Decision)",
-    descriptionVi: "Nhận diện văn bản quy phạm pháp luật Việt Nam (Luật, Bộ luật, Nghị định, Thông tư, Nghị quyết, Quyết định)",
+    description: "Recognized Vietnamese statutory instrument (Law, Code, Decree, Circular, Resolution, or Decision).",
+    descriptionVi: "Nhận diện văn bản quy phạm pháp luật Việt Nam (Luật, Bộ luật, Nghị định, Thông tư, Nghị quyết, Quyết định).",
     conditions: [
       { field: "doc_category", operator: "=", value: "vn_legal_statute" },
     ],
@@ -773,170 +712,155 @@ export const RULE_DEFINITIONS: Record<string, RuleDefinition> = {
   },
   "R-VN-LEGAL-VERIFIED": {
     id: "R-VN-LEGAL-VERIFIED",
-    name: "Vietnamese Legal Registry Verified",
-    nameVi: "Xác minh trên Cơ sở dữ liệu Pháp luật Việt Nam",
-    description: "Verified statutory code/number, promulgation year, and issuing authority against Vietnamese Legal Registry",
-    descriptionVi: "Đã xác minh số hiệu, năm ban hành và cơ quan ban hành đối chiếu với Cơ sở dữ liệu Pháp luật Việt Nam",
+    name: "Verified in Vietnamese Legal Registry",
+    nameVi: "Xác nhận trên Thư viện văn bản pháp luật Việt Nam",
+    description: "Verified document number, promulgation year, and issuing authority against the Vietnamese Legal Registry.",
+    descriptionVi: "Đã xác nhận số hiệu, năm ban hành và cơ quan ban hành đối chiếu với Thư viện văn bản pháp luật Việt Nam.",
     conditions: [
-      { field: "source", operator: "=", value: "vn_legal_registry" },
       { field: "statute_match", operator: "=", value: "true" },
     ],
     conclusion: "VERIFIED",
   },
   "R-VN-LEGAL-MISMATCH": {
     id: "R-VN-LEGAL-MISMATCH",
-    name: "Vietnamese Legal Document Metadata Mismatch",
+    name: "Vietnamese Legal Document Details Mismatch",
     nameVi: "Sai lệch thông tin văn bản pháp luật Việt Nam",
-    description: "Found matching Vietnamese legal statute, but promulgation year, code number, or issuing agency differs",
-    descriptionVi: "Tìm thấy văn bản pháp luật tương ứng nhưng năm ban hành, số hiệu hoặc cơ quan ban hành bị sai lệch",
+    description: "Found the matching Vietnamese legal document, but the promulgation year, number, or issuing agency differs.",
+    descriptionVi: "Tìm thấy văn bản pháp luật tương ứng nhưng năm ban hành, số hiệu hoặc cơ quan ban hành chưa khớp.",
     conditions: [
-      { field: "source", operator: "=", value: "vn_legal_registry" },
-      { field: "mismatched_fields", operator: "!=", value: "[]" },
+      { field: "statute_mismatch", operator: "=", value: "true" },
     ],
     conclusion: "METADATA_ERROR",
   },
   "R-VN-LEGAL-SUPERSEDED": {
     id: "R-VN-LEGAL-SUPERSEDED",
-    name: "Superseded Vietnamese Legal Statute",
-    nameVi: "Văn bản pháp luật đã hết hiệu lực / bị thay thế",
-    description: "Cited Vietnamese law or decree has been superseded or replaced by a newer statutory enactment",
-    descriptionVi: "Luật hoặc Nghị định được trích dẫn đã hết hiệu lực hoặc bị thay thế bởi văn bản pháp luật mới hơn",
+    name: "Superseded Vietnamese Legal Document",
+    nameVi: "Văn bản pháp luật đã hết hiệu lực hoặc bị thay thế",
+    description: "The cited Vietnamese law or decree has been superseded or replaced by a newer legal document.",
+    descriptionVi: "Luật hoặc Nghị định được trích dẫn đã hết hiệu lực hoặc được thay thế bởi văn bản pháp luật mới hơn.",
     conditions: [
-      { field: "source", operator: "=", value: "vn_legal_registry" },
       { field: "legal_status", operator: "=", value: "superseded" },
     ],
     conclusion: "METADATA_ERROR",
   },
   "R-VN-LEGAL-FABRICATED": {
     id: "R-VN-LEGAL-FABRICATED",
-    name: "Fabricated Vietnamese Legal Document",
-    nameVi: "Văn bản pháp luật ngụy tạo / không tồn tại",
-    description: "Cited legal document number, promulgation year, or issuing body is impossible or fabricated",
-    descriptionVi: "Số hiệu, năm ban hành hoặc cơ quan ban hành văn bản pháp luật không tồn tại hoặc bị ngụy tạo",
+    name: "Legal Document Number Not Found",
+    nameVi: "Không tìm thấy số hiệu văn bản pháp luật này",
+    description: "The cited legal document number, promulgation year, or issuing authority could not be confirmed in the official legal registry.",
+    descriptionVi: "Số hiệu, năm ban hành hoặc cơ quan ban hành văn bản pháp luật này chưa được tìm thấy trên hệ thống văn bản pháp luật chính thức.",
     conditions: [
-      { field: "source", operator: "=", value: "vn_legal_registry" },
-      { field: "is_fabricated_statute", operator: "=", value: "true" },
+      { field: "statute_found", operator: "=", value: "false" },
     ],
     conclusion: "SUSPECTED_HALLUCINATION",
   },
   "R-LEGAL-STATUTE-VERIFIED": {
     id: "R-LEGAL-STATUTE-VERIFIED",
-    name: "Official Legal Statute Verified",
-    nameVi: "Xác minh văn bản quy phạm pháp luật chính thức",
-    description: "Verified statutory instrument metadata against official legal database",
-    descriptionVi: "Đã xác minh thông tin văn bản quy phạm pháp luật đối chiếu với cơ sở dữ liệu pháp luật chính thức",
+    name: "Official Legal Document Verified",
+    nameVi: "Xác nhận văn bản quy phạm pháp luật chính thức",
+    description: "Verified legal document details against the official legal registry.",
+    descriptionVi: "Đã xác nhận thông tin văn bản quy phạm pháp luật đối chiếu với thư viện pháp luật chính thức.",
     conditions: [
-      { field: "source", operator: "=", value: "vn_legal_registry" },
       { field: "statute_match", operator: "=", value: "true" },
     ],
     conclusion: "VERIFIED",
   },
   "R-LEGAL-STATUTE-ERROR": {
     id: "R-LEGAL-STATUTE-ERROR",
-    name: "Legal Statute Metadata or Validity Error",
-    nameVi: "Lỗi thông tin hoặc hiệu lực văn bản pháp luật",
-    description: "Statutory citation has a number/year discrepancy or references a superseded regulation",
-    descriptionVi: "Trích dẫn văn bản pháp luật bị sai số hiệu/năm ban hành hoặc viện dẫn quy định đã hết hiệu lực",
+    name: "Legal Document Details or Validity Issue",
+    nameVi: "Sai lệch thông tin hoặc hiệu lực văn bản pháp luật",
+    description: "This legal citation has a number/year discrepancy or references a superseded regulation.",
+    descriptionVi: "Trích dẫn văn bản pháp luật bị lệch số hiệu/năm ban hành hoặc đang dẫn chiếu quy định đã hết hiệu lực.",
     conditions: [
-      { field: "source", operator: "=", value: "vn_legal_registry" },
       { field: "statute_error", operator: "=", value: "true" },
     ],
     conclusion: "METADATA_ERROR",
   },
   "R-BOOK-EDITION-VERIFIED": {
     id: "R-BOOK-EDITION-VERIFIED",
-    name: "Canonical Book / Monograph Edition Verified",
-    nameVi: "Xác minh ấn bản Sách chuyên khảo / Giáo trình",
-    description: "Verified textbook or monograph edition against OpenLibrary / Google Books bibliographic records",
-    descriptionVi: "Đã xác minh ấn bản giáo trình hoặc sách chuyên khảo đối chiếu với OpenLibrary / Google Books",
+    name: "Book or Textbook Edition Verified",
+    nameVi: "Xác nhận ấn bản sách hoặc giáo trình",
+    description: "Verified book or textbook edition against OpenLibrary and Google Books.",
+    descriptionVi: "Đã xác nhận ấn bản giáo trình hoặc sách chuyên khảo đối chiếu với OpenLibrary và Google Books.",
     conditions: [
-      { field: "openlibrary_edition_match", operator: "=", value: "true" },
-      { field: "title_sim_fuzzy", operator: ">=", value: "0.90" },
-      { field: "author_jaccard", operator: ">=", value: "0.70" },
+      { field: "book_match", operator: "=", value: "true" },
     ],
     conclusion: "VERIFIED",
   },
   "R-DOI-RA-NO-CSL": {
     id: "R-DOI-RA-NO-CSL",
-    name: "Regional DOI Registered Without Public CSL-JSON Metadata",
-    nameVi: "Mã DOI đã đăng ký tại Cơ quan DOI Khu vực nhưng chưa có CSL-JSON công khai",
-    description: "DOI resolves at a regional Registration Agency (e.g. Airiti, JaLC, KISTI, CNKI) that does not expose public CSL-JSON metadata — manual bibliographic verification required",
-    descriptionVi: "Mã DOI đã đăng ký tại Cơ quan Quản lý DOI khu vực nhưng chưa cung cấp metadata CSL-JSON công khai — cần đối chiếu thủ công thông tin thư mục",
+    name: "Regional DOI Registered Without Public Details",
+    nameVi: "Mã DOI đã đăng ký khu vực nhưng chưa công khai chi tiết",
+    description: "This DOI is registered at a regional agency (such as Airiti, JaLC, KISTI, or CNKI) that does not publish public citation details — please check manually.",
+    descriptionVi: "Mã DOI đã được đăng ký tại cơ quan quản lý DOI khu vực nhưng chưa công khai thông tin thư mục — vui lòng đối chiếu thủ công.",
     conditions: [
-      { field: "doi_ra_status", operator: "=", value: "registered_no_csl" },
+      { field: "doi_public_details", operator: "=", value: "unavailable" },
     ],
     conclusion: "UNRESOLVED",
   },
   "R-INCOMPLETE-METADATA": {
     id: "R-INCOMPLETE-METADATA",
-    name: "Incomplete Bibliographic Reference",
-    nameVi: "Thiếu quy cách trích dẫn học thuật",
-    description: "Reference entry lacks required bibliographic fields (author, publication year, academic venue, or identifier) rather than being fabricated",
-    descriptionVi: "Mục tài liệu tham khảo thiếu các trường bắt buộc (tác giả, năm xuất bản, nơi công bố hoặc mã định danh) chứ không phải nguồn bịa đặt",
+    name: "Incomplete Citation Details",
+    nameVi: "Thiếu thông tin trích dẫn",
+    description: "This reference entry is missing required details such as author, publication year, venue, or identifier — please complete it.",
+    descriptionVi: "Mục tài liệu tham khảo còn thiếu thông tin quan trọng (tác giả, năm xuất bản, nơi công bố hoặc mã định danh) — hãy bổ sung cho đầy đủ.",
     conditions: [
       { field: "is_incomplete", operator: "=", value: "true" },
-      { field: "has_resolvable_id", operator: "=", value: "false" },
-      { field: "title_sim_max", operator: "<", value: "0.78" },
     ],
     conclusion: "METADATA_ERROR",
   },
   "R-URL-CONTENT-MISMATCH": {
     id: "R-URL-CONTENT-MISMATCH",
-    name: "Cited URL Page Title / Metadata Mismatch",
-    nameVi: "Nội dung trang URL không khớp tiêu đề trích dẫn",
-    description: "Live HTML title or citation metadata at the cited URL does not match the claimed title",
-    descriptionVi: "Tiêu đề HTML hoặc metadata học thuật trên trang URL đính kèm không khớp với tiêu đề được trích dẫn",
+    name: "Web Page Title Does Not Match Citation",
+    nameVi: "Tiêu đề trang web không khớp với trích dẫn",
+    description: "The web link opens, but the page title at that address does not match the title in your citation.",
+    descriptionVi: "Đường dẫn vẫn mở được nhưng tiêu đề trang web đích không khớp với tiêu đề bạn ghi trong bài.",
     conditions: [
-      { field: "url_status", operator: "=", value: "alive" },
-      { field: "html_meta_title_sim", operator: "<", value: "0.20" },
+      { field: "page_title_match", operator: "=", value: "false" },
     ],
     conclusion: "METADATA_ERROR",
   },
   "R-VN-STANDARD-VERIFIED": {
     id: "R-VN-STANDARD-VERIFIED",
-    name: "Vietnamese National Technical Standard Verified (TCVN/QCVN)",
-    nameVi: "Xác minh Tiêu chuẩn / Quy chuẩn Kỹ thuật Quốc gia (TCVN/QCVN)",
-    description: "Verified Vietnamese technical standard or regulation against the TCVN/QCVN registry",
-    descriptionVi: "Đã xác minh Tiêu chuẩn hoặc Quy chuẩn Kỹ thuật Quốc gia đối chiếu với danh mục TCVN/QCVN chuẩn",
+    name: "Vietnamese National Standard Verified (TCVN / QCVN)",
+    nameVi: "Xác nhận Tiêu chuẩn / Quy chuẩn Quốc gia (TCVN / QCVN)",
+    description: "Verified Vietnamese national technical standard or regulation against the TCVN / QCVN catalog.",
+    descriptionVi: "Đã xác nhận Tiêu chuẩn hoặc Quy chuẩn Kỹ thuật Quốc gia đối chiếu với danh mục TCVN / QCVN.",
     conditions: [
-      { field: "source", operator: "=", value: "tech_standard" },
-      { field: "standard_code_match", operator: "=", value: "true" },
+      { field: "standard_match", operator: "=", value: "true" },
     ],
     conclusion: "VERIFIED",
   },
   "R-VN-TEXTBOOK-VERIFIED": {
     id: "R-VN-TEXTBOOK-VERIFIED",
     name: "Vietnamese University Textbook Verified",
-    nameVi: "Xác minh Giáo trình Đại học Việt Nam chuẩn",
-    description: "Verified canonical Vietnamese university textbook or monograph against the curated textbook registry",
-    descriptionVi: "Đã xác minh giáo trình đại học hoặc sách chuyên khảo tiếng Việt đối chiếu với danh mục chuẩn",
+    nameVi: "Xác nhận Giáo trình Đại học Việt Nam",
+    description: "Verified Vietnamese university textbook or monograph against the curated textbook catalog.",
+    descriptionVi: "Đã xác nhận giáo trình đại học hoặc sách chuyên khảo tiếng Việt đối chiếu với danh mục chuẩn.",
     conditions: [
-      { field: "source", operator: "=", value: "tech_standard" },
-      { field: "title_sim_fuzzy", operator: ">=", value: "0.88" },
+      { field: "textbook_match", operator: "=", value: "true" },
     ],
     conclusion: "VERIFIED",
   },
   "R-YEAR-MISMATCH": {
     id: "R-YEAR-MISMATCH",
-    name: "Publication Year Discrepancy",
+    name: "Publication Year Mismatch",
     nameVi: "Sai lệch năm xuất bản",
-    description: "Matched publication found, but the cited publication year differs from the canonical registry record",
-    descriptionVi: "Tìm thấy ấn phẩm tương ứng nhưng năm xuất bản trích dẫn không khớp với bản ghi học thuật chính thức",
+    description: "Found the matching publication, but the cited year differs from the published record.",
+    descriptionVi: "Đã tìm thấy tài liệu gốc nhưng năm xuất bản bạn ghi trong bài chưa khớp.",
     conditions: [
-      { field: "title_sim_fuzzy", operator: ">=", value: "0.85" },
       { field: "year_match", operator: "=", value: "false" },
     ],
     conclusion: "METADATA_ERROR",
   },
   "R-DOI-METADATA-MISMATCH": {
     id: "R-DOI-METADATA-MISMATCH",
-    name: "Cited DOI Differs From Canonical Record DOI",
-    nameVi: "Mã DOI trích dẫn sai lệch với bản ghi gốc",
-    description: "Publication title and authors match, but the cited DOI differs from the canonical registry DOI",
-    descriptionVi: "Tiêu đề và tác giả khớp với ấn phẩm thực nhưng mã DOI trích dẫn khác với mã DOI chính thức",
+    name: "Cited DOI Differs from Published Record",
+    nameVi: "Mã DOI trích dẫn khác với bản gốc",
+    description: "The publication title and authors match, but the cited DOI differs from the official DOI of this work.",
+    descriptionVi: "Tiêu đề và tác giả khớp với bài báo có thật nhưng mã DOI trong bài khác với mã DOI chính thức.",
     conditions: [
-      { field: "title_sim_fuzzy", operator: ">=", value: "0.85" },
-      { field: "doi_exact_match", operator: "=", value: "false" },
+      { field: "doi_match", operator: "=", value: "false" },
     ],
     conclusion: "METADATA_ERROR",
   },
@@ -1001,7 +925,7 @@ function formatRuleConclusion(conclusion: string, lang: "vi" | "en"): string {
     return getVerdictDisplay("unresolved", lang).label
   }
   if (upper.includes("CONFIDENCE PENALTY")) {
-    return lang === "vi" ? "Điều chỉnh độ tin cậy" : "Confidence adjusted"
+    return lang === "vi" ? "Điều chỉnh mức độ khớp" : "Match confidence adjusted"
   }
   return conclusion
 }
@@ -1010,46 +934,64 @@ export function RuleInspector({
   triggeredRules,
   verdictLabel,
   features,
-  className
+  className,
 }: RuleInspectorProps) {
   const { i18n } = useTranslation()
   const isVi = Boolean(i18n.language?.startsWith("vi"))
   const lang: "vi" | "en" = isVi ? "vi" : "en"
 
-  const featurePills: string[] = []
+  const summaryChips: string[] = []
   if (features) {
-    if (features.title_sim_fuzzy !== undefined) {
-      featurePills.push(`title_sim_fuzzy=${features.title_sim_fuzzy.toFixed(2)}`)
-    }
-    if (features.title_sim_semantic !== undefined && features.title_sim_semantic > 0) {
-      featurePills.push(`title_sim_semantic=${features.title_sim_semantic.toFixed(2)}`)
+    const titleScore = Math.max(
+      features.title_sim_fuzzy ?? 0,
+      features.title_sim_semantic ?? 0,
+      features.cross_lingual_title_sim ?? 0,
+    )
+    if (
+      features.title_sim_fuzzy !== undefined ||
+      (features.title_sim_semantic !== undefined && features.title_sim_semantic > 0) ||
+      (features.cross_lingual_title_sim !== undefined && features.cross_lingual_title_sim > 0)
+    ) {
+      const pct = Math.round(titleScore * 100)
+      summaryChips.push(isVi ? `Khớp tiêu đề: ${pct}%` : `Title match: ${pct}%`)
     }
     if (features.author_jaccard !== undefined) {
-      featurePills.push(`author_jaccard=${features.author_jaccard.toFixed(2)}`)
+      const pct = Math.round(features.author_jaccard * 100)
+      summaryChips.push(isVi ? `Khớp tác giả: ${pct}%` : `Author match: ${pct}%`)
     }
     if (
       features.year_distance !== undefined &&
       features.year_distance < 900 &&
       features.has_scholarly_candidate !== false
     ) {
-      featurePills.push(`year_distance=${features.year_distance}`)
-    }
-    if (features.html_meta_title_sim !== undefined && features.html_meta_title_sim !== null) {
-      featurePills.push(`html_meta_title_sim=${features.html_meta_title_sim.toFixed(2)}`)
-    }
-    if (
-      features.cross_lingual_title_detected ||
-      (features.cross_lingual_title_sim !== undefined && features.cross_lingual_title_sim > 0)
-    ) {
-      featurePills.push(
-        `cross_lingual_title_sim=${(features.cross_lingual_title_sim ?? 0).toFixed(2)}`
+      const dist = Math.round(features.year_distance)
+      summaryChips.push(
+        dist === 0
+          ? isVi
+            ? "Năm xuất bản: khớp"
+            : "Year: exact match"
+          : isVi
+            ? `Năm xuất bản: lệch ${dist} năm`
+            : `Year: ${dist} ${dist === 1 ? "yr" : "yrs"} off`,
       )
     }
-    if (features.cross_lingual_detected) {
-      featurePills.push("cross_lingual=VI↔EN")
+    if (features.html_meta_title_sim !== undefined && features.html_meta_title_sim !== null) {
+      const pct = Math.round(features.html_meta_title_sim * 100)
+      summaryChips.push(isVi ? `Khớp tiêu đề trang web: ${pct}%` : `Web page title match: ${pct}%`)
+    }
+    if (features.cross_lingual_detected || features.cross_lingual_title_detected) {
+      summaryChips.push(isVi ? "Khớp nội dung Việt–Anh" : "Cross-language match")
     }
     if (features.doi_exact_match !== undefined) {
-      featurePills.push(`doi_exact_match=${String(features.doi_exact_match)}`)
+      summaryChips.push(
+        features.doi_exact_match
+          ? isVi
+            ? "Mã DOI: khớp"
+            : "DOI: matched"
+          : isVi
+            ? "Mã DOI: chưa khớp"
+            : "DOI: not matched",
+      )
     }
   }
 
@@ -1060,10 +1002,10 @@ export function RuleInspector({
     }
     return {
       id: ruleId,
-      name: ruleId,
-      nameVi: ruleId,
-      description: "Custom rule triggered",
-      descriptionVi: "Quy tắc kiểm tra bổ sung được kích hoạt",
+      name: "Additional Verification Check",
+      nameVi: "Tiêu chí kiểm tra bổ sung",
+      description: "An additional bibliographic verification check was applied to this citation.",
+      descriptionVi: "Hệ thống đã áp dụng thêm một tiêu chí đối chiếu cho trích dẫn này.",
       conditions: [],
       conclusion: verdictLabel || "UNKNOWN",
       triggered: true,
@@ -1074,9 +1016,9 @@ export function RuleInspector({
     return (
       <Card className={cn("bg-slate-50 dark:bg-slate-800/50 p-4", className)}>
         <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
-          <FileCode className="h-4 w-4" />
+          <ListChecks className="h-4 w-4" />
           <span className="text-sm">
-            {isVi ? "Chưa có luật nào được kích hoạt" : "No rules triggered"}
+            {isVi ? "Chưa có tiêu chí kiểm tra nào" : "No verification checks recorded"}
           </span>
         </div>
       </Card>
@@ -1086,33 +1028,26 @@ export function RuleInspector({
   return (
     <div className={cn("space-y-3", className)}>
       <div className="flex items-center gap-2">
-        <FileCode className="h-4 w-4 text-slate-500 dark:text-slate-400" />
+        <ListChecks className="h-4 w-4 text-slate-500 dark:text-slate-400" />
         <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-          {isVi ? `Luật được kích hoạt (${rules.length})` : `Triggered Rules (${rules.length})`}
+          {isVi ? `Tiêu chí kiểm tra (${rules.length})` : `Verification Checks (${rules.length})`}
         </h4>
       </div>
 
-      {featurePills.length > 0 && (
-        <details className="rounded-lg bg-slate-100/80 dark:bg-slate-900/70 border border-slate-200/70 dark:border-slate-800 px-2.5 py-2">
-          <summary className="cursor-pointer select-none text-[11px] font-semibold text-slate-600 dark:text-slate-300">
-            {isVi
-              ? `Thông số kỹ thuật (${featurePills.length} đặc trưng)`
-              : `Technical Details (${featurePills.length} observed features)`}
-          </summary>
-          <div
-            data-testid="rule-inspector-live-features"
-            className="mt-2 flex flex-wrap items-center gap-1.5"
-          >
-            {featurePills.map((pill) => (
-              <span
-                key={pill}
-                className="px-2 py-0.5 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-mono text-[10px] text-slate-700 dark:text-slate-300"
-              >
-                {pill}
-              </span>
-            ))}
-          </div>
-        </details>
+      {summaryChips.length > 0 && (
+        <div
+          data-testid="rule-inspector-live-features"
+          className="flex flex-wrap items-center gap-1.5 rounded-lg bg-slate-50 dark:bg-slate-900/70 border border-slate-200/70 dark:border-slate-800 px-2.5 py-2"
+        >
+          {summaryChips.map((chip) => (
+            <span
+              key={chip}
+              className="px-2 py-0.5 rounded-md bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[11px] font-medium text-slate-700 dark:text-slate-300"
+            >
+              {chip}
+            </span>
+          ))}
+        </div>
       )}
 
       <div className="space-y-2">
@@ -1147,63 +1082,30 @@ export function RuleInspector({
               className={cn(
                 "p-3",
                 colors.bg,
-                colors.border
+                colors.border,
               )}
             >
-              <div className="flex items-start justify-between gap-2 mb-2 flex-wrap">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className={cn("font-mono text-xs font-semibold break-all", colors.text)}>
-                      {rule.id}
-                    </span>
-                  </div>
-                  <p className={cn("text-sm font-medium mt-0.5", colors.text)}>
-                    {displayName}
-                  </p>
-                </div>
+              <div className="flex items-start justify-between gap-2 mb-1.5 flex-wrap">
+                <p className={cn("text-sm font-semibold min-w-0 flex-1", colors.text)}>
+                  {displayName}
+                </p>
                 <Badge
                   variant="outline"
-                  className={cn("flex items-center gap-1 text-xs font-medium px-2 py-1 rounded shrink-0", colors.bg, colors.border, colors.text)}
+                  className={cn(
+                    "flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded shrink-0",
+                    colors.bg,
+                    colors.border,
+                    colors.text,
+                  )}
                 >
                   {colors.icon}
-                  <span className="text-[10px]">{displayConclusion}</span>
+                  <span className="text-[11px]">{displayConclusion}</span>
                 </Badge>
               </div>
 
-              <p className="text-xs text-slate-600 dark:text-slate-400 mb-2">
+              <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
                 {displayDesc}
               </p>
-
-              {rule.conditions.length > 0 && (
-                <details className="mt-2 rounded border border-slate-200/60 dark:border-slate-700/60 bg-white/50 dark:bg-slate-900/50 px-2.5 py-1.5">
-                  <summary className="cursor-pointer select-none text-[11px] font-medium text-slate-500 dark:text-slate-400">
-                    {isVi ? "Thông số kỹ thuật" : "Technical Details"}
-                  </summary>
-                  <div className="mt-2 overflow-x-auto font-mono text-xs space-y-1">
-                    <div className="text-slate-500 dark:text-slate-400 font-semibold">
-                      {isVi ? "NẾU" : "IF"}
-                    </div>
-                    {rule.conditions.map((condition, idx) => (
-                      <div key={idx} className="flex items-center gap-1 text-slate-600 dark:text-slate-300 pl-3 flex-wrap">
-                        {idx > 0 && (
-                          <span className="text-slate-400 dark:text-slate-500 mr-1">
-                            {isVi ? "VÀ" : "AND"}
-                          </span>
-                        )}
-                        <span className="font-medium break-all">{condition.field}</span>
-                        <span className="text-slate-400">{condition.operator}</span>
-                        <span className="text-slate-500 break-all">{condition.value}</span>
-                      </div>
-                    ))}
-                    <div className="text-slate-500 dark:text-slate-400 font-semibold mt-2">
-                      {isVi ? "KẾT LUẬN" : "THEN"}
-                    </div>
-                    <div className="pl-3 text-slate-600 dark:text-slate-300 break-words">
-                      {displayConclusion}
-                    </div>
-                  </div>
-                </details>
-              )}
             </Card>
           )
         })}
@@ -1214,7 +1116,7 @@ export function RuleInspector({
 
 export function RuleInspectorCompact({
   triggeredRules,
-  className
+  className,
 }: {
   triggeredRules: string[]
   className?: string
@@ -1232,26 +1134,33 @@ export function RuleInspectorCompact({
         const definition = RULE_DEFINITIONS[ruleId]
         const conclusion = definition?.conclusion || "UNKNOWN"
         const colors = getVerdictColorClass(conclusion)
+        const displayName = definition
+          ? isVi
+            ? definition.nameVi
+            : definition.name
+          : isVi
+            ? "Tiêu chí kiểm tra"
+            : "Verification Check"
         const tooltip = definition
           ? isVi
             ? definition.descriptionVi
             : definition.description
-          : ruleId
+          : displayName
 
         return (
           <Badge
             key={ruleId}
             variant="outline"
             className={cn(
-              "inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-semibold border",
+              "inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium border",
               colors.bg,
               colors.border,
-              colors.text
+              colors.text,
             )}
             title={tooltip}
           >
             {colors.icon}
-            {ruleId}
+            {displayName}
           </Badge>
         )
       })}

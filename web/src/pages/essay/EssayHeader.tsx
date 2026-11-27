@@ -25,6 +25,7 @@ import { Tooltip } from '@/components/ui/tooltip';
 import { useToast } from '@/contexts/ToastContext';
 import { copyTextToClipboard } from '@/lib/clipboard';
 import { isDocxFilename, type ExportFormat } from '@/lib/fileKind';
+import { formatUserError } from '@/lib/academicTaxonomy';
 
 /* ============================================================
    EssayHeader — Compact Editorial Document Topbar
@@ -128,11 +129,12 @@ export function EssayHeader({
         filename,
       );
     } catch (err) {
-      const detail = err instanceof Error ? err.message : '';
-      toast.error(
-        t('essay.export.failedTitle'),
-        `${t('essay.export.failedMessage', { format: label })}${detail ? ` (${detail})` : ''}`,
+      const friendly = formatUserError(
+        err,
+        lang,
+        t('essay.export.failedMessage', { format: label }),
       );
+      toast.error(t('essay.export.failedTitle'), friendly);
     } finally {
       setBusy(null);
     }
@@ -149,8 +151,11 @@ export function EssayHeader({
 
   const handleDownloadHealedDocx = () => {
     if (!isDocxSource) return;
+    const healedLabel = isVi
+      ? 'Bản Word gợi ý sửa (.docx)'
+      : 'Word with Suggestions (.docx)';
     if (!canExportHealed) {
-      openUpgrade('AUTO-HEALED DOCX');
+      openUpgrade(healedLabel);
       return;
     }
     const healedStyle = /ieee/i.test(styleName ?? '')
@@ -158,7 +163,7 @@ export function EssayHeader({
       : /tdtu/i.test(styleName ?? '')
         ? 'tdtu'
         : 'apa';
-    void runDownload('healed', 'AUTO-HEALED DOCX', () =>
+    void runDownload('healed', healedLabel, () =>
       api.downloadAutoHealedDocx(essayId, healedStyle, filename),
     );
   };
@@ -181,11 +186,8 @@ export function EssayHeader({
         `${res.receipt_id} — ${t('essay.share.toastCopied')}`,
       );
     } catch (err) {
-      const detail = err instanceof Error ? err.message : '';
-      toast.error(
-        t('essay.share.failedTitle'),
-        detail || t('essay.share.failedMessage'),
-      );
+      const friendly = formatUserError(err, lang, t('essay.share.failedMessage'));
+      toast.error(t('essay.share.failedTitle'), friendly);
     } finally {
       setBusy(null);
     }
@@ -330,7 +332,7 @@ export function EssayHeader({
                     variant="secondary"
                     className="align-middle text-[11px] font-medium px-2 py-0"
                   >
-                    {styleName}
+                    {isVi ? `Chuẩn: ${styleName}` : `Style: ${styleName}`}
                   </Badge>
                 )}
               </div>
@@ -365,7 +367,7 @@ export function EssayHeader({
               className="h-9 rounded-xl text-xs sm:text-[13px] font-semibold px-3.5 border-slate-300 dark:border-slate-700 cursor-pointer"
             >
               <Download className="h-3.5 w-3.5 text-slate-500 shrink-0" />
-              <span>{isVi ? 'Xuất báo cáo' : 'Export'}</span>
+              <span>{isVi ? 'Xuất báo cáo' : 'Export Report'}</span>
               <ChevronDown
                 className={`h-3.5 w-3.5 text-slate-500 transition-transform duration-150 ${
                   exportMenuOpen ? 'rotate-180' : ''
@@ -389,7 +391,7 @@ export function EssayHeader({
 
               {renderMenuFormatItem(
                 'pdf',
-                'Báo cáo kiểm định (.PDF)',
+                'Báo cáo kiểm tra (.PDF)',
                 'Verification Report (.PDF)',
                 'Bản trình bày chuẩn để nộp hoặc lưu trữ',
                 'Formatted report for submission or archiving',
@@ -431,8 +433,8 @@ export function EssayHeader({
                     <div className="min-w-0">
                       <span className="font-semibold block truncate">
                         {isVi
-                          ? 'Bản Word đã tự sửa lỗi (.DOCX)'
-                          : t('essay.export.healedDocx')}
+                          ? 'Tải bản Word gợi ý sửa (.docx)'
+                          : 'Download Word with Suggestions'}
                       </span>
                       <span className="text-[11px] text-slate-500 dark:text-slate-400 block">
                         {!isDocxSource
@@ -440,8 +442,8 @@ export function EssayHeader({
                             ? 'Chỉ khả dụng cho tệp Word (.docx)'
                             : 'Available for Word (.docx) files only'
                           : isVi
-                            ? 'Tự cập nhật trích dẫn đúng ngay trên file gốc'
-                            : 'Auto-applies verified citations to .docx'}
+                            ? 'Thêm gợi ý sửa trích dẫn ngay trên tệp Word gốc'
+                            : 'Adds verified citation suggestions to your .docx'}
                       </span>
                     </div>
                   </div>
@@ -480,18 +482,12 @@ export function EssayHeader({
                   </span>
                   <div className="min-w-0">
                     <span className="font-semibold block truncate">
-                      <TextMorph
-                        text={
-                          isVi
-                            ? 'Chia sẻ chứng nhận xác thực'
-                            : t('essay.share.buttonLabel')
-                        }
-                      />
+                      <TextMorph text={t('essay.share.buttonLabel')} />
                     </span>
                     <span className="text-[11px] text-slate-500 dark:text-slate-400 block">
                       {isVi
-                        ? 'Sao chép liên kết công khai gửi giảng viên'
-                        : 'Copy public verification receipt link'}
+                        ? 'Sao chép liên kết chia sẻ báo cáo gửi giảng viên'
+                        : 'Copy a shareable link to this report'}
                     </span>
                   </div>
                 </div>
@@ -500,11 +496,11 @@ export function EssayHeader({
               <div className="my-1 h-px bg-slate-200/80 dark:bg-slate-800" />
 
               <div className="px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                {isVi ? 'Dữ liệu nâng cao' : 'Raw Data'}
+                {isVi ? 'Dữ liệu bảng tính & kỹ thuật' : 'Data Exports'}
               </div>
 
-              {renderMenuFormatItem('csv', 'Xuất bảng tính (.CSV)', 'Spreadsheet (.CSV)')}
-              {renderMenuFormatItem('json', 'Xuất dữ liệu thô (.JSON)', 'Raw Data (.JSON)')}
+              {renderMenuFormatItem('csv', 'Bảng tính (.CSV)', 'Spreadsheet (.CSV)')}
+              {renderMenuFormatItem('json', 'Dữ liệu JSON (.JSON)', 'JSON Data (.JSON)')}
             </div>
           </div>
         </div>
