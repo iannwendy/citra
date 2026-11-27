@@ -54,9 +54,11 @@ def list_audit(
 
     out: list[dict] = []
     for r in rows:
-        eid = essay_id_by_verdict.get(r.verdict_id)
+        row_essay_id: int | None = essay_id_by_verdict.get(r.verdict_id)
         essay_filename, owner_uid = (
-            essay_info_by_id.get(eid, (None, None)) if eid is not None else (None, None)
+            essay_info_by_id.get(row_essay_id, (None, None))
+            if row_essay_id is not None
+            else (None, None)
         )
         student_username, student_full_name = (
             student_info_by_id.get(owner_uid, (None, None))
@@ -69,7 +71,7 @@ def list_audit(
             {
                 "id": r.id,
                 "verdict_id": r.verdict_id,
-                "essay_id": eid,
+                "essay_id": row_essay_id,
                 "essay_filename": essay_filename,
                 "student_name": student_name,
                 "student_username": student_username,

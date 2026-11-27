@@ -93,14 +93,16 @@ describe('DashboardPage aggregate cards', () => {
 
     renderWithProviders(<DashboardPage />, { user: makeUser('teacher', 'pro') });
     const overview = await screen.findByTestId('dashboard-teacher-overview');
-    expect(overview.textContent).toContain('3 classes');
+    await waitFor(() => {
+      expect(overview.textContent).toContain('3 classes');
+      expect(screen.getByTestId('dashboard-teacher-pending-count').textContent).toBe('7');
+    });
     expect(screen.getByTestId('dashboard-teacher-classes-link').getAttribute('href')).toBe(
       '/teacher/classes',
     );
     expect(screen.getByTestId('dashboard-teacher-reviews-link').getAttribute('href')).toBe(
       '/teacher/reviews',
     );
-    expect(screen.getByTestId('dashboard-teacher-pending-count').textContent).toBe('7');
     expect(document.body.textContent).not.toContain('GROBID TEI');
     expect(document.body.textContent).not.toContain('OPENXML');
   });

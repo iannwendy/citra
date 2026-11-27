@@ -1,6 +1,6 @@
 # =====================================================================
 # config.yaml — runtime configuration
-# Synchronized with config.example.yaml and Pydantic Settings (v3.90.25).
+# Synchronized with config.example.yaml and Pydantic Settings (v3.90.26).
 # =====================================================================
 
 app:
