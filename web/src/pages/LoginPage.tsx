@@ -14,7 +14,6 @@ import {
   Lock,
   User,
   KeyRound,
-  Terminal,
   Check,
   CheckCircle2,
   Mail,
@@ -256,17 +255,17 @@ export function LoginPage() {
             >
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
               <Lock className="h-3 w-3 shrink-0 opacity-80" />
-              <span>
-                {lang === 'vi' ? 'Đăng nhập Không gian' : 'Workspace Sign In'}
-              </span>
+              <span>{t('auth.loginTitle')}</span>
             </div>
 
             <span
               style={{ color: 'var(--solva-muted)' }}
-              className="inline-flex items-center gap-1 font-mono text-[10px] shrink-0"
+              className="inline-flex items-center gap-1 font-solva-sans text-[11px] shrink-0"
             >
               <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-              <span>{t('auth.loginSecurityChip')}</span>
+              <span>
+                {lang === 'vi' ? 'Bảo mật dữ liệu · Riêng tư' : 'Private & Secure'}
+              </span>
             </span>
           </div>
 
@@ -482,7 +481,11 @@ export function LoginPage() {
                     color: 'var(--solva-ink)',
                   }}
                   className={`t-input ${getSolvaInputBorderClasses(passwordInvalid)} ${isShaking ? 'is-shaking' : ''} h-11 pl-10 pr-11 rounded-[11px] font-solva-sans text-[14px] transition-all duration-200`}
-                  placeholder={t('auth.passwordPlaceholder')}
+                  placeholder={
+                    lang === 'vi'
+                      ? 'Nhập mật khẩu của bạn'
+                      : 'Enter your password'
+                  }
                 />
                 {/* IMPORTANT: First <button> with <svg> in DOM for E2E test compatibility */}
                 <button
@@ -616,7 +619,7 @@ export function LoginPage() {
                 style={{ color: 'var(--solva-ink)' }}
                 className="flex items-center gap-1.5 text-xs font-solva-sans font-semibold"
               >
-                <Terminal className="h-3.5 w-3.5 shrink-0 opacity-80" />
+                <KeyRound className="h-3.5 w-3.5 shrink-0 opacity-80" />
                 <span>{t('auth.demoCredentials')}</span>
               </div>
               <button

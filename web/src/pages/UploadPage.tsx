@@ -18,13 +18,12 @@ import {
   Sparkles,
   GraduationCap,
   KeyRound,
-  FlaskConical,
-  Globe,
+  ShieldCheck,
 } from 'lucide-react';
 import { api, type Class } from '../api/client';
 import { useVerificationProgress } from '@/contexts/VerificationProgressContext';
 import { useRole } from '@/hooks/useRole';
-import { getQuotaView } from '@/lib/quotaDisplay';
+import { getQuotaView, isUnlimitedValue } from '@/lib/quotaDisplay';
 import { formatUserError, resolveAcademicLang } from '@/lib/academicTaxonomy';
 import { useToast } from '@/contexts/ToastContext';
 import { UpgradeModal } from '@/components/UpgradeModal';
@@ -121,6 +120,24 @@ export function UploadPage() {
 
   const lang = resolveAcademicLang(i18n.resolvedLanguage || i18n.language);
   const quotaView = getQuotaView(quota, lang, { isAdmin });
+  const sizeUnlimited = isUnlimitedValue(quota.max_file_size_mb);
+  const pagesUnlimited = isAdmin || isUnlimitedValue(quota.max_pages_per_pdf);
+  const fileAndPageLimitSummary =
+    sizeUnlimited && pagesUnlimited
+      ? lang === 'vi'
+        ? 'Không giới hạn dung lượng & số trang'
+        : 'Unlimited file size & pages'
+      : sizeUnlimited
+        ? lang === 'vi'
+          ? `Không giới hạn dung lượng · Tối đa ${quotaView.pages} trang`
+          : `Unlimited file size · Up to ${quotaView.pages} pages`
+        : pagesUnlimited
+          ? lang === 'vi'
+            ? `Tối đa ${quotaView.fileSize} · Không giới hạn số trang`
+            : `Up to ${quotaView.fileSize} · Unlimited pages`
+          : lang === 'vi'
+            ? `Tối đa ${quotaView.fileSize} · ${quotaView.pages} trang`
+            : `Up to ${quotaView.fileSize} · ${quotaView.pages} pages`;
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -228,9 +245,12 @@ export function UploadPage() {
         title:
           lang === 'vi'
             ? 'Đã hết lượt kiểm tra trong tháng'
-            : 'Monthly Upload Quota Reached',
+            : 'Monthly Check Limit Reached',
         description: msg,
-        feature: '50–1,000 Monthly Checks',
+        feature:
+          lang === 'vi'
+            ? '50–1.000 lượt kiểm tra mỗi tháng'
+            : '50–1,000 Monthly Checks',
       });
       setUpgradeModalOpen(true);
       return;
@@ -238,7 +258,7 @@ export function UploadPage() {
 
     // Client-side file size pre-check against current plan quota
     const maxBytes = quota.max_file_size_mb * 1024 * 1024;
-    if (file.size > maxBytes) {
+    if (!sizeUnlimited && file.size > maxBytes) {
       const msg =
         lang === 'vi'
           ? `Tệp vượt quá giới hạn dung lượng gói ${planTier.toUpperCase()} (${quota.max_file_size_mb} MB). Vui lòng nâng cấp lên gói Pro (25 MB) hoặc Ultra (100 MB).`
@@ -248,9 +268,10 @@ export function UploadPage() {
         title:
           lang === 'vi'
             ? `Tài liệu vượt quá dung lượng gói ${planTier.toUpperCase()} (${quota.max_file_size_mb} MB)`
-            : 'Manuscript Exceeds Plan File Size Limit',
+            : 'File Exceeds Plan Size Limit',
         description: msg,
-        feature: '25MB–100MB File Upload',
+        feature:
+          lang === 'vi' ? 'Tải tệp lớn đến 100 MB' : 'Files Up to 100 MB',
       });
       setUpgradeModalOpen(true);
       return;
@@ -280,9 +301,12 @@ export function UploadPage() {
           title:
             lang === 'vi'
               ? 'Đã chạm giới hạn gói cước hiện tại'
-              : 'Plan Quota or Limit Reached',
+              : 'Plan Limit Reached',
           description: friendlyErr,
-          feature: 'Elevated Upload Quota & Page Limit',
+          feature:
+            lang === 'vi'
+              ? 'Nâng giới hạn tải bài & số trang'
+              : 'Higher Upload & Page Limits',
         });
         setUpgradeModalOpen(true);
       }
@@ -493,8 +517,8 @@ export function UploadPage() {
           </h1>
           <p className="text-sm text-slate-600 dark:text-slate-400">
             {lang === 'vi'
-              ? 'Tải lên tài liệu PDF, Word (.docx), BibTeX (.bib) hoặc RIS (.ris) để kiểm chứng trích dẫn và tài liệu tham khảo.'
-              : 'Upload your PDF, Word (.docx), BibTeX (.bib), or RIS (.ris) file to verify citations and references.'}
+              ? 'Tải lên bài viết PDF hoặc Word (.docx) để kiểm tra trích dẫn và tài liệu tham khảo.'
+              : 'Upload your PDF or Word (.docx) document to check citations and references.'}
           </p>
         </div>
 
@@ -506,7 +530,7 @@ export function UploadPage() {
             className="h-10 rounded-xl font-medium whitespace-nowrap"
           >
             <Link to="/sandbox" data-testid="upload-open-sandbox-link">
-              <FlaskConical className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+              <Sparkles className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
               <span>{t('nav.liveSandbox')}</span>
             </Link>
           </Button>
@@ -557,9 +581,7 @@ export function UploadPage() {
             ·
           </span>
           <span className="text-slate-600 dark:text-slate-400 font-mono whitespace-nowrap">
-            {lang === 'vi'
-              ? `Tối đa ${quotaView.fileSize} · ${quotaView.pages} trang`
-              : `Max ${quotaView.fileSize} · ${quotaView.pages} pages`}
+            {fileAndPageLimitSummary}
           </span>
         </div>
 
@@ -594,8 +616,8 @@ export function UploadPage() {
         <div className="px-4 sm:px-6 py-3.5 bg-slate-50/80 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2.5">
           <h2 className="font-display text-sm font-bold text-slate-800 dark:text-slate-200">
             {lang === 'vi'
-              ? 'Tải lên tài liệu cần kiểm chứng'
-              : 'Upload Document for Verification'}
+              ? 'Tải lên tài liệu cần kiểm tra'
+              : 'Upload Document to Check'}
           </h2>
           <div className="flex flex-wrap items-center gap-2">
             <Badge
@@ -608,115 +630,121 @@ export function UploadPage() {
               variant="outline"
               className="font-mono text-[11px] whitespace-nowrap shrink-0 bg-white dark:bg-slate-950 text-slate-600 dark:text-slate-400"
             >
-              {lang === 'vi'
-                ? `Tối đa ${quota.max_file_size_mb} MB`
-                : `Max ${quota.max_file_size_mb} MB`}
+              {sizeUnlimited
+                ? lang === 'vi'
+                  ? 'Không giới hạn dung lượng'
+                  : 'Unlimited size'
+                : lang === 'vi'
+                  ? `Tối đa ${quota.max_file_size_mb} MB`
+                  : `Up to ${quota.max_file_size_mb} MB`}
             </Badge>
           </div>
         </div>
 
         <div className="p-4 sm:p-8">
-          {/* Cohort / Class Enrollment & Assignment Bar */}
-          <div className="mb-5 p-3.5 rounded-2xl bg-slate-50/90 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="p-2 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 shrink-0">
-                <GraduationCap className="h-4 w-4" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-xs font-semibold text-slate-900 dark:text-white">
-                  {lang === 'vi'
-                    ? 'Nộp bài vào Lớp học / Học phần (Tùy chọn)'
-                    : 'Submit to Cohort / Class (Optional)'}
-                </p>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
-                  {lang === 'vi'
-                    ? 'Chọn lớp đã tham gia hoặc nhập mã CITRA-XXXX từ giảng viên'
-                    : 'Select an enrolled class or enter a CITRA-XXXX join code from your instructor'}
-                </p>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2 w-full md:w-auto min-w-0">
-              {enrolledClasses.length > 0 && (
-                <select
-                  aria-label={
-                    lang === 'vi' ? 'Chọn lớp học' : 'Select enrolled class'
-                  }
-                  data-testid="upload-class-select"
-                  value={selectedClassId ?? ''}
-                  onChange={(e) =>
-                    setSelectedClassId(
-                      e.target.value ? Number(e.target.value) : null,
-                    )
-                  }
-                  className="h-9 px-3 rounded-xl text-xs font-mono w-full sm:w-auto max-w-full truncate bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200"
-                >
-                  <option value="">
-                    {lang === 'vi'
-                      ? '— Kiểm tra cá nhân —'
-                      : '— Personal Check —'}
-                  </option>
-                  {enrolledClasses.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name.length > 36
-                        ? `${c.name.slice(0, 35)}…`
-                        : c.name}{' '}
-                      {c.join_code ? `(${c.join_code})` : ''}
-                    </option>
-                  ))}
-                </select>
-              )}
-
-              {isUser && (
-                <div className="flex items-center gap-1.5 w-full sm:w-auto">
-                  <div className="relative flex-1 sm:flex-initial min-w-0">
-                    <label htmlFor="join-class-code-input" className="sr-only">
-                      {lang === 'vi' ? 'Mã tham gia lớp học' : 'Class join code'}
-                    </label>
-                    <KeyRound
-                      className="h-3.5 w-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none"
-                      aria-hidden="true"
-                    />
-                    <input
-                      id="join-class-code-input"
-                      type="text"
-                      data-testid="join-class-code-input"
-                      aria-label={
-                        lang === 'vi' ? 'Mã tham gia lớp học' : 'Class join code'
-                      }
-                      value={joinCodeInput}
-                      onChange={(e) => {
-                        setJoinCodeInput(e.target.value.toUpperCase());
-                        if (joinCodeError) clearJoinCodeError();
-                      }}
-                      placeholder="CITRA-XXXX"
-                      maxLength={16}
-                      className={`t-input h-9 w-full sm:w-32 pl-8 pr-2.5 rounded-xl text-xs font-mono uppercase bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
-                        joinCodeError ? 'is-error' : ''
-                      } ${joinCodeShaking ? 'is-shaking' : ''}`}
-                    />
-                  </div>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    data-testid="join-class-submit-btn"
-                    disabled={!joinCodeInput.trim() || joiningClass}
-                    onClick={handleJoinClass}
-                    className="h-9 rounded-xl text-xs font-semibold whitespace-nowrap shrink-0"
-                  >
-                    {joiningClass ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : lang === 'vi' ? (
-                      'Tham gia lớp'
-                    ) : (
-                      'Join Class'
-                    )}
-                  </Button>
+          {/* Class Enrollment & Assignment Bar (hidden for teachers/admins without enrolled classes) */}
+          {(enrolledClasses.length > 0 || isUser) && (
+            <div className="mb-5 p-3.5 rounded-2xl bg-slate-50/90 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="p-2 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 shrink-0">
+                  <GraduationCap className="h-4 w-4" />
                 </div>
-              )}
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-slate-900 dark:text-white">
+                    {lang === 'vi'
+                      ? 'Nộp bài vào lớp học (Tùy chọn)'
+                      : 'Submit to a Class (Optional)'}
+                  </p>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                    {lang === 'vi'
+                      ? 'Chọn lớp đã tham gia hoặc nhập mã lớp từ giảng viên'
+                      : 'Select an enrolled class or enter a join code from your instructor'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 w-full md:w-auto min-w-0">
+                {enrolledClasses.length > 0 && (
+                  <select
+                    aria-label={
+                      lang === 'vi' ? 'Chọn lớp học' : 'Select enrolled class'
+                    }
+                    data-testid="upload-class-select"
+                    value={selectedClassId ?? ''}
+                    onChange={(e) =>
+                      setSelectedClassId(
+                        e.target.value ? Number(e.target.value) : null,
+                      )
+                    }
+                    className="h-9 px-3 rounded-xl text-xs font-mono w-full sm:w-auto max-w-full truncate bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200"
+                  >
+                    <option value="">
+                      {lang === 'vi'
+                        ? '— Kiểm tra cá nhân —'
+                        : '— Personal Check —'}
+                    </option>
+                    {enrolledClasses.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name.length > 36
+                          ? `${c.name.slice(0, 35)}…`
+                          : c.name}{' '}
+                        {c.join_code ? `(${c.join_code})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                )}
+
+                {isUser && (
+                  <div className="flex items-center gap-1.5 w-full sm:w-auto">
+                    <div className="relative flex-1 sm:flex-initial min-w-0">
+                      <label htmlFor="join-class-code-input" className="sr-only">
+                        {lang === 'vi' ? 'Mã tham gia lớp học' : 'Class join code'}
+                      </label>
+                      <KeyRound
+                        className="h-3.5 w-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none"
+                        aria-hidden="true"
+                      />
+                      <input
+                        id="join-class-code-input"
+                        type="text"
+                        data-testid="join-class-code-input"
+                        aria-label={
+                          lang === 'vi' ? 'Mã tham gia lớp học' : 'Class join code'
+                        }
+                        value={joinCodeInput}
+                        onChange={(e) => {
+                          setJoinCodeInput(e.target.value.toUpperCase());
+                          if (joinCodeError) clearJoinCodeError();
+                        }}
+                        placeholder="CITRA-XXXX"
+                        maxLength={16}
+                        className={`t-input h-9 w-full sm:w-32 pl-8 pr-2.5 rounded-xl text-xs font-mono uppercase bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+                          joinCodeError ? 'is-error' : ''
+                        } ${joinCodeShaking ? 'is-shaking' : ''}`}
+                      />
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      data-testid="join-class-submit-btn"
+                      disabled={!joinCodeInput.trim() || joiningClass}
+                      onClick={handleJoinClass}
+                      className="h-9 rounded-xl text-xs font-semibold whitespace-nowrap shrink-0"
+                    >
+                      {joiningClass ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : lang === 'vi' ? (
+                        'Tham gia lớp'
+                      ) : (
+                        'Join Class'
+                      )}
+                    </Button>
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Interactive Dropzone */}
           <div
@@ -807,13 +835,13 @@ export function UploadPage() {
                   </AvatarGroupHover>
                   <p className="font-display text-lg sm:text-xl font-bold text-slate-900 dark:text-white mb-1.5">
                     {lang === 'vi'
-                      ? 'Kéo và thả tệp PDF, Word (.docx), BibTeX (.bib) hoặc RIS (.ris) vào đây'
-                      : 'Drop your PDF, Word (.docx), BibTeX (.bib), or RIS (.ris) file here'}
+                      ? 'Kéo thả tệp PDF hoặc Word (.docx) vào đây'
+                      : 'Drop your PDF or Word (.docx) file here'}
                   </p>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
                     {lang === 'vi'
-                      ? 'Hỗ trợ đầy đủ chuẩn trích dẫn APA, IEEE, MLA, Chicago, Harvard, Vancouver'
-                      : 'Supports APA, IEEE, MLA, Chicago, Harvard, and Vancouver citation styles'}
+                      ? 'Hỗ trợ .pdf, .docx, danh mục .bib/.ris và các chuẩn trích dẫn APA, IEEE, MLA, Harvard…'
+                      : 'Supports .pdf, .docx, .bib/.ris reference files and APA, IEEE, MLA, Harvard styles'}
                   </p>
                   <span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-indigo-600 dark:text-indigo-400 shadow-sm">
                     {t('upload.orBrowse')}
@@ -831,28 +859,24 @@ export function UploadPage() {
             </Alert>
           )}
 
-          {/* Cross-border scholarly API & data processing notice (DLCN-02) */}
+          {/* Concise calm privacy reassurance (DLCN-02) */}
           <div
             data-testid="upload-privacy-notice"
-            className="mt-4 rounded-[14px] border border-[#E7E3D9] dark:border-[#332F26] bg-[#F4F2EC]/80 dark:bg-[#1E1C17]/75 px-4 py-3 flex items-start gap-3 font-solva-sans text-[12px] leading-[19px] text-[#56524A] dark:text-[#A8A296] transition-colors"
+            className="mt-4 rounded-xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950/50 px-3.5 py-2.5 flex items-center gap-2.5 text-xs text-slate-600 dark:text-slate-400 leading-relaxed"
           >
-            <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-[7px] bg-white dark:bg-[#141310] border border-[#E7E3D9] dark:border-[#332F26] text-[#1C1A15] dark:text-[#FBFAF6] shadow-sm">
-              <Globe className="h-3.5 w-3.5" />
-            </span>
-            <div className="min-w-0">
-              <span className="font-medium text-[#1C1A15] dark:text-[#FBFAF6]">
-                {t('privacyCompliance.uploadNoticeTitle')}:{' '}
-              </span>
-              {t('privacyCompliance.uploadNoticeBody')}{' '}
+            <ShieldCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <p className="min-w-0">
+              {lang === 'vi'
+                ? 'CITRA chỉ đối chiếu thông tin tài liệu tham khảo qua các thư viện học thuật uy tín (như Crossref, OpenAlex) và bảo mật nội dung bài viết của bạn. '
+                : 'CITRA only checks reference details across trusted scholarly libraries (such as Crossref and OpenAlex) and keeps your document private. '}
               <Link
                 to="/privacy#third-parties"
-                className="inline-flex items-center gap-1 font-medium text-[#1C1A15] dark:text-[#FBFAF6] underline underline-offset-4 decoration-[#1C1A15]/40 dark:decoration-[#FBFAF6]/40 hover:opacity-75 transition-opacity"
+                className="inline-flex items-center gap-0.5 font-medium text-slate-800 dark:text-slate-200 underline underline-offset-4 hover:opacity-80 transition-opacity whitespace-nowrap"
               >
-                <span>{t('privacyCompliance.policyLinkLabel')}</span>
+                <span>{lang === 'vi' ? 'Chính sách bảo mật' : 'Privacy Policy'}</span>
                 <ArrowRight className="h-3 w-3" />
               </Link>
-              .
-            </div>
+            </p>
           </div>
 
           {/* Action Bar */}

@@ -27,7 +27,9 @@ import {
   formatCisScore,
   formatLocalizedDate,
   formatUserError,
+  getCisBand,
   resolveAcademicLang,
+  type CisBandKey,
 } from '@/lib/academicTaxonomy';
 import {
   FileFormatIcon,
@@ -49,7 +51,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 
 const PAGE_SIZE = 15;
 
-type CisBandFilter = 'all' | 'good' | 'review' | 'attention';
+type CisBandFilter = 'all' | CisBandKey;
 type FileTypeFilter = 'all' | 'pdf' | 'docx' | 'bib_ris';
 
 function getCisBadgeClass(
@@ -57,15 +59,9 @@ function getCisBadgeClass(
   isUnscannable: boolean,
 ): string {
   if (isUnscannable || typeof score !== 'number' || !Number.isFinite(score)) {
-    return 'bg-slate-100 text-slate-600 border-slate-200/80 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700';
+    return 'bg-slate-100 text-slate-600 border border-slate-200/80 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700';
   }
-  if (score >= 85) {
-    return 'bg-emerald-50 text-emerald-700 border-emerald-200/80 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800/70';
-  }
-  if (score >= 60) {
-    return 'bg-amber-50 text-amber-800 border-amber-200/80 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800/70';
-  }
-  return 'bg-rose-50 text-rose-700 border-rose-200/80 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-800/70';
+  return getCisBand(score).badgeClass;
 }
 
 function formatHistoryFormatBadge(
@@ -156,9 +152,7 @@ export function HistoryPage() {
         if (!isCompleted || typeof score !== 'number' || !Number.isFinite(score)) {
           return false;
         }
-        if (cisBand === 'good' && score < 85) return false;
-        if (cisBand === 'review' && (score < 60 || score >= 85)) return false;
-        if (cisBand === 'attention' && score >= 60) return false;
+        if (getCisBand(score).key !== cisBand) return false;
       }
 
       return true;
@@ -194,6 +188,11 @@ export function HistoryPage() {
     setFileType('all');
   };
 
+  const cisTooltip =
+    lang === 'vi'
+      ? 'Điểm trích dẫn (CIS, thang 0–100 — không phải điểm chấm bài viết): 85–100 Xuất sắc · 70–84 Khá tốt · 50–69 Cần rà soát · < 50 Cần kiểm tra kỹ'
+      : 'Citation Score (CIS, 0–100 — reflects reference accuracy, not your essay grade): 85–100 Excellent · 70–84 Good · 50–69 Needs Review · < 50 Needs Careful Review';
+
   const cisBandOptions: Array<{
     key: CisBandFilter;
     label: string;
@@ -203,23 +202,29 @@ export function HistoryPage() {
       key: 'all',
       label: lang === 'vi' ? 'Tất cả' : 'All',
       activeClass:
-        'bg-indigo-600 text-white border-indigo-600 dark:bg-indigo-500 dark:border-indigo-500',
+        'bg-slate-900 text-white border-slate-900 dark:bg-slate-100 dark:text-slate-900 dark:border-slate-100',
     },
     {
-      key: 'good',
-      label: lang === 'vi' ? 'Tốt ≥ 85' : 'Good ≥ 85',
+      key: 'excellent',
+      label: `${getCisBand(95, lang).shortLabel} (85–100)`,
       activeClass:
         'bg-emerald-600 text-white border-emerald-600 dark:bg-emerald-500 dark:border-emerald-500',
     },
     {
+      key: 'good',
+      label: `${getCisBand(75, lang).shortLabel} (70–84)`,
+      activeClass:
+        'bg-indigo-600 text-white border-indigo-600 dark:bg-indigo-500 dark:border-indigo-500',
+    },
+    {
       key: 'review',
-      label: lang === 'vi' ? 'Cần xem 60–84' : 'Review 60–84',
+      label: `${getCisBand(60, lang).shortLabel} (50–69)`,
       activeClass:
         'bg-amber-600 text-white border-amber-600 dark:bg-amber-500 dark:border-amber-500',
     },
     {
-      key: 'attention',
-      label: lang === 'vi' ? 'Cần rà soát < 60' : 'Needs Review < 60',
+      key: 'critical',
+      label: `${getCisBand(30, lang).shortLabel} (< 50)`,
       activeClass:
         'bg-rose-600 text-white border-rose-600 dark:bg-rose-500 dark:border-rose-500',
     },
@@ -231,7 +236,7 @@ export function HistoryPage() {
       label: lang === 'vi' ? 'Tất cả định dạng' : 'All formats',
     },
     { key: 'pdf', label: 'PDF' },
-    { key: 'docx', label: 'DOCX' },
+    { key: 'docx', label: 'Word (.docx)' },
     { key: 'bib_ris', label: 'BibTeX / RIS' },
   ];
 
@@ -299,8 +304,8 @@ export function HistoryPage() {
             <div className="flex items-center gap-2.5 min-w-0 flex-wrap">
               <h2 className="font-display text-sm font-semibold text-slate-800 dark:text-slate-200">
                 {lang === 'vi'
-                  ? 'Danh mục báo cáo đã lưu'
-                  : 'Archived Verification Reports'}
+                  ? 'Các bài đã kiểm tra'
+                  : 'Past Verification Reports'}
               </h2>
               <Badge
                 variant="secondary"
@@ -380,10 +385,16 @@ export function HistoryPage() {
                 role="group"
                 aria-label={
                   lang === 'vi'
-                    ? 'Lọc theo mức điểm CIS'
-                    : 'Filter by CIS quality band'
+                    ? 'Lọc theo mức điểm trích dẫn'
+                    : 'Filter by Citation Score band'
                 }
               >
+                <span
+                  title={cisTooltip}
+                  className="text-xs font-medium text-slate-500 dark:text-slate-400 mr-0.5 whitespace-nowrap"
+                >
+                  {lang === 'vi' ? 'Điểm trích dẫn:' : 'Citation Score:'}
+                </span>
                 {cisBandOptions.map((opt) => {
                   const active = cisBand === opt.key;
                   return (
@@ -552,7 +563,7 @@ export function HistoryPage() {
                               className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-50 dark:bg-amber-950/70 text-amber-700 dark:text-amber-300 border border-amber-200/80 dark:border-amber-800/80 shrink-0"
                             >
                               <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-                              {lang === 'vi' ? 'Hàng đợi' : 'Queued'}
+                              {lang === 'vi' ? 'Đang chờ lượt' : 'Queued'}
                             </span>
                           )}
                           {isProcessing && (
@@ -567,7 +578,11 @@ export function HistoryPage() {
                           {isFailed && (
                             <span
                               data-testid={`history-job-status-${essay.id}`}
-                              title={essay.job_error || undefined}
+                              title={
+                                essay.job_error
+                                  ? formatUserError(essay.job_error, lang)
+                                  : undefined
+                              }
                               className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-rose-50 dark:bg-rose-950/70 text-rose-700 dark:text-rose-300 border border-rose-200/80 dark:border-rose-800/80 shrink-0"
                             >
                               <AlertTriangle className="h-3 w-3" />
@@ -590,9 +605,11 @@ export function HistoryPage() {
                           </span>
                           <span
                             data-testid={`history-essay-cis-${essay.id}`}
-                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border font-mono tabular-nums font-semibold ${cisTone}`}
+                            title={cisTooltip}
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-mono tabular-nums font-semibold ${cisTone}`}
                           >
-                            CIS: {cisDisplay}
+                            {lang === 'vi' ? 'Điểm trích dẫn:' : 'Citation Score:'}{' '}
+                            {cisDisplay}
                           </span>
                           <span className="inline-flex items-center gap-1 font-mono">
                             <Clock className="h-3.5 w-3.5 text-slate-400" />

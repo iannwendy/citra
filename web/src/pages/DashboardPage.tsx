@@ -40,6 +40,7 @@ import {
   formatCisScore,
   formatLocalizedDate,
   formatUserError,
+  getCisBand,
   resolveAcademicLang,
 } from '@/lib/academicTaxonomy';
 import { SCHOLARLY_APIS_LABEL } from '@/lib/productFacts';
@@ -86,15 +87,9 @@ function getCisBadgeClass(
   isUnscannable: boolean,
 ): string {
   if (isUnscannable || typeof score !== 'number' || !Number.isFinite(score)) {
-    return 'bg-slate-100 text-slate-600 border-slate-200/80 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700';
+    return 'bg-slate-100 text-slate-600 border border-slate-200/80 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700';
   }
-  if (score >= 85) {
-    return 'bg-emerald-50 text-emerald-700 border-emerald-200/80 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800/70';
-  }
-  if (score >= 60) {
-    return 'bg-amber-50 text-amber-800 border-amber-200/80 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800/70';
-  }
-  return 'bg-rose-50 text-rose-700 border-rose-200/80 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-800/70';
+  return getCisBand(score).badgeClass;
 }
 
 function formatDocumentMeta(
@@ -192,8 +187,8 @@ export function DashboardPage() {
 
   const cisTooltip =
     lang === 'vi'
-      ? 'Chỉ số toàn vẹn trích dẫn (0–100): Tốt ≥ 85 · Cần xem 60–84 · Cần rà soát < 60'
-      : 'Citation Integrity Score (0–100): Good ≥ 85 · Review 60–84 · Needs review < 60';
+      ? 'Điểm trích dẫn (CIS, thang 0–100 — phản ánh độ chính xác tài liệu tham khảo, không phải điểm bài viết): 85–100 Xuất sắc · 70–84 Khá tốt · 50–69 Cần rà soát · < 50 Cần kiểm tra kỹ'
+      : 'Citation Score (CIS, 0–100 — reflects reference accuracy, not your essay grade): 85–100 Excellent · 70–84 Good · 50–69 Needs Review · < 50 Needs Careful Review';
 
   const renderSortHeaderButton = (
     column: EssaySortColumn,
@@ -232,58 +227,52 @@ export function DashboardPage() {
   // Stat cards data
   const statCards = [
     {
-      idx: '01',
+      id: 'documents',
       label: t('dashboard.totalDocuments'),
       value: stats.total_documents,
       sub:
         lang === 'vi'
-          ? 'Tài liệu học thuật đã phân tích'
-          : 'Analyzed academic documents',
+          ? 'Tài liệu học thuật đã kiểm tra'
+          : 'Checked academic documents',
       tooltip: undefined as string | undefined,
       alwaysShowSub: false,
       icon: FileText,
       color: 'text-indigo-600 dark:text-indigo-400',
       iconBox:
         'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20',
-      badgeTone:
-        'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/80 dark:text-indigo-300 border-indigo-200/60 dark:border-indigo-800/60',
     },
     {
-      idx: '02',
+      id: 'citations',
       label: t('dashboard.totalCitations'),
       value: stats.total_citations,
       sub:
         lang === 'vi'
-          ? 'Trích dẫn bóc tách đa định dạng'
-          : 'Multi-format citation extractions',
+          ? 'Tổng số trích dẫn đã tìm thấy'
+          : 'Total citations found across your files',
       tooltip: undefined as string | undefined,
       alwaysShowSub: false,
       icon: Scale,
       color: 'text-emerald-600 dark:text-emerald-400',
       iconBox:
         'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20',
-      badgeTone:
-        'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-300 border-emerald-200/60 dark:border-emerald-800/60',
     },
     {
-      idx: '03',
-      label: t('dashboard.avgCisScore'),
+      id: 'cis',
+      label: lang === 'vi' ? 'Điểm trích dẫn TB' : 'Avg. Citation Score',
       value: formatCisScore(stats.avg_cis_score),
       sub:
         lang === 'vi'
-          ? 'Chỉ số toàn vẹn trích dẫn (0–100)'
-          : 'Citation Integrity Score (0–100)',
+          ? 'Độ chính xác trích dẫn (0–100, không phải điểm bài viết)'
+          : 'Citation accuracy (0–100, not an essay grade)',
       tooltip: cisTooltip,
       alwaysShowSub: true,
       icon: TrendingUp,
       color: 'text-amber-600 dark:text-amber-400',
       iconBox:
         'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20',
-      badgeTone:
-        'bg-amber-50 text-amber-700 dark:bg-amber-950/80 dark:text-amber-300 border-amber-200/60 dark:border-amber-800/60',
     },
     {
-      idx: '04',
+      id: 'verified',
       label: t('dashboard.verifiedRate'),
       value: stats.verified_rate > 0 ? `${stats.verified_rate}%` : '—',
       sub:
@@ -296,8 +285,6 @@ export function DashboardPage() {
       color: 'text-sky-600 dark:text-sky-400',
       iconBox:
         'bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20',
-      badgeTone:
-        'bg-sky-50 text-sky-700 dark:bg-sky-950/80 dark:text-sky-300 border-sky-200/60 dark:border-sky-800/60',
     },
   ];
 
@@ -410,7 +397,7 @@ export function DashboardPage() {
           const Icon = card.icon;
           return (
             <Card
-              key={card.label}
+              key={card.id}
               title={card.tooltip}
               className="card group relative overflow-hidden rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-3.5 sm:p-5 shadow-sm hover:shadow-md hover:-translate-y-0.5 hover:border-indigo-300 dark:hover:border-indigo-700 transition-all duration-200"
             >
@@ -419,13 +406,6 @@ export function DashboardPage() {
                 <div className={`p-2.5 rounded-xl border ${card.iconBox}`}>
                   <Icon className="h-5 w-5" />
                 </div>
-                {!isUser && (
-                  <span
-                    className={`text-[11px] font-mono font-semibold px-2 py-0.5 rounded-md border ${card.badgeTone}`}
-                  >
-                    {card.idx}
-                  </span>
-                )}
               </div>
               <p
                 className={`text-xl sm:text-2xl xl:text-3xl font-bold font-mono tabular-nums tracking-tight ${card.color}`}
@@ -442,14 +422,19 @@ export function DashboardPage() {
                     />
                   )}
                 </p>
-                {card.idx === '02' && incompleteMetadataCount > 0 && (
+                {card.id === 'citations' && incompleteMetadataCount > 0 && (
                   <span
                     data-testid="dashboard-incomplete-ref-chip"
-                    className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-mono font-semibold bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800/70"
+                    title={
+                      lang === 'vi'
+                        ? 'Các mục tài liệu tham khảo còn thiếu tác giả, năm xuất bản hoặc nơi công bố'
+                        : 'Reference entries missing author, publication year, or journal/publisher'
+                    }
+                    className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-amber-50 text-amber-800 border border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800/70"
                   >
                     {lang === 'vi'
-                      ? `${incompleteMetadataCount} thiếu thông tin`
-                      : `${incompleteMetadataCount} Incomplete Ref`}
+                      ? `${incompleteMetadataCount} mục thiếu thông tin trích dẫn`
+                      : `${incompleteMetadataCount} incomplete ${incompleteMetadataCount === 1 ? 'reference' : 'references'}`}
                   </span>
                 )}
               </div>
@@ -633,7 +618,11 @@ export function DashboardPage() {
                   aria-sort={getEssayColumnAriaSort(sortBy, 'cis')}
                   className="whitespace-nowrap font-mono text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-400 py-3 px-2 xl:px-4"
                 >
-                  {renderSortHeaderButton('cis', 'CIS', cisTooltip)}
+                  {renderSortHeaderButton(
+                    'cis',
+                    lang === 'vi' ? 'Điểm trích dẫn' : 'Citation Score',
+                    cisTooltip,
+                  )}
                 </TableHead>
                 <TableHead
                   aria-sort={getEssayColumnAriaSort(sortBy, 'date')}
@@ -699,7 +688,7 @@ export function DashboardPage() {
                                 className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-50 dark:bg-amber-950/70 text-amber-700 dark:text-amber-300 border border-amber-200/80 dark:border-amber-800/80 shrink-0"
                               >
                                 <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-                                {lang === 'vi' ? 'Hàng đợi' : 'Queued'}
+                                {lang === 'vi' ? 'Đang chờ lượt' : 'Queued'}
                               </span>
                             )}
                             {isProcessing && (
@@ -714,7 +703,11 @@ export function DashboardPage() {
                             {isFailed && (
                               <span
                                 data-testid={`job-status-badge-${essay.id}`}
-                                title={essay.job_error || undefined}
+                                title={
+                                  essay.job_error
+                                    ? formatUserError(essay.job_error, lang)
+                                    : undefined
+                                }
                                 className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-rose-50 dark:bg-rose-950/70 text-rose-700 dark:text-rose-300 border border-rose-200/80 dark:border-rose-800/80 shrink-0"
                               >
                                 <AlertTriangle className="h-3 w-3" />
@@ -754,12 +747,12 @@ export function DashboardPage() {
                     </TableCell>
                     <TableCell className="py-0 md:py-4 px-0 md:px-2 xl:px-4 whitespace-nowrap flex items-center justify-between md:table-cell">
                       <span className="md:hidden text-[11px] font-medium uppercase text-slate-400">
-                        CIS
+                        {lang === 'vi' ? 'Điểm trích dẫn' : 'Citation Score'}
                       </span>
                       <span
                         data-testid={`essay-cis-${essay.id}`}
                         title={cisTooltip}
-                        className={`inline-flex items-center px-2.5 py-0.5 rounded-md border text-xs font-mono tabular-nums font-semibold ${cisTone}`}
+                        className={`inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-mono tabular-nums font-semibold ${cisTone}`}
                       >
                         {cisDisplay}
                       </span>

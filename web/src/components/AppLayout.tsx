@@ -30,7 +30,6 @@ import {
   Sun,
   Moon,
   Monitor,
-  FlaskConical,
 } from 'lucide-react';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -74,7 +73,7 @@ const SIDEBAR_GROUPS: NavGroup[] = [
     items: [
       { path: '/dashboard', labelKey: 'nav.dashboard', icon: FileSearch, capability: 'upload_essay' },
       { path: '/upload', labelKey: 'nav.newCheck', icon: Upload, capability: 'upload_essay' },
-      { path: '/sandbox', labelKey: 'nav.liveSandbox', icon: FlaskConical, capability: 'upload_essay' },
+      { path: '/sandbox', labelKey: 'nav.liveSandbox', icon: Sparkles, capability: 'upload_essay' },
       { path: '/batch-upload', labelKey: 'nav.batchCheck', icon: Layers, requiresBatch: true },
       { path: '/history', labelKey: 'nav.history', icon: History, capability: 'view_own_history' },
     ],
@@ -712,10 +711,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                         {visibleAdminItems.map((item, idx) => {
                           const Icon = item.icon;
                           const active = isActive(item.path);
-                          const itemLabel =
-                            item.path === '/admin/audit' && currentLang === 'vi'
-                              ? 'Nhật ký duyệt bài'
-                              : t(item.labelKey);
+                          const itemLabel = t(item.labelKey);
 
                           return (
                             <Link
@@ -787,7 +783,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                 onMouseEnter={(e) =>
                   showRailTooltip(
                     e.currentTarget,
-                    currentLang === 'vi' ? 'Nâng cấp Pro · $16/th' : 'Upgrade to Pro · $16/mo',
+                    currentLang === 'vi' ? 'Nâng cấp Pro' : 'Upgrade to Pro',
                   )
                 }
                 onMouseLeave={hideRailTooltip}
@@ -801,9 +797,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                 <Sparkles className="h-3.5 w-3.5 shrink-0" />
                 {!isDesktopCollapsed && (
                   <span className="truncate">
-                    {currentLang === 'vi'
-                      ? 'Nâng cấp Pro · $16/th'
-                      : 'Upgrade Pro · $16/mo'}
+                    {currentLang === 'vi' ? 'Nâng cấp Pro' : 'Upgrade to Pro'}
                   </span>
                 )}
               </Link>
@@ -874,6 +868,11 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                       ? sidebarQuota.usage
                       : `${quota.monthly_uploads_used} / ${quota.monthly_uploads_limit}`}
                   </span>
+                  {!sidebarQuota.uploadsUnlimited && (
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                      {currentLang === 'vi' ? 'lượt' : 'checks'}
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -912,7 +911,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
           <div className="space-y-1">
             <div className="flex items-center justify-between text-[10.5px] text-slate-600 dark:text-slate-400">
-              <span className="truncate">{currentLang === 'vi' ? 'Lượt tháng' : 'Monthly Checks'}</span>
+              <span className="truncate">
+                {currentLang === 'vi' ? 'Lượt kiểm tra tháng này' : 'Checks this month'}
+              </span>
               <span className="font-mono font-semibold text-slate-900 dark:text-white shrink-0">
                 {sidebarQuota.uploadsUnlimited
                   ? sidebarQuota.usage
@@ -1270,7 +1271,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           if (showBatchActive) {
             const batchLabel =
               currentLang === 'vi'
-                ? `Hàng loạt: ${batchStats.completed}/${batchStats.total} hoàn tất`
+                ? `Đã xong ${batchStats.completed}/${batchStats.total} tài liệu`
                 : `Batch: ${batchStats.completed}/${batchStats.total} completed`;
 
             return (

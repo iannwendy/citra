@@ -78,7 +78,7 @@ const STEP_LABELS: Array<{
   },
   {
     labelEn: 'Extracting citations & references',
-    labelVi: 'Bóc tách trích dẫn và danh mục tham khảo',
+    labelVi: 'Trích xuất trích dẫn và danh mục tham khảo',
     detailsEn: 'Finding in-text citations and bibliography entries',
     detailsVi: 'Tìm các trích dẫn trong bài và danh sách tài liệu tham khảo',
     tagEn: 'Extraction',
@@ -111,7 +111,7 @@ const STEP_LABELS: Array<{
   {
     labelEn: 'Evaluating citation accuracy & integrity',
     labelVi: 'Kiểm tra độ chính xác và tính toàn vẹn trích dẫn',
-    detailsEn: 'Checking for metadata errors, broken links, or retracted papers',
+    detailsEn: 'Checking for author/year mismatches, broken links, or retracted papers',
     detailsVi: 'Rà soát sai lệch thông tin, liên kết hỏng hoặc bài báo đã bị rút',
     tagEn: `${SYMBOLIC_RULES_COUNT} Checks`,
     tagVi: `${SYMBOLIC_RULES_COUNT} tiêu chí`,
@@ -138,37 +138,37 @@ const STEP_KEY_TO_INDEX: Record<string, number> = {
   done: 7,
 };
 
-const SOURCE_DISPLAY_NAMES: Record<string, string> = {
-  openalex: 'OpenAlex',
-  crossref: 'Crossref',
-  semanticscholar: 'Semantic Scholar',
-  semantic_scholar: 'Semantic Scholar',
-  arxiv: 'arXiv',
-  pubmed: 'PubMed',
-  europepmc: 'Europe PMC',
-  europe_pmc: 'Europe PMC',
-  dblp: 'DBLP',
-  openlibrary: 'Open Library',
-  open_library: 'Open Library',
-  datacite: 'DataCite',
-  doi_ra: 'DOI RA',
-  doaj: 'DOAJ',
-  openaire_hal: 'OpenAIRE / HAL',
-  ncbi_biorxiv: 'NCBI / bioRxiv',
-  huggingface: 'Hugging Face',
-  wikidata_opencitations: 'Wikidata / OpenCitations',
-  wikidata_opencitatio: 'Wikidata / OpenCitations',
-  tech_standard: 'Tech Standards',
-  vn_tech_standard: 'VN Tech Standards',
-  vn_textbook_registry: 'VN Textbook Registry',
-  vn_legal_registry: 'VN Legal Registry',
-  vn_registry: 'VN Registry',
-  web_html_meta: 'Web HTML Meta',
-  html_head: 'Web HTML Meta',
-  wayback_html_meta: 'Wayback Archive',
-  serpapi: 'Google Scholar',
-  local_db: 'Local Corpus',
-  known_papers: 'Known Papers',
+const SOURCE_DISPLAY_NAMES: Record<string, { en: string; vi: string }> = {
+  openalex: { en: 'OpenAlex', vi: 'OpenAlex' },
+  crossref: { en: 'Crossref', vi: 'Crossref' },
+  semanticscholar: { en: 'Semantic Scholar', vi: 'Semantic Scholar' },
+  semantic_scholar: { en: 'Semantic Scholar', vi: 'Semantic Scholar' },
+  arxiv: { en: 'arXiv', vi: 'arXiv' },
+  pubmed: { en: 'PubMed', vi: 'PubMed' },
+  europepmc: { en: 'Europe PMC', vi: 'Europe PMC' },
+  europe_pmc: { en: 'Europe PMC', vi: 'Europe PMC' },
+  dblp: { en: 'DBLP', vi: 'DBLP' },
+  openlibrary: { en: 'Open Library', vi: 'Open Library' },
+  open_library: { en: 'Open Library', vi: 'Open Library' },
+  datacite: { en: 'DataCite', vi: 'DataCite' },
+  doi_ra: { en: 'Global DOI Registry', vi: 'Hệ thống DOI quốc tế' },
+  doaj: { en: 'DOAJ', vi: 'DOAJ' },
+  openaire_hal: { en: 'OpenAIRE / HAL', vi: 'OpenAIRE / HAL' },
+  ncbi_biorxiv: { en: 'PubMed / bioRxiv', vi: 'PubMed / bioRxiv' },
+  huggingface: { en: 'Hugging Face', vi: 'Hugging Face' },
+  wikidata_opencitations: { en: 'Wikidata / OpenCitations', vi: 'Wikidata / OpenCitations' },
+  wikidata_opencitatio: { en: 'Wikidata / OpenCitations', vi: 'Wikidata / OpenCitations' },
+  tech_standard: { en: 'Technical Standards', vi: 'Tiêu chuẩn kỹ thuật' },
+  vn_tech_standard: { en: 'Vietnam Standards', vi: 'Tiêu chuẩn Quốc gia VN' },
+  vn_textbook_registry: { en: 'Vietnam Textbooks', vi: 'Danh mục giáo trình VN' },
+  vn_legal_registry: { en: 'Vietnam Legal Database', vi: 'Cơ sở dữ liệu Pháp luật VN' },
+  vn_registry: { en: 'Vietnam Academic Registry', vi: 'Danh mục học thuật VN' },
+  web_html_meta: { en: 'Source Web Page', vi: 'Trang web gốc' },
+  html_head: { en: 'Source Web Page', vi: 'Trang web gốc' },
+  wayback_html_meta: { en: 'Web Archive', vi: 'Kho lưu trữ web' },
+  serpapi: { en: 'Google Scholar', vi: 'Google Scholar' },
+  local_db: { en: 'CITRA Scholarly Library', vi: 'Thư viện học thuật CITRA' },
+  known_papers: { en: 'CITRA Scholarly Library', vi: 'Thư viện học thuật CITRA' },
 };
 
 function pluralEn(n: number, singular: string, plural: string): string {
@@ -186,14 +186,49 @@ function fixEnglishPluralization(text: string): string {
     .replace(/\b1\s+source hits\b/gi, '1 source hit');
 }
 
-function formatLiveSourceName(key: string): string {
+function formatLiveSourceName(key: string, lang: 'vi' | 'en'): string {
   const normalized = key.trim().toLowerCase();
-  return (
-    SOURCE_DISPLAY_NAMES[normalized] ??
-    key
-      .replace(/_/g, ' ')
-      .replace(/\b\w/g, (ch) => ch.toUpperCase())
-  );
+  const entry = SOURCE_DISPLAY_NAMES[normalized];
+  if (entry) {
+    return lang === 'vi' ? entry.vi : entry.en;
+  }
+  return key
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (ch) => ch.toUpperCase());
+}
+
+function formatProcessingError(
+  rawError: unknown,
+  lang: 'vi' | 'en',
+  fallback?: string,
+): string {
+  const raw =
+    typeof rawError === 'string'
+      ? rawError
+      : rawError instanceof Error
+        ? rawError.message
+        : '';
+  if (/processing\s+timeout/i.test(raw)) {
+    return lang === 'vi'
+      ? 'Quá thời gian xử lý. Vui lòng thử kiểm tra lại sau ít phút.'
+      : 'Verification took too long and timed out. Please try again.';
+  }
+  if (/unable\s+to\s+fetch\s+processing\s+status|failed\s+to\s+retrieve\s+status/i.test(raw)) {
+    return lang === 'vi'
+      ? 'Không thể cập nhật tiến trình do gián đoạn kết nối. Vui lòng tải lại trang hoặc thử lại.'
+      : 'Lost connection while checking progress. Please refresh or try again.';
+  }
+  if (/retry\s+failed/i.test(raw)) {
+    return lang === 'vi'
+      ? 'Không thể chạy lại kiểm tra lúc này. Vui lòng thử lại sau.'
+      : 'Could not restart the check right now. Please try again.';
+  }
+  if (/upload\s+failed/i.test(raw)) {
+    return lang === 'vi'
+      ? 'Không thể tải tệp lên. Vui lòng kiểm tra kết nối và thử lại.'
+      : 'Could not upload this file. Please check your connection and try again.';
+  }
+  return formatUserError(rawError, lang, fallback);
 }
 
 function formatStep1SubStageLine(
@@ -249,8 +284,8 @@ function formatStep1SubStageLine(
     const isFallback = lower.includes('grobid') || lower.includes('falling back');
     if (isFallback) {
       return lang === 'vi'
-        ? `[01/08] Chuyển sang phân tích cấu trúc văn bản dự phòng${pageCount ? ` (${pageCount} trang)` : ''}`
-        : `[01/08] Switching to fallback structural text parser${pageCount ? ` (${pluralEn(pageCount, 'page', 'pages')})` : ''}`;
+        ? `[01/08] Đang đọc cấu trúc văn bản ở chế độ tương thích${pageCount ? ` (${pageCount} trang)` : ''}`
+        : `[01/08] Reading document layout in compatibility mode${pageCount ? ` (${pluralEn(pageCount, 'page', 'pages')})` : ''}`;
     }
     return lang === 'vi'
       ? `[01/08] Đang phân tích cấu trúc văn bản${pageCount ? ` (${pageCount} trang)` : ''}`
@@ -292,7 +327,11 @@ function localizeLiveStatusMessage(
       .replace(/\bGROBID\s+TEI-XML\b/gi, 'document structure')
       .replace(/\bwith\s+GROBID\b/gi, 'structure')
       .replace(/\bGROBID\s+layout\s+cache\b/gi, 'cached layout')
-      .replace(/\bGROBID\b/gi, 'document parser');
+      .replace(/\bGROBID\b/gi, 'document reader')
+      .replace(/\b(?:smart\s+)?admission\s+queue\b/gi, 'waiting line')
+      .replace(/\bFIFO\s+queue\b/gi, 'waiting line')
+      .replace(/\bregex\s+parser\b/gi, 'compatibility reader')
+      .replace(/\bmetadata\b/gi, 'citation details');
     return sanitizedEn;
   }
 
@@ -330,7 +369,7 @@ function localizeLiveStatusMessage(
       : 'Đang phân tích cấu trúc tài liệu…';
   }
   if (lower.includes('grobid parsed')) {
-    return `Đã bóc tách ${refCount ?? 0} tài liệu tham khảo · Đang hợp nhất trích dẫn…`;
+    return `Đã trích xuất ${refCount ?? 0} tài liệu tham khảo · Đang hợp nhất trích dẫn…`;
   }
   if (lower.includes('regex parser') || lower.includes('falling back to regex')) {
     return pageCount
@@ -359,7 +398,7 @@ function localizeLiveStatusMessage(
     if (citCount != null && refCount != null) {
       return `Đã tìm thấy ${citCount} trích dẫn và ${refCount} tài liệu tham khảo`;
     }
-    return 'Đang bóc tách trích dẫn và danh mục tham khảo…';
+    return 'Đang trích xuất trích dẫn và danh mục tham khảo…';
   }
   const comparedMatch = clean.match(/compared\s+(\d+)\s+source\s+hits?\s+across\s+(\d+)\s+databases?/i);
   if (comparedMatch) {
@@ -431,7 +470,7 @@ function buildPipelineReasoningLines(
   ) {
     lines.push(
       lang === 'vi'
-        ? `[03/08] Bóc tách ${status.citations_found} trích dẫn & ${status.references_found} tài liệu tham khảo`
+        ? `[03/08] Trích xuất ${status.citations_found} trích dẫn & ${status.references_found} tài liệu tham khảo`
         : `[03/08] Extracted ${pluralEn(status.citations_found, 'in-text citation', 'in-text citations')} & ${pluralEn(status.references_found, 'reference', 'references')}`,
     );
   }
@@ -448,7 +487,7 @@ function buildPipelineReasoningLines(
     const sourcePreview =
       liveSourcesEntries
         .slice(0, 4)
-        .map(([k]) => formatLiveSourceName(k))
+        .map(([k]) => formatLiveSourceName(k, lang))
         .join(' · ') || 'Crossref · OpenAlex';
     const hasExactCount = liveSourcesEntries.length > 0;
     const countTextEn = hasExactCount
@@ -781,12 +820,12 @@ export function ProcessingPage() {
       setRetryRunSeq((s) => s + 1);
     } catch (err) {
       setErrorMsg(
-        formatUserError(
+        formatProcessingError(
           err,
           lang,
           lang === 'vi'
             ? 'Không thể thử lại lúc này. Vui lòng thử lại sau.'
-            : 'Unable to retry analysis right now.',
+            : 'Unable to retry verification right now.',
         ),
       );
     } finally {
@@ -1108,7 +1147,7 @@ export function ProcessingPage() {
         </div>
       </div>
 
-      {/* Queued FIFO banner during high-traffic deadline bursts */}
+      {/* Queued waiting banner during high-traffic periods */}
       {isQueued && (
         <div
           data-testid="queued-processing-banner"
@@ -1118,19 +1157,19 @@ export function ProcessingPage() {
           <div>
             <p className="font-bold font-display">
               {lang === 'vi'
-                ? `Bài nộp đang trong hàng đợi thông minh${queuePos ? ` — Vị trí hiện tại: #${queuePos}` : ''}`
-                : `Submission in smart admission queue${queuePos ? ` — Current position: #${queuePos}` : ''}`}
+                ? `Bài viết đang chờ tới lượt kiểm tra${queuePos ? ` — Vị trí #${queuePos}` : ''}`
+                : `Your document is waiting in line${queuePos ? ` — Position #${queuePos}` : ''}`}
             </p>
             <p className="mt-0.5 text-indigo-800/90 dark:text-indigo-300/90">
               {lang === 'vi'
-                ? 'Trang này sẽ tự động cập nhật ngay khi tới lượt phân tích tài liệu của bạn — không cần tải lại trang.'
-                : 'This page updates automatically as soon as a slot opens — no refresh needed.'}
+                ? 'Trang này sẽ tự động cập nhật ngay khi tới lượt kiểm tra tài liệu của bạn — không cần tải lại trang.'
+                : 'This page updates automatically as soon as your turn begins — no refresh needed.'}
             </p>
           </div>
         </div>
       )}
 
-      {/* Failed Pipeline Alert + Credit Refund Reassurance + Action Buttons */}
+      {/* Failed Verification Alert + Quota Restored Reassurance + Action Buttons */}
       {isFailed && (
         <Alert
           variant="destructive"
@@ -1139,16 +1178,18 @@ export function ProcessingPage() {
         >
           <AlertTriangle className="h-5 w-5" />
           <AlertTitle className="font-display font-bold">
-            {lang === 'vi' ? 'Lỗi tiến trình phân tích' : 'Pipeline error'}
+            {lang === 'vi'
+              ? 'Không thể hoàn tất kiểm tra'
+              : 'Verification could not finish'}
           </AlertTitle>
           <AlertDescription className="space-y-3 mt-1.5">
             <p className="text-sm leading-relaxed">
-              {formatUserError(
+              {formatProcessingError(
                 errorMsg ?? status?.error,
                 lang,
                 lang === 'vi'
-                  ? 'Đã xảy ra lỗi không xác định — vui lòng thử tải lại tài liệu.'
-                  : 'Unknown error — please try uploading the document again.',
+                  ? 'Đã xảy ra sự cố ngoài ý muốn — vui lòng thử kiểm tra lại tài liệu.'
+                  : 'An unexpected error occurred — please try checking your document again.',
               )}
             </p>
 
@@ -1160,8 +1201,8 @@ export function ProcessingPage() {
                 <ShieldCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
                 <span>
                   {lang === 'vi'
-                    ? 'Lượt tải lên trong tháng của bạn đã được hoàn lại (không trừ hạn ngạch)'
-                    : 'Your monthly upload credit was automatically refunded'}
+                    ? 'Lượt kiểm tra tháng này của bạn đã được hoàn lại (không bị trừ lượt)'
+                    : 'This failed check was not counted against your monthly limit'}
                 </span>
               </div>
             )}
@@ -1234,20 +1275,19 @@ export function ProcessingPage() {
           <div>
             <p className="font-bold font-display">
               {lang === 'vi'
-                ? 'Phát hiện tài liệu PDF dạng ảnh quét (Thiếu lớp văn bản số hóa)'
-                : 'Scanned / Image-Only PDF Detected (Missing Digital Text Layer)'}
+                ? 'Phát hiện tệp PDF dạng ảnh chụp / quét'
+                : 'Scanned PDF detected'}
             </p>
             <p className="mt-0.5">
-              {diagnostics.warning_message ||
-                (lang === 'vi'
-                  ? 'Tài liệu có mật độ văn bản số hóa rất thấp; hệ thống tự động khôi phục văn bản OCR khi khả dụng.'
-                  : 'Low extractable text density detected; OCR fallback recovery will run where supported.')}
+              {lang === 'vi'
+                ? 'Tệp PDF này là ảnh quét không chọn được chữ; hệ thống đang tự động đọc chữ từ trang ảnh khi có thể.'
+                : 'This PDF looks like scanned page images rather than selectable text; CITRA is automatically reading text from the pages where supported.'}
             </p>
           </div>
         </div>
       )}
 
-      {/* Early Legacy Vietnamese Encoding Transcoding Info Pill */}
+      {/* Early Legacy Vietnamese Font Normalization Info Pill */}
       {legacyEncoding && (
         <div
           data-testid="legacy-encoding-processing-banner"
@@ -1257,14 +1297,14 @@ export function ProcessingPage() {
           <div>
             <p className="font-semibold font-display">
               {lang === 'vi'
-                ? `Phát hiện bảng mã tiếng Việt cũ (${String(legacyEncoding).toUpperCase()}) — Đã tự động chuyển mã sang chuẩn Unicode NFC${legacyPagesCount ? ` (${legacyPagesCount} trang)` : ''}`
-                : `Legacy Vietnamese encoding detected (${String(legacyEncoding).toUpperCase()}) — Automatically transcoded to Unicode NFC${legacyPagesCount ? ` (${pluralEn(legacyPagesCount, 'page', 'pages')})` : ''}`}
+                ? `Đã chuẩn hóa phông chữ tiếng Việt cũ để đọc chính xác dấu${legacyPagesCount ? ` (${legacyPagesCount} trang)` : ''}`
+                : `Older Vietnamese font detected — normalized for accurate reading${legacyPagesCount ? ` (${pluralEn(legacyPagesCount, 'page', 'pages')})` : ''}`}
             </p>
           </div>
         </div>
       )}
 
-      {/* Early OCR Pages Recovered Info Pill */}
+      {/* Early Scanned Pages Read Info Pill */}
       {ocrRecoveredPages.length > 0 && (
         <div
           data-testid="ocr-recovered-processing-banner"
@@ -1274,8 +1314,8 @@ export function ProcessingPage() {
           <div>
             <p className="font-semibold font-display">
               {lang === 'vi'
-                ? `Đã khôi phục lớp văn bản OCR tự động trên ${ocrRecoveredPages.length} trang (${ocrRecoveredPages.map((p) => `tr.${p}`).join(', ')})`
-                : `OCR text layer automatically recovered on ${pluralEn(ocrRecoveredPages.length, 'page', 'pages')} (${ocrRecoveredPages.map((p) => `p.${p}`).join(', ')})`}
+                ? `Đọc trang ảnh quét: ${ocrRecoveredPages.length} trang (${ocrRecoveredPages.map((p) => `tr.${p}`).join(', ')})`
+                : `Scanned text read: ${pluralEn(ocrRecoveredPages.length, 'page', 'pages')} (${ocrRecoveredPages.map((p) => `p.${p}`).join(', ')})`}
             </p>
           </div>
         </div>
@@ -1284,7 +1324,6 @@ export function ProcessingPage() {
       {/* 4 Live Progress Stat Cards */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <StatCard
-          idx="01"
           icon={
             <Quote className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
           }
@@ -1292,7 +1331,6 @@ export function ProcessingPage() {
           label={lang === 'vi' ? 'Trích dẫn' : 'Citations'}
         />
         <StatCard
-          idx="02"
           icon={
             <FileText className="h-4 w-4 text-slate-600 dark:text-slate-400" />
           }
@@ -1300,7 +1338,6 @@ export function ProcessingPage() {
           label={lang === 'vi' ? 'Tài liệu tham khảo' : 'References'}
         />
         <StatCard
-          idx="03"
           icon={
             <GitMerge className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
           }
@@ -1309,18 +1346,26 @@ export function ProcessingPage() {
           highlight
         />
         <StatCard
-          idx="04"
           icon={
             <Database className="h-4 w-4 text-amber-600 dark:text-amber-400" />
           }
           value={
-            status?.references_found
-              ? status.references_found
-              : status?.citations_found
-                ? status.citations_found
+            visualDone || isDone
+              ? (status?.references_found || status?.citations_found || 0)
+              : liveSourcesEntries.length > 0
+                ? liveSourcesEntries.length
                 : '—'
           }
-          label={lang === 'vi' ? 'Cần xác minh' : 'To verify'}
+          label={
+            visualDone || isDone
+              ? lang === 'vi'
+                ? 'Đã kiểm tra xong'
+                : 'Verified'
+              : lang === 'vi'
+                ? 'Thư viện đã tra cứu'
+                : 'Libraries checked'
+          }
+          highlight={visualDone || isDone}
         />
       </div>
 
@@ -1537,7 +1582,7 @@ export function ProcessingPage() {
                                 className={`w-1.5 h-1.5 rounded-full shrink-0 ${tone.dotClass}`}
                               />
                               <span className="font-semibold">
-                                {formatLiveSourceName(sourceKey)}
+                                {formatLiveSourceName(sourceKey, lang)}
                               </span>
                               {tone.isRateLimited && (
                                 <span
@@ -1545,8 +1590,8 @@ export function ProcessingPage() {
                                   className="px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/70 border border-amber-300/80 dark:border-amber-700/80 text-[10px] font-bold tracking-tight text-amber-800 dark:text-amber-200"
                                 >
                                   {lang === 'vi'
-                                    ? 'Tạm giới hạn'
-                                    : 'Rate-Limited'}
+                                    ? 'Đang bận'
+                                    : 'Busy — retrying'}
                                 </span>
                               )}
                             </span>
@@ -1586,13 +1631,11 @@ export function ProcessingPage() {
 }
 
 function StatCard({
-  idx,
   icon,
   value,
   label,
   highlight,
 }: {
-  idx: string;
   icon: React.ReactNode;
   value: number | string;
   label: string;
@@ -1604,9 +1647,6 @@ function StatCard({
         <div className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800">
           {icon}
         </div>
-        <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
-          {idx}
-        </span>
       </div>
       <p
         className={`text-2xl font-bold font-mono tabular-nums ${

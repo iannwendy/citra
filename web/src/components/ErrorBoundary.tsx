@@ -78,11 +78,13 @@ function DefaultErrorFallback({
   title,
   pageLevel = false,
 }: DefaultErrorFallbackProps): ReactNode {
-  const isVi = Boolean(i18n.language?.startsWith('vi'));
-  const resolvedTitle = title ?? (isVi ? 'Đã xảy ra sự cố' : 'Something went wrong');
-  const errorMessage =
-    error?.message ||
-    (isVi ? 'Đã có lỗi ngoài ý muốn xảy ra.' : 'An unexpected error occurred');
+  const isVi = Boolean((i18n.resolvedLanguage || i18n.language)?.startsWith('vi'));
+  const resolvedTitle =
+    title ?? (isVi ? 'Đã xảy ra sự cố hiển thị' : 'Something went wrong');
+  const friendlyDescription = isVi
+    ? 'Trang này gặp lỗi ngoài ý muốn. Tài khoản và tài liệu của bạn vẫn an toàn — hãy thử lại hoặc quay về Bảng điều khiển.'
+    : 'This screen ran into an unexpected problem. Your account and documents are safe — please try again or return to your Dashboard.';
+  const technicalDetail = error?.stack || error?.message || '';
 
   if (pageLevel) {
     return (
@@ -94,8 +96,8 @@ function DefaultErrorFallback({
           <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100 mb-2">
             {resolvedTitle}
           </h1>
-          <p className="text-slate-600 dark:text-slate-400 mb-6">
-            {errorMessage}
+          <p className="text-sm text-slate-600 dark:text-slate-400 mb-6 leading-relaxed">
+            {friendlyDescription}
           </p>
           <div className="flex gap-3 justify-center">
             <button
@@ -107,26 +109,22 @@ function DefaultErrorFallback({
               {isVi ? 'Thử lại' : 'Try Again'}
             </button>
             <a
-              href="/"
+              href="/dashboard"
               className="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg font-medium transition-colors"
             >
-              {isVi ? 'Về trang chủ' : 'Go Home'}
+              {isVi ? 'Về Bảng điều khiển' : 'Go to Dashboard'}
             </a>
           </div>
 
-          {/* Error details for development */}
-          {import.meta.env.DEV && errorInfo && (
+          {import.meta.env.DEV && (technicalDetail || errorInfo) && (
             <details className="mt-8 text-left">
-              <summary className="cursor-pointer text-sm text-slate-500 hover:text-slate-700 dark:hover:text-slate-400">
-                {isVi
-                  ? 'Chi tiết lỗi (Chế độ phát triển)'
-                  : 'Error Details (Development)'}
+              <summary className="cursor-pointer text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-400">
+                {isVi ? 'Chi tiết kỹ thuật' : 'Technical details'}
               </summary>
               <pre className="mt-2 p-4 bg-slate-100 dark:bg-slate-800 rounded-lg text-xs overflow-auto max-h-48">
                 <code>
-                  {error?.stack || errorMessage}
-                  {'\n\n'}
-                  {errorInfo.componentStack}
+                  {technicalDetail}
+                  {errorInfo?.componentStack ? `\n\n${errorInfo.componentStack}` : ''}
                 </code>
               </pre>
             </details>
@@ -145,17 +143,27 @@ function DefaultErrorFallback({
           <h3 className="text-sm font-medium text-red-800 dark:text-red-200">
             {resolvedTitle}
           </h3>
-          <p className="text-sm text-red-600 dark:text-red-300 mt-1">
-            {errorMessage}
+          <p className="text-sm text-red-700 dark:text-red-300 mt-1 leading-relaxed">
+            {friendlyDescription}
           </p>
           <button
             type="button"
             onClick={onReset}
-            className="mt-2 text-sm font-medium text-red-700 dark:text-red-200 hover:text-red-800 dark:hover:text-red-100 flex items-center gap-1"
+            className="mt-2.5 text-sm font-medium text-red-700 dark:text-red-200 hover:text-red-800 dark:hover:text-red-100 flex items-center gap-1"
           >
             <RefreshCw className="w-3 h-3" />
             {isVi ? 'Thử lại' : 'Try again'}
           </button>
+          {import.meta.env.DEV && technicalDetail && (
+            <details className="mt-2 text-left">
+              <summary className="cursor-pointer text-xs text-red-700/80 dark:text-red-300/80">
+                {isVi ? 'Chi tiết kỹ thuật' : 'Technical details'}
+              </summary>
+              <pre className="mt-1.5 p-2.5 bg-white/80 dark:bg-slate-900/80 rounded-lg text-[11px] overflow-auto max-h-36">
+                <code>{technicalDetail}</code>
+              </pre>
+            </details>
+          )}
         </div>
       </div>
     </div>

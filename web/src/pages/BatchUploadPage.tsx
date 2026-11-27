@@ -54,6 +54,29 @@ export { BATCH_CONCURRENCY, batchTiming };
 
 const ACCEPTED_EXTENSIONS = ['.pdf', '.docx', '.bib', '.ris'];
 
+function formatBatchItemError(
+  rawError: string | null | undefined,
+  lang: 'vi' | 'en',
+): string {
+  const clean = String(rawError ?? '').trim();
+  if (/processing\s+timeout/i.test(clean)) {
+    return lang === 'vi'
+      ? 'Quá thời gian xử lý. Vui lòng thử kiểm tra lại.'
+      : 'Verification took too long and timed out. Please try again.';
+  }
+  if (/unable\s+to\s+fetch\s+processing\s+status|failed\s+to\s+retrieve\s+status/i.test(clean)) {
+    return lang === 'vi'
+      ? 'Không thể cập nhật tiến trình do gián đoạn kết nối. Vui lòng thử lại.'
+      : 'Lost connection while checking progress. Please try again.';
+  }
+  if (/retry\s+failed|upload\s+failed/i.test(clean)) {
+    return lang === 'vi'
+      ? 'Không thể tải tệp lên. Vui lòng kiểm tra kết nối và thử lại.'
+      : 'Could not upload this file. Please check your connection and try again.';
+  }
+  return formatUserError(clean, lang);
+}
+
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -156,13 +179,21 @@ export function BatchUploadPage() {
   const quotaView = getQuotaView(quota, lang, { isAdmin });
   const isBatchLimitUnlimited =
     isAdmin || isUnlimitedValue(quota.max_batch_files);
+  const isSizeUnlimited = isUnlimitedValue(quota.max_file_size_mb);
   const batchLimitText = isBatchLimitUnlimited
     ? lang === 'vi'
-      ? 'Không giới hạn tệp / lô'
-      : 'Unlimited files / batch'
+      ? 'Không giới hạn số tệp mỗi lần'
+      : 'Unlimited files per batch'
     : lang === 'vi'
-      ? `Tối đa ${quota.max_batch_files} tệp / lô`
-      : `Up to ${quota.max_batch_files} ${quota.max_batch_files === 1 ? 'file' : 'files'} / batch`;
+      ? `Tối đa ${quota.max_batch_files} tệp mỗi lần`
+      : `Up to ${quota.max_batch_files} ${quota.max_batch_files === 1 ? 'file' : 'files'} per batch`;
+  const fileSizeQuotaLabel = isSizeUnlimited
+    ? lang === 'vi'
+      ? 'Không giới hạn dung lượng tệp'
+      : 'Unlimited file size'
+    : lang === 'vi'
+      ? `Tối đa ${quotaView.fileSize}/tệp`
+      : `Up to ${quotaView.fileSize}/file`;
 
   useEffect(() => registerBatchPageMount(), [registerBatchPageMount]);
 
@@ -365,8 +396,8 @@ export function BatchUploadPage() {
 
   const batchPrivacyNoticeBody =
     lang === 'vi'
-      ? `Khi tải hàng loạt bài nộp của sinh viên hoặc đồng tác giả (${isBatchLimitUnlimited ? 'không giới hạn số tệp' : `tối đa ${quota.max_batch_files} tệp/lô`}), Giảng viên / Người tải lên xác nhận có thẩm quyền học thuật hoặc sự đồng ý của tác giả bản thảo, và đã thông báo việc trích xuất danh mục tham khảo gửi đối chiếu qua các thư viện học thuật quốc tế (Crossref, OpenAlex, DBLP, arXiv, DataCite…).`
-      : `When uploading multiple student or co-author manuscripts (${isBatchLimitUnlimited ? 'unlimited files per batch' : `up to ${quota.max_batch_files} ${quota.max_batch_files === 1 ? 'file' : 'files'} per batch`}), you confirm academic authorization or author consent, and acknowledge that extracted reference metadata is cross-checked against public scholarly libraries (Crossref, OpenAlex, DBLP, arXiv, DataCite…).`;
+      ? `Khi tải nhiều bài của sinh viên hoặc đồng tác giả (${isBatchLimitUnlimited ? 'không giới hạn số tệp' : `tối đa ${quota.max_batch_files} tệp mỗi lần`}), vui lòng đảm bảo đã có sự cho phép của tác giả. CITRA chỉ gửi thông tin tài liệu tham khảo để đối chiếu qua các thư viện học thuật uy tín và bảo mật nội dung bài viết.`
+      : `When uploading multiple student or co-author papers (${isBatchLimitUnlimited ? 'unlimited files per batch' : `up to ${quota.max_batch_files} ${quota.max_batch_files === 1 ? 'file' : 'files'} per batch`}), please confirm you have author permission. CITRA only checks reference details across trusted scholarly libraries and keeps manuscripts private.`;
 
   return (
     <div className="citra-cq-page-wide w-full max-w-5xl mx-auto space-y-6 pb-10 transition-[max-width] duration-300">
@@ -429,8 +460,8 @@ export function BatchUploadPage() {
           </span>
           <span className="text-slate-600 dark:text-slate-400 font-mono whitespace-nowrap">
             {lang === 'vi'
-              ? `Lượt tháng: ${quotaView.usage} · Tối đa ${quotaView.fileSize}/tệp`
-              : `Monthly checks: ${quotaView.usage} · Max ${quotaView.fileSize}/file`}
+              ? `Lượt kiểm tra tháng: ${quotaView.usage} · ${fileSizeQuotaLabel}`
+              : `Monthly checks: ${quotaView.usage} · ${fileSizeQuotaLabel}`}
           </span>
         </div>
       </div>
@@ -565,11 +596,6 @@ export function BatchUploadPage() {
               <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
                 {m.label}
               </span>
-              <span
-                className={`text-[10px] font-mono font-semibold px-2 py-0.5 rounded-md ${m.badge}`}
-              >
-                {m.idx}
-              </span>
             </div>
             <p className={`text-2xl font-bold font-mono tabular-nums ${m.tone}`}>
               <NumberPopIn value={m.value} />
@@ -637,7 +663,9 @@ export function BatchUploadPage() {
                   }
                   wrapperClassName="w-full"
                 >
-                  <option value="">{t('batchUpload.noClassAssigned')}</option>
+                  <option value="">
+                    {lang === 'vi' ? '— Không chọn lớp —' : '— No class selected —'}
+                  </option>
                   {classes.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name}
@@ -706,28 +734,22 @@ export function BatchUploadPage() {
             </p>
           </div>
 
-          {/* Author authorization & cross-border scholarly API notice (DLCN-02) */}
+          {/* Calm privacy & author permission reassurance (DLCN-02) */}
           <div
             data-testid="batch-upload-privacy-notice"
-            className="rounded-[14px] border border-amber-300/80 dark:border-amber-800/60 bg-amber-50/65 dark:bg-amber-950/25 px-4 py-3.5 flex items-start gap-3 font-solva-sans text-[12px] leading-[19px] text-amber-950 dark:text-amber-200 transition-colors"
+            className="rounded-xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950/50 px-3.5 py-2.5 flex items-start gap-2.5 text-xs leading-relaxed text-slate-600 dark:text-slate-400"
           >
-            <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-[7px] bg-white/90 dark:bg-amber-950/70 border border-amber-300/80 dark:border-amber-800 text-amber-700 dark:text-amber-300 shadow-sm">
-              <ShieldCheck className="h-3.5 w-3.5" />
-            </span>
-            <div className="min-w-0">
-              <span className="font-semibold">
-                {t('privacyCompliance.batchNoticeTitle')}:{' '}
-              </span>
+            <ShieldCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+            <p className="min-w-0">
               {batchPrivacyNoticeBody}{' '}
               <Link
                 to="/privacy#third-parties"
-                className="inline-flex items-center gap-1 font-semibold underline underline-offset-4 hover:opacity-80 transition-opacity"
+                className="inline-flex items-center gap-0.5 font-medium text-slate-800 dark:text-slate-200 underline underline-offset-4 hover:opacity-80 transition-opacity whitespace-nowrap"
               >
-                <span>{t('privacyCompliance.policyLinkLabel')}</span>
+                <span>{lang === 'vi' ? 'Chính sách bảo mật' : 'Privacy Policy'}</span>
                 <ArrowRight className="h-3 w-3" />
               </Link>
-              .
-            </div>
+            </p>
           </div>
 
           {/* File List */}
@@ -805,28 +827,42 @@ export function BatchUploadPage() {
 
                       {fileItem.status === 'completed' &&
                         (fileItem.documentDiagnostics?.ocr_pages_recovered
-                          ?.length ?? 0) > 0 && (
-                          <span
-                            data-testid={`batch-ocr-chip-${fileItem.id}`}
-                            className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 dark:bg-indigo-950/50 dark:text-indigo-300 dark:border-indigo-800/70"
-                          >
-                            OCR:{' '}
-                            {
-                              fileItem.documentDiagnostics!.ocr_pages_recovered!
-                                .length
-                            }
-                            p
-                          </span>
-                        )}
+                          ?.length ?? 0) > 0 && (() => {
+                          const ocrCount =
+                            fileItem.documentDiagnostics!.ocr_pages_recovered!
+                              .length;
+                          return (
+                            <span
+                              data-testid={`batch-ocr-chip-${fileItem.id}`}
+                              title={
+                                lang === 'vi'
+                                  ? `Hệ thống đã tự động đọc chữ từ ${ocrCount} trang ảnh quét`
+                                  : `Automatically read text from ${ocrCount} scanned ${ocrCount === 1 ? 'page' : 'pages'}`
+                              }
+                              className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-indigo-50 text-indigo-700 border border-indigo-200 dark:bg-indigo-950/50 dark:text-indigo-300 dark:border-indigo-800/70 whitespace-nowrap"
+                            >
+                              {lang === 'vi'
+                                ? `Đọc trang ảnh quét: ${ocrCount} trang`
+                                : `Scanned text read: ${ocrCount} ${ocrCount === 1 ? 'page' : 'pages'}`}
+                            </span>
+                          );
+                        })()}
 
                       {fileItem.status === 'completed' &&
                         fileItem.documentDiagnostics
                           ?.legacy_encoding_detected && (
                           <span
                             data-testid={`batch-encoding-chip-${fileItem.id}`}
-                            className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-violet-50 text-violet-700 border border-violet-200 dark:bg-violet-950/50 dark:text-violet-300 dark:border-violet-800/70"
+                            title={
+                              lang === 'vi'
+                                ? 'Đã tự động chuyển phông chữ tiếng Việt cũ sang chuẩn hiển thị Unicode'
+                                : 'Automatically converted older Vietnamese font encoding to standard text'
+                            }
+                            className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-violet-50 text-violet-700 border border-violet-200 dark:bg-violet-950/50 dark:text-violet-300 dark:border-violet-800/70 whitespace-nowrap"
                           >
-                            TCVN3/VNI -&gt; Unicode
+                            {lang === 'vi'
+                              ? 'Đã chuẩn hóa phông chữ tiếng Việt'
+                              : 'Vietnamese font normalized'}
                           </span>
                         )}
                     </div>
@@ -891,7 +927,7 @@ export function BatchUploadPage() {
                     className="text-xs text-red-700 dark:text-red-300 px-3 py-2 rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60 break-words [overflow-wrap:anywhere]"
                   >
                     <span className="font-semibold">{f.fileName}:</span>{' '}
-                    {formatUserError(f.error, lang)}
+                    {formatBatchItemError(f.error, lang)}
                   </div>
                 ))}
             </div>

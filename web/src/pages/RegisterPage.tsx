@@ -206,7 +206,7 @@ export function RegisterPage() {
       setError(
         pwCheck.reason === 'too_short'
           ? t('auth.registerPasswordTooShort')
-          : t('auth.registerPasswordTooLong'),
+          : pwCheck.error || t('auth.registerPasswordTooLong'),
       );
       return;
     }

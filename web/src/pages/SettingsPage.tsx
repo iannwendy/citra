@@ -4,7 +4,7 @@
  */
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   Settings,
@@ -26,6 +26,7 @@ import {
   Plus,
   AlertTriangle,
   ExternalLink,
+  ChevronDown,
 } from 'lucide-react';
 import {
   api,
@@ -38,7 +39,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useRole } from '@/hooks/useRole';
 import { useModalA11y } from '@/hooks/useModalA11y';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
-import { getQuotaView } from '@/lib/quotaDisplay';
+import { getQuotaView, isUnlimitedValue } from '@/lib/quotaDisplay';
 import {
   formatLocalizedDate,
   formatLocalizedDateTime,
@@ -67,7 +68,49 @@ interface SettingsState {
 }
 
 const STORAGE_KEY_NOTIFICATIONS = 'settings_notifications';
-const USD_TO_VND_RATE = 25500;
+const USD_TO_VND_RATE = 25000;
+
+function formatBillingCycleLabel(
+  cycle: string | null | undefined,
+  lang: 'vi' | 'en',
+): string {
+  const norm = String(cycle ?? '').trim().toLowerCase();
+  if (norm === 'annual') return lang === 'vi' ? 'Theo năm' : 'Annual';
+  if (norm === 'monthly') return lang === 'vi' ? 'Theo tháng' : 'Monthly';
+  return cycle ?? '';
+}
+
+function formatTransactionStatusLabel(
+  status: string | null | undefined,
+  lang: 'vi' | 'en',
+): string {
+  const norm = String(status ?? '').trim().toLowerCase();
+  if (norm === 'succeeded') return lang === 'vi' ? 'Thành công' : 'Paid';
+  if (norm === 'pending') return lang === 'vi' ? 'Đang xử lý' : 'Pending';
+  if (norm === 'failed') return lang === 'vi' ? 'Thất bại' : 'Failed';
+  return status ?? '';
+}
+
+function formatPaymentMethodSummary(
+  tx: BillingTransactionItem,
+  lang: 'vi' | 'en',
+): string {
+  const last4 = tx.card_last4 ? ` •••• ${tx.card_last4}` : '';
+  if (tx.payment_method === 'vnpay') {
+    const bank = (tx.vnp_bank_code || tx.card_brand || '').toUpperCase();
+    return bank ? `VNPay · ${bank}${last4}` : `VNPay${last4}`;
+  }
+  if (tx.payment_method === 'apple_pay') {
+    return `Apple Pay${last4}`;
+  }
+  if (tx.payment_method === 'google_pay') {
+    return `Google Pay${last4}`;
+  }
+  if (tx.card_brand) {
+    return `${tx.card_brand.toUpperCase()}${last4}`;
+  }
+  return `${lang === 'vi' ? 'Thẻ thanh toán' : 'Card'}${last4}`;
+}
 
 function formatTransactionAmount(
   tx: BillingTransactionItem,
@@ -104,6 +147,7 @@ function formatTransactionAmount(
 export function SettingsPage(): JSX.Element {
   const toast = useToast();
   const navigate = useNavigate();
+  const location = useLocation();
   const { t, i18n } = useTranslation();
   const { theme, setTheme } = useTheme();
   const { user, refreshUser, logout } = useAuth();
@@ -205,6 +249,16 @@ export function SettingsPage(): JSX.Element {
   const canManageApiKeys =
     !isBasic || isAdmin || user?.role === 'teacher' || user?.role === 'admin';
 
+  // Smoothly scroll to Delete Account section when navigated via /settings#delete-account-section
+  useEffect(() => {
+    if (location.hash === '#delete-account-section') {
+      const target = document.getElementById('delete-account-section');
+      if (target && typeof target.scrollIntoView === 'function') {
+        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+  }, [location.hash]);
+
   useEffect(() => {
     if (!user) return;
     let active = true;
@@ -298,12 +352,14 @@ export function SettingsPage(): JSX.Element {
       setSubscription(res.subscription);
       await refreshUser();
       toast.success(
-        lang === 'vi' ? 'Đã cập nhật gói cước' : 'Subscription Updated',
-        res.message,
+        lang === 'vi' ? 'Đã cập nhật gói dịch vụ' : 'Subscription Updated',
+        lang === 'vi'
+          ? 'Tự động gia hạn đã được tắt.'
+          : 'Auto-renewal has been turned off.',
       );
     } catch (err) {
       toast.error(
-        lang === 'vi' ? 'Không thể hủy gia hạn' : 'Error',
+        lang === 'vi' ? 'Không thể hủy gia hạn' : 'Could not update plan',
         formatUserError(err, lang),
       );
     } finally {
@@ -318,12 +374,14 @@ export function SettingsPage(): JSX.Element {
       setSubscription(res.subscription);
       await refreshUser();
       toast.success(
-        lang === 'vi' ? 'Đã kích hoạt lại gia hạn' : 'Subscription Reactivated',
-        res.message,
+        lang === 'vi' ? 'Đã bật lại gia hạn' : 'Subscription Reactivated',
+        lang === 'vi'
+          ? 'Tự động gia hạn đã được bật lại cho gói của bạn.'
+          : 'Auto-renewal is active again for your plan.',
       );
     } catch (err) {
       toast.error(
-        lang === 'vi' ? 'Không thể bật lại gia hạn' : 'Error',
+        lang === 'vi' ? 'Không thể bật lại gia hạn' : 'Could not update plan',
         formatUserError(err, lang),
       );
     } finally {
@@ -347,18 +405,16 @@ export function SettingsPage(): JSX.Element {
     { value: 'system', label: t('settings.themeSystem'), icon: Monitor },
   ];
 
-  // Available languages (without flag emojis)
+  // Available languages (without flag emojis or raw locale codes)
   const languages = [
     {
       code: 'vi',
       shortCode: 'VI',
-      localeTag: 'vi-VN',
       label: 'Tiếng Việt',
     },
     {
       code: 'en',
       shortCode: 'EN',
-      localeTag: 'en-US',
       label: 'English',
     },
   ];
@@ -506,7 +562,7 @@ export function SettingsPage(): JSX.Element {
                 {deletingAccount ? (
                   <>
                     <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
-                    <span>...</span>
+                    <span>{lang === 'vi' ? 'Đang xóa...' : 'Deleting...'}</span>
                   </>
                 ) : (
                   t('privacyCompliance.deleteModalConfirmBtn')
@@ -528,15 +584,9 @@ export function SettingsPage(): JSX.Element {
               <Settings className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
             </div>
             <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="font-solva-serif font-normal text-2xl sm:text-3xl tracking-tight text-slate-900 dark:text-slate-100">
-                  {t('settings.title')}
-                </h1>
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/70 border border-emerald-200/70 dark:border-emerald-800/70 text-[11px] font-mono text-emerald-700 dark:text-emerald-300 whitespace-nowrap">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                  v{APP_VERSION}
-                </span>
-              </div>
+              <h1 className="font-solva-serif font-normal text-2xl sm:text-3xl tracking-tight text-slate-900 dark:text-slate-100">
+                {t('settings.title')}
+              </h1>
               <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
                 {t('settings.subtitle')}
               </p>
@@ -547,7 +597,7 @@ export function SettingsPage(): JSX.Element {
 
       {/* 01 Appearance & 02 Language — stack cleanly below xl so 1024px & 375px never truncate */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        {/* 01: Appearance Section */}
+        {/* Appearance Section */}
         <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden flex flex-col">
           <div className="flex items-center justify-between gap-3 px-4 sm:px-5 py-3.5 bg-slate-50/90 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800">
             <div className="flex items-center gap-2.5 min-w-0">
@@ -556,9 +606,6 @@ export function SettingsPage(): JSX.Element {
                 {t('settings.appearance')}
               </h2>
             </div>
-            <span className="text-[11px] font-mono text-slate-400 whitespace-nowrap shrink-0">
-              01
-            </span>
           </div>
 
           <div className="p-4 sm:p-6 flex-1 flex flex-col justify-between gap-4">
@@ -609,7 +656,7 @@ export function SettingsPage(): JSX.Element {
           </div>
         </div>
 
-        {/* 02: Language Section */}
+        {/* Language Section */}
         <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden flex flex-col">
           <div className="flex items-center justify-between gap-3 px-4 sm:px-5 py-3.5 bg-slate-50/90 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800">
             <div className="flex items-center gap-2.5 min-w-0">
@@ -618,9 +665,6 @@ export function SettingsPage(): JSX.Element {
                 {t('settings.language')}
               </h2>
             </div>
-            <span className="text-[11px] font-mono text-slate-400 whitespace-nowrap shrink-0">
-              02
-            </span>
           </div>
 
           <div className="p-4 sm:p-6 flex-1 flex flex-col justify-between gap-4">
@@ -628,8 +672,10 @@ export function SettingsPage(): JSX.Element {
               <Label className="input-label mb-0">
                 {t('settings.language')}
               </Label>
-              <span className="text-xs font-mono text-slate-400 dark:text-slate-500">
-                vi-VN / en-US
+              <span className="text-xs text-slate-500 dark:text-slate-400">
+                {lang === 'vi'
+                  ? 'Chọn ngôn ngữ hiển thị giao diện'
+                  : 'Choose your display language'}
               </span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -658,26 +704,15 @@ export function SettingsPage(): JSX.Element {
                         {langOpt.shortCode}
                       </span>
 
-                      <div className="min-w-0">
-                        <span
-                          className={`block font-semibold text-sm leading-tight whitespace-nowrap ${
-                            isActive
-                              ? 'text-indigo-950 dark:text-indigo-100'
-                              : 'text-slate-700 group-hover:text-slate-900 dark:text-slate-300 dark:group-hover:text-slate-100'
-                          }`}
-                        >
-                          {langOpt.label}
-                        </span>
-                        <span
-                          className={`block text-[11px] font-mono mt-0.5 whitespace-nowrap ${
-                            isActive
-                              ? 'text-indigo-600/80 dark:text-indigo-300/80'
-                              : 'text-slate-400 dark:text-slate-500'
-                          }`}
-                        >
-                          {langOpt.localeTag}
-                        </span>
-                      </div>
+                      <span
+                        className={`block font-semibold text-sm leading-tight whitespace-nowrap ${
+                          isActive
+                            ? 'text-indigo-950 dark:text-indigo-100'
+                            : 'text-slate-700 group-hover:text-slate-900 dark:text-slate-300 dark:group-hover:text-slate-100'
+                        }`}
+                      >
+                        {langOpt.label}
+                      </span>
                     </div>
 
                     <span
@@ -697,7 +732,7 @@ export function SettingsPage(): JSX.Element {
         </div>
       </div>
 
-      {/* 03: Notifications Section */}
+      {/* Notifications Section */}
       <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
         <div className="flex items-center justify-between gap-3 px-4 sm:px-5 py-3.5 bg-slate-50/90 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800">
           <div className="flex items-center gap-2.5 min-w-0">
@@ -706,9 +741,6 @@ export function SettingsPage(): JSX.Element {
               {t('settings.notifications')}
             </h2>
           </div>
-          <span className="text-[11px] font-mono text-slate-400 whitespace-nowrap shrink-0">
-            03
-          </span>
         </div>
 
         <div className="p-4 sm:p-6">
@@ -722,7 +754,7 @@ export function SettingsPage(): JSX.Element {
         </div>
       </div>
 
-      {/* 04: Subscription & Billing Section */}
+      {/* Plan & Billing Section */}
       <div
         className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden"
         data-testid="settings-billing-section"
@@ -731,14 +763,9 @@ export function SettingsPage(): JSX.Element {
           <div className="flex items-center gap-2.5 min-w-0">
             <CreditCard className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
             <h2 className="text-sm font-display font-semibold text-slate-900 dark:text-slate-100">
-              {lang === 'vi'
-                ? 'Gói cước & Thanh toán (Stripe · VNPay)'
-                : 'Subscription & Billing (Stripe · VNPay)'}
+              {lang === 'vi' ? 'Gói dịch vụ & Thanh toán' : 'Plan & Billing'}
             </h2>
           </div>
-          <span className="text-[11px] font-mono text-slate-400 whitespace-nowrap shrink-0">
-            04
-          </span>
         </div>
 
         <div className="p-4 sm:p-6 space-y-5">
@@ -746,7 +773,7 @@ export function SettingsPage(): JSX.Element {
             <div className="space-y-1.5 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-xs font-medium uppercase text-slate-500 whitespace-nowrap">
-                  {lang === 'vi' ? 'Gói hiện tại:' : 'Active Tier:'}
+                  {lang === 'vi' ? 'Gói hiện tại:' : 'Active Plan:'}
                 </span>
                 <Badge
                   data-testid="settings-active-tier-badge"
@@ -763,15 +790,9 @@ export function SettingsPage(): JSX.Element {
                 {subscription?.billing_cycle && (
                   <Badge
                     variant="outline"
-                    className="font-mono text-[11px] uppercase whitespace-nowrap shrink-0"
+                    className="text-[11px] font-medium whitespace-nowrap shrink-0"
                   >
-                    {lang === 'vi'
-                      ? subscription.billing_cycle === 'annual'
-                        ? 'Hàng năm'
-                        : subscription.billing_cycle === 'monthly'
-                          ? 'Hàng tháng'
-                          : subscription.billing_cycle
-                      : subscription.billing_cycle}
+                    {formatBillingCycleLabel(subscription.billing_cycle, lang)}
                   </Badge>
                 )}
               </div>
@@ -781,14 +802,33 @@ export function SettingsPage(): JSX.Element {
               >
                 {(() => {
                   const qv = getQuotaView(quota, lang, { isAdmin });
+                  const sizeUnlimited = isUnlimitedValue(quota.max_file_size_mb);
+                  const pagesUnlimited =
+                    isAdmin || isUnlimitedValue(quota.max_pages_per_pdf);
+                  const limitsSummary =
+                    sizeUnlimited && pagesUnlimited
+                      ? lang === 'vi'
+                        ? 'Không giới hạn dung lượng & số trang'
+                        : 'Unlimited file size & pages'
+                      : sizeUnlimited
+                        ? lang === 'vi'
+                          ? `Không giới hạn dung lượng · Tối đa ${qv.pages} trang`
+                          : `Unlimited file size · Up to ${qv.pages} pages`
+                        : pagesUnlimited
+                          ? lang === 'vi'
+                            ? `Tối đa ${qv.fileSize} · Không giới hạn số trang`
+                            : `Up to ${qv.fileSize} · Unlimited pages`
+                          : lang === 'vi'
+                            ? `Tối đa ${qv.fileSize} & ${qv.pages} trang`
+                            : `Up to ${qv.fileSize} & ${qv.pages} pages`;
                   if (qv.uploadsUnlimited) {
                     return lang === 'vi'
-                      ? `Hạn mức tháng: ${qv.usage} · Tối đa ${qv.fileSize} · Số trang: ${qv.pages}`
-                      : `Monthly Quota: ${qv.usage} · Max ${qv.fileSize} · Pages: ${qv.pages}`;
+                      ? `Lượt tháng: ${qv.usage} · ${limitsSummary}`
+                      : `Monthly checks: ${qv.usage} · ${limitsSummary}`;
                   }
                   return lang === 'vi'
-                    ? `Hạn mức tháng: Đã dùng ${qv.usage} tài liệu · Tối đa ${qv.fileSize} & ${qv.pages} trang`
-                    : `Monthly Quota: ${qv.usage} checks used · Max ${qv.fileSize} & ${qv.pages} pages`;
+                    ? `Lượt tháng: Đã dùng ${qv.usage} tài liệu · ${limitsSummary}`
+                    : `Monthly checks: ${qv.usage} used · ${limitsSummary}`;
                 })()}
               </p>
               {subscription?.cancel_at_period_end && (
@@ -875,8 +915,8 @@ export function SettingsPage(): JSX.Element {
             <div className="space-y-2" data-testid="settings-transactions-list">
               <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 {lang === 'vi'
-                  ? 'Lịch sử giao dịch gần đây (Stripe & VNPay)'
-                  : 'Recent Billing Transactions (Stripe & VNPay)'}
+                  ? 'Lịch sử giao dịch gần đây'
+                  : 'Recent Billing History'}
               </p>
               <div className="divide-y divide-slate-200/70 dark:divide-slate-800 border border-slate-200/80 dark:border-slate-800 rounded-xl overflow-hidden text-xs">
                 {transactions.slice(0, 5).map((tx) => (
@@ -889,28 +929,13 @@ export function SettingsPage(): JSX.Element {
                         variant={
                           tx.status === 'succeeded' ? 'default' : 'secondary'
                         }
-                        className="font-mono text-[10px] uppercase whitespace-nowrap"
+                        className="text-[10px] font-medium whitespace-nowrap"
                       >
-                        {lang === 'vi'
-                          ? tx.status === 'succeeded'
-                            ? 'Thành công'
-                            : tx.status === 'pending'
-                              ? 'Đang xử lý'
-                              : tx.status === 'failed'
-                                ? 'Thất bại'
-                                : tx.status
-                          : tx.status}
+                        {formatTransactionStatusLabel(tx.status, lang)}
                       </Badge>
                       <span className="font-semibold text-slate-800 dark:text-slate-200">
                         CITRA {tx.plan_name} (
-                        {lang === 'vi'
-                          ? tx.billing_cycle === 'annual'
-                            ? 'năm'
-                            : tx.billing_cycle === 'monthly'
-                              ? 'tháng'
-                              : tx.billing_cycle
-                          : tx.billing_cycle}
-                        )
+                        {formatBillingCycleLabel(tx.billing_cycle, lang)})
                       </span>
                       {tx.promo_code && (
                         <span className="px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-[10px] font-mono font-semibold text-emerald-700 dark:text-emerald-300">
@@ -920,13 +945,7 @@ export function SettingsPage(): JSX.Element {
                     </div>
                     <div className="flex items-center gap-3 font-mono text-slate-600 dark:text-slate-400 flex-wrap">
                       <span className="whitespace-nowrap">
-                        {tx.payment_method === 'vnpay'
-                          ? `VNPAY · ${(tx.vnp_bank_code || tx.card_brand || 'NCB').toUpperCase()} •••• ${tx.card_last4 || '2198'}`
-                          : tx.payment_method === 'apple_pay'
-                            ? `APPLE PAY •••• ${tx.card_last4 || '4242'}`
-                            : tx.payment_method === 'google_pay'
-                              ? `GOOGLE PAY •••• ${tx.card_last4 || '4242'}`
-                              : `${(tx.card_brand || 'visa').toUpperCase()} •••• ${tx.card_last4 || '4242'}`}
+                        {formatPaymentMethodSummary(tx, lang)}
                       </span>
                       <span className="font-bold text-slate-900 dark:text-white whitespace-nowrap">
                         {formatTransactionAmount(tx, lang)}
@@ -940,29 +959,30 @@ export function SettingsPage(): JSX.Element {
         </div>
       </div>
 
-      {/* 05: Personal Developer API Keys Section */}
-      <div
-        className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden"
+      {/* Collapsible Developer Access (API) — closed by default for Basic students */}
+      <details
+        open={canManageApiKeys || undefined}
+        className="group rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden"
         data-testid="settings-api-keys-section"
       >
-        <div className="flex flex-wrap items-center justify-between gap-2.5 px-4 sm:px-5 py-3.5 bg-slate-50/90 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800">
-          <div className="flex items-center gap-2.5 min-w-0 flex-wrap">
-            <KeyRound className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
-            <h2 className="text-sm font-display font-semibold text-slate-900 dark:text-slate-100">
-              {t('settings.apiKeysTitle')}
-            </h2>
+        <summary className="list-none [&::-webkit-details-marker]:hidden cursor-pointer flex items-center justify-between gap-2.5 px-4 sm:px-5 py-3.5 bg-slate-50/90 dark:bg-slate-900/90 hover:bg-slate-100/70 dark:hover:bg-slate-800/60 transition-colors select-none">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <KeyRound className="w-4 h-4 text-slate-500 dark:text-slate-400 shrink-0" />
+            <span className="text-sm font-display font-semibold text-slate-900 dark:text-slate-100">
+              {lang === 'vi'
+                ? 'Dành cho lập trình viên (API)'
+                : 'Developer Access (API)'}
+            </span>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <span className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 whitespace-nowrap">
-              X-API-Key
+            <span className="text-xs text-slate-500 dark:text-slate-400 hidden sm:inline">
+              {lang === 'vi' ? 'Tùy chọn nâng cao' : 'Optional'}
             </span>
-            <span className="text-[11px] font-mono text-slate-400 whitespace-nowrap">
-              05
-            </span>
+            <ChevronDown className="w-4 h-4 text-slate-400 transition-transform duration-200 group-open:rotate-180" />
           </div>
-        </div>
+        </summary>
 
-        <div className="p-4 sm:p-6 space-y-4">
+        <div className="p-4 sm:p-6 space-y-4 border-t border-slate-200/80 dark:border-slate-800">
           <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
             {t('settings.apiKeysSubtitle')}
           </p>
@@ -970,28 +990,29 @@ export function SettingsPage(): JSX.Element {
           {!canManageApiKeys ? (
             <div
               data-testid="api-key-upgrade-prompt"
-              className="p-4 rounded-xl bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+              className="p-4 rounded-xl bg-slate-50/90 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
             >
               <div className="space-y-1">
-                <p className="text-xs font-semibold text-amber-900 dark:text-amber-200">
+                <p className="text-xs font-semibold text-slate-900 dark:text-slate-100">
                   {lang === 'vi'
-                    ? 'Khóa API cá nhân (X-API-Key) yêu cầu gói CITRA Pro hoặc Ultra'
-                    : 'Personal Developer API Keys (X-API-Key) require CITRA Pro or Ultra'}
+                    ? 'Kết nối API cá nhân dành cho gói CITRA Pro hoặc Ultra'
+                    : 'Personal API access requires CITRA Pro or Ultra'}
                 </p>
-                <p className="text-[11px] text-amber-700 dark:text-amber-300/90">
+                <p className="text-[11px] text-slate-600 dark:text-slate-400">
                   {lang === 'vi'
-                    ? 'Nâng cấp gói để tự động hóa kiểm tra trích dẫn qua tập lệnh CLI, Zotero và CI/CD.'
-                    : 'Upgrade your plan to automate citation verification via CLI scripts, Zotero, and CI/CD.'}
+                    ? 'Nâng cấp gói để kết nối CITRA với Zotero, Overleaf hoặc công cụ nghiên cứu tự động.'
+                    : 'Upgrade your plan to connect CITRA with Zotero, Overleaf, or automated research tools.'}
                 </p>
               </div>
               <Button
                 asChild
                 size="sm"
-                className="rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold shrink-0 whitespace-nowrap"
+                variant="outline"
+                className="rounded-xl font-semibold shrink-0 whitespace-nowrap"
               >
                 <Link to="/pricing">
-                  <Sparkles className="h-3.5 w-3.5 mr-1.5" />
-                  {lang === 'vi' ? 'Nâng cấp Pro' : 'Upgrade to Pro'}
+                  <Sparkles className="h-3.5 w-3.5 mr-1.5 text-indigo-600 dark:text-indigo-400" />
+                  {lang === 'vi' ? 'Xem gói Pro' : 'View Pro Plans'}
                 </Link>
               </Button>
             </div>
@@ -1012,8 +1033,8 @@ export function SettingsPage(): JSX.Element {
                   onChange={(e) => setNewKeyName(e.target.value)}
                   placeholder={
                     lang === 'vi'
-                      ? 'Tên khóa API (VD: Zotero Script, GitHub Actions...)'
-                      : 'API key name (e.g. Zotero Script, GitHub Actions...)'
+                      ? 'Tên khóa kết nối (VD: Zotero, Overleaf…)'
+                      : 'Key name (e.g. Zotero, Overleaf…)'
                   }
                   maxLength={120}
                   className="flex-none sm:flex-1 w-full h-11 min-h-[44px] shrink-0 px-3.5 rounded-xl text-xs font-mono bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -1129,28 +1150,30 @@ export function SettingsPage(): JSX.Element {
             </div>
           )}
         </div>
-      </div>
+      </details>
 
-      {/* 06: Personal Data Protection & Account Deletion Section (DLCN-03) */}
+      {/* Privacy & Account Deletion Section (DLCN-03) */}
       <div
+        id="delete-account-section"
         data-testid="settings-privacy-section"
-        className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden"
+        className="scroll-mt-20 rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden"
       >
         <div className="flex items-center justify-between gap-3 px-4 sm:px-5 py-3.5 bg-slate-50/90 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800">
           <div className="flex items-center gap-2.5 min-w-0">
             <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
             <h2 className="text-sm font-display font-semibold text-slate-900 dark:text-slate-100">
-              {t('privacyCompliance.settingsSectionTitle')}
+              {lang === 'vi'
+                ? 'Quyền riêng tư & Xóa tài khoản'
+                : 'Privacy & Account Deletion'}
             </h2>
           </div>
-          <span className="text-[11px] font-mono text-slate-400 whitespace-nowrap shrink-0">
-            06
-          </span>
         </div>
 
         <div className="p-4 sm:p-6 space-y-5">
           <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
-            {t('privacyCompliance.settingsSectionSubtitle')}
+            {lang === 'vi'
+              ? 'Xem lại chính sách bảo vệ dữ liệu cá nhân hoặc xóa vĩnh viễn tài khoản và toàn bộ bài viết đã tải lên.'
+              : 'Review our privacy policy or permanently delete your account and all uploaded documents.'}
           </p>
 
           <div className="rounded-xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950/40 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -1162,17 +1185,18 @@ export function SettingsPage(): JSX.Element {
                 {user?.privacy_consented_at ? (
                   <Badge
                     variant="outline"
-                    className="text-[11px] font-mono border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 bg-emerald-50/70 dark:bg-emerald-950/50 whitespace-nowrap"
+                    className="text-[11px] font-medium border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 bg-emerald-50/70 dark:bg-emerald-950/50 whitespace-nowrap"
                   >
-                    {t('privacyCompliance.consentedBadge')} · v
-                    {user.privacy_policy_version || '1.0'}
+                    {lang === 'vi' ? 'Đã đồng ý chính sách' : 'Policy accepted'}
                   </Badge>
                 ) : (
                   <Badge
                     variant="outline"
-                    className="text-[11px] font-mono whitespace-nowrap"
+                    className="text-[11px] font-medium whitespace-nowrap"
                   >
-                    {t('privacyCompliance.legacyAccountBadge')}
+                    {lang === 'vi'
+                      ? 'Tài khoản tạo trước khi cập nhật chính sách'
+                      : 'Created before current Privacy Policy'}
                   </Badge>
                 )}
               </div>
@@ -1189,8 +1213,8 @@ export function SettingsPage(): JSX.Element {
             >
               <span>
                 {lang === 'vi'
-                  ? 'Xem Chính sách bảo vệ dữ liệu'
-                  : 'Read Personal Data Policy'}
+                  ? 'Xem Chính sách bảo mật'
+                  : 'Read Privacy Policy'}
               </span>
               <ExternalLink className="h-3.5 w-3.5" />
             </Link>
@@ -1226,7 +1250,7 @@ export function SettingsPage(): JSX.Element {
         </div>
       </div>
 
-      {/* 07: About Section */}
+      {/* About Section */}
       <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
         <div className="flex items-center justify-between gap-3 px-4 sm:px-5 py-3.5 bg-slate-50/90 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800">
           <div className="flex items-center gap-2.5 min-w-0">
@@ -1235,14 +1259,28 @@ export function SettingsPage(): JSX.Element {
               {t('settings.about')}
             </h2>
           </div>
-          <span className="text-[11px] font-mono text-slate-400 whitespace-nowrap shrink-0">
-            07
-          </span>
         </div>
 
         <div className="p-4 sm:p-6 space-y-3">
           <InfoRow label={t('settings.version')} value={APP_VERSION} />
-          <InfoRow label={t('settings.buildDate')} value={APP_BUILD_DATE} />
+          <InfoRow
+            label={t('settings.buildDate')}
+            value={formatLocalizedDate(APP_BUILD_DATE, lang)}
+          />
+          <div className="pt-2 border-t border-slate-200/70 dark:border-slate-800 flex flex-wrap items-center gap-4 text-xs">
+            <Link
+              to="/privacy"
+              className="text-slate-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 underline underline-offset-4 transition-colors"
+            >
+              {lang === 'vi' ? 'Chính sách bảo mật' : 'Privacy Policy'}
+            </Link>
+            <Link
+              to="/terms"
+              className="text-slate-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 underline underline-offset-4 transition-colors"
+            >
+              {lang === 'vi' ? 'Điều khoản sử dụng' : 'Terms of Service'}
+            </Link>
+          </div>
         </div>
       </div>
 

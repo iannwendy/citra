@@ -25,7 +25,11 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { DecisionSupportBanner } from '@/components/DecisionSupportBanner';
 import { useModalA11y } from '@/hooks/useModalA11y';
-import { getVerdictDisplay, resolveAcademicLang } from '@/lib/academicTaxonomy';
+import {
+  getCisBand,
+  getVerdictDisplay,
+  resolveAcademicLang,
+} from '@/lib/academicTaxonomy';
 import { SCHOLARLY_APIS_LABEL } from '@/lib/productFacts';
 
 interface HelpModalProps {
@@ -49,15 +53,27 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
     { id: 'keyboard', label: t('help.keyboardShortcuts'), icon: Keyboard },
   ];
 
+  const isMac =
+    typeof navigator !== 'undefined' &&
+    /Mac|iPhone|iPad/i.test(navigator.platform || navigator.userAgent);
+  const modKey = isMac ? '⌘' : 'Ctrl';
+
   const shortcuts = [
     {
-      keys: ['Ctrl', 'B'],
+      keys: [modKey, 'B'],
       description: isVi
         ? 'Thu gọn / mở rộng thanh điều hướng bên trái'
         : 'Collapse / expand left navigation sidebar',
     },
-    { keys: ['Ctrl', '/'], description: t('help.shortcutHelp') },
+    { keys: [modKey, '/'], description: t('help.shortcutHelp') },
     { keys: ['Esc'], description: t('help.shortcutClose') },
+  ];
+
+  const cisBands = [
+    { range: '85 – 100', band: getCisBand(95, lang) },
+    { range: '70 – 84', band: getCisBand(75, lang) },
+    { range: '50 – 69', band: getCisBand(60, lang) },
+    { range: '< 50', band: getCisBand(30, lang) },
   ];
 
   const workflowIcons = [Upload, FileSearch, Database, BarChart3, Download];
@@ -93,8 +109,8 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
       badge: isVi ? 'Thiếu quy cách trích dẫn' : 'Incomplete Reference',
       badgeVariant: 'metadata_error' as const,
       desc: isVi
-        ? 'Mục tham khảo thiếu các thông tin cơ bản (tác giả, năm xuất bản hoặc nơi công bố). Đây là lỗi thiếu sót quy cách trình bày chứ không phải dấu hiệu bịa đặt.'
-        : 'Citations missing required bibliographic fields (author, publication year, or venue) are formatting omissions rather than fabricated sources.',
+        ? 'Mục tham khảo thiếu thông tin cơ bản (tác giả, năm xuất bản hoặc tạp chí/nhà xuất bản). Đây chỉ là thiếu sót trình bày, không phải nguồn bịa đặt.'
+        : 'Citations missing required details (author, publication year, or journal/publisher) are formatting omissions rather than fabricated sources.',
       icon: FileText,
       iconBox:
         'bg-amber-500/10 text-amber-800 dark:text-amber-400 ring-1 ring-amber-500/20',
@@ -154,24 +170,19 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
               />
             </span>
             <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h2
-                  id={titleId}
-                  className="font-display text-sm sm:text-base font-semibold text-slate-900 dark:text-white tracking-tight leading-snug"
-                >
-                  {t('help.title')}
-                </h2>
-                <span className="inline-flex items-center rounded-md bg-indigo-50 dark:bg-indigo-950/60 px-2 py-0.5 text-[10px] sm:text-[11px] font-medium text-indigo-700 dark:text-indigo-300 ring-1 ring-inset ring-indigo-600/20 whitespace-nowrap">
-                  {isVi ? 'Hướng dẫn CITRA' : 'CITRA Guide'}
-                </span>
-              </div>
+              <h2
+                id={titleId}
+                className="font-display text-sm sm:text-base font-semibold text-slate-900 dark:text-white tracking-tight leading-snug"
+              >
+                {isVi ? 'Hướng dẫn sử dụng CITRA' : 'CITRA Help Guide'}
+              </h2>
               <p
                 data-testid="help-modal-subtitle"
                 className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 whitespace-normal leading-snug"
               >
                 {isVi
-                  ? 'CITRA · Xác minh học thuật'
-                  : 'CITRA · Academic Verification'}
+                  ? 'Cách kiểm tra trích dẫn và đọc hiểu kết quả'
+                  : 'How to check citations and understand your report'}
               </p>
             </div>
           </div>
@@ -179,7 +190,7 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
           <div className="flex items-center gap-2 shrink-0">
             <div className="hidden sm:flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400 mr-1">
               <kbd className="px-1.5 py-0.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-[11px] font-mono text-slate-600 dark:text-slate-300 shadow-sm">
-                Ctrl
+                {modKey}
               </kbd>
               <span>+</span>
               <kbd className="px-1.5 py-0.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-[11px] font-mono text-slate-600 dark:text-slate-300 shadow-sm">
@@ -312,7 +323,9 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
                       {t('help.gettingStarted')}
                     </h3>
                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                      {t('upload.subtitle')}
+                      {isVi
+                        ? 'Bốn bước đơn giản để kiểm tra tệp PDF, Word (.docx) hoặc danh mục trích dẫn (.bib, .ris).'
+                        : 'Four simple steps to check PDF, Word (.docx), or reference files (.bib, .ris).'}
                     </p>
                   </div>
 
@@ -406,42 +419,22 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
                       {t('help.cisDesc')}
                     </p>
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
-                      <div className="rounded-lg bg-white dark:bg-slate-900 p-2.5 border border-slate-200/80 dark:border-slate-800">
-                        <div className="flex items-center justify-between text-[11px] font-mono font-semibold text-emerald-700 dark:text-emerald-400 mb-1">
-                          <span>85 – 100</span>
-                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                      {cisBands.map(({ range, band }) => (
+                        <div
+                          key={band.key}
+                          className="rounded-lg bg-white dark:bg-slate-900 p-2.5 border border-slate-200/80 dark:border-slate-800"
+                        >
+                          <div
+                            className={`flex items-center justify-between text-[11px] font-mono font-semibold mb-1 ${band.textClass}`}
+                          >
+                            <span>{range}</span>
+                            <span className={`h-1.5 w-1.5 rounded-full ${band.dotClass}`} />
+                          </div>
+                          <div className="text-[11px] font-medium text-slate-700 dark:text-slate-300">
+                            {band.label}
+                          </div>
                         </div>
-                        <div className="text-[11px] font-medium text-slate-700 dark:text-slate-300">
-                          {isVi ? 'Xuất sắc' : 'Excellent'}
-                        </div>
-                      </div>
-                      <div className="rounded-lg bg-white dark:bg-slate-900 p-2.5 border border-slate-200/80 dark:border-slate-800">
-                        <div className="flex items-center justify-between text-[11px] font-mono font-semibold text-indigo-700 dark:text-indigo-300 mb-1">
-                          <span>70 – 84</span>
-                          <span className="h-1.5 w-1.5 rounded-full bg-indigo-500" />
-                        </div>
-                        <div className="text-[11px] font-medium text-slate-700 dark:text-slate-300">
-                          {isVi ? 'Tốt' : 'Good'}
-                        </div>
-                      </div>
-                      <div className="rounded-lg bg-white dark:bg-slate-900 p-2.5 border border-slate-200/80 dark:border-slate-800">
-                        <div className="flex items-center justify-between text-[11px] font-mono font-semibold text-amber-800 dark:text-amber-400 mb-1">
-                          <span>50 – 69</span>
-                          <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                        </div>
-                        <div className="text-[11px] font-medium text-slate-700 dark:text-slate-300">
-                          {isVi ? 'Trung bình / Cần rà soát' : 'Fair / Needs Review'}
-                        </div>
-                      </div>
-                      <div className="rounded-lg bg-white dark:bg-slate-900 p-2.5 border border-slate-200/80 dark:border-slate-800">
-                        <div className="flex items-center justify-between text-[11px] font-mono font-semibold text-red-700 dark:text-red-400 mb-1">
-                          <span>&lt; 50</span>
-                          <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
-                        </div>
-                        <div className="text-[11px] font-medium text-slate-700 dark:text-slate-300">
-                          {isVi ? 'Cần rà soát kỹ' : 'Needs Thorough Review'}
-                        </div>
-                      </div>
+                      ))}
                     </div>
                   </div>
                 </div>

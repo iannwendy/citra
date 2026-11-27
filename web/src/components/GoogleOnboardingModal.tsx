@@ -15,6 +15,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { api } from '@/api/client';
 import { validatePasswordClient } from '@/lib/utils';
+import { formatUserError, resolveAcademicLang } from '@/lib/academicTaxonomy';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -23,7 +24,7 @@ import { useModalA11y } from '@/hooks/useModalA11y';
 
 export function GoogleOnboardingModal() {
   const { t, i18n } = useTranslation();
-  const lang = i18n.language?.startsWith('vi') ? 'vi' : 'en';
+  const lang = resolveAcademicLang(i18n.resolvedLanguage || i18n.language);
   const location = useLocation();
   const { user, refreshUser } = useAuth();
 
@@ -87,11 +88,13 @@ export function GoogleOnboardingModal() {
       );
     } catch (err) {
       setError(
-        err instanceof Error
-          ? err.message
-          : lang === 'vi'
+        formatUserError(
+          err,
+          lang,
+          lang === 'vi'
             ? 'Không thể gửi email. Vui lòng thử lại.'
-            : 'Could not send email. Please try again.'
+            : 'Could not send email. Please try again.',
+        ),
       );
     } finally {
       setSendingEmail(false);
@@ -112,8 +115,8 @@ export function GoogleOnboardingModal() {
     ) {
       setError(
         lang === 'vi'
-          ? 'Tên đăng nhập phải từ 3–50 ký tự (chữ cái, số, ., _, -), không bắt đầu/kết thúc bằng dấu câu hoặc lặp dấu chấm.'
-          : 'Username must be 3–50 characters (letters, numbers, ., _, -), without leading/trailing punctuation or consecutive dots.'
+          ? 'Tên đăng nhập dài 3–50 ký tự, chỉ dùng chữ không dấu, số và . _ - (không đặt ký tự đặc biệt ở đầu/cuối).'
+          : "Use 3–50 letters, numbers, dots, underscores, or hyphens — don't start or end with a symbol.",
       );
       return;
     }
@@ -121,7 +124,10 @@ export function GoogleOnboardingModal() {
     if (newPassword) {
       const pwCheck = validatePasswordClient(newPassword, lang);
       if (!pwCheck.valid) {
-        setError(pwCheck.error || 'Invalid password');
+        setError(
+          pwCheck.error ||
+            (lang === 'vi' ? 'Mật khẩu không hợp lệ.' : 'Invalid password.'),
+        );
         return;
       }
       if (newPassword !== confirmPassword) {
@@ -159,11 +165,13 @@ export function GoogleOnboardingModal() {
       setOpen(false);
     } catch (err) {
       setError(
-        err instanceof Error
-          ? err.message
-          : lang === 'vi'
+        formatUserError(
+          err,
+          lang,
+          lang === 'vi'
             ? 'Không thể lưu thiết lập. Vui lòng thử lại.'
-            : 'Failed to save setup. Please try again.'
+            : 'Failed to save setup. Please try again.',
+        ),
       );
     } finally {
       setSaving(false);
@@ -186,7 +194,7 @@ export function GoogleOnboardingModal() {
           type="button"
           onClick={handleDismiss}
           className="absolute right-4 top-4 p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-          aria-label="Close"
+          aria-label={t('common.close')}
         >
           <X className="h-4 w-4" />
         </button>
@@ -206,8 +214,8 @@ export function GoogleOnboardingModal() {
             </h2>
             <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
               {lang === 'vi'
-                ? `Xin chào ${user.full_name || user.username}! Hãy chọn tên đăng nhập (@username) của bạn và thiết lập mật khẩu (tuỳ chọn).`
-                : `Welcome ${user.full_name || user.username}! Choose your custom @username and optionally set a local password.`}
+                ? `Xin chào ${user.full_name || user.username}! Hãy chọn tên đăng nhập (@username) của bạn và thiết lập mật khẩu (tùy chọn).`
+                : `Welcome ${user.full_name || user.username}! Choose your custom @username and optionally set a CITRA password.`}
             </p>
           </div>
 
@@ -244,7 +252,7 @@ export function GoogleOnboardingModal() {
                   maxLength={50}
                   required
                   className="pl-8 rounded-xl font-mono"
-                  placeholder="your_username"
+                  placeholder={lang === 'vi' ? 'vd_minh_nguyen' : 'e.g. alex_chen'}
                   data-testid="onboarding-username-input"
                 />
               </div>
@@ -260,8 +268,8 @@ export function GoogleOnboardingModal() {
                 <span className="text-xs font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
                   <Lock className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
                   {lang === 'vi'
-                    ? 'Đặt mật khẩu đăng nhập (Tuỳ chọn)'
-                    : 'Set a local password (Optional)'}
+                    ? 'Đặt mật khẩu đăng nhập (Tùy chọn)'
+                    : 'Set a CITRA password (Optional)'}
                 </span>
                 {user.email && (
                   <button
@@ -276,7 +284,7 @@ export function GoogleOnboardingModal() {
                       <Mail className="h-3 w-3" />
                     )}
                     {lang === 'vi'
-                      ? 'Gửi link đặt mật khẩu qua Email'
+                      ? 'Gửi liên kết đặt mật khẩu qua email'
                       : 'Send setup link to email'}
                   </button>
                 )}

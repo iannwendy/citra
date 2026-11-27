@@ -125,8 +125,8 @@ export function ProfilePage() {
       ) {
         setProfileError(
           lang === 'vi'
-            ? 'Tên đăng nhập phải từ 3–50 ký tự (chữ cái, chữ số, ., _, -), không bắt đầu/kết thúc bằng dấu câu hoặc lặp dấu chấm.'
-            : 'Username must be 3–50 characters (letters, numbers, ., _, -), without leading/trailing punctuation or consecutive dots.',
+            ? 'Tên đăng nhập dài 3–50 ký tự, chỉ dùng chữ không dấu, số và . _ - (không đặt ký tự đặc biệt ở đầu/cuối).'
+            : "Use 3–50 letters, numbers, dots, underscores, or hyphens — don't start or end with a symbol.",
         );
         return;
       }
@@ -303,14 +303,9 @@ export function ProfilePage() {
       {/* Account Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm">
-          <div className="flex items-center justify-between mb-1">
-            <p className="text-slate-500 dark:text-slate-400 text-xs">
-              {t('profile.role')}
-            </p>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/80 text-indigo-600 dark:text-indigo-400">
-              01
-            </span>
-          </div>
+          <p className="text-slate-500 dark:text-slate-400 text-xs mb-1">
+            {t('profile.role')}
+          </p>
           <p
             data-testid="profile-role-value"
             className="font-display font-semibold text-lg text-slate-900 dark:text-slate-100"
@@ -326,28 +321,18 @@ export function ProfilePage() {
         </Card>
 
         <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm">
-          <div className="flex items-center justify-between mb-1">
-            <p className="text-slate-500 dark:text-slate-400 text-xs">
-              {t('profile.memberSince')}
-            </p>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/80 text-emerald-600 dark:text-emerald-400">
-              02
-            </span>
-          </div>
+          <p className="text-slate-500 dark:text-slate-400 text-xs mb-1">
+            {t('profile.memberSince')}
+          </p>
           <p className="font-mono font-semibold text-sm text-slate-900 dark:text-slate-100">
             {formatLocalizedDate(authUser?.created_at, lang)}
           </p>
         </Card>
 
         <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm">
-          <div className="flex items-center justify-between mb-1">
-            <p className="text-slate-500 dark:text-slate-400 text-xs">
-              {t('profile.lastLogin')}
-            </p>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-              03
-            </span>
-          </div>
+          <p className="text-slate-500 dark:text-slate-400 text-xs mb-1">
+            {t('profile.lastLogin')}
+          </p>
           <p className="font-mono font-semibold text-sm text-slate-900 dark:text-slate-100">
             {formatLocalizedDate(authUser?.last_login_at, lang)}
           </p>
@@ -425,7 +410,7 @@ export function ProfilePage() {
                         }}
                         maxLength={50}
                         className="pl-8 rounded-xl font-mono"
-                        placeholder="your_username"
+                        placeholder={lang === 'vi' ? 'vd_minh_nguyen' : 'e.g. alex_chen'}
                         data-testid="profile-username-input"
                       />
                     </div>
@@ -495,8 +480,8 @@ export function ProfilePage() {
                   {isGoogleEmailLocked && (
                     <p className="text-xs text-slate-400 mt-1">
                       {lang === 'vi'
-                        ? 'Email đã liên kết Google được khóa bảo mật.'
-                        : 'Google-linked email address is verified and locked.'}
+                        ? 'Email được đồng bộ từ tài khoản Google của bạn.'
+                        : 'Synced with your Google account.'}
                     </p>
                   )}
                 </div>
@@ -549,7 +534,11 @@ export function ProfilePage() {
           <div className="flex items-center gap-2.5">
             <Lock className="h-4 w-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
             <h2 className="font-display text-sm font-semibold text-slate-900 dark:text-slate-100">
-              {t('profile.changePassword')}
+              {hasPassword
+                ? t('profile.changePassword')
+                : lang === 'vi'
+                  ? 'Tạo mật khẩu đăng nhập'
+                  : 'Create a Password'}
             </h2>
           </div>
         </div>
@@ -608,8 +597,8 @@ export function ProfilePage() {
                 ) : (
                   <>
                     Your account was created via <strong>Google Sign-In</strong>{' '}
-                    and does not have a local password yet. You can{' '}
-                    <strong>set your initial password directly below</strong>{' '}
+                    and does not have a CITRA password yet. You can{' '}
+                    <strong>set your password directly below</strong>{' '}
                     (no current password required) or{' '}
                     <strong>
                       send a password setup link to your Google email
@@ -728,10 +717,10 @@ export function ProfilePage() {
                         <Mail className="h-3.5 w-3.5" />
                         {hasPassword
                           ? lang === 'vi'
-                            ? 'Gửi link đặt lại mật khẩu qua Email'
+                            ? 'Gửi liên kết đặt lại mật khẩu qua email'
                             : 'Send password reset link via email'
                           : lang === 'vi'
-                            ? 'Gửi link đặt mật khẩu qua Email'
+                            ? 'Gửi liên kết đặt mật khẩu qua email'
                             : 'Send password setup link via email'}
                       </>
                     )}
@@ -743,11 +732,11 @@ export function ProfilePage() {
                 <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
                   {hasPassword
                     ? lang === 'vi'
-                      ? 'Quên mật khẩu hiện tại? Nhấn nút gửi link qua email để tạo mật khẩu mới mà không cần nhập mật khẩu cũ.'
+                      ? 'Quên mật khẩu hiện tại? Nhấn nút gửi liên kết qua email để tạo mật khẩu mới mà không cần nhập mật khẩu cũ.'
                       : 'Forgot your current password? Send a reset link to your email to create a new password without entering your current one.'
                     : lang === 'vi'
                       ? 'Liên kết qua email cho phép bạn tạo mật khẩu đăng nhập trực tiếp bên cạnh đăng nhập bằng Google.'
-                      : 'The email link lets you create a local password so you can sign in with either Google or a password.'}
+                      : 'The email link lets you create a CITRA password so you can sign in with either Google or a password.'}
                 </p>
               )}
             </div>
@@ -803,20 +792,24 @@ export function ProfilePage() {
         </div>
       )}
 
-      {/* Personal Data Rights & Account Deletion Card (DLCN-03) */}
+      {/* Privacy & Account Management Card (DLCN-03) */}
       <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-3 px-4 sm:px-5 py-3.5 bg-slate-50/90 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800">
           <div className="flex items-center gap-2.5">
             <ShieldCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
             <h2 className="font-display text-sm font-semibold text-slate-900 dark:text-slate-100">
-              {t('privacyCompliance.settingsSectionTitle')}
+              {lang === 'vi'
+                ? 'Quyền riêng tư & Dữ liệu cá nhân'
+                : 'Privacy & Your Data'}
             </h2>
           </div>
         </div>
 
         <div className="p-4 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 leading-relaxed max-w-xl">
-            {t('privacyCompliance.settingsSectionSubtitle')}
+            {lang === 'vi'
+              ? 'Xem cách CITRA bảo vệ bài viết của bạn, hoặc quản lý và xóa tài khoản vĩnh viễn trong trang Cài đặt.'
+              : 'Review how CITRA protects your documents, or manage and permanently delete your account in Settings.'}
           </p>
           <div className="flex flex-wrap items-center gap-2.5 shrink-0">
             <Link
@@ -826,10 +819,13 @@ export function ProfilePage() {
               {t('privacyCompliance.policyLinkLabel')}
             </Link>
             <Link
-              to="/settings"
-              className="inline-flex items-center px-3.5 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-semibold shadow-sm transition-colors"
+              to="/settings#delete-account-section"
+              data-testid="profile-manage-delete-account-link"
+              className="inline-flex items-center px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:border-red-300 hover:text-red-700 dark:hover:border-red-800 dark:hover:text-red-300 transition-colors"
             >
-              {t('privacyCompliance.deleteAccountBtn')}
+              {lang === 'vi'
+                ? 'Quản lý & xóa tài khoản trong Cài đặt →'
+                : 'Manage or delete account in Settings →'}
             </Link>
           </div>
         </div>

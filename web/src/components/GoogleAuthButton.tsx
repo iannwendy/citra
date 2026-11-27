@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { AuthContext } from '@/contexts/AuthContext';
 import { api, type GoogleLoginPayload } from '@/api/client';
+import { formatUserError, resolveAcademicLang } from '@/lib/academicTaxonomy';
 
 interface GoogleTokenResponse {
   access_token?: string;
@@ -110,7 +111,8 @@ export function GoogleAuthButton({
   beforeAuth,
   googlePayloadExtras,
 }: GoogleAuthButtonProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const lang = resolveAcademicLang(i18n.resolvedLanguage || i18n.language);
   const navigate = useNavigate();
   const authContext = useContext(AuthContext);
   const loginWithGoogle = authContext?.loginWithGoogle;
@@ -160,7 +162,13 @@ export function GoogleAuthButton({
         if (response.error || !response.access_token) {
           setGoogleLoading(false);
           if (response.error && response.error !== 'popup_closed_by_user') {
-            onError(response.error_description || t('auth.googleLoginError'));
+            onError(
+              formatUserError(
+                response.error_description,
+                lang,
+                t('auth.googleLoginError'),
+              ),
+            );
           }
           return;
         }
@@ -178,13 +186,7 @@ export function GoogleAuthButton({
           }
           navigate('/dashboard');
         } catch (err) {
-          const msg =
-            err instanceof Error ? err.message : t('auth.googleLoginError');
-          if (msg.includes('ACCOUNT_DEACTIVATED')) {
-            onError(msg.replace('ACCOUNT_DEACTIVATED: ', ''));
-          } else {
-            onError(msg);
-          }
+          onError(formatUserError(err, lang, t('auth.googleLoginError')));
         } finally {
           verifyingBackendRef.current = false;
           setGoogleLoading(false);
@@ -193,7 +195,7 @@ export function GoogleAuthButton({
       error_callback: (err) => {
         setGoogleLoading(false);
         if (err?.type && err.type !== 'popup_closed') {
-          onError(err.message || t('auth.googleLoginError'));
+          onError(formatUserError(err.message, lang, t('auth.googleLoginError')));
         }
       },
     });
@@ -229,7 +231,15 @@ export function GoogleAuthButton({
       }
 
       if (!activeClientId) {
-        onError(t('auth.googleNotConfigured'));
+        onError(
+          formatUserError(
+            t('auth.googleNotConfigured'),
+            lang,
+            lang === 'vi'
+              ? 'Đăng nhập bằng Google hiện tạm ngưng. Vui lòng đăng nhập bằng email hoặc tên đăng nhập.'
+              : 'Google sign-in is currently unavailable. Please sign in with your email or username.',
+          ),
+        );
         setGoogleLoading(false);
         return;
       }
@@ -238,7 +248,16 @@ export function GoogleAuthButton({
       openGooglePopup(activeClientId);
     } catch (err) {
       setGoogleLoading(false);
-      onError(err instanceof Error ? err.message : t('auth.googleLoginError'));
+      const rawMsg = err instanceof Error ? err.message : '';
+      if (/google identity services sdk/i.test(rawMsg)) {
+        onError(
+          lang === 'vi'
+            ? 'Không thể tải cửa sổ đăng nhập Google. Vui lòng kiểm tra kết nối mạng và thử lại.'
+            : 'Could not load Google Sign-In. Please check your connection and try again.',
+        );
+      } else {
+        onError(formatUserError(err, lang, t('auth.googleLoginError')));
+      }
     }
   };
 

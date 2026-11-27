@@ -5,7 +5,9 @@ import { ThemeToggle } from '@/contexts/ThemeContext';
 import { APP_VERSION } from '@/version';
 import {
   SCHOLARLY_APIS_LABEL,
+  SYMBOLIC_RULES_COUNT,
 } from '@/lib/productFacts';
+import { getCisBand } from '@/lib/academicTaxonomy';
 import { SolvaLiveNumber } from '@/components/landing/SolvaMockupWidgets';
 import { ScholarlySourceLogo } from '@/components/landing/ScholarlySourceLogos';
 import {
@@ -63,7 +65,12 @@ interface LiveTraceSample {
   matchBadgeEn: string;
   matchBadgeVi: string;
   tone: 'emerald' | 'amber' | 'red';
-  sources: Array<{ name: string; ms: number; match: string }>;
+  sources: Array<{
+    name: string;
+    statusEn: string;
+    statusVi: string;
+    statusTone: 'emerald' | 'amber' | 'red';
+  }>;
 }
 
 const LIVE_TRACE_SAMPLES: LiveTraceSample[] = [
@@ -76,53 +83,55 @@ const LIVE_TRACE_SAMPLES: LiveTraceSample[] = [
     doi: '10.48550/arXiv.1706.03762',
     ruleLabelEn: 'Exact DOI Match',
     ruleLabelVi: 'Khớp mã DOI gốc',
-    ruleSummaryEn: 'Canonical DOI & Cross-Index Consensus',
-    ruleSummaryVi: 'Đồng thuận mã DOI & 4 thư viện quốc tế',
-    checkSummaryEn: 'Check: Exact match on canonical DOI and original paper title (2017).',
-    checkSummaryVi: 'Đối chiếu: Khớp chính xác mã DOI và tiêu đề bài báo gốc (2017).',
+    ruleSummaryEn: 'Exact DOI & publication details match',
+    ruleSummaryVi: 'Khớp đầy đủ mã DOI & thông tin xuất bản',
+    checkSummaryEn:
+      'Check: Exact match on DOI identifier and original paper title (2017).',
+    checkSummaryVi:
+      'Đối chiếu: Khớp chính xác mã định danh DOI và tiêu đề bài báo gốc (2017).',
     l1Status: 'MATCHED',
     verdict: 'VERIFIED',
     verdictLabelEn: 'Verified Source',
     verdictLabelVi: 'Nguồn trích dẫn hợp lệ',
     confidence: 99,
-    cisScore: 94.8,
+    cisScore: 96.0,
     matchBadgeEn: 'Content match: 96%',
     matchBadgeVi: 'Độ khớp nội dung: 96%',
     tone: 'emerald',
     sources: [
-      { name: 'Crossref', ms: 38, match: '100%' },
-      { name: 'OpenAlex', ms: 52, match: '100%' },
-      { name: 'Semantic Scholar', ms: 61, match: '99%' },
+      { name: 'Crossref', statusEn: '✓ Checked', statusVi: '✓ Đã khớp', statusTone: 'emerald' },
+      { name: 'OpenAlex', statusEn: '✓ Checked', statusVi: '✓ Đã khớp', statusTone: 'emerald' },
+      { name: 'Semantic Scholar', statusEn: '✓ Checked', statusVi: '✓ Đã khớp', statusTone: 'emerald' },
     ],
   },
   {
     id: 'trace-2',
     marker: '[4]',
-    citation: 'Nguyen & Tran (2021)',
+    citation: 'Devlin et al. (2021)',
     title: 'BERT: Pre-training of Deep Bidirectional Transformers',
     venue: 'Proceedings of NAACL-HLT (Cited as EMNLP)',
     doi: '10.18653/v1/N19-1423',
-    ruleLabelEn: 'Year & Venue Mismatch',
+    ruleLabelEn: 'Year & Conference Mismatch',
     ruleLabelVi: 'Lệch năm & hội nghị',
-    ruleSummaryEn: 'Preprint-to-Proceedings Year & Venue Drift',
-    ruleSummaryVi: 'Sai lệch năm bản nháp & hội nghị công bố',
+    ruleSummaryEn: 'Publication year & conference name do not match',
+    ruleSummaryVi: 'Năm xuất bản & tên hội nghị chưa trùng khớp',
     checkSummaryEn:
-      'Check: Cited year (2021) and venue differ from the official NAACL-HLT (2019) record.',
+      'Check: Cited year (2021) and conference name differ from the official NAACL-HLT (2019) record.',
     checkSummaryVi:
-      'Đối chiếu: Năm trích dẫn (2021) và tên hội nghị lệch với bản ghi gốc NAACL-HLT (2019).',
+      'Đối chiếu: Năm trích dẫn (2021) và tên hội nghị chưa khớp với bản ghi gốc NAACL-HLT (2019).',
     l1Status: 'MATCHED',
     verdict: 'METADATA_ERROR',
-    verdictLabelEn: 'Citation Details Mismatch',
-    verdictLabelVi: 'Sai lệch thông tin trích dẫn',
+    verdictLabelEn: 'Details Mismatch',
+    verdictLabelVi: 'Sai lệch thông tin',
     confidence: 84,
-    cisScore: 88.5,
+    cisScore: 64.5,
     matchBadgeEn: 'Content match: 93%',
     matchBadgeVi: 'Độ khớp nội dung: 93%',
     tone: 'amber',
     sources: [
-      { name: 'Crossref', ms: 44, match: '94%' },
-      { name: 'DBLP', ms: 49, match: '92%' },
-      { name: 'OpenAlex', ms: 58, match: '94%' },
+      { name: 'Crossref', statusEn: '✓ Checked', statusVi: '✓ Đã kiểm tra', statusTone: 'amber' },
+      { name: 'DBLP', statusEn: '✓ Checked', statusVi: '✓ Đã kiểm tra', statusTone: 'amber' },
+      { name: 'OpenAlex', statusEn: '✓ Checked', statusVi: '✓ Đã kiểm tra', statusTone: 'amber' },
     ],
   },
   {
@@ -134,24 +143,25 @@ const LIVE_TRACE_SAMPLES: LiveTraceSample[] = [
     doi: '10.1038/s42256-024-99812-x',
     ruleLabelEn: 'Unregistered DOI',
     ruleLabelVi: 'Không tìm thấy mã DOI',
-    ruleSummaryEn: 'Non-Existent DOI Handle across 15+ Registries',
-    ruleSummaryVi: 'Mã DOI không tồn tại trên 15+ thư viện',
+    ruleSummaryEn: 'DOI identifier not found across 15+ libraries',
+    ruleSummaryVi: 'Không tìm thấy mã định danh DOI trên 15+ thư viện',
     checkSummaryEn:
-      'Check: DOI handle does not exist on Crossref and no matching title was found.',
-    checkSummaryVi: 'Đối chiếu: Mã DOI không tồn tại trên Crossref và tiêu đề không khớp.',
+      'Check: DOI identifier does not exist on Crossref and no matching title was found.',
+    checkSummaryVi:
+      'Đối chiếu: Mã định danh DOI không tồn tại trên Crossref và không có bài báo trùng tiêu đề.',
     l1Status: 'MATCHED',
     verdict: 'SUSPECTED_HALLUCINATION',
     verdictLabelEn: 'Source Not Found',
-    verdictLabelVi: 'Không tìm thấy nguồn gốc',
-    confidence: 11,
-    cisScore: 84.5,
+    verdictLabelVi: 'Không tìm thấy nguồn',
+    confidence: 0,
+    cisScore: 24.0,
     matchBadgeEn: 'Source match: 0%',
     matchBadgeVi: 'Độ khớp nguồn: 0%',
     tone: 'red',
     sources: [
-      { name: 'Crossref', ms: 51, match: '404' },
-      { name: 'OpenAlex', ms: 63, match: '0%' },
-      { name: 'PubMed NCBI', ms: 55, match: '0%' },
+      { name: 'Crossref', statusEn: '✗ Not found', statusVi: '✗ Không thấy', statusTone: 'red' },
+      { name: 'OpenAlex', statusEn: '✗ Not found', statusVi: '✗ Không thấy', statusTone: 'red' },
+      { name: 'PubMed NCBI', statusEn: '✗ Not found', statusVi: '✗ Không thấy', statusTone: 'red' },
     ],
   },
 ];
@@ -203,13 +213,14 @@ export function AuthSplitShell({
   };
 
   const activeTrace = LIVE_TRACE_SAMPLES[activeTraceIdx];
+  const activeCisBand = getCisBand(activeTrace.cisScore, lang);
 
   const features = [
     {
       icon: Quote,
       title: t('auth.featureExtraction'),
       desc: t('auth.featureExtractionDesc'),
-      tag: lang === 'vi' ? 'PDF · Word · BibTeX' : 'PDF · DOCX · BibTeX',
+      tag: lang === 'vi' ? 'PDF · Word · BibTeX' : 'PDF · Word · BibTeX',
       accentClass:
         'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20',
     },
@@ -220,7 +231,7 @@ export function AuthSplitShell({
       tag:
         lang === 'vi'
           ? `${SCHOLARLY_APIS_LABEL} thư viện quốc tế`
-          : `${SCHOLARLY_APIS_LABEL} Academic Indexes`,
+          : `${SCHOLARLY_APIS_LABEL} Academic Libraries`,
       accentClass:
         'bg-[#1C1A15]/[0.08] text-[#1C1A15] dark:bg-[#FBFAF6]/10 dark:text-[#FBFAF6] border-[#1C1A15]/15 dark:border-[#FBFAF6]/20',
     },
@@ -230,8 +241,8 @@ export function AuthSplitShell({
       desc: t('auth.featureVerificationDesc'),
       tag:
         lang === 'vi'
-          ? 'Hơn 30 tiêu chí đối chiếu'
-          : '30+ Verification Criteria',
+          ? `${SYMBOLIC_RULES_COUNT} tiêu chí đối chiếu`
+          : `${SYMBOLIC_RULES_COUNT} Citation Checks`,
       accentClass:
         'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20',
     },
@@ -318,16 +329,16 @@ export function AuthSplitShell({
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
             <span
               style={{ color: 'var(--solva-ink)' }}
-              className="font-mono text-[9.5px] xl:text-[10px] font-semibold tracking-wider uppercase whitespace-nowrap"
+              className="font-solva-sans text-[10.5px] xl:text-[11px] font-semibold whitespace-nowrap"
             >
               {lang === 'vi'
-                ? '120.000 BÀI · 99,67% CHÍNH XÁC'
-                : '120K BENCHMARK · 99.67% ACC'}
+                ? 'Kiểm chứng qua 128.000+ bài báo'
+                : 'Tested on 128,000+ papers'}
             </span>
           </div>
         </div>
 
-        {/* Center Content: Two-Tone Editorial Heading + Painterly Live Debugger + 3 Pillars */}
+        {/* Center Content: Two-Tone Editorial Heading + Painterly Sample Preview + 3 Pillars */}
         <div className="relative z-10 my-auto py-3 space-y-3.5 max-w-[600px] mx-auto w-full">
           {/* Eyebrow + Staggered Sentient Light Serif Heading */}
           <div className="space-y-1.5">
@@ -338,11 +349,11 @@ export function AuthSplitShell({
               />
               <span
                 style={{ color: 'var(--solva-muted)' }}
-                className="text-[12px] font-mono uppercase tracking-wider font-medium"
+                className="text-[12px] font-solva-sans font-medium"
               >
                 {lang === 'vi'
-                  ? 'Thẩm định Trích dẫn Học thuật 2 Lớp Minh bạch'
-                  : 'Two-Layer Explainable Citation Verification'}
+                  ? 'Kiểm tra trích dẫn học thuật minh bạch'
+                  : 'Transparent two-step citation verification'}
               </span>
             </div>
 
@@ -456,19 +467,20 @@ export function AuthSplitShell({
                 </div>
 
                 <div className="flex items-center gap-1.5 shrink-0">
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[5px] bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300 font-mono text-[10px] font-semibold whitespace-nowrap">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                    <span>{lang === 'vi' ? 'TRỰC TIẾP' : 'LIVE'}</span>
-                  </span>
                   <span
                     style={{
                       backgroundColor: 'var(--solva-surface)',
-                      color: 'var(--solva-ink)',
                       borderColor: 'var(--solva-border)',
+                      color: 'var(--solva-muted)',
                     }}
-                    className="px-2 py-0.5 rounded-[5px] border font-mono text-[10px] font-semibold whitespace-nowrap"
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[5px] border font-mono text-[10px] font-semibold whitespace-nowrap"
                   >
-                    {lang === 'vi' ? 'Điểm toàn vẹn:' : 'Integrity Score:'}{' '}
+                    <span>{lang === 'vi' ? 'MẪU KIỂM TRA' : 'SAMPLE CHECK'}</span>
+                  </span>
+                  <span
+                    className={`px-2 py-0.5 rounded-[5px] font-mono text-[10px] font-semibold whitespace-nowrap ${activeCisBand.badgeClass}`}
+                  >
+                    {lang === 'vi' ? 'Điểm trích dẫn:' : 'Citation Score:'}{' '}
                     <SolvaLiveNumber
                       value={activeTrace.cisScore}
                       decimals={1}
@@ -628,7 +640,7 @@ export function AuthSplitShell({
                   </div>
                 </div>
 
-                {/* Live API Sources Latency Strip — Full Non-Truncated Source Names */}
+                {/* Academic Library Verification Status Strip — Clean Matched/Checked Badges */}
                 <div className="flex flex-wrap items-center gap-1.5">
                   {activeTrace.sources.map((src) => (
                     <div
@@ -637,20 +649,25 @@ export function AuthSplitShell({
                         backgroundColor: 'var(--solva-bg)',
                         borderColor: 'var(--solva-border)',
                       }}
-                      className="flex-1 min-w-fit px-2.5 py-1.5 rounded-[7px] border flex items-center justify-between gap-2 font-mono text-[10px] whitespace-nowrap"
+                      className="flex-1 min-w-fit px-2.5 py-1.5 rounded-[7px] border flex items-center justify-between gap-2 text-[10.5px] whitespace-nowrap"
                     >
                       <span
                         style={{ color: 'var(--solva-ink)' }}
-                        className="inline-flex items-center gap-1.5 font-medium whitespace-nowrap"
+                        className="inline-flex items-center gap-1.5 font-solva-sans font-medium whitespace-nowrap"
                       >
                         <ScholarlySourceLogo name={src.name} size={12} />
                         <span>{src.name}</span>
                       </span>
                       <span
-                        style={{ color: 'var(--solva-muted)' }}
-                        className="shrink-0"
+                        className={`shrink-0 font-solva-sans font-semibold ${
+                          src.statusTone === 'emerald'
+                            ? 'text-emerald-700 dark:text-emerald-300'
+                            : src.statusTone === 'amber'
+                              ? 'text-amber-700 dark:text-amber-300'
+                              : 'text-red-700 dark:text-red-300'
+                        }`}
                       >
-                        {src.ms}ms
+                        {lang === 'vi' ? src.statusVi : src.statusEn}
                       </span>
                     </div>
                   ))}
@@ -846,25 +863,25 @@ export function AuthSplitShell({
           </div>
         </div>
 
-        {/* Bottom Subtle Workspace Security Note (order-3) */}
+        {/* Bottom Subtle Privacy Note (order-3) */}
         <div
           style={{ color: 'var(--solva-muted)' }}
           className={`relative z-10 order-3 w-full ${maxWidthClass} mx-auto ${
             compactRightPanel ? 'pt-1' : 'pt-2'
-          } flex flex-wrap items-center justify-center sm:justify-between gap-x-3 gap-y-1 text-center text-[11px] font-mono`}
+          } flex flex-wrap items-center justify-center sm:justify-between gap-x-3 gap-y-1 text-center text-[11px] font-solva-sans`}
         >
           <span className="inline-flex items-center gap-1.5">
             <Sparkles className="h-3 w-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
             <span>
               {lang === 'vi'
-                ? 'Không gian Học thuật CITRA'
-                : 'CITRA Editorial Workspace'}
+                ? 'CITRA · Kiểm tra trích dẫn học thuật'
+                : 'CITRA · Academic Citation Checker'}
             </span>
           </span>
           <span>
             {lang === 'vi'
-              ? 'Mã hóa TLS 1.3 · Riêng tư'
-              : 'TLS 1.3 Encrypted · Private'}
+              ? 'Bảo mật dữ liệu · Riêng tư'
+              : 'Private & Secure'}
           </span>
         </div>
       </div>
