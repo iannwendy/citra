@@ -1266,9 +1266,12 @@ describe('Report Page UI/UX Redesign (Non-Tech Clarity & Progressive Disclosure)
         { user: makeUser('teacher', 'ultra'), initialRoute: '/verification/report/502?citation=766' },
       );
 
-      await waitFor(() =>
-        expect(screen.getByTestId('report-cis-score-value').textContent).toContain('69.4 / 100'),
-      );
+      await waitFor(() => {
+        expect(screen.getByTestId('report-cis-score-value').textContent).toContain('69.4 / 100');
+        expect(
+          essayContainer.querySelector('[data-citation-id="766"]')?.getAttribute('aria-selected'),
+        ).toBe('true');
+      });
       expect(screen.getByTestId('report-cis-score-value').textContent).not.toContain('%');
       expect(essayContainer.textContent).toContain('Gần chuẩn APA');
       expect(essayContainer.textContent).toContain('Liên kết hoạt động');
@@ -1660,9 +1663,12 @@ describe('Report Page UI/UX Redesign (Non-Tech Clarity & Progressive Disclosure)
         { user: makeUser('teacher', 'ultra'), initialRoute: '/verification/report/544?citation=r44-2' },
       );
 
-      await waitFor(() =>
-        expect(screen.getByTestId('revision-diff-banner')).toBeDefined(),
-      );
+      await waitFor(() => {
+        expect(screen.getByTestId('revision-diff-banner')).toBeDefined();
+        expect(
+          container.querySelector('[data-citation-id="r44-2"]')?.getAttribute('aria-selected'),
+        ).toBe('true');
+      });
 
       // Unified VI Revision Diff labels
       const revBannerText = screen.getByTestId('revision-diff-banner').textContent ?? '';
