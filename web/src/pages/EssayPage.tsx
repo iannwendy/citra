@@ -310,7 +310,7 @@ export function ReportSummaryAndNavBar({
   );
 
   const tabBase =
-    't-tab relative z-10 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-[13px] font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0';
+    't-tab relative z-10 inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-xs sm:text-[13px] font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0';
   const activeTabCls = pillStyle.ready
     ? 'text-slate-950 dark:text-white'
     : 'bg-white dark:bg-slate-900 text-slate-950 dark:text-white shadow-sm';
@@ -399,7 +399,7 @@ export function ReportSummaryAndNavBar({
         data-testid="report-view-tablist"
         role="tablist"
         aria-label={lang === 'vi' ? 'Chế độ xem báo cáo' : 'Report views'}
-        className="t-tabs relative flex items-center gap-1 p-1 rounded-xl bg-slate-100/90 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 overflow-x-auto max-w-full flex-nowrap"
+        className="t-tabs relative flex items-center gap-1 p-1 rounded-xl bg-slate-100/90 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 overflow-x-auto scrollbar-none max-w-full flex-nowrap"
       >
         <span
           aria-hidden="true"
@@ -5606,18 +5606,18 @@ export function EssayPage() {
                                 }
                                 className="w-full"
                               >
-                                <TabsList className="grid grid-cols-2 sm:grid-cols-4 w-full bg-slate-100 dark:bg-slate-900 p-1 rounded-xl h-auto gap-1">
+                                <TabsList className="flex flex-wrap sm:flex-nowrap items-center justify-between w-full bg-slate-100 dark:bg-slate-900 p-1 rounded-xl h-auto gap-1 overflow-x-auto scrollbar-none">
                                   <TabsTrigger
                                     value="sources"
                                     data-testid="inspector-tab-sources"
-                                    className="w-full text-xs font-semibold py-1.5 px-2 truncate"
+                                    className="flex-auto text-xs font-semibold py-1.5 px-2.5 whitespace-nowrap"
                                   >
                                     {lang === 'vi' ? '1. Nguồn đối chiếu' : '1. Checked Sources'}
                                   </TabsTrigger>
                                   <TabsTrigger
                                     value="steps"
                                     data-testid="inspector-tab-steps"
-                                    className="w-full text-xs font-semibold py-1.5 px-2 truncate"
+                                    className="flex-auto text-xs font-semibold py-1.5 px-2.5 whitespace-nowrap"
                                   >
                                     {lang === 'vi'
                                       ? `2. Các bước & Tiêu chí (${activeItem.rules.length})`
@@ -5626,7 +5626,7 @@ export function EssayPage() {
                                   <TabsTrigger
                                     value="content"
                                     data-testid="inspector-tab-content"
-                                    className="w-full text-xs font-semibold py-1.5 px-2 truncate"
+                                    className="flex-auto text-xs font-semibold py-1.5 px-2.5 whitespace-nowrap"
                                   >
                                     {lang === 'vi'
                                       ? '3. Đối chiếu nội dung'
@@ -5635,10 +5635,10 @@ export function EssayPage() {
                                   <TabsTrigger
                                     value="graph"
                                     data-testid="inspector-tab-graph"
-                                    className="w-full text-xs font-semibold py-1.5 px-2 gap-1 truncate"
+                                    className="flex-auto text-xs font-semibold py-1.5 px-2.5 gap-1 whitespace-nowrap"
                                   >
                                     <GitBranch className="h-3 w-3 shrink-0 text-violet-500" />
-                                    <span className="truncate">
+                                    <span>
                                       {lang === 'vi' ? '4. Sơ đồ kiểm tra' : '4. Decision Flow'}
                                     </span>
                                   </TabsTrigger>
