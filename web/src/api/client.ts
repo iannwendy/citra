@@ -221,6 +221,8 @@ export interface CIS {
   num_citations: number;
   num_unresolved: number;
   disclaimer: string;
+  is_unscannable?: boolean;
+  risk_level?: string | null;
 }
 
 // --- Full Report ---
@@ -233,6 +235,9 @@ export interface DocumentDiagnostics {
   parser_used?: string | null;
   warning_code?: string | null;
   warning_message?: string | null;
+  warning_message_en?: string | null;
+  warning_message_vi?: string | null;
+  is_unscannable?: boolean;
   parser_warnings?: string[];
   ocr_pages_recovered?: number[];
   legacy_encoding_detected?: string | null;
@@ -363,6 +368,9 @@ export interface SandboxInstantVerdictItem {
   mapping_status: string;
   mapping_note: string;
   reasoning: string;
+  reasoning_en?: string | null;
+  reasoning_vi?: string | null;
+  is_invalid_input?: boolean;
   triggered_rules: string[];
   mismatched_fields: string[];
   matched_source?: MatchedSource | null;
@@ -1266,6 +1274,9 @@ export interface PendingVerdict {
   essay_id: number;
   filename: string;
   student_username: string | null;
+  student_name?: string | null;
+  class_id?: number | null;
+  class_name?: string | null;
   citation_raw?: string;
   label: ValidationLabel | string;
   confidence: number;
@@ -1311,6 +1322,9 @@ export interface UpstreamSourceHealth {
 
 export interface SystemHealth {
   status: string;
+  upstream_status?: 'ok' | 'degraded' | string;
+  degraded_sources?: string[];
+  checked_at?: string;
   totals: {
     users: number;
     admins: number;
@@ -1339,6 +1353,9 @@ export interface AuditLogEntry {
   verdict_id: number | null;
   /** Essay owning the verdict (newer backends); enables deep links to the report. */
   essay_id?: number | null;
+  essay_filename?: string | null;
+  student_name?: string | null;
+  student_username?: string | null;
   original_label: string;
   new_label: string;
   user: string;

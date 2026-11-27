@@ -251,6 +251,8 @@ export function ThemeToggle({
     dark: t('settings.themeDark'),
     system: t('settings.themeSystem'),
   };
+  const isVi = (t('settings.themeLight') || '').toLowerCase().includes('sáng');
+  const currentThemeLabel = translatedLabels[theme] || themeLabels[theme];
 
   return (
     <button
@@ -271,8 +273,12 @@ export function ThemeToggle({
         ${sizeClasses[size]}
         ${className}
       `}
-      title={`Theme: ${themeLabels[theme]}`}
-      aria-label={`Current theme: ${themeLabels[theme]}. Click to change.`}
+      title={isVi ? `Giao diện: ${currentThemeLabel}` : `Theme: ${currentThemeLabel}`}
+      aria-label={
+        isVi
+          ? `Giao diện hiện tại: ${currentThemeLabel}. Nhấn để thay đổi.`
+          : `Current theme: ${currentThemeLabel}. Click to change.`
+      }
     >
       <span className="inline-grid place-items-center">
         {(['light', 'dark', 'system'] as const).map((mode) => {

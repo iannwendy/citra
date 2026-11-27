@@ -220,17 +220,17 @@ const PAGE_TITLE_ROUTES: Array<{ pattern: string; title: string; titleVi: string
   { pattern: '/admin/users', title: 'Accounts', titleVi: 'Quản lý tài khoản' },
   { pattern: '/admin/promos', title: 'Promo Codes', titleVi: 'Mã giảm giá' },
   { pattern: '/admin/system', title: 'System Health', titleVi: 'Sức khỏe hệ thống' },
-  { pattern: '/admin/audit', title: 'Audit Log', titleVi: 'Nhật ký kiểm toán' },
+  { pattern: '/admin/audit', title: 'Citation Review Log', titleVi: 'Nhật ký duyệt trích dẫn' },
   { pattern: '/settings', title: 'Settings', titleVi: 'Cài đặt' },
   { pattern: '/pricing', title: 'Pricing & Plans', titleVi: 'Bảng giá & Gói dịch vụ' },
   { pattern: '/privacy', title: 'Privacy Policy', titleVi: 'Chính sách bảo mật' },
   { pattern: '/terms', title: 'Terms of Service', titleVi: 'Điều khoản dịch vụ' },
-  { pattern: '/billing/checkout', title: 'Stripe Checkout', titleVi: 'Thanh toán' },
+  { pattern: '/billing/checkout', title: 'Checkout', titleVi: 'Thanh toán' },
   { pattern: '/billing/success', title: 'Payment Confirmed', titleVi: 'Thanh toán thành công' },
   { pattern: '/teacher/classes', title: 'My Classes', titleVi: 'Lớp học của tôi' },
   { pattern: '/teacher/classes/:classId', title: 'Class Detail', titleVi: 'Chi tiết lớp học' },
-  { pattern: '/teacher/reviews', title: 'Pending Reviews', titleVi: 'Hàng đợi rà soát' },
-  { pattern: '/verify/share/:token', title: 'Digital Verification Receipt', titleVi: 'Chứng nhận xác thực số' },
+  { pattern: '/teacher/reviews', title: 'Citation Reviews', titleVi: 'Duyệt trích dẫn' },
+  { pattern: '/verify/share/:token', title: 'Citation Verification Receipt', titleVi: 'Chứng nhận xác minh trích dẫn' },
 ];
 
 export const PUBLIC_INDEXABLE_PATHS: ReadonlySet<string> = new Set([
