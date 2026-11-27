@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { api, type EssaySummary } from '@/api/client';
 import i18n from '@/i18n';
-import { renderWithProviders, makeUser, screen, waitFor } from '@/test-utils';
+import { renderWithProviders, makeUser, screen, fireEvent, waitFor } from '@/test-utils';
 import { loadDashboardStats } from '@/hooks/useEssays';
 import { DashboardPage } from './DashboardPage';
+import { HistoryPage } from './HistoryPage';
 
 const essays: EssaySummary[] = [
   { id: 1, filename: 'a.pdf', num_pages: 2, uploaded_at: '2026-10-01T00:00:00Z', user_id: 1, cis_score: 80, num_citations: 10, num_verdicts: 10, num_verified: 5 },
@@ -102,5 +103,58 @@ describe('DashboardPage aggregate cards', () => {
     expect(screen.getByTestId('dashboard-teacher-pending-count').textContent).toBe('7');
     expect(document.body.textContent).not.toContain('GROBID TEI');
     expect(document.body.textContent).not.toContain('OPENXML');
+  });
+
+  it('Loop Round 2: bounds Search/Sort/Refresh toolbar widths across DashboardPage & HistoryPage, uses font-solva-serif font-normal H1s, and sets role="dialog" aria-modal="true" on Delete Essay modal', async () => {
+    vi.spyOn(api, 'getEssayStats').mockResolvedValue(remoteStats);
+
+    const { unmount: unmountDash } = renderWithProviders(<DashboardPage />, {
+      user: makeUser('user', 'pro'),
+    });
+    await waitFor(() => expect(screen.getByTestId('dashboard-essay-link-1')).toBeDefined());
+
+    const dashH1 = screen.getByRole('heading', { level: 1 });
+    expect(dashH1.className).toContain('font-solva-serif');
+    expect(dashH1.className).toContain('font-normal');
+    expect(dashH1.className).not.toContain('font-bold');
+
+    const dashSearchBox = screen.getByTestId('dashboard-search-box');
+    expect(dashSearchBox.className).toContain('sm:flex-none');
+    expect(dashSearchBox.className).toContain('w-full');
+    expect(dashSearchBox.className).toContain('sm:w-52');
+    expect(dashSearchBox.className).toContain('lg:w-56');
+    expect(dashSearchBox.className).toContain('xl:w-64');
+    expect(dashSearchBox.className).toContain('min-w-0');
+
+    const dashControls = screen.getByTestId('dashboard-toolbar-controls');
+    expect(dashControls.className).toContain('sm:flex-wrap');
+    expect(dashControls.className).toContain('min-w-0');
+
+    // Open Delete Essay ConfirmationModal and verify explicit role="dialog" + aria-modal="true"
+    fireEvent.click(screen.getByRole('button', { name: 'Delete a.pdf' }));
+    const deleteDialog = await screen.findByRole('dialog');
+    expect(deleteDialog.getAttribute('aria-modal')).toBe('true');
+    unmountDash();
+
+    // HistoryPage toolbar geometry + H1 typography
+    renderWithProviders(<HistoryPage />, { user: makeUser('user', 'pro') });
+    await waitFor(() => expect(screen.getByTestId('history-search-box')).toBeDefined());
+
+    const histH1 = screen.getByRole('heading', { level: 1 });
+    expect(histH1.className).toContain('font-solva-serif');
+    expect(histH1.className).toContain('font-normal');
+    expect(histH1.className).not.toContain('font-bold');
+
+    const histSearchBox = screen.getByTestId('history-search-box');
+    expect(histSearchBox.className).toContain('sm:flex-none');
+    expect(histSearchBox.className).toContain('w-full');
+    expect(histSearchBox.className).toContain('sm:w-52');
+    expect(histSearchBox.className).toContain('lg:w-56');
+    expect(histSearchBox.className).toContain('xl:w-64');
+    expect(histSearchBox.className).toContain('min-w-0');
+
+    const histControls = screen.getByTestId('history-toolbar-controls');
+    expect(histControls.className).toContain('sm:flex-wrap');
+    expect(histControls.className).toContain('min-w-0');
   });
 });

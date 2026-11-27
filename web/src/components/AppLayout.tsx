@@ -712,7 +712,10 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                         {visibleAdminItems.map((item, idx) => {
                           const Icon = item.icon;
                           const active = isActive(item.path);
-                          const itemLabel = t(item.labelKey);
+                          const itemLabel =
+                            item.path === '/admin/audit' && currentLang === 'vi'
+                              ? 'Nhật ký duyệt bài'
+                              : t(item.labelKey);
 
                           return (
                             <Link

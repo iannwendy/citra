@@ -3,6 +3,7 @@ import { api } from '@/api/client';
 import i18n from '@/i18n';
 import { renderWithProviders, makeUser, QUOTA_BY_TIER, screen, fireEvent, waitFor } from '@/test-utils';
 import { SettingsPage } from './SettingsPage';
+import { ProfilePage } from './ProfilePage';
 
 const proUser = () =>
   makeUser('user', 'pro', { billing_cycle: 'annual', current_period_end: '2027-10-26T00:00:00Z' });
@@ -122,5 +123,35 @@ describe('SettingsPage cancel auto-renew confirmation', () => {
       target: { value: 'Secret123!' },
     });
     expect(confirmBtn.disabled).toBe(false);
+
+    // Explicit role="dialog" & aria-modal="true" on Delete Account modal panel + font-solva-serif H1
+    const panel = screen.getByTestId('delete-account-dialog-panel');
+    expect(panel.getAttribute('role')).toBe('dialog');
+    expect(panel.getAttribute('aria-modal')).toBe('true');
+    const settingsH1 = screen.getByRole('heading', { level: 1 });
+    expect(settingsH1.className).toContain('font-solva-serif');
+    expect(settingsH1.className).toContain('font-normal');
+    expect(settingsH1.className).not.toContain('font-bold');
+  });
+
+  it('Loop Round 2: ConfirmationModal sets aria-modal="true" and ProfilePage shows "Sinh viên" in VI with font-solva-serif H1', async () => {
+    const { unmount } = renderWithProviders(<SettingsPage />, { user: proUser() });
+    fireEvent.click(await screen.findByTestId('settings-cancel-sub-btn'));
+    const cancelDialog = await screen.findByRole('dialog');
+    expect(cancelDialog.getAttribute('aria-modal')).toBe('true');
+    unmount();
+
+    await i18n.changeLanguage('vi');
+    vi.spyOn(api, 'listEnrolledClasses').mockResolvedValue([]);
+    renderWithProviders(<ProfilePage />, { user: makeUser('user', 'ultra') });
+
+    const profileH1 = screen.getByRole('heading', { level: 1 });
+    expect(profileH1.className).toContain('font-solva-serif');
+    expect(profileH1.className).toContain('font-normal');
+    expect(profileH1.className).not.toContain('font-bold');
+
+    const roleValue = screen.getByTestId('profile-role-value');
+    expect(roleValue.textContent).toBe('Sinh viên');
+    expect(roleValue.className).not.toContain('capitalize');
   });
 });

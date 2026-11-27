@@ -398,6 +398,10 @@ export function SettingsPage(): JSX.Element {
       >
         <div
           {...deleteDialog.dialogProps}
+          role="dialog"
+          aria-modal="true"
+          aria-describedby={deleteDialog.descriptionId}
+          data-testid="delete-account-dialog-panel"
           className="t-modal is-open w-full max-w-md rounded-2xl border border-red-200 dark:border-red-900/60 bg-white dark:bg-slate-900 shadow-2xl overflow-hidden outline-none"
         >
           <div className="h-1.5 w-full bg-gradient-to-r from-red-600 via-red-500 to-amber-500" />
@@ -413,7 +417,10 @@ export function SettingsPage(): JSX.Element {
                 >
                   {t('privacyCompliance.deleteModalTitle')}
                 </h3>
-                <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 leading-relaxed">
+                <p
+                  id={deleteDialog.descriptionId}
+                  className="text-xs text-slate-600 dark:text-slate-400 mt-1 leading-relaxed"
+                >
                   {t('privacyCompliance.deleteAccountZoneDesc')}
                 </p>
               </div>
@@ -522,7 +529,7 @@ export function SettingsPage(): JSX.Element {
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="font-display text-2xl sm:text-3xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
+                <h1 className="font-solva-serif font-normal text-2xl sm:text-3xl tracking-tight text-slate-900 dark:text-slate-100">
                   {t('settings.title')}
                 </h1>
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/70 border border-emerald-200/70 dark:border-emerald-800/70 text-[11px] font-mono text-emerald-700 dark:text-emerald-300 whitespace-nowrap">

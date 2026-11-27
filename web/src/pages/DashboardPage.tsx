@@ -306,7 +306,7 @@ export function DashboardPage() {
       {/* Page Header Banner */}
       <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 sm:p-6 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="space-y-1.5 min-w-0">
-          <h1 className="font-display text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
+          <h1 className="font-solva-serif font-normal text-2xl sm:text-3xl tracking-tight text-slate-900 dark:text-slate-100">
             {t('dashboard.title')}
           </h1>
           <p className="text-sm text-slate-600 dark:text-slate-400">
@@ -474,24 +474,37 @@ export function DashboardPage() {
       {/* Document Registry & Search */}
       <Card className="p-0 overflow-hidden rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
         {/* Top Toolbar */}
-        <div className="px-4 sm:px-6 py-3.5 bg-slate-50/80 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800 flex flex-col xl:flex-row xl:items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5 min-w-0 flex-wrap shrink-0">
-            <h2 className="font-display text-sm font-bold text-slate-800 dark:text-slate-200">
+        <div
+          data-testid="dashboard-toolbar"
+          className="px-4 sm:px-6 py-3.5 bg-slate-50/80 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800 flex flex-col xl:flex-row xl:flex-wrap xl:items-center justify-between gap-3 min-w-0"
+        >
+          <div className="flex items-center gap-2.5 min-w-0 flex-wrap">
+            <h2 className="font-display text-sm font-semibold text-slate-800 dark:text-slate-200">
               {t('dashboard.recentActivity')}
             </h2>
             <Badge
               variant="secondary"
-              className="font-mono text-[11px] bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/60"
+              className="font-mono text-[11px] bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/60 shrink-0"
             >
               {filteredEssays.length} / {essays.length}
             </Badge>
           </div>
 
-          {/* Sort, Search & Inline Refresh Controls (no lonely wrap on 375px) */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full xl:w-auto min-w-0">
-            <EssaySortSelect value={sortBy} onChange={setSortBy} />
-            <div className="flex items-center gap-2 flex-nowrap w-full sm:flex-1 xl:flex-none min-w-0">
-              <div className="relative flex-1 xl:w-64 2xl:w-72 min-w-0">
+          {/* Sort, Search & Inline Refresh Controls (bounded widths, zero overflow across 375–1440px) */}
+          <div
+            data-testid="dashboard-toolbar-controls"
+            className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2 w-full xl:w-auto min-w-0 max-w-full"
+          >
+            <EssaySortSelect
+              value={sortBy}
+              onChange={setSortBy}
+              className="shrink-0"
+            />
+            <div className="flex items-center gap-2 flex-nowrap w-full sm:w-auto min-w-0 max-w-full">
+              <div
+                data-testid="dashboard-search-box"
+                className="relative flex-1 sm:flex-none w-full sm:w-52 lg:w-56 xl:w-64 min-w-0"
+              >
                 <Search
                   className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 dark:text-slate-500 pointer-events-none"
                   aria-hidden="true"
@@ -504,7 +517,7 @@ export function DashboardPage() {
                   aria-label={
                     lang === 'vi' ? 'Tìm kiếm tài liệu' : 'Search documents'
                   }
-                  className="t-clear-input h-9 pl-9 pr-8 text-xs rounded-xl bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800"
+                  className="t-clear-input h-9 w-full pl-9 pr-8 text-xs rounded-xl bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800"
                 />
                 {searchQuery && (
                   <button

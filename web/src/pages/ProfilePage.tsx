@@ -283,7 +283,7 @@ export function ProfilePage() {
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <h1 className="font-display text-2xl sm:text-3xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
+                  <h1 className="font-solva-serif font-normal text-2xl sm:text-3xl tracking-tight text-slate-900 dark:text-slate-100">
                     {t('profile.title')}
                   </h1>
                   <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/70 border border-emerald-200/70 dark:border-emerald-800/70 text-xs font-mono text-emerald-700 dark:text-emerald-300">
@@ -311,13 +311,16 @@ export function ProfilePage() {
               01
             </span>
           </div>
-          <p className="font-display font-bold text-lg text-slate-900 dark:text-slate-100 capitalize">
+          <p
+            data-testid="profile-role-value"
+            className="font-display font-semibold text-lg text-slate-900 dark:text-slate-100"
+          >
             {authUser?.role
               ? authUser.role === 'admin'
-                ? t('admin.roleAdmin')
+                ? t('roleBadge.admin')
                 : authUser.role === 'teacher'
-                  ? t('admin.roleTeacher')
-                  : t('admin.roleUser')
+                  ? t('roleBadge.teacher')
+                  : t('roleBadge.user')
               : '—'}
           </p>
         </Card>

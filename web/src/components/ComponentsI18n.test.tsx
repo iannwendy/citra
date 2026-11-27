@@ -696,4 +696,77 @@ describe('Task 2.3 — Non-Tech Verdict Clarity, Mapping Case-Insensitivity & Up
     window.dispatchEvent(ctrlUEvent);
     expect(ctrlUEvent.defaultPrevented).toBe(false);
   });
+
+  it('Loop Round 2: HelpModal wraps header subtitle & footer without truncate in VI & EN, and AppLayout uses concise VI sidebar label "Nhật ký duyệt bài" for /admin/audit', async () => {
+    // 1. HelpModal VI
+    await i18n.changeLanguage('vi');
+    const { unmount: uVi } = renderWithProviders(
+      <HelpModal isOpen={true} onClose={vi.fn()} />,
+    );
+    const viSub = screen.getByTestId('help-modal-subtitle');
+    const viFooter = screen.getByTestId('help-modal-footer-note');
+    expect(viSub.textContent).toBe('CITRA · Xác minh học thuật');
+    expect(viSub.className).toContain('whitespace-normal');
+    expect(viSub.className).not.toContain('truncate');
+    expect(viFooter.textContent).toBe(
+      'Công cụ hỗ trợ — Giảng viên & tác giả quyết định cuối cùng.',
+    );
+    expect(viFooter.className).toContain('whitespace-normal');
+    expect(viFooter.className).not.toContain('truncate');
+    uVi();
+
+    // 2. HelpModal EN
+    await i18n.changeLanguage('en');
+    const { unmount: uEn } = renderWithProviders(
+      <HelpModal isOpen={true} onClose={vi.fn()} />,
+    );
+    const enSub = screen.getByTestId('help-modal-subtitle');
+    const enFooter = screen.getByTestId('help-modal-footer-note');
+    expect(enSub.textContent).toBe('CITRA · Academic Verification');
+    expect(enSub.className).toContain('whitespace-normal');
+    expect(enSub.className).not.toContain('truncate');
+    expect(enFooter.textContent).toBe(
+      'Decision support — final judgment rests with humans.',
+    );
+    expect(enFooter.className).toContain('whitespace-normal');
+    expect(enFooter.className).not.toContain('truncate');
+    uEn();
+
+    // 3. AppLayout VI admin sidebar audit log link uses concise non-truncating label
+    await i18n.changeLanguage('vi');
+    const { container: viLayout, unmount: uViLayout } = renderWithProviders(
+      <Routes>
+        <Route
+          path="/dashboard"
+          element={
+            <AppLayout>
+              <div>Body</div>
+            </AppLayout>
+          }
+        />
+      </Routes>,
+      { user: makeUser('admin', 'ultra'), initialRoute: '/dashboard' },
+    );
+    const auditLinkVi = viLayout.querySelector('aside a[href="/admin/audit"]');
+    expect(auditLinkVi?.textContent).toBe('Nhật ký duyệt bài');
+    uViLayout();
+
+    // 4. AppLayout EN admin sidebar keeps "Citation Review Log"
+    await i18n.changeLanguage('en');
+    const { container: enLayout } = renderWithProviders(
+      <Routes>
+        <Route
+          path="/dashboard"
+          element={
+            <AppLayout>
+              <div>Body</div>
+            </AppLayout>
+          }
+        />
+      </Routes>,
+      { user: makeUser('admin', 'ultra'), initialRoute: '/dashboard' },
+    );
+    const auditLinkEn = enLayout.querySelector('aside a[href="/admin/audit"]');
+    expect(auditLinkEn?.textContent).toBe('Citation Review Log');
+  });
 });

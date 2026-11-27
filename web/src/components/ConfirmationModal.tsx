@@ -59,6 +59,8 @@ export function ConfirmationModal({
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onCancel()}>
       <DialogContent
+        role="dialog"
+        aria-modal="true"
         className="max-w-md"
         onEscapeKeyDown={onCancel}
         onPointerDownOutside={onCancel}

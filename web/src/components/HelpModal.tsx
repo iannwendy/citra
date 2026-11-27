@@ -157,7 +157,7 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
               <div className="flex items-center gap-2 flex-wrap">
                 <h2
                   id={titleId}
-                  className="font-display text-sm sm:text-base font-semibold text-slate-900 dark:text-white tracking-tight truncate"
+                  className="font-display text-sm sm:text-base font-semibold text-slate-900 dark:text-white tracking-tight leading-snug"
                 >
                   {t('help.title')}
                 </h2>
@@ -165,8 +165,13 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
                   {isVi ? 'Hướng dẫn CITRA' : 'CITRA Guide'}
                 </span>
               </div>
-              <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 truncate">
-                {t('nav.academicVerification')} · {t('nav.footerSystem')}
+              <p
+                data-testid="help-modal-subtitle"
+                className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 whitespace-normal leading-snug"
+              >
+                {isVi
+                  ? 'CITRA · Xác minh học thuật'
+                  : 'CITRA · Academic Verification'}
               </p>
             </div>
           </div>
@@ -494,10 +499,17 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
         </div>
 
         {/* Modal Footer */}
-        <div className="flex items-center justify-between gap-2 px-4 sm:px-6 py-3 border-t border-slate-200/80 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/80 shrink-0">
-          <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 min-w-0">
-            <ShieldCheck className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
-            <span className="truncate">{t('auth.footerNote')}</span>
+        <div className="flex items-start sm:items-center justify-between gap-3 px-4 sm:px-6 py-3 border-t border-slate-200/80 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/80 shrink-0">
+          <div className="flex items-start sm:items-center gap-2 text-xs text-slate-500 dark:text-slate-400 min-w-0 flex-1">
+            <ShieldCheck className="h-3.5 w-3.5 mt-0.5 sm:mt-0 text-indigo-600 dark:text-indigo-400 shrink-0" />
+            <span
+              data-testid="help-modal-footer-note"
+              className="whitespace-normal leading-snug text-xs"
+            >
+              {isVi
+                ? 'Công cụ hỗ trợ — Giảng viên & tác giả quyết định cuối cùng.'
+                : 'Decision support — final judgment rests with humans.'}
+            </span>
           </div>
           <Button variant="outline" size="sm" onClick={onClose} className="h-8 text-xs shrink-0">
             {t('common.close')}
