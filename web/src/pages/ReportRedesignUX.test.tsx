@@ -1351,8 +1351,9 @@ describe('Report Page UI/UX Redesign (Non-Tech Clarity & Progressive Disclosure)
         ),
       );
       expect(screen.getByTestId('trace-source-passage-label').textContent).toContain(
-        'Đoạn gốc từ tài liệu · Khớp 57%',
+        'Đoạn trích từ tài liệu gần giống (chưa xác nhận) · 57%',
       );
+      expect(screen.getByTestId('trace-source-passage-label').className).toContain('text-amber-700');
       const neuralPanel = screen.getByTestId('neural-alignment-panel');
       expect(neuralPanel.textContent).not.toContain('(Manuscript Claim)');
       expect(neuralPanel.textContent).not.toContain('(Source Evidence)');

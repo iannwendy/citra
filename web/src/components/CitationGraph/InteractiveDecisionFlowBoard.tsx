@@ -749,8 +749,8 @@ export function InteractiveDecisionFlowBoard({
         if (isUnconfirmedVerdict) {
           satTone = 'amber';
           statusLine = isVi
-            ? '⚠ Tài liệu gần giống (chưa khớp)'
-            : '⚠ Similar record (unconfirmed)';
+            ? '⚠ Gần giống (chưa khớp)'
+            : '⚠ Similar (unconfirmed)';
           storyTitle = isVi
             ? `${cluster.nameVi} — Tài liệu gần giống (chưa đủ khớp)`
             : `${cluster.nameEn} — Unconfirmed Similar Record`;
@@ -1357,7 +1357,6 @@ export function InteractiveDecisionFlowBoard({
     effectiveLabel,
     isLegal,
     isVi,
-    matchedSatellites.length,
     verdict.mismatched_fields,
   ]);
 
@@ -2501,9 +2500,21 @@ export function InteractiveDecisionFlowBoard({
               }}
               className={`rounded-xl border p-2.5 text-left text-xs cursor-pointer ${
                 sat.isMatched
-                  ? isDarkSurface
-                    ? 'border-emerald-500/50 bg-emerald-950/30 text-white'
-                    : 'border-emerald-400 bg-white text-slate-900'
+                  ? sat.satTone === 'amber'
+                    ? isDarkSurface
+                      ? 'border-amber-500/50 bg-amber-950/30 text-white'
+                      : 'border-amber-400 bg-white text-slate-900'
+                    : sat.satTone === 'violet'
+                      ? isDarkSurface
+                        ? 'border-violet-500/50 bg-violet-950/30 text-white'
+                        : 'border-violet-400 bg-white text-slate-900'
+                      : sat.satTone === 'rose'
+                        ? isDarkSurface
+                          ? 'border-rose-500/50 bg-rose-950/30 text-white'
+                          : 'border-rose-400 bg-white text-slate-900'
+                        : isDarkSurface
+                          ? 'border-emerald-500/50 bg-emerald-950/30 text-white'
+                          : 'border-emerald-400 bg-white text-slate-900'
                   : isDarkSurface
                     ? 'border-white/10 bg-white/[0.03] text-slate-400'
                     : 'border-slate-200 bg-white/70 text-slate-500'

@@ -608,9 +608,13 @@ export function NeuralAlignmentPanel({
                 : 'Citation Context & Source Content Match'}
             </h5>
             <p className="text-[11px] text-slate-500 dark:text-slate-400">
-              {lang === 'vi'
-                ? 'So sánh câu trích dẫn trong bài với tóm tắt bài báo gốc, vai trò trích dẫn và mức độ phù hợp.'
-                : 'Compares your cited sentence against the source abstract, citation role, and support level.'}
+              {isUnconfirmedSource
+                ? lang === 'vi'
+                  ? 'So sánh câu trích dẫn trong bài với tài liệu gần giống nhất tìm thấy (chưa đủ cơ sở xác nhận là nguồn gốc).'
+                  : 'Compares your cited sentence against the closest similar record found (not confirmed as the cited source).'
+                : lang === 'vi'
+                  ? 'So sánh câu trích dẫn trong bài với tóm tắt bài báo gốc, vai trò trích dẫn và mức độ phù hợp.'
+                  : 'Compares your cited sentence against the source abstract, citation role, and support level.'}
             </p>
           </div>
         </div>
@@ -691,11 +695,13 @@ export function NeuralAlignmentPanel({
               <div className="w-full h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
                 <div
                   className={`h-full rounded-full ${
-                    pct >= 65
-                      ? 'bg-emerald-500'
-                      : pct >= 40
-                        ? 'bg-indigo-500'
-                        : 'bg-amber-500'
+                    isUnconfirmedSource
+                      ? 'bg-amber-500'
+                      : pct >= 65
+                        ? 'bg-emerald-500'
+                        : pct >= 40
+                          ? 'bg-indigo-500'
+                          : 'bg-amber-500'
                   }`}
                   style={{ width: `${pct}%` }}
                 />
@@ -781,19 +787,37 @@ export function NeuralAlignmentPanel({
           )}
 
           {evidenceSentence && (
-            <div className="rounded-lg border border-emerald-200/80 dark:border-emerald-900/60 bg-emerald-50/40 dark:bg-emerald-950/20 p-3">
+            <div
+              className={`rounded-lg border p-3 ${
+                isUnconfirmedSource
+                  ? 'border-amber-200/80 dark:border-amber-900/60 bg-amber-50/40 dark:bg-amber-950/20'
+                  : 'border-emerald-200/80 dark:border-emerald-900/60 bg-emerald-50/40 dark:bg-emerald-950/20'
+              }`}
+            >
               <div className="flex items-center justify-between gap-2 mb-1 flex-wrap">
                 <span
                   data-testid="trace-source-passage-label"
-                  className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400"
+                  className={`text-[11px] font-semibold ${
+                    isUnconfirmedSource
+                      ? 'text-amber-700 dark:text-amber-400'
+                      : 'text-emerald-700 dark:text-emerald-400'
+                  }`}
                 >
-                  {lang === 'vi'
-                    ? evidenceSim > 0
-                      ? `Đoạn gốc từ tài liệu · Khớp ${Math.round(evidenceSim * 100)}%`
-                      : 'Đoạn gốc từ tài liệu'
-                    : evidenceSim > 0
-                      ? `Source passage · ${Math.round(evidenceSim * 100)}% match`
-                      : 'Source passage'}
+                  {isUnconfirmedSource
+                    ? lang === 'vi'
+                      ? evidenceSim > 0
+                        ? `Đoạn trích từ tài liệu gần giống (chưa xác nhận) · ${Math.round(evidenceSim * 100)}%`
+                        : 'Đoạn trích từ tài liệu gần giống (chưa xác nhận)'
+                      : evidenceSim > 0
+                        ? `Closest similar excerpt (unconfirmed) · ${Math.round(evidenceSim * 100)}%`
+                        : 'Closest similar excerpt (unconfirmed)'
+                    : lang === 'vi'
+                      ? evidenceSim > 0
+                        ? `Đoạn gốc từ tài liệu · Khớp ${Math.round(evidenceSim * 100)}%`
+                        : 'Đoạn gốc từ tài liệu'
+                      : evidenceSim > 0
+                        ? `Source passage · ${Math.round(evidenceSim * 100)}% match`
+                        : 'Source passage'}
                 </span>
               </div>
               <p className="text-xs font-serif text-slate-800 dark:text-slate-200 leading-relaxed break-words">
