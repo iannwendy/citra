@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils"
 import { FileCode, CheckCircle, XCircle, AlertTriangle } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { getVerdictDisplay } from "@/lib/academicTaxonomy"
+import { getVerdictDisplay, normalizeVerdictKey } from "@/lib/academicTaxonomy"
 
 /* ============================================================
    SourceLogic — Rule Inspector Component
@@ -1117,10 +1117,26 @@ export function RuleInspector({
 
       <div className="space-y-2">
         {rules.map((rule) => {
-          const colors = getVerdictColorClass(rule.conclusion)
+          const isOverallNotFound =
+            Boolean(verdictLabel) &&
+            normalizeVerdictKey(verdictLabel) === "suspected_hallucination"
+          const isContradictoryPositive =
+            isOverallNotFound && rule.conclusion.toUpperCase().includes("VERIFIED")
+          const colors = isContradictoryPositive
+            ? {
+                bg: "bg-amber-50 dark:bg-amber-950/60",
+                border: "border-amber-200 dark:border-amber-800",
+                text: "text-amber-700 dark:text-amber-300",
+                icon: <AlertTriangle className="h-3.5 w-3.5" />,
+              }
+            : getVerdictColorClass(rule.conclusion)
           const displayName = isVi ? rule.nameVi : rule.name
           const displayDesc = isVi ? rule.descriptionVi : rule.description
-          const displayConclusion = formatRuleConclusion(rule.conclusion, lang)
+          const displayConclusion = isContradictoryPositive
+            ? lang === "vi"
+              ? "Ứng viên tham khảo (chưa đủ khớp)"
+              : "Candidate (insufficient match)"
+            : formatRuleConclusion(rule.conclusion, lang)
 
           return (
             <Card

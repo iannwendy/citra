@@ -30,7 +30,11 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { OverrideControls } from '../OverrideControls';
 import { toSafeDoiHref, toSafeExternalHref } from '../../lib/utils';
 import { DirectionalStageSlide, useSlidingPill } from '@/components/ui/transitions';
-import { getVerdictDisplay } from '@/lib/academicTaxonomy';
+import {
+  formatAcademicAuthorShort,
+  getVerdictDisplay,
+  splitRawAuthorString,
+} from '@/lib/academicTaxonomy';
 import {
   getCitationMarkerLabel,
   getVerdictExplanation,
@@ -188,116 +192,24 @@ const SATELLITE_CLUSTERS: SatelliteClusterDef[] = [
   },
 ];
 
-const SURNAME_PARTICLES = new Set([
-  'de',
-  'del',
-  'della',
-  'di',
-  'da',
-  'van',
-  'von',
-  'der',
-  'den',
-  'le',
-  'la',
-  'du',
-  'st',
-  'st.',
-]);
-
-function extractSurname(rawAuthor: string): string {
-  const cleaned = rawAuthor
-    .replace(/\bet\s+al\.?/gi, '')
-    .replace(/^[\s,;:.&]+|[\s,;:.&]+$/g, '')
-    .trim();
-  if (!cleaned) return '';
-
-  // APA / Last, F. M. format (e.g. "De Choudhury, M." or "Vaswani, A.")
-  if (cleaned.includes(',')) {
-    const beforeComma = cleaned.split(',')[0].trim();
-    if (beforeComma.length >= 2 && !/^[A-ZÀ-Ỹ]\.?$/.test(beforeComma)) {
-      return beforeComma;
-    }
+function formatAuthorSummary(
+  rawAuthors: string,
+  fallbackMatchedAuthors?: string[],
+  fallbackTitle?: string | null,
+): string {
+  const parsedList = splitRawAuthorString(rawAuthors);
+  const hadEtAl = /\bet\s+al\.?/i.test(rawAuthors);
+  if (parsedList.length > 0) {
+    const authorsInput =
+      hadEtAl && parsedList.length === 1
+        ? [`${parsedList[0]} et al.`]
+        : parsedList;
+    return formatAcademicAuthorShort(authorsInput, fallbackTitle);
   }
-
-  // Strip leading initials such as "N. ", "J. Q. ", "A.-B. "
-  const withoutInitials = cleaned
-    .replace(/^(?:[A-ZÀ-Ỹ](?:\.-?[A-ZÀ-Ỹ])?\.\s*)+/, '')
-    .trim();
-
-  const words = (withoutInitials || cleaned)
-    .split(/\s+/)
-    .map((w) => w.replace(/^[.,;:]+|[.,;:]+$/g, ''))
-    .filter((w) => w.length > 0 && !/^[A-ZÀ-Ỹ]\.?$/.test(w));
-
-  if (words.length === 0) return withoutInitials || cleaned;
-  if (words.length === 1) return words[0];
-
-  // Preserve compound surname particles (e.g. "De Choudhury", "van der Maaten")
-  if (words.length >= 2 && SURNAME_PARTICLES.has(words[words.length - 2].toLowerCase())) {
-    return `${words[words.length - 2]} ${words[words.length - 1]}`;
+  if (fallbackMatchedAuthors && fallbackMatchedAuthors.length > 0) {
+    return formatAcademicAuthorShort(fallbackMatchedAuthors, fallbackTitle);
   }
-  // Keep multi-word institutional / Vietnamese author names if <= 3 words and no initials stripped
-  if (withoutInitials === cleaned && words.length <= 3 && /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i.test(cleaned)) {
-    return cleaned;
-  }
-  return words[words.length - 1];
-}
-
-function formatAuthorSummary(rawAuthors: string, fallbackMatchedAuthors?: string[]): string {
-  const trimmed = rawAuthors.trim().replace(/[.,;:]+$/, '');
-  const hasEtAl = /\bet\s+al\.?/i.test(trimmed);
-
-  // Split by ";", " & ", " and ", or comma NOT followed by just an initial like "M."
-  const splitAuthors = trimmed
-    .replace(/\bet\s+al\.?/gi, '')
-    .split(/\s*(?:;|\s+&\s+|\s+and\s+|\s+và\s+)\s*/i)
-    .flatMap((chunk) => {
-      // Handle "A. Vaswani, N. Shazeer" vs "Vaswani, A., Shazeer, N."
-      const commaParts = chunk.split(/,\s*/).filter(Boolean);
-      if (commaParts.length <= 1) return [chunk];
-      // If second token looks like initials ("M." or "A. B."), pair it with the surname before it
-      const grouped: string[] = [];
-      for (let i = 0; i < commaParts.length; i++) {
-        const cur = commaParts[i].trim();
-        const next = commaParts[i + 1]?.trim();
-        if (next && /^(?:[A-ZÀ-Ỹ]\.(?:\s*-?[A-ZÀ-Ỹ]\.)*|[A-Z]{1,3})$/.test(next)) {
-          grouped.push(`${cur}, ${next}`);
-          i += 1;
-        } else {
-          grouped.push(cur);
-        }
-      }
-      return grouped;
-    })
-    .map((s) => s.trim())
-    .filter(Boolean);
-
-  const firstSurname = extractSurname(splitAuthors[0] || '');
-  const resolvedFirst =
-    firstSurname && firstSurname.length >= 2 && !/^[A-ZÀ-Ỹ]\.?$/.test(firstSurname)
-      ? firstSurname
-      : fallbackMatchedAuthors?.[0]
-        ? extractSurname(fallbackMatchedAuthors[0])
-        : firstSurname;
-
-  if (!resolvedFirst) return '';
-  const capped = resolvedFirst.length > 26 ? `${resolvedFirst.slice(0, 24)}…` : resolvedFirst;
-  if (hasEtAl || splitAuthors.length >= 3) {
-    return `${capped} et al.`;
-  }
-  if (splitAuthors.length === 2) {
-    const secondSurname = extractSurname(splitAuthors[1]);
-    if (
-      secondSurname &&
-      secondSurname.length >= 2 &&
-      `${capped} & ${secondSurname}`.length <= 24
-    ) {
-      return `${capped} & ${secondSurname}`;
-    }
-    return `${capped} et al.`;
-  }
-  return capped;
+  return fallbackTitle ? formatAcademicAuthorShort([], fallbackTitle) : '';
 }
 
 export function extractCleanCitationIdentity(
@@ -310,7 +222,8 @@ export function extractCleanCitationIdentity(
   cleanTitle: string;
 } {
   const stripped = (raw || '')
-    .replace(/^\s*(?:\[\s*\d+[a-z]?\s*\]|\(\s*[a-z]\s*\)|\d+[a-z]?\.)\s*/i, '')
+    .replace(/^\s*(?:\[\s*\d+[a-z]?\s*\]|\(\s*[a-z]\s*\)|\d+[a-z]?[.)])\s*/i, '')
+    .replace(/^\s*(?:\[\s*\d+[a-z]?\s*\]|\(\s*[a-z]\s*\)|\d+[a-z]?[.)])\s*/i, '')
     .trim();
   const yearMatch = stripped.match(/\b(19\d{2}|20\d{2})[a-z]?\b/);
   const citedYear = yearMatch ? yearMatch[1] : '';
@@ -318,31 +231,41 @@ export function extractCleanCitationIdentity(
   // 1. APA style: Authors (Year). Title...
   const apaMatch = stripped.match(/^(.+?)\s*\((?:19|20)\d{2}[a-z]?\)[.,:\s]+(.+)$/);
   if (apaMatch) {
+    const restTitle = (apaMatch[2].split(/\.\s+/)[0]?.trim() || apaMatch[2].trim()).replace(
+      /^[“"]|[”".,]+$/g,
+      '',
+    );
     const authorOnly =
-      formatAuthorSummary(apaMatch[1], primaryMatched?.authors) ||
-      apaMatch[1].trim().slice(0, 28);
-    const shortHeader = `${authorOnly}${citedYear ? ` (${citedYear})` : ''}`;
-    const restTitle = apaMatch[2].split(/\.\s+/)[0]?.trim() || apaMatch[2].trim();
+      formatAuthorSummary(apaMatch[1], primaryMatched?.authors, restTitle) ||
+      formatAcademicAuthorShort([], restTitle);
+    const shortHeader =
+      citedYear && !authorOnly.includes(citedYear)
+        ? `${authorOnly} (${citedYear})`
+        : authorOnly;
     return {
       shortHeader,
       authorOnly,
       citedYear,
-      cleanTitle: restTitle.replace(/^[“"]|[”".,]+$/g, ''),
+      cleanTitle: restTitle,
     };
   }
 
   // 2. IEEE / Quoted-title style: N. Reimers and I. Gurevych, "Sentence-BERT: ...", EMNLP 2019.
   const ieeeQuotedMatch = stripped.match(/^(.+?)[,.:]\s*[“"]([^”"]{4,260})[”"][,.\s]*(.*)$/);
   if (ieeeQuotedMatch) {
+    const cleanTitle = ieeeQuotedMatch[2].replace(/^[“"]|[”".,]+$/g, '').trim();
     const authorOnly =
-      formatAuthorSummary(ieeeQuotedMatch[1], primaryMatched?.authors) ||
-      ieeeQuotedMatch[1].trim().slice(0, 28);
-    const shortHeader = `${authorOnly}${citedYear ? ` (${citedYear})` : ''}`;
+      formatAuthorSummary(ieeeQuotedMatch[1], primaryMatched?.authors, cleanTitle) ||
+      formatAcademicAuthorShort([], cleanTitle);
+    const shortHeader =
+      citedYear && !authorOnly.includes(citedYear)
+        ? `${authorOnly} (${citedYear})`
+        : authorOnly;
     return {
       shortHeader,
       authorOnly,
       citedYear,
-      cleanTitle: ieeeQuotedMatch[2].replace(/^[“"]|[”".,]+$/g, '').trim(),
+      cleanTitle,
     };
   }
 
@@ -353,9 +276,10 @@ export function extractCleanCitationIdentity(
     .filter(Boolean);
   if (sentenceParts.length >= 2) {
     const firstPart = sentenceParts[0];
+    const cleanTitle = sentenceParts[1].replace(/^[“"]|[”".,]+$/g, '').trim();
     const authorOnly =
-      formatAuthorSummary(firstPart, primaryMatched?.authors) ||
-      (firstPart.length > 32 ? `${firstPart.slice(0, 30)}…` : firstPart);
+      formatAuthorSummary(firstPart, primaryMatched?.authors, cleanTitle) ||
+      formatAcademicAuthorShort([], cleanTitle || firstPart);
     return {
       shortHeader:
         citedYear && !authorOnly.includes(citedYear)
@@ -363,21 +287,22 @@ export function extractCleanCitationIdentity(
           : authorOnly,
       authorOnly,
       citedYear,
-      cleanTitle: sentenceParts[1].replace(/^[“"]|[”".,]+$/g, '').trim(),
+      cleanTitle,
     };
   }
 
-  // 4. Fallback to primary matched author if available
-  const fallbackAuthor =
-    primaryMatched?.authors && primaryMatched.authors.length > 0
-      ? formatAuthorSummary(primaryMatched.authors.join(' and '))
-      : '';
-  const fallbackHeader = fallbackAuthor
-    ? `${fallbackAuthor}${citedYear ? ` (${citedYear})` : ''}`
-    : stripped.slice(0, 44) || 'Reference';
+  // 4. Fallback to primary matched author or clean title
+  const fallbackAuthor = formatAcademicAuthorShort(
+    primaryMatched?.authors,
+    primaryMatched?.title || stripped,
+  );
+  const fallbackHeader =
+    citedYear && !fallbackAuthor.includes(citedYear)
+      ? `${fallbackAuthor} (${citedYear})`
+      : fallbackAuthor;
   return {
     shortHeader: fallbackHeader,
-    authorOnly: fallbackAuthor || stripped.slice(0, 28) || 'Reference',
+    authorOnly: fallbackAuthor,
     citedYear,
     cleanTitle: stripped,
   };

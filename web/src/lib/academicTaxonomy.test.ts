@@ -14,6 +14,11 @@ import {
   formatStanceLabel,
   formatUserError,
   getScannedPdfNotice,
+  formatCitationStyleLabel,
+  isInstitutionalAuthor,
+  splitRawAuthorString,
+  formatAcademicAuthorShort,
+  sanitizeReasoningForDisplay,
 } from './academicTaxonomy';
 import { DecisionSupportBanner } from '@/components/DecisionSupportBanner';
 
@@ -245,6 +250,119 @@ describe('academicTaxonomy — unified verdict, mapping, CIS, dates, errors & no
       expect(screen.getByTestId('decision-support-banner').textContent).toContain(
         'Final judgment always rests with instructors and reviewers',
       );
+    });
+  });
+
+  describe('formatCitationStyleLabel', () => {
+    it('localizes APA-LIKE, IEEE-LIKE, MIXED, and suppresses UNKNOWN', () => {
+      expect(formatCitationStyleLabel('APA-LIKE', 'vi')).toBe('Gần chuẩn APA');
+      expect(formatCitationStyleLabel('APA_LIKE', 'en')).toBe('APA-like');
+      expect(formatCitationStyleLabel('IEEE-LIKE', 'vi')).toBe('Gần chuẩn IEEE');
+      expect(formatCitationStyleLabel('IEEE_LIKE', 'en')).toBe('IEEE-like');
+      expect(formatCitationStyleLabel('MIXED', 'vi')).toBe('Hỗn hợp');
+      expect(formatCitationStyleLabel('MIXED', 'en')).toBe('Mixed');
+      expect(formatCitationStyleLabel('UNKNOWN', 'vi')).toBe('');
+      expect(formatCitationStyleLabel(null, 'en')).toBe('');
+    });
+  });
+
+  describe('formatAcademicAuthorShort & institutional Vietnamese/global authors', () => {
+    it('recognizes and preserves Vietnamese and global institutional authors without splitting, inverting, or adding et al.', () => {
+      expect(isInstitutionalAuthor('Ban Chấp hành Trung ương')).toBe(true);
+      expect(isInstitutionalAuthor('Đảng Cộng sản Việt Nam')).toBe(true);
+      expect(isInstitutionalAuthor('Quốc hội')).toBe(true);
+      expect(isInstitutionalAuthor('Thủ tướng Chính phủ')).toBe(true);
+      expect(isInstitutionalAuthor('Bộ Giáo dục và Đào tạo')).toBe(true);
+      expect(isInstitutionalAuthor('Viện Khoa học Xã hội Việt Nam')).toBe(true);
+      expect(isInstitutionalAuthor('World Health Organization')).toBe(true);
+      expect(isInstitutionalAuthor('WHO')).toBe(true);
+      expect(isInstitutionalAuthor('UNESCO')).toBe(true);
+
+      expect(formatAcademicAuthorShort(['Ban Chấp hành Trung ương'], null, 'vi')).toBe(
+        'Ban Chấp hành Trung ương',
+      );
+      expect(formatAcademicAuthorShort(['Đảng Cộng sản Việt Nam'], null, 'vi')).toBe(
+        'Đảng Cộng sản Việt Nam',
+      );
+      expect(formatAcademicAuthorShort(['Quốc hội'], null, 'vi')).toBe('Quốc hội');
+      expect(formatAcademicAuthorShort(['Thủ tướng Chính phủ'], null, 'vi')).toBe(
+        'Thủ tướng Chính phủ',
+      );
+      expect(formatAcademicAuthorShort(['Bộ Giáo dục và Đào tạo'], null, 'vi')).toBe(
+        'Bộ Giáo dục và Đào tạo',
+      );
+      expect(formatAcademicAuthorShort(['World Bank'], null, 'en')).toBe('World Bank');
+
+      // Ensure institutional names with "và" or commas are NOT broken by splitRawAuthorString
+      expect(splitRawAuthorString('Bộ Giáo dục và Đào tạo')).toEqual([
+        'Bộ Giáo dục và Đào tạo',
+      ]);
+      expect(splitRawAuthorString('Bộ Văn hóa, Thể thao và Du lịch')).toEqual([
+        'Bộ Văn hóa, Thể thao và Du lịch',
+      ]);
+    });
+
+    it('falls back cleanly to truncated title instead of bare numeric garbage like "4"', () => {
+      expect(
+        formatAcademicAuthorShort(
+          ['4'],
+          '[4] Nghị quyết số 57-NQ/TW về phát triển khoa học công nghệ',
+          'vi',
+        ),
+      ).toMatch(/^Nghị quyết số 57-NQ\/TW/);
+      expect(formatAcademicAuthorShort(['4'], null, 'vi')).toBe('Tài liệu tham khảo');
+      expect(formatAcademicAuthorShort([], '4. Luật Dữ liệu năm 2024', 'vi')).toBe(
+        'Luật Dữ liệu năm 2024',
+      );
+    });
+
+    it('formats Western and Vietnamese personal authors cleanly', () => {
+      expect(formatAcademicAuthorShort(['N. Reimers', 'I. Gurevych'], null, 'en')).toBe(
+        'Reimers & Gurevych',
+      );
+      expect(
+        formatAcademicAuthorShort(['De Choudhury, M.', 'Gamon, M.', 'Counts, S.'], null, 'en'),
+      ).toBe('De Choudhury et al.');
+      expect(formatAcademicAuthorShort(['Nguyễn Văn An'], null, 'vi')).toBe('Nguyễn Văn An');
+    });
+  });
+
+  describe('sanitizeReasoningForDisplay', () => {
+    it('strips raw [Neural: ...] debug logs and translates common English diagnostics into natural non-accusatory VI/EN', () => {
+      const rawDoi =
+        'DOI 10.1234/fake.2025 matches known fabricated DOI pattern [Neural: content alignment score=0.52, intent=background, stance=neutral, evidence_sim=0.44]';
+      const viDoi = sanitizeReasoningForDisplay(rawDoi, 'vi');
+      expect(viDoi).not.toContain('[Neural:');
+      expect(viDoi).not.toMatch(/fabricated|matches known/i);
+      expect(viDoi).toContain('10.1234/fake.2025');
+      expect(viDoi).toContain('tiền tố thử nghiệm/không hợp lệ');
+
+      const enDoi = sanitizeReasoningForDisplay(rawDoi, 'en');
+      expect(enDoi).not.toContain('[Neural:');
+      expect(enDoi).not.toMatch(/\bfabricated\b/i);
+      expect(enDoi).toContain('invalid/unregistered test prefix');
+
+      const rawDomain =
+        "URL domain 'fake-journal.example.com' is a placeholder/fake domain [Neural: score=0.10]";
+      expect(sanitizeReasoningForDisplay(rawDomain, 'vi')).toBe(
+        "Tên miền URL 'fake-journal.example.com' là tên miền mẫu hoặc không tồn tại thực tế.",
+      );
+      expect(sanitizeReasoningForDisplay(rawDomain, 'en')).toBe(
+        "URL domain 'fake-journal.example.com' is a placeholder or non-existent domain.",
+      );
+
+      expect(
+        sanitizeReasoningForDisplay('Year mismatch (2021 vs 2017) and Title mismatch', 'vi'),
+      ).toContain('Sai lệch năm xuất bản (2021 so với 2017)');
+      expect(
+        sanitizeReasoningForDisplay('điểm căn chỉnh ngữ cảnh Neural = 0.52 [trung bình]', 'vi'),
+      ).toBe('mức độ liên quan ngữ cảnh: 52%');
+      expect(
+        sanitizeReasoningForDisplay('Kiểm tra liên kết thành công (HTTP 200 OK).', 'vi'),
+      ).toBe('Kiểm tra liên kết thành công (liên kết hoạt động).');
+      expect(
+        sanitizeReasoningForDisplay('Link check succeeded (HTTP 200 OK).', 'en'),
+      ).toBe('Link check succeeded (link active).');
     });
   });
 });

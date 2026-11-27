@@ -23,6 +23,7 @@ import { DecisionSupportBanner } from '@/components/DecisionSupportBanner';
 import { useEssayReport, useOverrideVerdict } from '@/hooks/useEssayReport';
 import { useToast } from '@/contexts/ToastContext';
 import { copyTextToClipboard } from '@/lib/clipboard';
+import { isDocxFilename } from '@/lib/fileKind';
 import { toSafeDoiHref, toSafeExternalHref } from '@/lib/utils';
 import {
   extractObservedWebMeta,
@@ -35,6 +36,12 @@ import {
   normalizeVerdictKey,
   getVerdictDisplay,
   getMappingStatusDisplay,
+  formatCisScore,
+  formatCitationStyleLabel,
+  formatAcademicAuthorShort,
+  isInstitutionalAuthor,
+  splitRawAuthorString,
+  sanitizeReasoningForDisplay,
   formatUserError,
   getScannedPdfNotice,
 } from '@/lib/academicTaxonomy';
@@ -320,11 +327,14 @@ export function ReportSummaryAndNavBar({
         />
         <div className="flex flex-col justify-center">
           <div className="flex items-center gap-2 flex-wrap leading-none">
-            <span className="text-lg sm:text-[19px] font-extrabold tracking-tight tabular-nums text-slate-900 dark:text-white leading-none">
+            <span
+              data-testid="report-cis-score-value"
+              className="text-lg sm:text-[19px] font-extrabold tracking-tight tabular-nums text-slate-900 dark:text-white leading-none"
+            >
               {unscannable ? (
                 'N/A'
               ) : (
-                <SubtleNumber value={cisScore.toFixed(1)} suffix="%" />
+                <SubtleNumber value={formatCisScore(cisScore)} />
               )}
             </span>
             <span
@@ -669,7 +679,7 @@ interface SymbolicRuleDisplay {
 
 interface SourceRetrievalItem {
   name: string;
-  status: 'matched' | 'partial' | 'not_found';
+  status: 'matched' | 'partial' | 'candidate_insufficient' | 'not_found';
   score: string;
   matchedFields: string[];
   url?: string;
@@ -1556,8 +1566,12 @@ function computeAcademicVenueSim(v1: string, v2: string): number {
 
 function normalizeAuthorDisplay(name: string): string {
   if (!name || name === '—') return name;
-  return name
-    .replace(/\.{2,}/g, '.')
+  const cleaned = name.replace(/\.{2,}/g, '.').trim();
+  // Preserve authentic casing of Vietnamese/global institutional authors
+  if (isInstitutionalAuthor(cleaned)) {
+    return cleaned;
+  }
+  return cleaned
     .split(/\s+/)
     .map((word) => {
       if (!word) return word;
@@ -1573,28 +1587,31 @@ function formatShortInText(
   authors: string,
   year: string,
   rawText: string,
-  authorList?: string[]
+  authorList?: string[],
+  fallbackTitle?: string,
+  lang: 'vi' | 'en' = 'vi',
 ): string {
-  if (authors && authors !== '—') {
-    const firstAuthor = normalizeAuthorDisplay(
-      authors.split(/,|&|\band\b/i)[0].trim()
-    );
-    const hasMore =
-      authorList && authorList.length > 0
-        ? authorList.length > 1 || /\bet\s+al/i.test(authors)
-        : authors.split(',').length > 2 || /&|\band\b|\bet\s+al/i.test(authors);
-    const shortAuthor =
-      firstAuthor.length > 28 ? firstAuthor.slice(0, 28) + '…' : firstAuthor;
-    const suffix =
-      hasMore && !/et\s+al/i.test(shortAuthor) ? ' et al.' : '';
-    return year && year !== '—'
-      ? `${shortAuthor}${suffix} (${year})`
-      : `${shortAuthor}${suffix}`;
+  const effectiveAuthors =
+    authorList && authorList.length > 0
+      ? authorList
+      : authors && authors !== '—'
+        ? splitRawAuthorString(authors)
+        : [];
+  const hadEtAl = /\bet\s+al\.?/i.test(authors || '');
+  const authorsForFormat =
+    hadEtAl && effectiveAuthors.length === 1 && !isInstitutionalAuthor(effectiveAuthors[0])
+      ? [`${effectiveAuthors[0]} et al.`]
+      : effectiveAuthors;
+
+  const shortAuthor = formatAcademicAuthorShort(
+    authorsForFormat,
+    fallbackTitle || rawText,
+    lang,
+  );
+  if (year && year !== '—' && !shortAuthor.includes(year)) {
+    return `${shortAuthor} (${year})`;
   }
-  const stripped = rawText
-    .replace(/^\s*(?:\[\s*\d+[a-z]?\s*\]|\(\s*[a-z]\s*\))\s*/i, '')
-    .trim();
-  return (stripped || rawText).slice(0, 42);
+  return shortAuthor;
 }
 
 export function getVerdictBadgeVisuals(
@@ -1749,7 +1766,7 @@ function getLinkBadgeVisuals(
       }
       return {
         status,
-        text: `✓ HTTP ${code || 200} OK`,
+        text: lang === 'vi' ? '✓ Liên kết hoạt động' : '✓ Link Active',
         badgeClass:
           'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/70 dark:text-emerald-300 dark:border-emerald-800 font-semibold',
         title:
@@ -1839,11 +1856,12 @@ function buildLocalizedReasoning(verdict: Verdict, lang: 'vi' | 'en'): string {
     verdict.reasoning &&
     ((lang === 'vi' && hasViChars) || (lang === 'en' && !hasViChars))
   ) {
+    const cleanLegalReasoning = sanitizeReasoningForDisplay(verdict.reasoning, lang);
     return verdict.override_note
       ? lang === 'vi'
-        ? `[Ghi đè bởi Giảng viên: ${verdict.override_note}] — ${verdict.reasoning}`
-        : `[Teacher Override: ${verdict.override_note}] — ${verdict.reasoning}`
-      : verdict.reasoning;
+        ? `[Ghi đè bởi Giảng viên: ${verdict.override_note}] — ${cleanLegalReasoning}`
+        : `[Teacher Override: ${verdict.override_note}] — ${cleanLegalReasoning}`
+      : cleanLegalReasoning;
   }
 
   const fieldMapVi: Record<string, string> = {
@@ -1953,11 +1971,6 @@ function buildLocalizedReasoning(verdict: Verdict, lang: 'vi' | 'en'): string {
       : neuralMatch
         ? neuralMatch[1]
         : null;
-  const neuralLevel = (
-    verdict.features?.content_alignment_confidence ||
-    (neuralMatch ? neuralMatch[2] : '') ||
-    ''
-  ).toLowerCase() || null;
 
   const { status: urlStatus, code: urlCode } = resolveVerdictUrlStatus(verdict);
   const isUrlContentMismatch = (verdict.triggered_rules ?? []).includes(
@@ -1995,21 +2008,14 @@ function buildLocalizedReasoning(verdict: Verdict, lang: 'vi' | 'en'): string {
       telemetryParts.push(`tác giả = ${authorSim.toFixed(2)}`);
     }
     if (neuralScore) {
-      const levelVi =
-        neuralLevel === 'high'
-          ? 'cao'
-          : neuralLevel === 'medium'
-            ? 'trung bình'
-            : 'thấp';
-      telemetryParts.push(
-        `điểm căn chỉnh ngữ cảnh Neural = ${neuralScore} [${levelVi}]`
-      );
+      const pct = Math.round(Number(neuralScore) * 100);
+      telemetryParts.push(`mức độ liên quan ngữ cảnh: ${pct}%`);
     }
     if (urlStatus === 'alive') {
       telemetryParts.push(
         isUrlContentMismatch
           ? `kiểm tra liên kết = HTTP ${urlCode || 200} — sai nội dung trang`
-          : `kiểm tra liên kết = HTTP ${urlCode || 200} OK`,
+          : 'kiểm tra liên kết = Liên kết hoạt động',
       );
     } else if (urlStatus === 'restricted_alive') {
       telemetryParts.push(
@@ -2133,15 +2139,14 @@ function buildLocalizedReasoning(verdict: Verdict, lang: 'vi' | 'en'): string {
     telemetryPartsEn.push(`author similarity = ${authorSim.toFixed(2)}`);
   }
   if (neuralScore) {
-    telemetryPartsEn.push(
-      `context alignment = ${neuralScore} [${neuralLevel || 'checked'}]`
-    );
+    const pct = Math.round(Number(neuralScore) * 100);
+    telemetryPartsEn.push(`context relevance: ${pct}%`);
   }
   if (urlStatus === 'alive') {
     telemetryPartsEn.push(
       isUrlContentMismatch
         ? `link check = HTTP ${urlCode || 200} — wrong page content`
-        : `link check = HTTP ${urlCode || 200} OK`,
+        : 'link check = Link Active',
     );
   } else if (urlStatus === 'restricted_alive') {
     telemetryPartsEn.push(
@@ -2341,7 +2346,9 @@ function enrichVerdictItem(
     citedMeta.authors,
     citedMeta.year,
     matchedRef?.raw_text || verdict.citation_raw,
-    matchedRef?.authors
+    matchedRef?.authors,
+    citedMeta.title,
+    lang,
   );
 
   const pageNum =
@@ -2349,7 +2356,7 @@ function enrichVerdictItem(
     matchedRef?.cited_on_pages?.[0] ||
     matchedRef?.page_num ||
     1;
-  const pageLabel = `p. ${pageNum}`;
+  const pageLabel = lang === 'vi' ? `tr. ${pageNum}` : `p. ${pageNum}`;
 
   // Separate scholarly/legal/standard sources from web_html_meta / wayback_html_meta
   const nonWebSources = (verdict.matched_sources ?? []).filter((s) => {
@@ -2654,7 +2661,7 @@ function enrichVerdictItem(
   );
   const unmatchedNeutralStatus = (): { status: FieldStatus; label: string } => ({
     status: 'missing',
-    label: lang === 'vi' ? '— Chưa đối chiếu được' : '— Not matched',
+    label: lang === 'vi' ? '— Chưa đối chiếu' : '— Not matched',
   });
 
   const computeTitleStatus = (): { status: FieldStatus; label?: string } => {
@@ -2915,7 +2922,10 @@ function enrichVerdictItem(
       };
     }
     if (urlStatus === 'alive') {
-      return { status: 'match', label: `HTTP ${urlCode || 200} OK` };
+      return {
+        status: 'match',
+        label: lang === 'vi' ? 'Liên kết hoạt động' : 'Link Active',
+      };
     }
     if (urlStatus === 'restricted_alive') {
       return {
@@ -2939,7 +2949,10 @@ function enrichVerdictItem(
       };
     }
     if (urlStatus === 'fake_domain') {
-      return { status: 'mismatch', label: 'Fake Domain' };
+      return {
+        status: 'mismatch',
+        label: lang === 'vi' ? 'Tên miền không hợp lệ' : 'Invalid Domain',
+      };
     }
     if (mismatchedFieldsSet.has('url')) {
       return { status: 'mismatch', label: 'Broken Link' };
@@ -3024,6 +3037,8 @@ function enrichVerdictItem(
               ? ['R-NO-CANDIDATE']
               : ['R-WEAK-EVIDENCE'];
 
+  const isOverallNotFound = verdict.label === 'suspected_hallucination';
+
   const rules: SymbolicRuleDisplay[] = triggeredCodes.map((code) => {
     const cleanCode = code.trim();
     const meta = RULE_CATALOG[cleanCode];
@@ -3032,18 +3047,20 @@ function enrichVerdictItem(
         code: cleanCode,
         name: lang === 'vi' ? meta.nameVi : meta.nameEn,
         condition: meta.condition,
-        status: meta.status,
+        status: isOverallNotFound && meta.status === 'passed' ? 'warning' : meta.status,
       };
     }
     const inspectorDef = RULE_DEFINITIONS[cleanCode];
     if (inspectorDef) {
       const concl = inspectorDef.conclusion.toLowerCase();
-      const statusFromOutcome: 'passed' | 'warning' | 'failed' =
+      const rawStatus: 'passed' | 'warning' | 'failed' =
         concl.includes('verified') || concl.includes('resource')
           ? 'passed'
           : concl.includes('hallucination')
             ? 'failed'
             : 'warning';
+      const statusFromOutcome: 'passed' | 'warning' | 'failed' =
+        isOverallNotFound && rawStatus === 'passed' ? 'warning' : rawStatus;
       const condText = inspectorDef.conditions
         .map((c) => `${c.field} ${c.operator} ${c.value}`)
         .join(' AND ');
@@ -3118,7 +3135,11 @@ function enrichVerdictItem(
           : engine.label;
       return {
         name: contextualLabel,
-        status: conf >= 0.7 ? 'matched' : 'partial',
+        status: isOverallNotFound
+          ? 'candidate_insufficient'
+          : conf >= 0.7
+            ? 'matched'
+            : 'partial',
         score: conf.toFixed(2),
         matchedFields: ms.matched_fields ?? [],
         url: ms.url ?? undefined,
@@ -3135,7 +3156,11 @@ function enrichVerdictItem(
     ) {
       return {
         name: engine.label,
-        status: verdict.confidence >= 0.7 ? 'matched' : 'partial',
+        status: isOverallNotFound
+          ? 'candidate_insufficient'
+          : verdict.confidence >= 0.7
+            ? 'matched'
+            : 'partial',
         score: verdict.confidence.toFixed(2),
         matchedFields: [],
       };
@@ -3161,11 +3186,13 @@ function enrichVerdictItem(
       const conf = ms.confidence ?? verdict.confidence;
       sources.unshift({
         name: formatEssaySourceDisplay(ms.source, lang, verdict, ms),
-        status: isUrlContentMismatch
-          ? 'partial'
-          : conf >= 0.7
-            ? 'matched'
-            : 'partial',
+        status: isOverallNotFound
+          ? 'candidate_insufficient'
+          : isUrlContentMismatch
+            ? 'partial'
+            : conf >= 0.7
+              ? 'matched'
+              : 'partial',
         score: conf.toFixed(2),
         matchedFields: ms.matched_fields ?? [],
         url: ms.url ?? undefined,
@@ -3186,7 +3213,11 @@ function enrichVerdictItem(
     if (observedWeb.doi) extractedFields.push('doi');
     sources.unshift({
       name: formatEssaySourceDisplay(webSourceKey, lang, verdict),
-      status: isUrlContentMismatch ? 'partial' : 'matched',
+      status: isOverallNotFound
+        ? 'candidate_insufficient'
+        : isUrlContentMismatch
+          ? 'partial'
+          : 'matched',
       score: (
         typeof verdict.features?.html_meta_title_sim === 'number'
           ? verdict.features.html_meta_title_sim
@@ -3487,7 +3518,9 @@ export function EssayPage() {
       Indexed: 'Đã lập chỉ mục',
       Retrieved: 'Đã truy xuất',
       'Wayback Archived': 'Lưu trữ Wayback',
-      'Fake Domain': 'Tên miền giả',
+      'Fake Domain': 'Tên miền không hợp lệ',
+      'Invalid Domain': 'Tên miền không hợp lệ',
+      'Link Active': 'Liên kết hoạt động',
       'Broken Link': 'Liên kết hỏng',
       'Verified Link': 'Liên kết hợp lệ',
       'Resolved URL': 'Đã phân giải URL',
@@ -3528,7 +3561,7 @@ export function EssayPage() {
         const displayMissing = fieldInfo.label
           ? localizeFieldBadgeLabel(fieldInfo.label)
           : lang === 'vi'
-            ? '— Khuyết thông tin'
+            ? '— Thiếu'
             : '— Missing';
         return (
           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-mono font-semibold whitespace-nowrap shrink-0 bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
@@ -3763,7 +3796,7 @@ export function EssayPage() {
         numPages={report.num_pages}
         numCitations={report.num_citations}
         numReferences={report.verdicts.length}
-        styleName={report.style_profile?.style}
+        styleName={formatCitationStyleLabel(report.style_profile?.style, lang)}
         onOpenRemediation={() => setRemediationOpen(true)}
       />
 
@@ -3884,11 +3917,11 @@ export function EssayPage() {
                 v1 → v2
               </span>
               <span className="font-semibold text-slate-800 dark:text-slate-200 truncate">
-                {(activeRevisionDiff.cis_before ?? 0).toFixed(1)}% →{' '}
-                {(activeRevisionDiff.cis_after ?? report.cis.score).toFixed(1)}% (
+                {formatCisScore(activeRevisionDiff.cis_before ?? 0)} →{' '}
+                {formatCisScore(activeRevisionDiff.cis_after ?? report.cis.score)} (
                 {(activeRevisionDiff.cis_delta ?? 0) >= 0
-                  ? `+${(activeRevisionDiff.cis_delta ?? 0).toFixed(1)}%`
-                  : `${(activeRevisionDiff.cis_delta ?? 0).toFixed(1)}%`}
+                  ? `+${(activeRevisionDiff.cis_delta ?? 0).toFixed(1)}`
+                  : `${(activeRevisionDiff.cis_delta ?? 0).toFixed(1)}`}
                 )
               </span>
             </span>
@@ -3931,7 +3964,7 @@ export function EssayPage() {
                     <option key={rev.essay_id} value={rev.essay_id}>
                       #{rev.essay_id}{' '}
                       {rev.filename.length > 18 ? `${rev.filename.slice(0, 16)}...` : rev.filename}{' '}
-                      ({rev.cis_score.toFixed(1)}%)
+                      ({formatCisScore(rev.cis_score)})
                     </option>
                   ))}
                 </select>
@@ -3940,9 +3973,9 @@ export function EssayPage() {
               {/* Compact CIS Delta */}
               <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs">
                 <span className="text-slate-600 dark:text-slate-300">
-                  {(activeRevisionDiff.cis_before ?? 0).toFixed(1)}% →{' '}
+                  {formatCisScore(activeRevisionDiff.cis_before ?? 0)} →{' '}
                   <strong className="text-indigo-600 dark:text-indigo-400">
-                    {(activeRevisionDiff.cis_after ?? report.cis.score).toFixed(1)}%
+                    {formatCisScore(activeRevisionDiff.cis_after ?? report.cis.score)}
                   </strong>
                 </span>
                 <span
@@ -3956,8 +3989,8 @@ export function EssayPage() {
                   }`}
                 >
                   {(activeRevisionDiff.cis_delta ?? 0) >= 0
-                    ? `+${(activeRevisionDiff.cis_delta ?? 0).toFixed(1)}%`
-                    : `${(activeRevisionDiff.cis_delta ?? 0).toFixed(1)}%`}
+                    ? `+${(activeRevisionDiff.cis_delta ?? 0).toFixed(1)}`
+                    : `${(activeRevisionDiff.cis_delta ?? 0).toFixed(1)}`}
                 </span>
               </div>
 
@@ -4182,7 +4215,7 @@ export function EssayPage() {
               ) : (
                 <p className="text-xs text-slate-600 dark:text-slate-400">
                   {lang === 'vi'
-                    ? `Đã đối chiếu tự động giữa #${activeRevisionDiff.previous_essay_id} (${(activeRevisionDiff.cis_before ?? 0).toFixed(1)}%) và #${activeRevisionDiff.current_essay_id} (${(activeRevisionDiff.cis_after ?? 0).toFixed(1)}%).`
+                    ? `Đã đối chiếu tự động giữa #${activeRevisionDiff.previous_essay_id} (${formatCisScore(activeRevisionDiff.cis_before ?? 0)}) và #${activeRevisionDiff.current_essay_id} (${formatCisScore(activeRevisionDiff.cis_after ?? 0)}).`
                     : `Automatically compared #${activeRevisionDiff.previous_essay_id} and #${activeRevisionDiff.current_essay_id}.`}
                 </p>
               )}
@@ -4867,7 +4900,7 @@ export function EssayPage() {
                         ? 'Đối chiếu thông tin chi tiết'
                         : 'Detailed Field Comparison'}
                     </div>
-                    <div className="rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden">
+                    <div className="rounded-xl border border-slate-200 dark:border-slate-800 overflow-x-auto">
                       <table className="w-full block sm:table sm:table-fixed lg:block xl:table xl:table-fixed text-left border-collapse">
                         <thead className="hidden sm:table-header-group lg:hidden xl:table-header-group">
                           <tr className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 text-[11px] font-semibold uppercase text-slate-500 dark:text-slate-400">
@@ -4882,7 +4915,7 @@ export function EssayPage() {
                                 ? 'Bản ghi chuẩn truy xuất'
                                 : 'Canonical Retrieved'}
                             </th>
-                            <th className="py-2.5 px-3 w-[160px] text-right">
+                            <th className="py-2.5 px-3 w-[160px] min-w-[140px] whitespace-nowrap text-right">
                               {lang === 'vi' ? 'Trạng thái' : 'Status'}
                             </th>
                           </tr>
@@ -5119,49 +5152,53 @@ export function EssayPage() {
                   </div>
 
                   {/* Manuscript Context Quote Box (Moved cleanly from Left Queue bottom into Right Detail flow) */}
-                  <div
-                    data-testid="manuscript-context-card"
-                    className="p-3.5 sm:p-4 rounded-xl border bg-slate-50/90 dark:bg-slate-900 border-slate-200/80 dark:border-slate-800"
-                  >
-                    <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
-                      <span>
-                        {lang === 'vi'
-                          ? `Đoạn trích dẫn trong bài của bạn (${activeItem.pageLabel})`
-                          : `In-Text Context (${activeItem.pageLabel})`}
-                      </span>
-                      {canViewDeepTrace && (
-                        <span className="font-mono text-[10px] font-medium text-slate-400">
-                          {(() => {
-                            const parserUsed = (docDiag?.parser_used || '').toLowerCase();
-                            const fnameLow = (report.filename || '').toLowerCase();
-                            if (parserUsed === 'docx' || fnameLow.endsWith('.docx')) {
-                              return 'WORD DOCX · OPENXML';
-                            }
-                            if (fnameLow.endsWith('.bib')) return 'BIBTEX PARSER';
-                            if (fnameLow.endsWith('.ris')) return 'RIS PARSER';
-                            if (fnameLow.endsWith('.txt')) return 'PLAIN TEXT';
-                            if (parserUsed === 'mupdf') return 'PYMUPDF PARSER';
-                            return 'GROBID TEI-XML';
-                          })()}
-                        </span>
-                      )}
-                    </div>
-                    <p className="document-content text-xs sm:text-sm text-slate-700 dark:text-slate-300 leading-relaxed line-clamp-4 break-words [overflow-wrap:anywhere]">
-                      {activeItem.contextBefore}
-                      <mark
-                        className={`rounded px-1 py-0.5 font-mono font-bold ${
-                          activeItem.verdict.label === 'suspected_hallucination'
-                            ? 'bg-red-100/80 dark:bg-red-950/70 text-red-700 dark:text-red-300'
-                            : activeItem.verdict.label === 'metadata_error'
-                              ? 'bg-amber-100/80 dark:bg-amber-950/70 text-amber-800 dark:text-amber-300'
-                              : 'bg-indigo-100/80 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300'
-                        }`}
+                  {(() => {
+                    const isImplicitOrUncitedContext =
+                      activeItem.verdict.mapping_status === 'uncited_reference' ||
+                      activeItem.verdict.features?.context_source === 'implicit_body_discovery';
+                    return (
+                      <div
+                        data-testid="manuscript-context-card"
+                        className="p-3.5 sm:p-4 rounded-xl border bg-slate-50/90 dark:bg-slate-900 border-slate-200/80 dark:border-slate-800"
                       >
-                        {activeItem.contextHighlight}
-                      </mark>
-                      {activeItem.contextAfter}
-                    </p>
-                  </div>
+                        <div className="flex items-center justify-between gap-2 text-[11px] font-bold tracking-wider text-slate-500 dark:text-slate-400 mb-1.5 flex-wrap">
+                          <span className={isImplicitOrUncitedContext ? 'normal-case text-amber-700 dark:text-amber-300' : 'uppercase'}>
+                            {isImplicitOrUncitedContext
+                              ? lang === 'vi'
+                                ? 'Đoạn văn liên quan trong bài (chưa trích dẫn trực tiếp)'
+                                : 'Related body passage (not explicitly cited)'
+                              : lang === 'vi'
+                                ? 'Đoạn trích dẫn trong bài của bạn'
+                                : 'In-Text Context'}{' '}
+                            <span className="normal-case font-semibold">
+                              ({activeItem.pageLabel})
+                            </span>
+                          </span>
+                          {isDocxFilename(report.filename) && (
+                            <span className="text-[10px] font-medium px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+                              Word (.docx)
+                              <span className="sr-only"> WORD DOCX · OPENXML</span>
+                            </span>
+                          )}
+                        </div>
+                        <p className="document-content text-xs sm:text-sm text-slate-700 dark:text-slate-300 leading-relaxed line-clamp-4 break-words [overflow-wrap:anywhere]">
+                          {activeItem.contextBefore}
+                          <mark
+                            className={`rounded px-1 py-0.5 font-mono font-bold ${
+                              activeItem.verdict.label === 'suspected_hallucination'
+                                ? 'bg-red-100/80 dark:bg-red-950/70 text-red-700 dark:text-red-300'
+                                : activeItem.verdict.label === 'metadata_error'
+                                  ? 'bg-amber-100/80 dark:bg-amber-950/70 text-amber-800 dark:text-amber-300'
+                                  : 'bg-indigo-100/80 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300'
+                            }`}
+                          >
+                            {activeItem.contextHighlight}
+                          </mark>
+                          {activeItem.contextAfter}
+                        </p>
+                      </div>
+                    );
+                  })()}
 
                   {/* Instructor Override Bar (Directly accessible for Teachers & Admins) */}
                   {canOverride && (
@@ -5303,24 +5340,31 @@ export function EssayPage() {
                                           ? lang === 'vi'
                                             ? `Đã khớp · Tương đồng: ${src.score}${joinedFields ? ` · Trường khớp: ${joinedFields}` : ''}`
                                             : `Matched · Sim: ${src.score}${joinedFields ? ` · Fields: ${joinedFields}` : ''}`
-                                          : src.status === 'partial'
+                                          : src.status === 'candidate_insufficient'
                                             ? lang === 'vi'
-                                              ? `Đã truy vấn · Tương đồng: ${src.score}${joinedFields ? ` · Trường khớp: ${joinedFields}` : ''}`
-                                              : `Queried · Sim: ${src.score}${joinedFields ? ` · Fields: ${joinedFields}` : ''}`
-                                            : src.notRouted
+                                              ? `Ứng viên tham khảo · Tương đồng: ${src.score}${joinedFields ? ` · Trường trùng: ${joinedFields}` : ''}`
+                                              : `Candidate · Sim: ${src.score}${joinedFields ? ` · Fields: ${joinedFields}` : ''}`
+                                            : src.status === 'partial'
                                               ? lang === 'vi'
-                                                ? 'Không định tuyến · Tài nguyên phi học thuật'
-                                                : 'Not Routed · Non-scholarly resource'
-                                              : lang === 'vi'
-                                                ? `Đã truy vấn · Không có bản ghi trùng`
-                                                : `Queried · No matching record`;
+                                                ? `Đã truy vấn · Tương đồng: ${src.score}${joinedFields ? ` · Trường khớp: ${joinedFields}` : ''}`
+                                                : `Queried · Sim: ${src.score}${joinedFields ? ` · Fields: ${joinedFields}` : ''}`
+                                              : src.notRouted
+                                                ? lang === 'vi'
+                                                  ? 'Không định tuyến · Tài nguyên phi học thuật'
+                                                  : 'Not Routed · Non-scholarly resource'
+                                                : lang === 'vi'
+                                                  ? `Đã truy vấn · Không có bản ghi trùng`
+                                                  : `Queried · No matching record`;
                                       return (
                                         <div
                                           key={src.name}
+                                          data-testid="deep-source-card"
+                                          data-source-status={src.status}
                                           className={`p-3 rounded-xl border flex items-center justify-between gap-2 min-w-0 ${
                                             src.status === 'matched'
                                               ? 'bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/70'
-                                              : src.status === 'partial'
+                                              : src.status === 'partial' ||
+                                                  src.status === 'candidate_insufficient'
                                                 ? 'bg-amber-50/40 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800/70'
                                                 : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800'
                                           }`}
@@ -5358,7 +5402,8 @@ export function EssayPage() {
                                             className={`text-[10.5px] font-semibold px-2 py-0.5 rounded shrink-0 ${
                                               src.status === 'matched'
                                                 ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200'
-                                                : src.status === 'partial'
+                                                : src.status === 'candidate_insufficient' ||
+                                                    src.status === 'partial'
                                                   ? 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200'
                                                   : 'bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
                                             }`}
@@ -5367,17 +5412,21 @@ export function EssayPage() {
                                               ? lang === 'vi'
                                                 ? 'Khớp nguồn'
                                                 : 'Matched'
-                                              : src.status === 'partial'
+                                              : src.status === 'candidate_insufficient'
                                                 ? lang === 'vi'
-                                                  ? 'Ứng viên'
-                                                  : 'Candidate'
-                                                : src.notRouted
+                                                  ? 'Ứng viên tham khảo (chưa đủ khớp)'
+                                                  : 'Candidate (insufficient match)'
+                                                : src.status === 'partial'
                                                   ? lang === 'vi'
-                                                    ? 'Không định tuyến'
-                                                    : 'Not Routed'
-                                                  : lang === 'vi'
-                                                    ? 'Không khớp'
-                                                    : 'No Hit'}
+                                                    ? 'Ứng viên'
+                                                    : 'Candidate'
+                                                  : src.notRouted
+                                                    ? lang === 'vi'
+                                                      ? 'Không định tuyến'
+                                                      : 'Not Routed'
+                                                    : lang === 'vi'
+                                                      ? 'Không khớp'
+                                                      : 'No Hit'}
                                           </span>
                                         </div>
                                       );

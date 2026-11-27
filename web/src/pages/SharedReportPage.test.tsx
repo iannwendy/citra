@@ -455,4 +455,115 @@ describe('Task 6.1: SharedReportPage & EssayHeader Share Receipt', () => {
       'contact the document author',
     );
   });
+
+  it('Round 2 P1-1 & P2-1: clarifies bibliography references vs in-text mentions, localizes style & link status, and avoids green Matched on suspected_hallucination', async () => {
+    vi.spyOn(api, 'getSharedEssayReport').mockResolvedValue({
+      essay_id: 99,
+      receipt_id: 'CITRA-00099-R2POLISH',
+      filename: 'Long_Vietnamese_Essay_Filename_Without_Spaces_2026.pdf',
+      num_pages: 14,
+      num_citations: 11,
+      created_at: '2026-10-26T02:40:00Z',
+      verified_at: '2026-10-26T02:40:00Z',
+      disclaimer: '',
+      style_profile: {
+        style: 'APA_LIKE',
+        confidence: 0.9,
+        apa_count: 9,
+        ieee_count: 0,
+        mixed_count: 0,
+        features: {},
+        ratios: {},
+        explanation: '',
+      },
+      cis: {
+        score: 69.4,
+        components: { verified_ratio: 0.694 },
+        weights_used: {},
+        num_citations: 9,
+        num_unresolved: 1,
+        disclaimer: '',
+      },
+      verdict_counts: {
+        verified: 4,
+        metadata_error: 1,
+        suspected_hallucination: 2,
+        unresolved: 1,
+        resource: 1,
+      },
+      verdicts: [
+        {
+          reference_id: 'ref-0001',
+          numeric_index: 1,
+          raw_text: '[1] Ban Chấp hành Trung ương (2024). Nghị quyết 57. https://chinhphu.vn/nq57',
+          label: 'resource',
+          confidence: 0.96,
+          explanation: 'Matched record. [Neural: content alignment score=0.72, intent=background]',
+          triggered_rules: ['R-URL-RESOURCE'],
+          url_status: 'alive',
+          url_status_code: 200,
+          matched_source: null,
+        },
+        {
+          reference_id: 'ref-0002',
+          numeric_index: 2,
+          raw_text: '[2] Fake Author (2025). Fake Paper. doi:10.9999/fake.001',
+          label: 'suspected_hallucination',
+          confidence: 0.99,
+          explanation:
+            'DOI 10.9999/fake.001 matches known fabricated DOI pattern [Neural: content alignment score=0.12]',
+          triggered_rules: ['R-FABRICATED-DOI'],
+          matched_source: {
+            source: 'crossref',
+            title: 'Unrelated Real Paper',
+            authors: ['Real Author'],
+            year: '2021',
+            doi: '10.1000/real',
+            url: null,
+            matched_fields: ['doi'],
+            checked_at: '2026-10-26T02:40:00Z',
+          },
+        },
+      ],
+    });
+
+    await i18n.changeLanguage('vi');
+    renderWithProviders(
+      <Routes>
+        <Route path="/verify/share/:token" element={<SharedReportPage />} />
+      </Routes>,
+      { initialRoute: '/verify/share/sh_99_r2', user: null },
+    );
+
+    await waitFor(() => expect(screen.getByTestId('shared-report-page')).toBeDefined());
+
+    // Responsive citations summary explicitly shows references vs in-text mentions
+    const citationsSummary = screen.getByTestId('shared-citations-summary');
+    expect(citationsSummary.textContent).toContain('2 tài liệu tham khảo (11 lượt trích)');
+
+    // Style localized (APA-LIKE -> Gần chuẩn APA) and Link Active (no HTTP 200 OK)
+    expect(screen.getByTestId('shared-report-page').textContent).toContain('Gần chuẩn APA');
+    expect(screen.getByTestId('shared-report-page').textContent).toContain('Liên kết hoạt động');
+    expect(screen.getByTestId('shared-report-page').textContent).not.toContain('HTTP 200 OK');
+
+    // Expand hallucination row -> sanitized Vietnamese reasoning & candidate warning (NEVER green Đã khớp)
+    const row1 = screen.getByTestId('shared-verdict-row-1');
+    const expandBtn = row1.querySelector('button');
+    expect(expandBtn).not.toBeNull();
+    fireEvent.click(expandBtn!);
+    await waitFor(() =>
+      expect(row1.textContent).toContain('Ứng viên tham khảo (chưa đủ khớp)'),
+    );
+    expect(row1.textContent).not.toContain('fabricated');
+    expect(row1.textContent).not.toContain('[Neural:');
+
+    // Switch to EN -> explicit EN references vs mentions wording
+    fireEvent.click(screen.getByTestId('shared-lang-toggle'));
+    await waitFor(() =>
+      expect(screen.getByTestId('shared-citations-summary').textContent).toContain(
+        '2 references (11 mentions)',
+      ),
+    );
+    expect(screen.getByTestId('shared-report-page').textContent).toContain('Link Active');
+  });
 });

@@ -22,7 +22,10 @@ import {
 import { isDocxFilename } from '@/lib/fileKind';
 import { useModalA11y } from '@/hooks/useModalA11y';
 import { useToast } from '@/contexts/ToastContext';
-import { formatUserError } from '@/lib/academicTaxonomy';
+import {
+  formatUserError,
+  sanitizeReasoningForDisplay,
+} from '@/lib/academicTaxonomy';
 import {
   getFieldDisplayName,
   getSourceDisplayName,
@@ -650,7 +653,7 @@ export function BibliographyRemediationModal({
                             : 'Decision-Support Notice — Source Not Found: '}
                         </span>
                         <span>
-                          {entry.reasoning ||
+                          {sanitizeReasoningForDisplay(entry.reasoning, lang) ||
                             (lang === 'vi'
                               ? 'Chưa tìm thấy bản ghi khớp trong các cơ sở dữ liệu học thuật hoặc phát hiện bất thường ở mã định danh. Vui lòng đối chiếu lại bản gốc trước khi trích dẫn.'
                               : 'No matching scholarly record was found or metadata anomalies were detected. Please manually verify the original publication before citing.')}

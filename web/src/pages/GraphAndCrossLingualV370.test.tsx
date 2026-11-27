@@ -187,12 +187,15 @@ describe('v3.70.0 Groups 5 & 6: Cross-Lingual ONNX INT8 UI, RevisionDiff Polarit
     expect(container.textContent).toContain('R-DOI-CONFLICT');
 
     // Switch to Tab 1 (Checked Sources) in EN mode
+    // On suspected_hallucination verdicts, retrieved candidates MUST NOT render green "Matched"
     const sourcesTabEn = screen.getByRole('tab', { name: /1\. Checked Sources/i });
     fireEvent.mouseDown(sourcesTabEn);
     fireEvent.click(sourcesTabEn);
     await waitFor(() =>
-      expect(container.textContent).toContain('Matched · Sim: 0.88'),
+      expect(container.textContent).toContain('Candidate · Sim: 0.88'),
     );
+    expect(container.textContent).toContain('Candidate (insufficient match)');
+    expect(container.textContent).not.toContain('Matched · Sim: 0.88');
     expect(container.textContent).toContain('No Hit');
 
     // Select web resource [2] in EN mode -> shows Not Routed
@@ -222,9 +225,10 @@ describe('v3.70.0 Groups 5 & 6: Cross-Lingual ONNX INT8 UI, RevisionDiff Polarit
     fireEvent.mouseDown(sourcesTabVi);
     fireEvent.click(sourcesTabVi);
     await waitFor(() =>
-      expect(viContainer.textContent).toContain('Đã khớp · Tương đồng: 0.88'),
+      expect(viContainer.textContent).toContain('Ứng viên tham khảo · Tương đồng: 0.88'),
     );
-    expect(viContainer.textContent).toContain('Khớp');
+    expect(viContainer.textContent).toContain('Ứng viên tham khảo (chưa đủ khớp)');
+    expect(viContainer.textContent).not.toContain('Đã khớp · Tương đồng: 0.88');
     expect(viContainer.textContent).toContain('Không khớp');
     expect(viContainer.textContent).not.toContain('No Hit');
 

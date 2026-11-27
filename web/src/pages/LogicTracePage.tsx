@@ -14,10 +14,12 @@ import {
   isUrlResource,
 } from '@/lib/verdictExplanation';
 import {
+  formatCitationStyleLabel,
   formatIntentLabel as formatTaxonomyIntent,
   formatStanceLabel as formatTaxonomyStance,
   formatUserError,
   getVerdictDisplay,
+  sanitizeReasoningForDisplay,
 } from '@/lib/academicTaxonomy';
 import { SYMBOLIC_RULES_COUNT } from '@/lib/productFacts';
 import { useEssayPolling } from '@/hooks/useEssayPolling';
@@ -260,7 +262,7 @@ function buildTraceSteps(verdict: Verdict, lang: 'vi' | 'en'): TraceStep[] {
     {
       id: 'verdict',
       label: lang === 'vi' ? '5. Kết luận kiểm chứng' : '5. Final Result',
-      description: getVerdictExplanation(verdict, lang),
+      description: sanitizeReasoningForDisplay(getVerdictExplanation(verdict, lang), lang),
       status:
         verdict.label === 'verified'
           ? 'completed'
@@ -270,9 +272,13 @@ function buildTraceSteps(verdict: Verdict, lang: 'vi' | 'en'): TraceStep[] {
               ? 'active'
               : 'pending',
       tag:
-        lang === 'vi'
-          ? `ĐỘ TIN CẬY ${Math.round(verdict.confidence * 100)}%`
-          : `CONFIDENCE ${Math.round(verdict.confidence * 100)}%`,
+        verdict.label === 'suspected_hallucination' || verdict.label === 'metadata_error'
+          ? lang === 'vi'
+            ? `ĐỘ CHẮC CHẮN ${Math.round(verdict.confidence * 100)}%`
+            : `CERTAINTY ${Math.round(verdict.confidence * 100)}%`
+          : lang === 'vi'
+            ? `ĐỘ TIN CẬY ${Math.round(verdict.confidence * 100)}%`
+            : `CONFIDENCE ${Math.round(verdict.confidence * 100)}%`,
     },
   ];
 }
@@ -419,11 +425,15 @@ function NeuralAlignmentPanel({
     if (val === 'multi_occurrence')
       return lang === 'vi' ? `Đa vị trí trích dẫn (${occAlignments.length || 2}+ vị trí)` : `Multi-Occurrence (${occAlignments.length || 2}+ sites)`;
     if (val === 'implicit_body_discovery')
-      return lang === 'vi' ? 'Phát hiện theo ngữ cảnh thân bài' : 'Implicit Body Discovery';
+      return lang === 'vi' ? 'Đoạn văn liên quan (chưa trích dẫn trực tiếp)' : 'Related body passage (not explicitly cited)';
     if (val === 'in_text_citation')
       return lang === 'vi' ? 'Trích dẫn trực tiếp trong bài' : 'In-Text Citation';
     return '';
   };
+  const sourceLabel = formatSourceLabel(contextSource);
+  const isUncitedOrImplicit =
+    verdict.mapping_status === 'uncited_reference' ||
+    contextSource === 'implicit_body_discovery';
 
   return (
     <div
@@ -476,9 +486,9 @@ function NeuralAlignmentPanel({
                   : 'VI ↔ EN Cross-Lingual'}
             </span>
           )}
-          {contextSource && (
+          {sourceLabel && (
             <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] border bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700">
-              {formatSourceLabel(contextSource)}
+              {sourceLabel}
             </span>
           )}
         </div>
@@ -589,18 +599,27 @@ function NeuralAlignmentPanel({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {citedSentence && (
             <div className="rounded-lg border border-slate-200/80 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 p-3">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              <div className="flex items-center justify-between gap-2 mb-1 flex-wrap">
+                <span
+                  data-testid="trace-manuscript-passage-label"
+                  className="text-[11px] font-semibold text-slate-600 dark:text-slate-300"
+                >
                   {lang === 'vi'
-                    ? 'Câu Trích dẫn Trọng tâm (Manuscript Claim)'
-                    : 'Manuscript Focal Sentence'}
+                    ? alignScore > 0
+                      ? `Câu trong bài viết · Khớp ${Math.round(alignScore * 100)}%`
+                      : 'Câu trong bài viết'
+                    : alignScore > 0
+                      ? `Manuscript passage · ${Math.round(alignScore * 100)}% match`
+                      : 'Manuscript passage'}
                 </span>
-                {alignScore > 0 && (
-                  <span className="text-[10px] font-mono font-semibold text-indigo-600 dark:text-indigo-400">
-                    align={(alignScore * 100).toFixed(0)}%
-                  </span>
-                )}
               </div>
+              {isUncitedOrImplicit && (
+                <p className="text-[10px] font-medium text-amber-700 dark:text-amber-300 mb-1">
+                  {lang === 'vi'
+                    ? 'Đoạn văn liên quan trong bài (chưa trích dẫn trực tiếp)'
+                    : 'Related body passage (not explicitly cited)'}
+                </p>
+              )}
               <p className="text-xs font-serif text-slate-800 dark:text-slate-200 leading-relaxed break-words">
                 “{citedSentence}”
               </p>
@@ -609,17 +628,19 @@ function NeuralAlignmentPanel({
 
           {evidenceSentence && (
             <div className="rounded-lg border border-emerald-200/80 dark:border-emerald-900/60 bg-emerald-50/40 dark:bg-emerald-950/20 p-3">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
+              <div className="flex items-center justify-between gap-2 mb-1 flex-wrap">
+                <span
+                  data-testid="trace-source-passage-label"
+                  className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400"
+                >
                   {lang === 'vi'
-                    ? 'Câu Bằng chứng Khớp nhất từ Bài báo Gốc (Source Evidence)'
-                    : 'Matched Source Abstract Evidence'}
+                    ? evidenceSim > 0
+                      ? `Đoạn gốc từ tài liệu · Khớp ${Math.round(evidenceSim * 100)}%`
+                      : 'Đoạn gốc từ tài liệu'
+                    : evidenceSim > 0
+                      ? `Source passage · ${Math.round(evidenceSim * 100)}% match`
+                      : 'Source passage'}
                 </span>
-                {evidenceSim > 0 && (
-                  <span className="text-[10px] font-mono font-semibold text-emerald-700 dark:text-emerald-400">
-                    sim={(evidenceSim * 100).toFixed(0)}%
-                  </span>
-                )}
               </div>
               <p className="text-xs font-serif text-slate-800 dark:text-slate-200 leading-relaxed break-words">
                 “{evidenceSentence}”
@@ -645,7 +666,7 @@ function NeuralAlignmentPanel({
               >
                 <div className="flex items-center gap-2 min-w-0 flex-1">
                   <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 shrink-0">
-                    p.{occ.page || 1}
+                    {lang === 'vi' ? `tr. ${occ.page || 1}` : `p. ${occ.page || 1}`}
                   </span>
                   <span className="font-serif text-slate-700 dark:text-slate-300 truncate">
                     {occ.focal_sentence}
@@ -673,11 +694,13 @@ function NeuralAlignmentPanel({
 function VerdictTrace({
   verdict,
   index,
+  markerIndex,
   lang,
   defaultExpanded = false,
 }: {
   verdict: Verdict;
   index: number;
+  markerIndex: number;
   lang: 'vi' | 'en';
   defaultExpanded?: boolean;
 }) {
@@ -710,7 +733,7 @@ function VerdictTrace({
         className="w-full flex items-center gap-3.5 p-4 bg-white dark:bg-slate-900 hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors text-left"
       >
         <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 shrink-0">
-          {getCitationMarkerLabel(verdict, index)}
+          {getCitationMarkerLabel(verdict, markerIndex)}
         </span>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate font-serif">
@@ -733,7 +756,9 @@ function VerdictTrace({
                   ? `⚠ HTTP ${urlCode || 200} · Sai trang`
                   : `⚠ HTTP ${urlCode || 200} · Wrong Page`
                 : urlStatus === 'alive'
-                  ? `✓ HTTP ${urlCode || 200} OK`
+                  ? lang === 'vi'
+                    ? '✓ Liên kết hoạt động'
+                    : '✓ Link Active'
                   : urlStatus === 'restricted_alive'
                     ? lang === 'vi'
                       ? `🔒 Truy cập hạn chế (HTTP ${urlCode || 403})`
@@ -954,9 +979,23 @@ export function LogicTracePage() {
   const totalCount = bucketCounts.all;
   const verifiedCount = bucketCounts.verified;
   const resourceCount = bucketCounts.resource;
+  const unresolvedCount = bucketCounts.unresolved;
   const flaggedCount = bucketCounts.attentionCount;
   const metaErrCount = bucketCounts.metadata_error;
   const hallucinationCount = bucketCounts.suspected_hallucination;
+  const otherBreakdownCount = unresolvedCount + resourceCount;
+  const kpiColClass =
+    unresolvedCount > 0 && resourceCount > 0
+      ? 'sm:grid-cols-3 lg:grid-cols-6'
+      : otherBreakdownCount > 0
+        ? 'sm:grid-cols-5'
+        : 'sm:grid-cols-4';
+  const bibIndexByCitationId = new Map<string, number>();
+  (report.verdicts ?? []).forEach((v, idx) => {
+    if (!bibIndexByCitationId.has(v.citation_id)) {
+      bibIndexByCitationId.set(v.citation_id, idx);
+    }
+  });
 
   return (
     <div className="space-y-4 pb-10">
@@ -967,7 +1006,7 @@ export function LogicTracePage() {
         numPages={report.num_pages}
         numCitations={report.num_citations}
         numReferences={report.verdicts.length}
-        styleName={report.style_profile?.style}
+        styleName={formatCitationStyleLabel(report.style_profile?.style, lang)}
       />
 
       {/* Unified Persistent 5-Layer Score Summary & Navigation Bar (BUG-19) */}
@@ -984,8 +1023,11 @@ export function LogicTracePage() {
       {/* Non-Accusatory Academic Decision-Support Disclaimer (BUG-03) */}
       <DecisionSupportBanner variant="compact" lang={lang} />
 
-      {/* Summary Metric Cards (Verified NEVER merges Web/Legal Resource — BUG-02) */}
-      <div className={`grid grid-cols-2 ${resourceCount > 0 ? 'sm:grid-cols-5' : 'sm:grid-cols-4'} gap-3.5`}>
+      {/* Summary Metric Cards (Verified NEVER merges Web/Legal Resource — BUG-02; sums to 100% of Total) */}
+      <div
+        data-testid="trace-kpi-grid"
+        className={`grid grid-cols-2 ${kpiColClass} gap-3.5`}
+      >
         <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm">
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
@@ -1030,8 +1072,27 @@ export function LogicTracePage() {
           </p>
         </Card>
 
+        {unresolvedCount > 0 && (
+          <Card
+            data-testid="trace-kpi-unresolved"
+            className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-300/80 dark:border-slate-700 shadow-sm"
+          >
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-xs font-medium text-slate-600 dark:text-slate-300">
+                {getVerdictDisplay('unresolved', lang).label}
+              </span>
+            </div>
+            <p className="text-2xl font-bold font-mono tabular-nums text-slate-700 dark:text-slate-200">
+              {unresolvedCount}
+            </p>
+          </Card>
+        )}
+
         {resourceCount > 0 && (
-          <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-violet-200/80 dark:border-violet-900/70 shadow-sm">
+          <Card
+            data-testid="trace-kpi-resource"
+            className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-violet-200/80 dark:border-violet-900/70 shadow-sm"
+          >
             <div className="flex items-center justify-between mb-1.5">
               <span className="text-xs font-medium text-violet-600 dark:text-violet-400">
                 {getVerdictDisplay('resource', lang).label}
@@ -1094,6 +1155,7 @@ export function LogicTracePage() {
               key={verdict.citation_id}
               verdict={verdict}
               index={index}
+              markerIndex={bibIndexByCitationId.get(verdict.citation_id) ?? index}
               lang={lang}
               defaultExpanded={index === 0}
             />

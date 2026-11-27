@@ -15,7 +15,10 @@ import {
   InteractiveDecisionFlowBoard,
   extractCleanCitationIdentity,
 } from '@/components/CitationGraph/InteractiveDecisionFlowBoard';
-import { deduplicateRepeatedVenue } from '@/components/BibliographyRemediationModal';
+import {
+  BibliographyRemediationModal,
+  deduplicateRepeatedVenue,
+} from '@/components/BibliographyRemediationModal';
 
 describe('Report Page UI/UX Redesign (Non-Tech Clarity & Progressive Disclosure)', () => {
   beforeEach(async () => {
@@ -1123,6 +1126,317 @@ describe('Report Page UI/UX Redesign (Non-Tech Clarity & Progressive Disclosure)
         'He, K. (2016). ResNet. CVPR.',
       );
       expect(deduplicateRepeatedVenue('NeurIPS, NeurIPS 2020')).toBe('NeurIPS 2020');
+    });
+
+    it('Round 2 fixes: EssayPage CIS /100 & VI labels, IssuesPage 1-based markers & non-green certainty bar & linking filter, Vietnamese institutional authors, Remediation reasoning, LogicTrace KPI 100% sum, and OrphanPage real bibliography indices', async () => {
+      // 1. P2-5: Vietnamese institutional authors & bare numeric fallback
+      const bchIdentity = extractCleanCitationIdentity(
+        '[1] Ban Chấp hành Trung ương (2024). Nghị quyết số 57-NQ/TW.',
+      );
+      expect(bchIdentity.authorOnly).toBe('Ban Chấp hành Trung ương');
+      expect(bchIdentity.authorOnly).not.toBe('ương');
+      expect(bchIdentity.authorOnly).not.toContain('et al.');
+
+      const dcsIdentity = extractCleanCitationIdentity(
+        '[2] Đảng Cộng sản Việt Nam (2021). Văn kiện Đại hội XIII.',
+      );
+      expect(dcsIdentity.authorOnly).toBe('Đảng Cộng sản Việt Nam');
+      expect(dcsIdentity.authorOnly).not.toContain('Nam Đ.');
+
+      const numericGarbageIdentity = extractCleanCitationIdentity(
+        '[4] 4 (2025). Báo cáo chuyển đổi số quốc gia tại Việt Nam.',
+      );
+      expect(numericGarbageIdentity.authorOnly).not.toBe('4');
+      expect(numericGarbageIdentity.shortHeader).not.toContain('[4] 4');
+
+      // 2. P2-3 & P2-Teacher #1: EssayPage L1 CIS / 100, VI labels, no GROBID TEI-XML, uncited caption
+      const r2Report = makeReport({
+        essay_id: 502,
+        filename: 'BaoCao_TDTU_2026.pdf',
+        style_profile: {
+          style: 'APA_LIKE',
+          confidence: 0.9,
+          apa_count: 5,
+          ieee_count: 0,
+          mixed_count: 0,
+          features: {},
+          ratios: {},
+          explanation: '',
+        },
+        cis: {
+          score: 69.4,
+          components: { verified_ratio: 0.694 },
+          weights_used: {},
+          num_citations: 5,
+          num_unresolved: 1,
+          disclaimer: '',
+        },
+        verdicts: [
+          makeVerdict({
+            citation_id: '765',
+            numeric_index: null,
+            citation_raw: 'Fake Author (2025). Fake Title. doi:10.9999/test.123',
+            label: 'suspected_hallucination',
+            confidence: 0.99,
+            mapping_status: 'matched',
+            reasoning:
+              'DOI 10.9999/test.123 matches known fabricated DOI pattern. [Neural: content alignment score=0.52, intent=background, stance=neutral]',
+            triggered_rules: ['R-FABRICATED-DOI', 'R-FAKE-URL'],
+            mismatched_fields: ['title'],
+            features: {
+              content_alignment_score: 0.52,
+              best_cited_sentence: 'Câu trích dẫn trong bài viết về chuyển đổi số.',
+              best_evidence_sentence: 'Matched evidence passage from source paper.',
+              best_evidence_score: 0.57,
+            },
+            matched_sources: [
+              {
+                source: 'crossref',
+                title: 'Unrelated Source Title',
+                authors: ['John Doe'],
+                year: '2020',
+                doi: '10.1000/other',
+                confidence: 0.4,
+                matched_fields: ['doi'],
+                checked_at: '2026-11-27T00:00:00Z',
+              },
+            ],
+          }),
+          makeVerdict({
+            citation_id: '766',
+            numeric_index: null,
+            citation_raw: 'Ban Chấp hành Trung ương (2024). Nghị quyết 57-NQ/TW. https://chinhphu.vn/nq57',
+            label: 'verified',
+            confidence: 0.95,
+            mapping_status: 'uncited_reference',
+            url_status: 'alive',
+            url_status_code: 200,
+            context: 'Đoạn thân bài nhắc tới chuyển đổi số quốc gia.',
+            triggered_rules: ['R-VN-LEGAL-VERIFIED'],
+            features: {
+              context_source: 'implicit_body_discovery',
+              content_alignment_score: 0.52,
+              best_cited_sentence: 'Đoạn thân bài nhắc tới chuyển đổi số quốc gia.',
+              best_evidence_sentence: 'Nghị quyết về đột phá phát triển khoa học công nghệ.',
+              best_evidence_score: 0.57,
+            },
+          }),
+          makeVerdict({
+            citation_id: '767',
+            numeric_index: null,
+            citation_raw: 'Smith, J. (2022). Partial Mismatch Study.',
+            label: 'metadata_error',
+            confidence: 0.86,
+            mapping_status: 'matched',
+            mismatched_fields: ['year'],
+            triggered_rules: ['R-SINGLE-SOURCE-PARTIAL'],
+          }),
+          makeVerdict({
+            citation_id: '768',
+            numeric_index: null,
+            citation_raw: 'Local Report (2023). Unindexed Internal Document.',
+            label: 'unresolved',
+            confidence: 0.5,
+            mapping_status: 'matched',
+            matched_sources: [],
+            triggered_rules: ['R-NO-CANDIDATE'],
+          }),
+          makeVerdict({
+            citation_id: '769',
+            numeric_index: null,
+            citation_raw: 'VNExpress (2025). Bài viết báo chí. https://vnexpress.net/demo',
+            label: 'resource',
+            confidence: 0.9,
+            mapping_status: 'uncited_reference',
+            url_status: 'alive',
+            url_status_code: 200,
+            triggered_rules: ['R-URL-RESOURCE'],
+          }),
+        ],
+      });
+
+      vi.spyOn(api, 'getEssay').mockResolvedValue(r2Report);
+
+      await i18n.changeLanguage('vi');
+      const { container: essayContainer, unmount: unmountEssay } = renderWithProviders(
+        <Routes>
+          <Route path="/verification/report/:id" element={<EssayPage />} />
+        </Routes>,
+        { user: makeUser('teacher', 'ultra'), initialRoute: '/verification/report/502?citation=766' },
+      );
+
+      await waitFor(() =>
+        expect(screen.getByTestId('report-cis-score-value').textContent).toContain('69.4 / 100'),
+      );
+      expect(screen.getByTestId('report-cis-score-value').textContent).not.toContain('%');
+      expect(essayContainer.textContent).toContain('Gần chuẩn APA');
+      expect(essayContainer.textContent).toContain('Liên kết hoạt động');
+      expect(essayContainer.textContent).not.toContain('HTTP 200 OK');
+      expect(essayContainer.textContent).not.toContain('GROBID TEI-XML');
+      expect(essayContainer.textContent).toContain('(tr. 1)');
+      expect(essayContainer.textContent).toContain(
+        'Đoạn văn liên quan trong bài (chưa trích dẫn trực tiếp)',
+      );
+      expect(essayContainer.textContent).toContain('mức độ liên quan ngữ cảnh: 52%');
+      expect(essayContainer.textContent).not.toContain('Neural = 0.52');
+
+      // Select unresolved citation [4] (768) -> verifies short "— Chưa đối chiếu" badge without clipping
+      const unresolvedCard = essayContainer.querySelector('[data-citation-id="768"]');
+      expect(unresolvedCard).not.toBeNull();
+      fireEvent.click(unresolvedCard!);
+      await waitFor(() =>
+        expect(essayContainer.textContent).toContain('— Chưa đối chiếu'),
+      );
+      expect(essayContainer.textContent).not.toContain('Chưa đối chiếu được');
+      unmountEssay();
+
+      // 3. P2-4: IssuesPage 1-based markers (no [765]), non-green certainty bar, collapsed raw rule IDs, Liên kết trong bài bucket
+      const { container: issuesContainer, unmount: unmountIssues } = renderWithProviders(
+        <Routes>
+          <Route path="/verification/issues/:id" element={<IssuesPage />} />
+        </Routes>,
+        { user: makeUser('teacher', 'ultra'), initialRoute: '/verification/issues/502' },
+      );
+
+      await waitFor(() =>
+        expect(screen.getByTestId('issues-filter-linking')).toBeDefined(),
+      );
+      expect(issuesContainer.textContent).toContain('Liên kết trong bài');
+      expect(issuesContainer.textContent).not.toContain('[765]');
+      expect(issuesContainer.textContent).not.toContain('[769]');
+
+      // Expand first error card ([1] Fake Author) to inspect analysis certainty bar & technical details
+      const expandButtons = screen.getAllByLabelText(/Mở rộng chi tiết/i);
+      expect(expandButtons.length).toBeGreaterThan(0);
+      fireEvent.click(expandButtons[0]);
+
+      const certaintyEl = await screen.findByTestId('issue-analysis-certainty');
+      expect(certaintyEl.textContent).toContain('Độ chắc chắn của phân tích');
+      // Must NOT use green bg-emerald-500 progress bar on error cards!
+      expect(certaintyEl.innerHTML).not.toContain('bg-emerald-500');
+      const techDetails = screen.getByTestId('issue-technical-details');
+      expect(techDetails.getAttribute('open')).toBeNull();
+      expect(techDetails.textContent).toContain('R-FABRICATED-DOI');
+      unmountIssues();
+
+      // 4. P3: LogicTracePage plain labels + KPI cards summing to 100% of Total
+      const { container: traceContainer, unmount: unmountTrace } = renderWithProviders(
+        <Routes>
+          <Route path="/verification/trace/:id" element={<LogicTracePage />} />
+        </Routes>,
+        { user: makeUser('teacher', 'ultra'), initialRoute: '/verification/trace/502' },
+      );
+
+      await waitFor(() =>
+        expect(screen.getByTestId('trace-kpi-unresolved')).toBeDefined(),
+      );
+      expect(screen.getByTestId('trace-kpi-resource')).toBeDefined();
+      // Expand citation [1] (Fake Author, confidence 0.99) to inspect NeuralAlignmentPanel labels
+      const fakeTraceBtn = Array.from(traceContainer.querySelectorAll('button')).find((b) =>
+        b.textContent?.includes('Fake Title'),
+      );
+      expect(fakeTraceBtn).toBeDefined();
+      fireEvent.click(fakeTraceBtn!);
+      await waitFor(() =>
+        expect(screen.getByTestId('trace-manuscript-passage-label').textContent).toContain(
+          'Câu trong bài viết · Khớp 52%',
+        ),
+      );
+      expect(screen.getByTestId('trace-source-passage-label').textContent).toContain(
+        'Đoạn gốc từ tài liệu · Khớp 57%',
+      );
+      const neuralPanel = screen.getByTestId('neural-alignment-panel');
+      expect(neuralPanel.textContent).not.toContain('(Manuscript Claim)');
+      expect(neuralPanel.textContent).not.toContain('(Source Evidence)');
+      expect(neuralPanel.textContent).not.toContain('align=');
+      expect(neuralPanel.textContent).not.toContain('sim=');
+      expect(traceContainer.textContent).not.toContain('(Manuscript Claim)');
+      unmountTrace();
+
+      // 5. P3: OrphanDetectionPage uses real 1-based bibliography index (no duplicate [1], [2] across uncited & matched)
+      const { unmount: unmountOrphan } = renderWithProviders(
+        <Routes>
+          <Route path="/verification/consistency/:id" element={<OrphanDetectionPage />} />
+        </Routes>,
+        { user: makeUser('teacher', 'ultra'), initialRoute: '/verification/consistency/502' },
+      );
+
+      await waitFor(() =>
+        expect(screen.getAllByTestId('consistency-entry-card').length).toBe(5),
+      );
+      const uncitedCards = screen
+        .getAllByTestId('consistency-entry-card')
+        .filter((el) => el.getAttribute('data-mapping-status') === 'uncited_reference');
+      const matchedCards = screen
+        .getAllByTestId('consistency-entry-card')
+        .filter((el) => el.getAttribute('data-mapping-status') === 'matched');
+      const uncitedMarkers = uncitedCards.map((c) => c.textContent?.match(/\[\d+\]/)?.[0]);
+      const matchedMarkers = matchedCards.map((c) => c.textContent?.match(/\[\d+\]/)?.[0]);
+      // Uncited entries are at bibliography positions [2] and [5]; matched are at [1], [3], [4]
+      expect(uncitedMarkers).toEqual(['[2]', '[5]']);
+      expect(matchedMarkers).toEqual(['[1]', '[3]', '[4]']);
+      unmountOrphan();
+
+      // 6. P2-7: BibliographyRemediationModal sanitizes EN reasoning & strips [Neural: ...]
+      vi.spyOn(api, 'getRemediatedBibliography').mockResolvedValueOnce({
+        essay_id: 502,
+        style: 'apa',
+        total_entries: 1,
+        remediated_count: 0,
+        hallucination_count: 1,
+        error_count: 0,
+        entries: [
+          {
+            index: 1,
+            verdict_id: '765',
+            label: 'suspected_hallucination',
+            remediation_status: 'hallucination',
+            is_hallucination: true,
+            triggered_rules: ['R-FABRICATED-DOI'],
+            reasoning:
+              'DOI 10.9999/test.123 matches known fabricated DOI pattern [Neural: content alignment score=0.41, intent=background]',
+            source_used: null,
+            original_raw: '[1] Fake Author (2025). Fake Title. doi:10.9999/test.123',
+            remediated_text: '[1] Fake Author (2025). Fake Title.',
+            apa: 'Fake Author (2025). Fake Title.',
+            ieee: '[1] Fake Author, "Fake Title," 2025.',
+            tdtu: 'Fake Author (2025), Fake Title.',
+            bibtex: '',
+            ris: '',
+            diff_fields: [],
+            was_modified: false,
+            canonical_metadata: {
+              title: 'Fake Title',
+              authors: ['Fake Author'],
+              year: '2025',
+              venue: '',
+              doi: '10.9999/test.123',
+              url: '',
+            },
+          },
+        ],
+        combined_text: '[1] Fake Author (2025). Fake Title.',
+        combined_bibtex: '',
+        combined_ris: '',
+      });
+
+      const { unmount: unmountModal } = renderWithProviders(
+        <BibliographyRemediationModal
+          essayId={502}
+          filename="BaoCao_TDTU_2026.pdf"
+          lang="vi"
+          open={true}
+          onClose={() => {}}
+        />,
+        { user: makeUser('teacher', 'ultra') },
+      );
+
+      await waitFor(() =>
+        expect(document.body.textContent).toContain('tiền tố thử nghiệm/không hợp lệ'),
+      );
+      expect(document.body.textContent).not.toContain('fabricated DOI pattern');
+      expect(document.body.textContent).not.toContain('[Neural:');
+      unmountModal();
     });
   });
 });

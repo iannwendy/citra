@@ -20,11 +20,14 @@ import {
   isUrlResource,
 } from '@/lib/verdictExplanation';
 import {
+  formatCisScore,
+  formatCitationStyleLabel,
   formatIntentLabel,
   formatStanceLabel,
   formatUserError,
   getVerdictDisplay,
   normalizeVerdictKey,
+  sanitizeReasoningForDisplay,
 } from '@/lib/academicTaxonomy';
 import { isDocxFilename } from '@/lib/fileKind';
 import { useEssayPolling } from '@/hooks/useEssayPolling';
@@ -501,7 +504,9 @@ function CitationPopup({
                           ? `⚠ HTTP ${code || 200} · Sai nội dung trang`
                           : `⚠ HTTP ${code || 200} · Wrong Page`
                         : st === 'alive'
-                          ? `✓ HTTP ${code || 200} OK`
+                          ? lang === 'vi'
+                            ? '✓ Liên kết hoạt động'
+                            : '✓ Link Active'
                           : st === 'restricted_alive'
                             ? lang === 'vi'
                               ? `🔒 Truy cập hạn chế (HTTP ${code || 403})`
@@ -531,24 +536,32 @@ function CitationPopup({
                   {t('inspector.whatWeFound')}
                 </label>
                 <p className="mt-1 text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
-                  {getVerdictExplanation(verdict, lang)}
+                  {sanitizeReasoningForDisplay(getVerdictExplanation(verdict, lang), lang)}
                 </p>
               </div>
 
               <div>
                 <label className="text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                  {t('inspector.confidence')}
+                  {verdict.label === 'suspected_hallucination' ||
+                  verdict.label === 'metadata_error'
+                    ? lang === 'vi'
+                      ? 'Độ chắc chắn của phân tích'
+                      : 'Analysis Certainty'
+                    : t('inspector.confidence')}
                 </label>
                 <div className="mt-2 flex items-center gap-3">
                   <Progress
                     value={verdict.confidence * 100}
                     className="flex-1 h-2"
                     indicatorClassName={
-                      verdict.confidence >= 0.8
-                        ? 'bg-emerald-500'
-                        : verdict.confidence >= 0.5
-                        ? 'bg-amber-500'
-                        : 'bg-red-500'
+                      verdict.label === 'suspected_hallucination' ||
+                      verdict.label === 'metadata_error'
+                        ? 'bg-slate-500 dark:bg-slate-400'
+                        : verdict.confidence >= 0.8
+                          ? 'bg-emerald-500'
+                          : verdict.confidence >= 0.5
+                            ? 'bg-amber-500'
+                            : 'bg-red-500'
                     }
                   />
                   <span className="text-xs font-mono font-semibold text-slate-700 dark:text-slate-300">
@@ -1506,7 +1519,7 @@ export function DocumentInspectorPage() {
         numPages={report.num_pages}
         numCitations={report.num_citations}
         numReferences={report.verdicts.length}
-        styleName={report.style_profile?.style}
+        styleName={formatCitationStyleLabel(report.style_profile?.style, lang)}
       />
 
       {/* Legacy Vietnamese Encoding (TCVN3/VNI) & Page-Selective OCR Recovery Diagnostics */}
@@ -1560,7 +1573,7 @@ export function DocumentInspectorPage() {
                   ? isVi
                     ? 'N/A · Không thể quét'
                     : 'N/A · Not Scannable'
-                  : `${Number(report.cis.score ?? 0).toFixed(1)} / 100`}
+                  : formatCisScore(report.cis.score ?? 0)}
               </span>
             </span>
           )}

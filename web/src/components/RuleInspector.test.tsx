@@ -210,4 +210,26 @@ describe('RuleInspector & verdictExplanation i18n and complete backend R- rule c
       'Đã kiểm tra Crossref để tìm ấn phẩm khớp.',
     );
   });
+
+  it('Round 2 P2-Teacher #1: never renders green VERIFIED badge on positive rules when overall verdict is suspected_hallucination', async () => {
+    await i18n.changeLanguage('vi');
+    const { container, unmount } = renderWithProviders(
+      <RuleInspector
+        triggeredRules={['R-DOI-TITLE-AUTHOR', 'R-CHIMERIC-DOI-MISMATCH']}
+        verdictLabel="suspected_hallucination"
+      />,
+    );
+    expect(container.textContent).toContain('Ứng viên tham khảo (chưa đủ khớp)');
+    expect(container.textContent).not.toContain('Đã xác minh');
+    unmount();
+
+    await i18n.changeLanguage('en');
+    const { container: enContainer } = renderWithProviders(
+      <RuleInspector
+        triggeredRules={['R-DOI-TITLE-AUTHOR', 'R-CHIMERIC-DOI-MISMATCH']}
+        verdictLabel="suspected_hallucination"
+      />,
+    );
+    expect(enContainer.textContent).toContain('Candidate (insufficient match)');
+  });
 });

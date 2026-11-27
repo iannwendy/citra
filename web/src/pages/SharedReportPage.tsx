@@ -48,10 +48,12 @@ import {
   normalizeVerdictKey,
   getVerdictDisplay,
   formatCisScore,
+  formatCitationStyleLabel,
   formatLocalizedDateTime,
   formatUserError,
   getScannedPdfNotice,
   resolveAcademicLang,
+  sanitizeReasoningForDisplay,
 } from '@/lib/academicTaxonomy';
 
 /**
@@ -115,46 +117,11 @@ function VerificationQrMatrixSvg({
 }
 
 /**
- * Strips raw markdown backticks, internal neural telemetry blocks, and raw
- * uppercase backend enum tokens from public verification text.
+ * Strips raw markdown backticks, internal neural telemetry blocks, raw
+ * uppercase backend enum tokens, and untranslated/accusatory diagnostics.
  */
 function sanitizePublicText(text: string, lang: 'en' | 'vi'): string {
-  if (!text) return '';
-  let out = text
-    // Strip internal [Neural: content alignment score=...] blocks
-    .replace(/\s*\[Neural:[^\]]*\]/gi, '')
-    // Strip parenthetical raw telemetry e.g. (title_sim=1.00, author_sim=1.00)
-    .replace(/\s*\((?:[^()]*\b(?:title_sim|author_sim|year_diff|score|sim)=[^()]*)\)/gi, '')
-    // Unwrap backticked enum tokens and replace known ones with human labels
-    .replace(/`([^`]+)`/g, (_match, inner: string) => {
-      const token = inner.trim().toLowerCase().replace(/[\s-]+/g, '_');
-      if (
-        token === 'suspected_hallucination' ||
-        token === 'metadata_error' ||
-        token === 'verified' ||
-        token === 'unresolved' ||
-        token === 'resource' ||
-        token === 'url_resource'
-      ) {
-        return `"${getVerdictDisplay(token, lang).label}"`;
-      }
-      return inner.trim();
-    })
-    // Replace bare uppercase internal enum tokens
-    .replace(/\bSUSPECTED_HALLUCINATION\b/g, getVerdictDisplay('suspected_hallucination', lang).label)
-    .replace(/\bMETADATA_ERROR\b/g, getVerdictDisplay('metadata_error', lang).label)
-    .replace(/\bURL_RESOURCE\b/g, getVerdictDisplay('resource', lang).label)
-    .replace(/\bUNCITED_REF\b/g, lang === 'vi' ? 'Chưa trích dẫn trong bài' : 'Not Cited')
-    .replace(/\bSTYLE_INCONSISTENT\b/g, lang === 'vi' ? 'Khác chuẩn trích dẫn' : 'Style Issue')
-    .replace(/\bDUPLICATE_REF\b/g, lang === 'vi' ? 'Trích dẫn trùng lặp' : 'Duplicate Reference')
-    // Clean double closing parens and double spaces
-    .replace(/\)\)+/g, ')')
-    .replace(/\s{2,}/g, ' ')
-    .trim();
-
-  // Fix missing space after colon in Vietnamese/English prose (excluding URLs/times)
-  out = out.replace(/([A-Za-zÀ-ỹ]):(?=[A-Za-zÀ-ỹ])/g, '$1: ');
-  return out;
+  return sanitizeReasoningForDisplay(text, lang);
 }
 
 function localizeExplanation(v: SharedVerdictItem, lang: 'en' | 'vi'): string {
@@ -265,7 +232,10 @@ function PublicReceiptHeader({
   const { t } = useTranslation();
   return (
     <header className="border-b border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md sticky top-0 z-40 print:static print:bg-white print:border-slate-300">
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-2 sm:gap-3">
+      <div
+        data-testid="shared-receipt-header-row"
+        className="max-w-5xl mx-auto px-4 sm:px-6 min-h-16 py-2.5 flex items-center justify-between gap-2 flex-wrap"
+      >
         <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
           <Link
             to="/"
@@ -285,7 +255,7 @@ function PublicReceiptHeader({
           </span>
         </div>
 
-        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 print:hidden">
+        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap justify-end min-w-0 print:hidden">
           <button
             type="button"
             onClick={onToggleTheme}
@@ -353,17 +323,18 @@ function PublicReceiptHeader({
               type="button"
               onClick={onCopyLink}
               data-testid="copy-share-url-btn"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono font-semibold bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white transition-colors cursor-pointer touch-manipulation select-none"
+              className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-mono font-semibold bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white transition-colors cursor-pointer touch-manipulation select-none"
             >
               {copied ? (
                 <>
-                  <Check className="h-3.5 w-3.5" />
+                  <Check className="h-3.5 w-3.5 shrink-0" />
                   <span>{t('sharedReport.copied')}</span>
                 </>
               ) : (
                 <>
-                  <Copy className="h-3.5 w-3.5" />
-                  <span>{t('sharedReport.copyVerificationLink')}</span>
+                  <Copy className="h-3.5 w-3.5 shrink-0" />
+                  <span className="sm:hidden">{lang === 'vi' ? 'Sao chép' : 'Copy'}</span>
+                  <span className="hidden sm:inline">{t('sharedReport.copyVerificationLink')}</span>
                 </>
               )}
             </button>
@@ -644,23 +615,23 @@ export function SharedReportPage() {
     report.qr_matrix && report.verification_url === shareUrlFull
       ? report.qr_matrix
       : undefined;
-  const rawStyle = (report.style_profile?.style || 'APA').toUpperCase();
+  const formattedStyle = formatCitationStyleLabel(report.style_profile?.style, lang);
   const displayStyle =
-    rawStyle === 'APA_LIKE' || rawStyle === 'APA-LIKE'
-      ? 'APA'
-      : rawStyle === 'IEEE_LIKE' || rawStyle === 'IEEE-LIKE'
-        ? 'IEEE'
-        : rawStyle === 'MIXED'
-          ? lang === 'vi'
-            ? 'Hỗn hợp'
-            : 'Mixed'
-          : rawStyle === 'UNKNOWN'
-            ? report.filename?.toLowerCase().endsWith('.bib')
-              ? 'BibTeX'
-              : report.filename?.toLowerCase().endsWith('.ris')
-                ? 'RIS'
-                : 'APA'
-            : rawStyle;
+    formattedStyle ||
+    (report.filename?.toLowerCase().endsWith('.bib')
+      ? 'BibTeX'
+      : report.filename?.toLowerCase().endsWith('.ris')
+        ? 'RIS'
+        : 'APA');
+
+  const numReferences = report.verdicts?.length ?? 0;
+  const hasDistinctReferences =
+    numReferences > 0 && numReferences !== report.num_citations;
+  const citationsSummaryText = hasDistinctReferences
+    ? lang === 'vi'
+      ? `${numReferences} tài liệu tham khảo (${report.num_citations} lượt trích)`
+      : `${numReferences} ${numReferences === 1 ? 'reference' : 'references'} (${report.num_citations} ${report.num_citations === 1 ? 'mention' : 'mentions'})`
+    : String(report.num_citations);
 
   const formattedVerifiedAt = formatLocalizedDateTime(report.verified_at, lang);
   const sanitizedDisclaimer = sanitizePublicText(
@@ -726,38 +697,41 @@ export function SharedReportPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-2 text-xs font-mono">
-                <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-800">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 text-xs font-mono">
+                <div className="min-w-0 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-800">
                   <div className="text-slate-400 dark:text-slate-500">
                     {t('sharedReport.pagesLabel')}
                   </div>
-                  <div className="font-bold text-slate-800 dark:text-slate-200 mt-0.5">
+                  <div className="font-bold text-slate-800 dark:text-slate-200 mt-0.5 break-words">
                     {report.num_pages}
                   </div>
                 </div>
-                <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-800">
-                  <div className="text-slate-400 dark:text-slate-500">
-                    {t('sharedReport.citationsLabel')}
-                  </div>
-                  <div className="font-bold text-slate-800 dark:text-slate-200 mt-0.5">
-                    {report.num_citations}
-                  </div>
-                </div>
-                <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-800">
+                <div className="min-w-0 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-800">
                   <div className="text-slate-400 dark:text-slate-500">
                     {t('sharedReport.styleLabel')}
                   </div>
-                  <div className="font-bold text-slate-800 dark:text-slate-200 mt-0.5">
+                  <div className="font-bold text-slate-800 dark:text-slate-200 mt-0.5 break-words">
                     {displayStyle}
                   </div>
                 </div>
-                <div className="col-span-2 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-800">
+                <div className="min-w-0 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-800">
+                  <div className="text-slate-400 dark:text-slate-500">
+                    {t('sharedReport.citationsLabel')}
+                  </div>
+                  <div
+                    data-testid="shared-citations-summary"
+                    className="font-bold text-slate-800 dark:text-slate-200 mt-0.5 break-words"
+                  >
+                    {citationsSummaryText}
+                  </div>
+                </div>
+                <div className="min-w-0 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-800">
                   <div className="text-slate-400 dark:text-slate-500">
                     {t('sharedReport.verifiedAtLabel')}
                   </div>
                   <div
                     data-testid="shared-verified-at"
-                    className="font-bold text-slate-800 dark:text-slate-200 mt-0.5 whitespace-nowrap"
+                    className="font-bold text-slate-800 dark:text-slate-200 mt-0.5 break-words sm:whitespace-nowrap"
                   >
                     {formattedVerifiedAt}
                   </div>
@@ -766,7 +740,7 @@ export function SharedReportPage() {
             </div>
 
             {/* QR Matrix + Integrity Seal Block */}
-            <div className="flex items-center gap-4 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 w-full lg:w-auto">
+            <div className="flex items-center gap-4 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 w-full lg:w-[296px] lg:shrink-0">
               <VerificationQrMatrixSvg
                 value={shareUrlFull}
                 matrix={qrMatrixForUrl}
@@ -1098,7 +1072,9 @@ export function SharedReportPage() {
                               {isUrlContentMismatch
                                 ? `⚠ HTTP ${urlStatusCode ?? 200} · ${lang === 'vi' ? 'Sai nội dung trang' : 'Wrong Page'}`
                                 : urlStatus === 'alive'
-                                  ? `✓ HTTP ${urlStatusCode ?? 200} OK`
+                                  ? lang === 'vi'
+                                    ? '✓ Liên kết hoạt động'
+                                    : '✓ Link Active'
                                   : urlStatus === 'restricted_alive'
                                     ? lang === 'vi'
                                       ? `🔒 Truy cập hạn chế (HTTP ${urlStatusCode ?? 403})`
@@ -1201,10 +1177,20 @@ export function SharedReportPage() {
                         )}
                         {matched && (
                           <div className="p-3 rounded-lg bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 space-y-1">
-                            <div className="font-mono font-semibold text-emerald-700 dark:text-emerald-300 flex items-center justify-between gap-2 flex-wrap">
+                            <div
+                              className={`font-mono font-semibold flex items-center justify-between gap-2 flex-wrap ${
+                                normalizedLabel === 'suspected_hallucination'
+                                  ? 'text-amber-700 dark:text-amber-300'
+                                  : 'text-emerald-700 dark:text-emerald-300'
+                              }`}
+                            >
                               <span>
-                                {t('sharedReport.matchedSourceLabel')}:{' '}
-                                {matchedSourceDisplay}
+                                {normalizedLabel === 'suspected_hallucination'
+                                  ? lang === 'vi'
+                                    ? 'Ứng viên tham khảo (chưa đủ khớp)'
+                                    : 'Candidate (insufficient match)'
+                                  : t('sharedReport.matchedSourceLabel')}
+                                : {matchedSourceDisplay}
                               </span>
                               {(() => {
                                 const safeMatchedHref =

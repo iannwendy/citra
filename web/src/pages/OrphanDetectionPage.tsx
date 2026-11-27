@@ -12,6 +12,8 @@ import { getCitationMarkerLabel, isUrlResource } from '@/lib/verdictExplanation'
 import { MappingStatusBadge } from '@/components/MappingStatusBadge';
 import { DecisionSupportBanner } from '@/components/DecisionSupportBanner';
 import {
+  formatCisScore,
+  formatCitationStyleLabel,
   formatUserError,
   getMappingStatusDisplay,
 } from '@/lib/academicTaxonomy';
@@ -51,6 +53,7 @@ interface OrphanCitation {
   reference_id?: string;
   citation_link?: Verdict['citation_link'];
   features?: Verdict['features'];
+  bibliographyIndex: number;
 }
 
 interface UncitedReference {
@@ -61,14 +64,22 @@ interface UncitedReference {
   composite_label?: string | null;
   citation_link?: Verdict['citation_link'];
   features?: Verdict['features'];
+  bibliographyIndex: number;
 }
+
+type IndexedVerdict = Verdict & { bibliographyIndex: number };
 
 function getOrphanStats(
   verdicts: Verdict[],
   references?: Citation[],
   extractedCitations?: Citation[]
 ) {
-  const verdictOrphans = verdicts.filter(
+  const indexedVerdicts: IndexedVerdict[] = verdicts.map((v, idx) => ({
+    ...v,
+    bibliographyIndex: idx,
+  }));
+
+  const verdictOrphans: OrphanCitation[] = indexedVerdicts.filter(
     (v) => v.mapping_status === 'missing_reference' || v.mapping_status === 'in_text_mismatch'
   );
   const seenOrphanRaw = new Set(verdictOrphans.map((v) => v.citation_raw));
@@ -88,30 +99,54 @@ function getOrphanStats(
       composite_label: c.composite_label,
       reference_id: c.reference_id,
       citation_link: c.citation_link,
+      bibliographyIndex:
+        c.numeric_index && c.numeric_index > 0
+          ? c.numeric_index - 1
+          : verdicts.length + i,
     }));
 
   const citationsWithoutReference: OrphanCitation[] = [
     ...verdictOrphans,
     ...extraOrphansFromExtracted,
   ];
-  const verdictUncited = verdicts.filter(
+  const verdictUncited = indexedVerdicts.filter(
     (v) => v.mapping_status === 'uncited_reference'
   );
   const seenUncitedRaw = new Set(verdictUncited.map((v) => v.citation_raw));
-  const extraUncitedFromRefs: UncitedReference[] = (references ?? [])
+  const refsList = references ?? [];
+  const refsRepresentsFullBib = refsList.some((r) =>
+    verdicts.some(
+      (v) =>
+        v.citation_raw === r.raw_text ||
+        (r.reference_id && v.citation_link?.reference_id === r.reference_id),
+    ),
+  );
+  let extraUncitedOffset = 0;
+  const extraUncitedFromRefs: UncitedReference[] = refsList
+    .map((r, refIdx) => ({ ref: r, refIdx }))
     .filter(
-      (r) =>
+      ({ ref: r }) =>
         (r.cited_in_text_count === 0 || r.mapping_status === 'uncited_reference') &&
         !seenUncitedRaw.has(r.raw_text)
     )
-    .map((r, i) => ({
-      reference_id: r.reference_id || String(r.id ?? `ref-uncited-${i}`),
-      raw_text: r.raw_text,
-      numeric_index: r.numeric_index,
-      sub_index: r.sub_index,
-      composite_label: r.composite_label,
-      citation_link: r.citation_link,
-    }));
+    .map(({ ref: r, refIdx }) => {
+      const fallbackIdx = refsRepresentsFullBib
+        ? refIdx
+        : verdicts.length + extraUncitedOffset;
+      extraUncitedOffset += 1;
+      return {
+        reference_id: r.reference_id || String(r.id ?? `ref-uncited-${refIdx}`),
+        raw_text: r.raw_text,
+        numeric_index: r.numeric_index,
+        sub_index: r.sub_index,
+        composite_label: r.composite_label,
+        citation_link: r.citation_link,
+        bibliographyIndex:
+          r.numeric_index && r.numeric_index > 0
+            ? r.numeric_index - 1
+            : fallbackIdx,
+      };
+    });
 
   const uncitedReferences: UncitedReference[] = [
     ...verdictUncited.map((v) => ({
@@ -122,24 +157,25 @@ function getOrphanStats(
       composite_label: v.composite_label,
       citation_link: v.citation_link,
       features: v.features,
+      bibliographyIndex: v.bibliographyIndex,
     })),
     ...extraUncitedFromRefs,
   ];
 
   // Bucket EVERY remaining verdict so ZERO entries are silently dropped (BUG-02)
-  const ambiguousMappings = verdicts.filter(
+  const ambiguousMappings = indexedVerdicts.filter(
     (v) => v.mapping_status === 'ambiguous_mapping'
   );
-  const duplicateReferences = verdicts.filter(
+  const duplicateReferences = indexedVerdicts.filter(
     (v) => v.mapping_status === 'duplicate_reference'
   );
-  const styleInconsistent = verdicts.filter(
+  const styleInconsistent = indexedVerdicts.filter(
     (v) => v.mapping_status === 'style_inconsistent'
   );
-  const correctlyLinked = verdicts.filter(
+  const correctlyLinked = indexedVerdicts.filter(
     (v) => v.mapping_status === 'matched'
   );
-  const otherUnresolved = verdicts.filter(
+  const otherUnresolved = indexedVerdicts.filter(
     (v) =>
       v.mapping_status !== 'matched' &&
       v.mapping_status !== 'missing_reference' &&
@@ -556,7 +592,7 @@ export function OrphanConsistencyWorkspace({
                           : 'These citations appear in the document but no matching entry was found in the bibliography.'}
                       </p>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                        {stats.citationsWithoutReference.map((citation, index) => (
+                        {stats.citationsWithoutReference.map((citation) => (
                           <div
                             key={citation.citation_id}
                             onClick={
@@ -574,7 +610,7 @@ export function OrphanConsistencyWorkspace({
                           >
                             <MappingIssueCard
                               citation={citation}
-                              index={index}
+                              index={citation.bibliographyIndex}
                               isVi={isVi}
                             />
                           </div>
@@ -598,11 +634,11 @@ export function OrphanConsistencyWorkspace({
                           : 'These references exist in the bibliography but are never cited in the document.'}
                       </p>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                        {stats.uncitedReferences.map((reference, index) => (
+                        {stats.uncitedReferences.map((reference) => (
                           <UncitedReferenceCard
                             key={reference.reference_id}
                             reference={reference}
-                            index={index}
+                            index={reference.bibliographyIndex}
                             isVi={isVi}
                           />
                         ))}
@@ -623,7 +659,7 @@ export function OrphanConsistencyWorkspace({
                           : 'These citations have multiple possible reference matches.'}
                       </p>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                        {stats.ambiguousMappings.map((citation, index) => (
+                        {stats.ambiguousMappings.map((citation) => (
                           <div
                             key={citation.citation_id}
                             onClick={
@@ -635,7 +671,7 @@ export function OrphanConsistencyWorkspace({
                           >
                             <MappingIssueCard
                               citation={citation}
-                              index={index}
+                              index={citation.bibliographyIndex}
                               isVi={isVi}
                             />
                           </div>
@@ -657,7 +693,7 @@ export function OrphanConsistencyWorkspace({
                           : 'These bibliography entries appear more than once in the reference list.'}
                       </p>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                        {stats.duplicateReferences.map((citation, index) => (
+                        {stats.duplicateReferences.map((citation) => (
                           <div
                             key={citation.citation_id}
                             onClick={
@@ -669,7 +705,7 @@ export function OrphanConsistencyWorkspace({
                           >
                             <MappingIssueCard
                               citation={citation}
-                              index={index}
+                              index={citation.bibliographyIndex}
                               isVi={isVi}
                             />
                           </div>
@@ -691,7 +727,7 @@ export function OrphanConsistencyWorkspace({
                           : 'These citations do not match the dominant citation style used across the manuscript.'}
                       </p>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                        {stats.styleInconsistent.map((citation, index) => (
+                        {stats.styleInconsistent.map((citation) => (
                           <div
                             key={citation.citation_id}
                             onClick={
@@ -703,7 +739,7 @@ export function OrphanConsistencyWorkspace({
                           >
                             <MappingIssueCard
                               citation={citation}
-                              index={index}
+                              index={citation.bibliographyIndex}
                               isVi={isVi}
                             />
                           </div>
@@ -720,7 +756,7 @@ export function OrphanConsistencyWorkspace({
                         {isVi ? 'Liên kết chưa xác định' : 'Other Unresolved Mappings'}
                       </h2>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                        {stats.otherUnresolved.map((citation, index) => (
+                        {stats.otherUnresolved.map((citation) => (
                           <div
                             key={citation.citation_id}
                             onClick={
@@ -732,7 +768,7 @@ export function OrphanConsistencyWorkspace({
                           >
                             <MappingIssueCard
                               citation={citation}
-                              index={index}
+                              index={citation.bibliographyIndex}
                               isVi={isVi}
                             />
                           </div>
@@ -755,8 +791,8 @@ export function OrphanConsistencyWorkspace({
                         : 'These bibliography entries are properly linked to in-text citations in the manuscript.'}
                     </p>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                      {stats.correctlyLinked.map((v, index) => {
-                        const markerLabel = getCitationMarkerLabel(v, index);
+                      {stats.correctlyLinked.map((v) => {
+                        const markerLabel = getCitationMarkerLabel(v, v.bibliographyIndex);
                         const displayRaw = v.citation_raw.replace(
                           /^\s*\[\s*\d+[a-z]?\s*\]\s*/i,
                           '',
@@ -963,7 +999,7 @@ export function OrphanDetectionPage() {
         numPages={report.num_pages}
         numCitations={report.num_citations}
         numReferences={report.verdicts.length}
-        styleName={report.style_profile?.style}
+        styleName={formatCitationStyleLabel(report.style_profile?.style, lang)}
       />
 
       {/* Shared Multi-Tab Diagnostic Navigation + Compact CIS Score (BUG-19) */}
@@ -981,7 +1017,7 @@ export function OrphanDetectionPage() {
                   ? isVi
                     ? 'N/A · Không thể quét'
                     : 'N/A · Not Scannable'
-                  : `${Number(report.cis.score ?? 0).toFixed(1)} / 100`}
+                  : formatCisScore(report.cis.score ?? 0)}
               </span>
             </span>
           )}

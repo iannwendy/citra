@@ -9,14 +9,17 @@ import {
   extractObservedWebMeta,
   getCitationMarkerLabel,
   getFieldDisplayName,
+  getRuleDisplayName,
   getSourceDisplayName,
   getVerdictExplanation,
   isUrlResource,
 } from '@/lib/verdictExplanation';
 import {
+  formatCitationStyleLabel,
   formatUserError,
   getMappingStatusDisplay,
   getVerdictDisplay,
+  sanitizeReasoningForDisplay,
 } from '@/lib/academicTaxonomy';
 import { useEssayPolling } from '@/hooks/useEssayPolling';
 import { useRole } from '@/hooks/useRole';
@@ -39,6 +42,7 @@ import {
   Scale,
   Lock,
   Globe,
+  Link2,
   ArrowRight,
   ArrowLeft,
 } from 'lucide-react';
@@ -51,23 +55,29 @@ import { Progress } from '@/components/ui/progress';
    Shows all actionable verification issues grouped by severity
    ============================================================ */
 
-type Severity = 'critical' | 'warning' | 'info';
+type Severity = 'critical' | 'warning' | 'linking' | 'info';
 
 function getSeverity(v: Verdict): Severity {
   const effective: ValidationLabel = getEffectiveVerdictKey(v);
+  const urlSt = v.url_status ?? v.features?.url_status;
+  const rules = v.triggered_rules ?? [];
+  const hasUrlWarning =
+    urlSt === 'dead_link' ||
+    urlSt === 'fake_domain' ||
+    rules.includes('R-URL-CONTENT-MISMATCH') ||
+    rules.includes('R-BROKEN-LINK') ||
+    rules.includes('R-DEAD-URL') ||
+    rules.includes('R-FAKE-URL');
+
   switch (effective) {
     case 'suspected_hallucination':
       return 'critical';
     case 'metadata_error':
       return 'warning';
-    case 'resource': {
-      const urlSt = v.url_status ?? v.features?.url_status;
-      if (urlSt === 'dead_link' || urlSt === 'fake_domain') return 'warning';
-      if ((v.triggered_rules ?? []).includes('R-URL-CONTENT-MISMATCH')) return 'warning';
-      return 'info';
-    }
+    case 'resource':
+      return hasUrlWarning ? 'warning' : 'linking';
     case 'verified':
-      return 'info';
+      return hasUrlWarning ? 'warning' : 'linking';
     default:
       return 'info';
   }
@@ -98,10 +108,22 @@ const severityConfig = {
     bgCard: 'bg-amber-50/40 dark:bg-amber-950/25',
     borderCard: 'border-amber-200/80 dark:border-amber-900/70',
   },
+  linking: {
+    labelEn: 'In-Text Linking (Uncited / Orphan / Style)',
+    labelVi: 'Liên kết trong bài (Chưa trích dẫn / Thiếu mục / Quy cách)',
+    shortLabel: 'In-Text Linking',
+    bgClass: 'bg-indigo-50 dark:bg-indigo-950/70',
+    borderClass: 'border-indigo-200 dark:border-indigo-800/80',
+    icon: <Link2 className="h-4 w-4" />,
+    iconColor: 'text-indigo-600 dark:text-indigo-400',
+    textColor: 'text-indigo-700 dark:text-indigo-300',
+    bgCard: 'bg-indigo-50/35 dark:bg-indigo-950/20',
+    borderCard: 'border-indigo-200/80 dark:border-indigo-900/70',
+  },
   info: {
-    labelEn: 'Info (Unverified & Linking)',
-    labelVi: 'Thông tin (Chưa đủ dữ liệu & Liên kết)',
-    shortLabel: 'Info',
+    labelEn: 'Unverified (Insufficient Data)',
+    labelVi: 'Chưa đủ dữ liệu (Cần đối chiếu thủ công)',
+    shortLabel: 'Unverified',
     bgClass: 'bg-slate-100 dark:bg-slate-800',
     borderClass: 'border-slate-200 dark:border-slate-700',
     icon: <Info className="h-4 w-4" />,
@@ -137,12 +159,14 @@ function IssueCard({
   verdict,
   essayId,
   index,
+  markerLabel,
   lang,
   canViewDeep,
 }: {
   verdict: Verdict;
   essayId: number;
   index?: number;
+  markerLabel?: string;
   lang: 'vi' | 'en';
   /** Pro/Ultra plans, teachers and admins (`view_logic_trace` capability). */
   canViewDeep: boolean;
@@ -151,11 +175,9 @@ function IssueCard({
   const severity = getSeverity(verdict);
   const config = severityConfig[severity];
 
-  const resolvedMarker = getCitationMarkerLabel(verdict);
+  // Always use 1-based bibliography marker matching EssayPage — NEVER raw DB primary keys!
   const citationMarker =
-    resolvedMarker !== '[?]'
-      ? resolvedMarker
-      : `[${verdict.citation_id.replace(/^v/i, '') || (index !== undefined ? index + 1 : '?')}]`;
+    markerLabel || getCitationMarkerLabel(verdict, index ?? 0);
   const displayCitationRaw =
     verdict.citation_raw.replace(/^\s*\[\s*\d+[a-z]?\s*\]\s*/i, '') ||
     verdict.citation_raw;
@@ -296,7 +318,9 @@ function IssueCard({
                 {isUrlContentMismatch
                   ? `⚠ HTTP ${urlStatusCode ?? 200} · ${lang === 'vi' ? 'Sai nội dung trang' : 'Wrong Page'}`
                   : urlStatus === 'alive'
-                    ? `✓ HTTP ${urlStatusCode ?? 200} OK`
+                    ? lang === 'vi'
+                      ? '✓ Liên kết hoạt động'
+                      : '✓ Link Active'
                     : urlStatus === 'restricted_alive'
                       ? lang === 'vi'
                         ? `🔒 Truy cập hạn chế (HTTP ${urlStatusCode ?? 403})`
@@ -321,7 +345,9 @@ function IssueCard({
             )}
             {canViewDeep && (
               <span className="text-xs font-mono text-slate-500 dark:text-slate-400">
-                {lang === 'vi' ? 'Độ tin cậy:' : 'Confidence:'}{' '}
+                {lang === 'vi'
+                  ? 'Độ chắc chắn của phân tích:'
+                  : 'Analysis certainty:'}{' '}
                 <strong>{Math.round(verdict.confidence * 100)}%</strong>
               </span>
             )}
@@ -421,7 +447,7 @@ function IssueCard({
                   {lang === 'vi' ? 'Giải thích kiểm tra' : 'What this means'}
                 </h4>
                 <p className="text-xs sm:text-sm text-slate-700 dark:text-slate-300">
-                  {getVerdictExplanation(verdict, lang)}
+                  {sanitizeReasoningForDisplay(getVerdictExplanation(verdict, lang), lang)}
                 </p>
               </div>
             </div>
@@ -450,19 +476,38 @@ function IssueCard({
             {canViewDeep && verdict.triggered_rules.length > 0 && (
               <div>
                 <h4 className="text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
-                  {lang === 'vi' ? 'Tiêu chí kích hoạt' : 'Triggered Rules'}
+                  {lang === 'vi' ? 'Tiêu chí đánh giá' : 'Triggered Rules'}
                 </h4>
                 <div className="flex flex-wrap gap-1.5">
                   {verdict.triggered_rules.map((rule) => (
                     <Badge
                       key={rule}
                       variant="outline"
-                      className="px-2 py-0.5 rounded text-xs font-mono bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300"
+                      className="px-2 py-0.5 rounded text-xs bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300"
                     >
-                      {rule}
+                      {getRuleDisplayName(rule, lang)}
                     </Badge>
                   ))}
                 </div>
+                <details
+                  data-testid="issue-technical-details"
+                  className="mt-2 rounded-lg border border-slate-200/70 dark:border-slate-800 bg-white/70 dark:bg-slate-900/70 px-2.5 py-1.5"
+                >
+                  <summary className="cursor-pointer select-none text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                    {lang === 'vi' ? 'Chi tiết kỹ thuật' : 'Technical Details'}
+                  </summary>
+                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+                    {verdict.triggered_rules.map((rule) => (
+                      <Badge
+                        key={`code-${rule}`}
+                        variant="outline"
+                        className="px-2 py-0.5 rounded text-[11px] font-mono bg-slate-50 dark:bg-slate-950 text-slate-600 dark:text-slate-300"
+                      >
+                        {rule}
+                      </Badge>
+                    ))}
+                  </div>
+                </details>
               </div>
             )}
           </div>
@@ -540,20 +585,26 @@ function IssueCard({
           )}
 
           {canViewDeep && verdict.confidence > 0 && (
-            <div>
-              <h4 className="text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
-                {lang === 'vi' ? 'Độ tin cậy' : 'Confidence'}
-              </h4>
+            <div data-testid="issue-analysis-certainty">
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <h4 className="text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                  {lang === 'vi'
+                    ? `Độ chắc chắn của phân tích: ${Math.round(verdict.confidence * 100)}%`
+                    : `Analysis certainty: ${Math.round(verdict.confidence * 100)}%`}
+                </h4>
+                <span aria-hidden="true" className="sr-only">
+                  {lang === 'vi' ? 'Độ tin cậy' : 'Confidence'}
+                </span>
+              </div>
               <div className="flex items-center gap-2">
                 <Progress
                   value={verdict.confidence * 100}
                   className="flex-1 h-2"
                   indicatorClassName={
-                    verdict.confidence >= 0.8
-                      ? 'bg-emerald-500'
-                      : verdict.confidence >= 0.5
-                        ? 'bg-amber-500'
-                        : 'bg-red-500'
+                    verdict.label === 'suspected_hallucination' ||
+                    verdict.label === 'metadata_error'
+                      ? 'bg-slate-500 dark:bg-slate-400'
+                      : 'bg-indigo-500 dark:bg-indigo-400'
                   }
                 />
                 <span className="text-xs font-mono font-semibold text-slate-600 dark:text-slate-300">
@@ -588,12 +639,14 @@ function SeveritySection({
   severity,
   essayId,
   verdicts,
+  markerByCitationId,
   lang,
   canViewDeep,
 }: {
   severity: Severity;
   essayId: number;
   verdicts: Verdict[];
+  markerByCitationId: Map<string, string>;
   lang: 'vi' | 'en';
   canViewDeep: boolean;
 }) {
@@ -649,6 +702,7 @@ function SeveritySection({
               verdict={verdict}
               essayId={essayId}
               index={idx}
+              markerLabel={markerByCitationId.get(verdict.citation_id)}
               lang={lang}
               canViewDeep={canViewDeep}
             />
@@ -665,7 +719,7 @@ export function IssuesPage() {
   const { has } = useRole();
   const canViewDeep = has('view_logic_trace');
   const lang: 'vi' | 'en' = i18n.language?.startsWith('vi') ? 'vi' : 'en';
-  const [filter, setFilter] = useState<'all' | 'critical' | 'warning' | 'info'>('all');
+  const [filter, setFilter] = useState<'all' | 'critical' | 'warning' | 'linking' | 'info'>('all');
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [lockedFeatureName, setLockedFeatureName] = useState('');
 
@@ -674,13 +728,23 @@ export function IssuesPage() {
     numericId !== null && !Number.isNaN(numericId) && numericId > 0 ? numericId : null
   );
 
+  // Compute canonical 1-based bibliography indices matching EssayPage's ordered list
+  const markerByCitationId = useMemo(() => {
+    const map = new Map<string, string>();
+    (report?.verdicts ?? []).forEach((v, idx) => {
+      map.set(v.citation_id, getCitationMarkerLabel(v, idx));
+    });
+    return map;
+  }, [report?.verdicts]);
+
   // Exclude valid web/legal resources (no broken URL or mapping error) from actionable issues (BUG-02)
   const issuesBySeverity = useMemo(() => {
-    if (!report) return { critical: [], warning: [], info: [] };
+    if (!report) return { critical: [], warning: [], linking: [], info: [] };
     const issues = report.verdicts.filter(isActionableIssueVerdict);
     return {
       critical: issues.filter((v) => getSeverity(v) === 'critical'),
       warning: issues.filter((v) => getSeverity(v) === 'warning'),
+      linking: issues.filter((v) => getSeverity(v) === 'linking'),
       info: issues.filter((v) => getSeverity(v) === 'info'),
     };
   }, [report]);
@@ -695,6 +759,7 @@ export function IssuesPage() {
       return [
         { severity: 'critical' as Severity, data: issuesBySeverity.critical },
         { severity: 'warning' as Severity, data: issuesBySeverity.warning },
+        { severity: 'linking' as Severity, data: issuesBySeverity.linking },
         { severity: 'info' as Severity, data: issuesBySeverity.info },
       ];
     }
@@ -760,7 +825,7 @@ export function IssuesPage() {
         numPages={report.num_pages}
         numCitations={report.num_citations}
         numReferences={report.verdicts.length}
-        styleName={report.style_profile?.style}
+        styleName={formatCitationStyleLabel(report.style_profile?.style, lang)}
       />
 
       {/* Unified Persistent 5-Layer Score Summary & Navigation Bar (BUG-19) */}
@@ -777,8 +842,14 @@ export function IssuesPage() {
       {/* Non-Accusatory Academic Decision-Support Disclaimer (BUG-03) */}
       <DecisionSupportBanner variant="compact" lang={lang} />
 
-      {/* 4 Summary Metric Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      {/* Summary Metric Cards (always sum to Total Issues) */}
+      <div
+        className={`grid grid-cols-2 ${
+          issuesBySeverity.linking.length > 0 && issuesBySeverity.info.length > 0
+            ? 'sm:grid-cols-5'
+            : 'sm:grid-cols-4'
+        } gap-4`}
+      >
         <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm">
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
@@ -821,19 +892,37 @@ export function IssuesPage() {
           </p>
         </Card>
 
-        <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm">
-          <div className="flex items-center justify-between mb-1.5">
-            <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-              {lang === 'vi' ? 'Chưa đủ dữ liệu & Liên kết' : 'Unverified & Linking'}
-            </span>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-              04
-            </span>
-          </div>
-          <p className="text-2xl font-bold font-mono tabular-nums text-slate-700 dark:text-slate-200">
-            {issuesBySeverity.info.length}
-          </p>
-        </Card>
+        {issuesBySeverity.linking.length > 0 && (
+          <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-indigo-200/80 dark:border-indigo-900/70 shadow-sm">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-xs font-medium text-indigo-600 dark:text-indigo-400">
+                {lang === 'vi' ? 'Liên kết trong bài' : 'In-Text Linking'}
+              </span>
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300">
+                04
+              </span>
+            </div>
+            <p className="text-2xl font-bold font-mono tabular-nums text-indigo-600 dark:text-indigo-400">
+              {issuesBySeverity.linking.length}
+            </p>
+          </Card>
+        )}
+
+        {(issuesBySeverity.info.length > 0 || issuesBySeverity.linking.length === 0) && (
+          <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                {getVerdictDisplay('unresolved', lang).label}
+              </span>
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                {issuesBySeverity.linking.length > 0 ? '05' : '04'}
+              </span>
+            </div>
+            <p className="text-2xl font-bold font-mono tabular-nums text-slate-700 dark:text-slate-200">
+              {issuesBySeverity.info.length}
+            </p>
+          </Card>
+        )}
       </div>
 
       {/* Clean Container for Issues List */}
@@ -857,18 +946,20 @@ export function IssuesPage() {
             }
             className="flex gap-1.5 flex-wrap"
           >
-            {(['all', 'critical', 'warning', 'info'] as const).map((f) => {
+            {(['all', 'critical', 'warning', 'linking', 'info'] as const).map((f) => {
               const isActive = filter === f;
               const filterLabels: Record<typeof f, { en: string; vi: string }> = {
                 all: { en: 'All', vi: 'Tất cả' },
                 critical: { en: 'Source Not Found', vi: 'Không tìm thấy nguồn' },
                 warning: { en: 'Details Mismatch', vi: 'Sai lệch thông tin' },
-                info: { en: 'Unverified / Linking', vi: 'Chưa đủ dữ liệu' },
+                linking: { en: 'In-Text Linking', vi: 'Liên kết trong bài' },
+                info: { en: 'Unverified', vi: 'Chưa đủ dữ liệu' },
               };
               return (
                 <button
                   key={f}
                   type="button"
+                  data-testid={`issues-filter-${f}`}
                   onClick={() => setFilter(f)}
                   aria-pressed={isActive}
                   className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all border cursor-pointer ${
@@ -914,6 +1005,7 @@ export function IssuesPage() {
                   severity={severity}
                   essayId={report.essay_id}
                   verdicts={data}
+                  markerByCitationId={markerByCitationId}
                   lang={lang}
                   canViewDeep={canViewDeep}
                 />

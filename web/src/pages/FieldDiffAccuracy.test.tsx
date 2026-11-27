@@ -380,6 +380,7 @@ describe('EssayPage Metadata Diff Table Accuracy (Regression for essay_02_mixed.
       ).toBeGreaterThan(0),
     );
     expect(container.textContent).not.toContain('(cao))');
-    expect(container.textContent).toContain('[cao]');
+    expect(container.textContent).not.toContain('ngữ cảnh Neural');
+    expect(container.textContent).toContain('mức độ liên quan ngữ cảnh: 88%');
   });
 });

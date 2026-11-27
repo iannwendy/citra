@@ -22,10 +22,17 @@ import {
   type ViewMode,
   type CitationGraphStats,
 } from '../graph/CitationGraphControls';
-import { InteractiveDecisionFlowBoard } from './InteractiveDecisionFlowBoard';
+import {
+  InteractiveDecisionFlowBoard,
+  extractCleanCitationIdentity,
+} from './InteractiveDecisionFlowBoard';
 import { DirectionalStageSlide, useSlidingPill } from '@/components/ui/transitions';
 import { getCitationMarkerLabel, isUrlResource } from '@/lib/verdictExplanation';
-import { getVerdictDisplay, normalizeVerdictKey } from '@/lib/academicTaxonomy';
+import {
+  formatAcademicAuthorShort,
+  getVerdictDisplay,
+  normalizeVerdictKey,
+} from '@/lib/academicTaxonomy';
 
 interface CitationGraphViewProps {
   verdicts: Verdict[];
@@ -515,8 +522,20 @@ export function CitationGraphView({
                   'R-INCOMPLETE-METADATA',
                 );
                 const cleanedRawText =
-                  v.citation_raw?.replace(/^\s*\[\s*\d+[a-z]?\s*\]\s*/i, '') ||
-                  v.citation_raw;
+                  v.citation_raw
+                    ?.replace(/^\s*(?:\[\s*\d+[a-z]?\s*\]|\d+[a-z]?[.)])\s*/i, '')
+                    .trim() || v.citation_raw;
+                const parsedIdentity = extractCleanCitationIdentity(
+                  v.citation_raw,
+                  v.matched_sources?.[0],
+                );
+                const shortAuthorLabel =
+                  parsedIdentity.shortHeader ||
+                  formatAcademicAuthorShort(
+                    v.matched_sources?.[0]?.authors,
+                    cleanedRawText,
+                    lang,
+                  );
                 return (
                   <div key={v.citation_id ?? i} className="w-full min-w-0 space-y-2">
                     <div
@@ -533,16 +552,26 @@ export function CitationGraphView({
                       }`}
                     >
                       <div className="flex items-center justify-between gap-2 mb-1.5">
-                        <span
-                          data-testid="graph-sidebar-marker"
-                          className={`font-mono text-[11px] font-bold px-1.5 py-0.5 rounded-md shrink-0 transition-colors ${
-                            isSelected
-                              ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-sm'
-                              : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200'
-                          }`}
-                        >
-                          {marker}
-                        </span>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span
+                            data-testid="graph-sidebar-marker"
+                            className={`font-mono text-[11px] font-bold px-1.5 py-0.5 rounded-md shrink-0 transition-colors ${
+                              isSelected
+                                ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-sm'
+                                : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200'
+                            }`}
+                          >
+                            {marker}
+                          </span>
+                          {shortAuthorLabel && (
+                            <span
+                              data-testid="graph-sidebar-author"
+                              className="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate"
+                            >
+                              {shortAuthorLabel}
+                            </span>
+                          )}
+                        </div>
 
                         <div className="flex items-center gap-1.5 flex-wrap justify-end min-w-0">
                           {!isCleanEmbeddedMode && viewMode !== 'source' && (
