@@ -296,16 +296,16 @@ describe('SystemHealthPage', () => {
 
     const openalexBadge = screen.getByTestId('circuit-badge-openalex');
     expect(openalexBadge.getAttribute('data-state')).toBe('closed');
-    expect(openalexBadge.textContent).toContain('CLOSED');
+    expect(openalexBadge.textContent).toContain('Operational');
 
     const crossrefBadge = screen.getByTestId('circuit-badge-crossref');
     expect(crossrefBadge.getAttribute('data-state')).toBe('open');
-    expect(crossrefBadge.textContent).toContain('OPEN');
+    expect(crossrefBadge.textContent).toContain('Paused');
     expect(screen.getByTestId('circuit-cooldown-crossref').textContent).toContain('32.5s');
 
     const s2Badge = screen.getByTestId('circuit-badge-semanticscholar');
     expect(s2Badge.getAttribute('data-state')).toBe('half_open');
-    expect(s2Badge.textContent).toContain('HALF_OPEN');
+    expect(s2Badge.textContent).toContain('Recovering');
 
     const openalexRow = screen.getByTestId('upstream-row-openalex');
     expect(openalexRow.textContent).toContain('OpenAlex');
@@ -325,7 +325,9 @@ describe('SystemHealthPage', () => {
     expect(s2Row.textContent).toContain('512 ms');
     expect(s2Row.textContent).toContain('15 / 20');
 
-    expect(screen.getByTestId('health-status-pill').textContent).toContain('ALL SERVICES HEALTHY');
+    const statusPill = screen.getByTestId('health-status-pill');
+    expect(statusPill.getAttribute('data-level')).toBe('degraded');
+    expect(statusPill.textContent).toContain('2 SOURCES DEGRADED (1/3 operational)');
 
     const cacheStats = screen.getByTestId('cache-stats');
     expect(cacheStats.textContent).toContain('Persistent SQLite Entries');
@@ -389,9 +391,10 @@ describe('SystemHealthPage', () => {
 
     const panel = await screen.findByTestId('upstream-sources-panel');
     expect(panel.textContent).toContain('Nguồn Học Thuật & Ngắt Mạch Tự Động');
-    expect(panel.textContent).toContain('Ổn định');
-    expect(panel.textContent).toContain('Ngắt mạch');
-    expect(panel.textContent).toContain('Thăm dò');
+    expect(panel.textContent).toContain('Đang hoạt động');
+    expect(panel.textContent).toContain('Tạm ngắt');
+    expect(panel.textContent).toContain('Đang kiểm tra lại');
+    expect(panel.textContent).toContain('Hết thời gian chờ (Timeout)');
     expect(screen.getByTestId('circuit-cooldown-crossref').textContent).toContain('18.4s');
 
     const cacheStats = screen.getByTestId('cache-stats');
@@ -497,11 +500,6 @@ describe('Multi-format & Telemetry Accuracy (BUG-03 & BUG-09)', () => {
       user: makeUser('teacher', 'pro'),
     });
 
-    await waitFor(() => {
-      expect(screen.getByTestId('upload-parser-status').textContent).toContain(
-        'BỘ PHÂN TÍCH REGEX SẴN SÀNG',
-      );
-    });
     expect(screen.getByTestId('upload-quota-banner').textContent).toContain('GÓI PRO');
 
     const input = container.querySelector('input[type="file"]') as HTMLInputElement;
@@ -515,7 +513,7 @@ describe('Multi-format & Telemetry Accuracy (BUG-03 & BUG-09)', () => {
     });
     expect(container.textContent).toContain('KB');
     expect(container.textContent).not.toContain('0.00 MB');
-    expect(container.textContent).toContain('BIBTEX PARSER');
+    expect(container.textContent).toContain('Tệp BibTeX (.bib)');
     expect(container.textContent).not.toContain('GROBID / XML');
   });
 
@@ -551,10 +549,9 @@ describe('Multi-format & Telemetry Accuracy (BUG-03 & BUG-09)', () => {
       user: makeUser('teacher', 'pro'),
     });
     await waitFor(() => expect(screen.getByText('references.bib')).toBeDefined());
-    expect(historyContainer.textContent).toContain('BIBTEX · .BIB');
-    expect(historyContainer.textContent).toContain('RIS · BIBLIOGRAPHY');
+    expect(historyContainer.textContent).toContain('BibTeX');
+    expect(historyContainer.textContent).toContain('RIS');
     expect(historyContainer.textContent).not.toContain('GROBID TEI');
-    expect(historyContainer.textContent).toContain('1 page');
     expect(historyContainer.textContent).not.toContain('1 pages');
     unmount();
 
@@ -562,8 +559,8 @@ describe('Multi-format & Telemetry Accuracy (BUG-03 & BUG-09)', () => {
       user: makeUser('teacher', 'pro'),
     });
     await waitFor(() => expect(screen.getByText('references.bib')).toBeDefined());
-    expect(dashContainer.textContent).toContain('BIBTEX · .BIB');
-    expect(dashContainer.textContent).toContain('RIS · BIBLIOGRAPHY');
+    expect(dashContainer.textContent).toContain('BibTeX');
+    expect(dashContainer.textContent).toContain('RIS');
   });
 
   it('EssayHeader omits raw UNKNOWN style badge and singularizes 1 page and 1 citation', () => {

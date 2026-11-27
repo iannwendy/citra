@@ -45,8 +45,11 @@ export function RoleBadge({ role }: RoleBadgeProps) {
   const style = ROLE_STYLES[role as Role] ?? ROLE_STYLES.user;
   const { Icon, key, label, bg } = style;
   return (
-    <Badge variant="outline" className={`gap-1 px-2.5 py-0.5 ${bg}`}>
-      <Icon className="h-3 w-3" />
+    <Badge
+      variant="outline"
+      className={`gap-1 px-2.5 py-0.5 whitespace-nowrap shrink-0 ${bg}`}
+    >
+      <Icon className="h-3 w-3 shrink-0" />
       {t(key, label)}
     </Badge>
   );

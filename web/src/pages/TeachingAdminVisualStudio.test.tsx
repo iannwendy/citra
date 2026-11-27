@@ -169,10 +169,16 @@ describe('Visual Action Studio Redesign — 6 Teaching & Admin Pages', () => {
       fireEvent.click(screen.getByTestId('pending-kpi-critical'));
       expect(screen.queryByTestId('pending-review-row-202')).toBeNull();
 
-      // Double-click Approve on 201 -> only 1 API call while in flight (Review Focus #1)
+      // Click Approve on 201 -> opens guarded inline confirm bar without firing API prematurely (BUG-23)
       const approveBtn = screen.getByTestId('pending-approve-btn-201');
       fireEvent.click(approveBtn);
-      fireEvent.click(approveBtn);
+      expect(overrideSpy).toHaveBeenCalledTimes(0);
+      expect(screen.getByTestId('pending-confirm-bar-201')).toBeDefined();
+
+      // Double-click Confirm on 201 -> only 1 API call while in flight (Review Focus #1)
+      const confirmApproveBtn = screen.getByTestId('pending-confirm-submit-201');
+      fireEvent.click(confirmApproveBtn);
+      fireEvent.click(confirmApproveBtn);
       expect(overrideSpy).toHaveBeenCalledTimes(1);
       expect(overrideSpy).toHaveBeenNthCalledWith(
         1,
@@ -189,18 +195,20 @@ describe('Visual Action Studio Redesign — 6 Teaching & Admin Pages', () => {
       const resetFilterBtn = await screen.findByTestId('pending-reset-severity-btn');
       fireEvent.click(resetFilterBtn);
 
-      // Item 202 ('unverified') is now visible
+      // Item 202 ('unverified') is now visible -> click Flag opens inline confirm bar
       const flagBtn = await screen.findByTestId('pending-confirm-issue-btn-202');
+      fireEvent.click(flagBtn);
+      expect(screen.getByTestId('pending-confirm-bar-202')).toBeDefined();
 
       // Next override call rejects -> item 202 stays in the queue (Review Focus #1)
-      fireEvent.click(flagBtn);
+      fireEvent.click(screen.getByTestId('pending-confirm-submit-202'));
       await waitFor(() => {
         expect(overrideSpy).toHaveBeenCalledTimes(2);
       });
       expect(screen.getByTestId('pending-review-row-202')).toBeDefined();
 
       // Retry -> succeeds with normalized new_label: 'metadata_error' (Review Focus #3)
-      fireEvent.click(screen.getByTestId('pending-confirm-issue-btn-202'));
+      fireEvent.click(screen.getByTestId('pending-confirm-submit-202'));
       await waitFor(() => {
         expect(overrideSpy).toHaveBeenNthCalledWith(
           3,
@@ -487,7 +495,7 @@ describe('Visual Action Studio Redesign — 6 Teaching & Admin Pages', () => {
       expect(text).not.toContain('telemetry_upstream_circuits.json');
       expect(text).not.toContain('PLATFORM TELEMETRY MONITOR');
       expect(text).not.toContain('suspected_hallucination');
-      expect(text).toContain('Suspected Fabrication');
+      expect(text).toContain('Source Not Found');
       expect(text).toContain('VERDICT DISTRIBUTION');
 
       // Advanced diagnostics drawer starts collapsed (data-open="false") and expands on click
@@ -533,7 +541,7 @@ describe('Visual Action Studio Redesign — 6 Teaching & Admin Pages', () => {
       expect(text).not.toContain('VERDICT OVERRIDE STREAM');
       expect(text).not.toContain('metadata_error');
       expect(text).toContain('REVIEW ACTIVITY LOG');
-      expect(text).toContain('Metadata Discrepancy');
+      expect(text).toContain('Details Mismatch');
       expect(text).toContain('Verified');
     });
   });
@@ -634,6 +642,265 @@ describe('Visual Action Studio Redesign — 6 Teaching & Admin Pages', () => {
       expect(accEl?.hasAttribute('inert')).toBe(true);
       fireEvent.click(toggleBtn);
       expect(accEl?.hasAttribute('inert')).toBe(false);
+    });
+  });
+
+  describe('Phase 2 Agent F — Admin Control Panel Production Bugfixes', () => {
+    it('AccountManagementPage: Plan Tier filter works, Role vs Plan colors do not collide, Institution / Class header used, and self-lockout guard protects editing own admin account', async () => {
+      const selfAdmin = makeUser('admin', 'ultra', {
+        id: 1,
+        username: 'admin_root',
+        institution: 'Ton Duc Thang University',
+      });
+      const proTeacher = makeUser('teacher', 'pro', {
+        id: 2,
+        username: 'prof_minh',
+        institution: 'TDTU',
+      });
+      const basicStudent = makeUser('user', 'basic', {
+        id: 3,
+        username: 'sv_an',
+        institution: 'TDTU',
+      });
+      vi.spyOn(api, 'listUsers').mockResolvedValue([selfAdmin, proTeacher, basicStudent]);
+
+      const { container } = renderWithProviders(<AccountManagementPage />, {
+        user: selfAdmin,
+        initialRoute: '/admin/users',
+      });
+
+      await waitFor(() => expect(screen.getByText(/prof_minh/)).toBeDefined());
+      expect(container.textContent).toContain('Institution / Class');
+      expect(container.textContent).toContain('Role Distribution');
+      expect(container.textContent).toContain('Plan Tier Distribution');
+      // Ultra bar uses amber-500 instead of violet-500 (reserved for Admin role)
+      expect(screen.getByTestId('plan-tier-distribution-bar').innerHTML).toContain(
+        'bg-amber-500',
+      );
+
+      // Plan Tier filter narrows cleanly to Pro
+      fireEvent.change(screen.getByTestId('plan-tier-filter'), {
+        target: { value: 'pro' },
+      });
+      expect(screen.getByText(/prof_minh/)).toBeDefined();
+      expect(screen.queryByText(/sv_an/)).toBeNull();
+
+      // Reset plan filter and open Edit modal for own admin account -> self-lockout guard active
+      fireEvent.change(screen.getByTestId('plan-tier-filter'), {
+        target: { value: 'all' },
+      });
+      fireEvent.click(screen.getByLabelText('Edit user admin_root'));
+      const guardNote = await screen.findByTestId('self-lockout-guard-note');
+      expect(guardNote.textContent).toContain(
+        'You cannot demote or deactivate your own account',
+      );
+      expect((document.getElementById('user-form-role') as HTMLSelectElement).disabled).toBe(true);
+      expect(
+        (document.getElementById('user-form-active-switch') as HTMLButtonElement).disabled,
+      ).toBe(true);
+      // Username label in edit mode omits misleading '*'
+      expect(document.querySelector('label[for="user-form-username"]')?.textContent).toBe(
+        'Username',
+      );
+    });
+
+    it('PromoManagementPage: prevents silent 6-char truncation, clears stale errors on edit, blocks past expiry, shows Reset Filters on filtered empty state, and removes doubled discount symbols', async () => {
+      vi.spyOn(api, 'listAdminPromoCodes').mockResolvedValue({
+        stats: { total_codes: 1, active_codes: 1, total_redemptions: 2, total_discount_usd: 20 },
+        promos: [
+          {
+            id: 10,
+            code: 'SAVE10',
+            description: 'Fixed $10 off',
+            discount_type: 'fixed',
+            discount_value: 10,
+            max_discount_usd: null,
+            min_amount_usd: 0,
+            applicable_tiers: 'all',
+            applicable_cycles: 'all',
+            max_uses: 50,
+            used_count: 2,
+            max_uses_per_user: 1,
+            expires_at: null,
+            is_active: true,
+            is_expired: false,
+            is_exhausted: false,
+            effective_status: 'active',
+            created_by: 1,
+            created_at: '2026-11-01T00:00:00Z',
+            updated_at: '2026-11-01T00:00:00Z',
+          },
+        ],
+      });
+
+      const { container } = renderWithProviders(<PromoManagementPage />, {
+        user: makeUser('admin', 'ultra'),
+        initialRoute: '/admin/promos',
+      });
+
+      await waitFor(() => expect(screen.getByTestId('promo-row-SAVE10')).toBeDefined());
+      // Single clean discount symbol and clear "No expiry" on mobile cards
+      expect(screen.getByTestId('promo-row-SAVE10').textContent).toContain('-$10.00');
+      expect(screen.getByTestId('promo-mobile-cards').textContent).toContain('No expiry');
+
+      // Filtering to Paused when 1 active promo exists -> Reset Filters CTA (not Create First Promo Code)
+      fireEvent.click(screen.getByRole('button', { name: 'Paused' }));
+      expect(screen.getByTestId('promo-reset-filters-btn')).toBeDefined();
+      expect(container.textContent).not.toContain('Create First Promo Code');
+      fireEvent.click(screen.getByTestId('promo-reset-filters-btn'));
+      expect(screen.getByTestId('promo-row-SAVE10')).toBeDefined();
+
+      // Create modal: typing >6 chars shows 10/6 counter & inline error instead of silently truncating
+      fireEvent.click(screen.getByTestId('create-promo-btn'));
+      const codeInput = screen.getByTestId('promo-code-input') as HTMLInputElement;
+      fireEvent.change(codeInput, { target: { value: 'SUMMER2026' } });
+      expect(codeInput.value).toBe('SUMMER2026');
+      expect(screen.getByTestId('promo-code-counter').textContent).toBe('10/6');
+      expect(screen.getByTestId('promo-code-inline-error').textContent).toContain('10 entered');
+
+      // Fixing to valid 6-char code clears inline error immediately
+      fireEvent.change(codeInput, { target: { value: 'SUMM26' } });
+      expect(screen.queryByTestId('promo-code-inline-error')).toBeNull();
+
+      // Past expiry date is rejected with inline error and input has min attribute
+      const expiresInput = screen.getByTestId('promo-expires-input') as HTMLInputElement;
+      expect(expiresInput.getAttribute('min')).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      fireEvent.change(expiresInput, { target: { value: '2020-01-01' } });
+      fireEvent.click(screen.getByTestId('promo-submit-btn'));
+      await waitFor(() => {
+        expect(screen.getByTestId('promo-form-modal').textContent).toContain(
+          'Expiration date cannot be in the past',
+        );
+      });
+    });
+
+    it('SystemHealthPage: sanitizes raw RetryError/Future leaks, formats >=1000ms latency as seconds, shows Refresh + checked_at + Stage 1 GROBID/DB pills, and flags degraded <80% closed providers', async () => {
+      const getHealthSpy = vi.spyOn(api, 'getSystemHealth').mockResolvedValue({
+        status: 'ok',
+        upstream_status: 'degraded',
+        degraded_sources: ['crossref'],
+        checked_at: '2026-11-27T05:30:00Z',
+        grobid_available: true,
+        parser_mode: 'grobid',
+        services: { database: 'ok', cache: 'ok', parser: 'ok' },
+        totals: { users: 10, admins: 1, teachers: 2, students: 7, essays: 50, verdicts: 4656 },
+        verdict_label_counts: { verified: 4000, metadata_error: 656 },
+        cache_stats: { dynamic_entries: 120, local_papers_count: 127102 },
+        upstream_sources: {
+          crossref: {
+            state: 'closed',
+            consecutive_failures: 1,
+            total_calls: 10,
+            success_count: 5,
+            timeout_count: 5,
+            http_429_count: 0,
+            http_5xx_count: 0,
+            ema_latency_ms: 25463.9,
+            open_remaining_seconds: 0,
+            last_error: "RetryError[<Future at 0x104abc123 state=finished raised ReadTimeout>]",
+          },
+          openalex: {
+            state: 'closed',
+            consecutive_failures: 0,
+            total_calls: 20,
+            success_count: 20,
+            timeout_count: 0,
+            http_429_count: 0,
+            http_5xx_count: 0,
+            ema_latency_ms: 180,
+            open_remaining_seconds: 0,
+          },
+        },
+      });
+
+      renderWithProviders(<SystemHealthPage />, { user: makeUser('admin', 'ultra') });
+
+      const pill = await screen.findByTestId('health-status-pill');
+      expect(pill.getAttribute('data-level')).toBe('degraded');
+      expect(pill.textContent).toContain('1 SOURCE DEGRADED (1/2 operational)');
+      expect(screen.getByTestId('circuit-badge-crossref').textContent).toBe('Degraded');
+      expect(screen.getByTestId('upstream-latency-crossref').textContent).toContain('25.5 s');
+      const errEl = screen.getByTestId('upstream-last-error-crossref');
+      expect(errEl.textContent).not.toContain('RetryError');
+      expect(errEl.textContent).not.toContain('0x104abc');
+      expect(screen.getByTestId('stage1-grobid-pill').textContent).toContain('GROBID: Active');
+      expect(screen.getByTestId('stage1-db-pill').textContent).toContain('DB: Connected');
+      expect(screen.getByTestId('health-checked-at').textContent).toContain('Last checked:');
+
+      fireEvent.click(screen.getByTestId('refresh-health-btn'));
+      await waitFor(() => expect(getHealthSpy).toHaveBeenCalledTimes(2));
+    });
+
+    it('AuditLogPage: shows essay_filename & student_name, excludes resource from flagged, preserves global KPIs on empty search, filters by verdict, and formats VI timestamps', async () => {
+      await i18n.changeLanguage('vi');
+      vi.spyOn(api, 'getAuditStats').mockResolvedValue({
+        total_events: 42,
+        unique_actors: 5,
+      });
+      vi.spyOn(api, 'listAuditLog').mockImplementation(async ({ user } = {}) => {
+        if (user === 'nobody') return [];
+        return [
+          {
+            id: 1,
+            verdict_id: 501,
+            essay_id: 11,
+            essay_filename: 'khoa_luan_2026.pdf',
+            student_name: 'Nguyễn Văn A',
+            student_username: 'sv_a',
+            original_label: 'unresolved',
+            new_label: 'resource',
+            user: 'gv_lan',
+            note: 'Trang web chính thức',
+            logged_at: '2026-11-27T05:30:00Z',
+          },
+          {
+            id: 2,
+            verdict_id: 502,
+            essay_id: 12,
+            essay_filename: 'bao_cao_ai.pdf',
+            student_name: 'Trần Thị B',
+            student_username: 'sv_b',
+            original_label: 'metadata_error',
+            new_label: 'verified',
+            user: 'gv_lan',
+            note: 'Đã đối chiếu bản gốc',
+            logged_at: '2026-11-27T06:00:00Z',
+          },
+        ];
+      });
+
+      renderWithProviders(<AuditLogPage />, { user: makeUser('admin', 'ultra') });
+
+      await waitFor(() => expect(screen.getByTestId('audit-context-1')).toBeDefined());
+      expect(screen.getByRole('heading', { level: 1 }).textContent).toBe(
+        'Nhật ký duyệt trích dẫn',
+      );
+      expect(screen.getByTestId('audit-context-1').textContent).toContain('khoa_luan_2026.pdf');
+      expect(screen.getByTestId('audit-context-1').textContent).toContain('Nguyễn Văn A');
+      // VI 24h GMT+7 timestamp (2026-11-27T05:30:00Z -> 27/11/2026 · 12:30 (GMT+7))
+      expect(screen.getByTestId('audit-time-1').textContent).toContain(
+        '27/11/2026 · 12:30 (GMT+7)',
+      );
+      // resource is NOT counted inside flagged ('0 giữ cảnh báo', '1 nguồn web / khác')
+      const breakdown = screen.getByTestId('audit-outcome-breakdown').textContent ?? '';
+      expect(breakdown).toContain('1 đã xác minh');
+      expect(breakdown).toContain('0 giữ cảnh báo');
+      expect(breakdown).toContain('1 nguồn web / khác');
+
+      // Verdict filter narrows to 'resource'
+      fireEvent.change(screen.getByTestId('audit-verdict-filter'), {
+        target: { value: 'resource' },
+      });
+      expect(screen.getByTestId('audit-entry-1')).toBeDefined();
+      expect(screen.queryByTestId('audit-entry-2')).toBeNull();
+
+      // Searching a nonexistent user preserves global KPIs (42, 5) and shows filtered-empty state
+      fireEvent.change(screen.getByPlaceholderText(/tên đăng nhập/i), {
+        target: { value: 'nobody' },
+      });
+      await waitFor(() => expect(screen.getByTestId('audit-reset-filters-btn')).toBeDefined());
+      expect(screen.getByTestId('audit-total-events').textContent).toBe('42');
+      expect(screen.getByTestId('audit-unique-actors').textContent).toBe('5');
     });
   });
 });

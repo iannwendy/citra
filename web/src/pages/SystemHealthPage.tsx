@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Activity,
+  ArrowRight,
   Database,
   FileCheck,
   Users,
@@ -14,6 +15,7 @@ import {
   Clock,
   HardDrive,
   RotateCcw,
+  RefreshCw,
   Globe,
   Zap,
   SlidersHorizontal,
@@ -27,13 +29,18 @@ import {
   type SystemHealth,
   type UpstreamSourceHealth,
 } from '@/api/client';
-import { getHumanVerdictMeta } from '@/lib/teacherGuidance';
+import {
+  formatLocalizedDateTime,
+  formatUserError,
+  getVerdictDisplay,
+  resolveAcademicLang,
+  type CanonicalVerdictKey,
+} from '@/lib/academicTaxonomy';
 import { Card } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   StudioWindowHeader,
   ProportionalBarRow,
-  PipelineStageFlow,
 } from '@/components/ui/studio-visuals';
 import {
   AccordionExpand,
@@ -47,10 +54,19 @@ type HealthLevel = 'healthy' | 'degraded' | 'down';
 
 const HEALTHY_WORDS = new Set(['ok', 'healthy', 'up', 'alive', 'ready', 'pass']);
 
+const VERDICT_COLOR_HEX: Record<CanonicalVerdictKey, string> = {
+  verified: '#10b981',
+  metadata_error: '#f59e0b',
+  suspected_hallucination: '#ef4444',
+  resource: '#8b5cf6',
+  unresolved: '#64748b',
+};
+
 const CACHE_STAT_LABELS: Record<string, { en: string; vi: string }> = {
   total: { en: 'Total Cached Entries', vi: 'Tổng mục lưu đệm' },
   total_hits: { en: 'Total Cache Hits', vi: 'Tổng lượt trúng đệm' },
   avg_hit_count: { en: 'Avg Hits / Entry', vi: 'Trung bình trúng / mục' },
+  dynamic_entries: { en: 'Dynamic Entries', vi: 'Mục đệm động' },
   local_papers_count: { en: 'Local Corpus Papers', vi: 'Bài báo kho cục bộ' },
   local_queries_count: { en: 'Local Corpus Queries', vi: 'Truy vấn kho cục bộ' },
   local_hits_count: { en: 'Local Corpus Hits', vi: 'Lượt trúng kho cục bộ' },
@@ -77,7 +93,7 @@ const CACHE_STAT_LABELS: Record<string, { en: string; vi: string }> = {
   wave0_entries: { en: 'Wave-0 Prefetch Entries', vi: 'Mục tiền nạp Wave-0' },
   negative_cache_entries: {
     en: 'Negative Cache Entries',
-    vi: 'Mục đệm âm (Không tồn tại)',
+    vi: 'Bộ nhớ đệm không tìm thấy',
   },
   singleflight_coalesced: {
     en: 'Singleflight Coalesced',
@@ -106,7 +122,10 @@ const UPSTREAM_PROVIDER_LABELS: Record<
   openaire_hal: 'OpenAIRE / HAL',
   ncbi_biorxiv: 'NCBI / bioRxiv',
   huggingface: 'Hugging Face',
-  tech_standard: 'Tech Standards',
+  tech_standard: {
+    en: 'Tech Standards',
+    vi: 'Tiêu chuẩn kỹ thuật',
+  },
   vn_tech_standard: {
     en: 'VN Tech Standards (TCVN/QCVN)',
     vi: 'Tiêu chuẩn Kỹ thuật VN (TCVN/QCVN)',
@@ -134,10 +153,22 @@ const UPSTREAM_PROVIDER_LABELS: Record<
   serpapi: 'SerpAPI (Google Scholar)',
   acl: 'ACL Anthology',
   coreapi: 'CORE',
-  vn_registry: 'VN Academic Registry',
-  html_head: 'HTML Meta Verifier',
-  local_db: 'Local Corpus DB',
-  known_papers: 'Curated Known Papers',
+  vn_registry: {
+    en: 'VN Academic Registry',
+    vi: 'Danh mục học thuật VN',
+  },
+  html_head: {
+    en: 'HTML Meta Verifier',
+    vi: 'Trình kiểm chứng HTML Meta',
+  },
+  local_db: {
+    en: 'Local Corpus DB',
+    vi: 'Kho dữ liệu cục bộ',
+  },
+  known_papers: {
+    en: 'Curated Known Papers',
+    vi: 'Danh mục bài báo chuẩn',
+  },
 };
 
 function formatProviderName(key: string, lang: 'en' | 'vi' = 'en'): string {
@@ -154,6 +185,71 @@ function formatProviderName(key: string, lang: 'en' | 'vi' = 'en'): string {
 function formatMetricNumber(val: number): string {
   if (!Number.isFinite(val)) return '0';
   return String(Number(val.toFixed(1)));
+}
+
+function formatLatency(ms: number): string {
+  if (!Number.isFinite(ms)) return '0 ms';
+  if (ms >= 1000) {
+    return `${(ms / 1000).toFixed(1)} s`;
+  }
+  return `${formatMetricNumber(ms)} ms`;
+}
+
+function formatIntCounter(val: number, lang: 'en' | 'vi'): string {
+  if (!Number.isFinite(val)) return '0';
+  const locale = lang === 'vi' ? 'vi-VN' : 'en-US';
+  return Math.round(val).toLocaleString(locale);
+}
+
+function formatStatCellValue(val: unknown, lang: 'en' | 'vi'): string {
+  if (typeof val === 'number' && Number.isFinite(val)) {
+    const locale = lang === 'vi' ? 'vi-VN' : 'en-US';
+    return Number.isInteger(val)
+      ? val.toLocaleString(locale)
+      : val.toLocaleString(locale, { maximumFractionDigits: 2 });
+  }
+  return String(val ?? '—');
+}
+
+function sanitizeUpstreamError(
+  raw: string | null | undefined,
+  lang: 'en' | 'vi',
+): string | null {
+  if (typeof raw !== 'string') return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+
+  // Catch raw Python RetryError / Future pointer leaks or stack trace frames
+  if (
+    /RetryError\s*\[|<Future\s+at\s+0x|0x[0-9a-f]{6,}|Traceback\s*\(/i.test(
+      trimmed,
+    )
+  ) {
+    if (/timeout|timed\s*out/i.test(trimmed)) {
+      return lang === 'vi'
+        ? 'Hết thời gian chờ sau nhiều lần thử lại'
+        : 'Request timed out after retries';
+    }
+    return lang === 'vi'
+      ? 'Kết nối nguồn gặp lỗi sau nhiều lần thử lại'
+      : 'Upstream request failed after retries';
+  }
+
+  // Strip leaked query strings / URL parameters / quoted search queries
+  const cleaned = trimmed
+    .replace(/(?:for\s+url|url=|query=)\s*['"][^'"]*['"]/gi, '')
+    .replace(/https?:\/\/\S+/gi, '')
+    .replace(/['"][^'"]{24,}['"]/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+
+  if (!cleaned) {
+    return lang === 'vi'
+      ? 'Nguồn tạm thời phản hồi lỗi'
+      : 'Upstream source returned an error';
+  }
+
+  return cleaned.length > 140 ? `${cleaned.slice(0, 137)}…` : cleaned;
 }
 
 function formatSqliteSyncMode(raw: unknown): string {
@@ -190,24 +286,34 @@ function formatLocalPapersDbMode(
   return 'CONNECTED';
 }
 
-function getCircuitVisuals(
+function isProviderDegraded(info: UpstreamSourceHealth): boolean {
+  const state = String(info.state ?? 'closed').trim().toLowerCase();
+  if (state !== 'closed') return true;
+  const totalCalls = Number(info.total_calls ?? 0);
+  const successCount = Number(info.success_count ?? 0);
+  const consecutiveFailures = Number(info.consecutive_failures ?? 0);
+  if (consecutiveFailures >= 2) return true;
+  if (totalCalls >= 3 && successCount / totalCalls < 0.8) return true;
+  return false;
+}
+
+function getProviderVisuals(
   state: CircuitBreakerState,
+  degradedWhileClosed: boolean,
   lang: 'en' | 'vi',
 ): {
-  canonical: 'CLOSED' | 'HALF_OPEN' | 'OPEN';
-  caption: string;
+  label: string;
   tooltip: string;
   pillClass: string;
   dotClass: string;
 } {
   if (state === 'open') {
     return {
-      canonical: 'OPEN',
-      caption: lang === 'vi' ? 'Ngắt mạch' : 'Tripped',
+      label: lang === 'vi' ? 'Tạm ngắt' : 'Paused',
       tooltip:
         lang === 'vi'
-          ? 'Mạch đang mở do lỗi hạ tầng liên tiếp — tạm ngưng gọi API cho tới khi hết thời gian chờ'
-          : 'Circuit open after consecutive infrastructure failures — fast-failing until cooldown expires',
+          ? 'Tạm ngưng gọi nguồn này do lỗi liên tiếp — sẽ tự động kiểm tra lại khi hết thời gian chờ'
+          : 'Temporarily paused after consecutive errors — will automatically re-probe after cooldown',
       pillClass:
         'bg-rose-50 dark:bg-rose-950/70 border-rose-200/80 dark:border-rose-800/70 text-rose-700 dark:text-rose-300',
       dotClass: 'bg-rose-500 animate-pulse',
@@ -215,24 +321,34 @@ function getCircuitVisuals(
   }
   if (state === 'half_open') {
     return {
-      canonical: 'HALF_OPEN',
-      caption: lang === 'vi' ? 'Thăm dò' : 'Probing',
+      label: lang === 'vi' ? 'Đang kiểm tra lại' : 'Recovering',
       tooltip:
         lang === 'vi'
-          ? 'Mạch bán mở — cho phép 1 yêu cầu thăm dò để kiểm tra khả năng phục hồi của nguồn'
-          : 'Half-open recovery state — allowing a single probe request to verify upstream health',
+          ? 'Đang gửi yêu cầu kiểm tra lại để xác nhận nguồn học thuật đã hoạt động ổn định'
+          : 'Probing upstream source to verify recovery',
       pillClass:
-        'bg-amber-50 dark:bg-amber-950/70 border-amber-200/80 dark:border-amber-800/70 text-amber-700 dark:text-amber-300',
+        'bg-amber-50 dark:bg-amber-950/70 border-amber-200/80 dark:border-amber-800/70 text-amber-800 dark:text-amber-300',
       dotClass: 'bg-amber-500 animate-pulse',
     };
   }
+  if (degradedWhileClosed) {
+    return {
+      label: lang === 'vi' ? 'Phản hồi chậm' : 'Degraded',
+      tooltip:
+        lang === 'vi'
+          ? 'Nguồn đang kết nối nhưng tỷ lệ thành công dưới 80% hoặc có lỗi liên tiếp'
+          : 'Source is reachable but success rate is below 80% or experiencing errors',
+      pillClass:
+        'bg-amber-50 dark:bg-amber-950/70 border-amber-200/80 dark:border-amber-800/70 text-amber-800 dark:text-amber-300',
+      dotClass: 'bg-amber-500',
+    };
+  }
   return {
-    canonical: 'CLOSED',
-    caption: lang === 'vi' ? 'Ổn định' : 'Healthy',
+    label: lang === 'vi' ? 'Đang hoạt động' : 'Operational',
     tooltip:
       lang === 'vi'
-        ? 'Mạch đóng — nguồn học thuật phản hồi bình thường'
-        : 'Circuit closed — upstream scholarly API operating normally',
+        ? 'Nguồn học thuật đang kết nối và phản hồi ổn định'
+        : 'Upstream scholarly API is operating normally',
     pillClass:
       'bg-emerald-50 dark:bg-emerald-950/70 border-emerald-200/80 dark:border-emerald-800/70 text-emerald-700 dark:text-emerald-300',
     dotClass: 'bg-emerald-500',
@@ -281,24 +397,37 @@ export function summarizeHealth(
 
 export function SystemHealthPage() {
   const { t, i18n } = useTranslation();
-  const lang: 'en' | 'vi' = i18n.language?.startsWith('vi') ? 'vi' : 'en';
+  const lang = resolveAcademicLang(i18n.language);
   const toast = useToast();
   const [data, setData] = useState<SystemHealth | null>(null);
+  const [fetchedAt, setFetchedAt] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [confirmClearOpen, setConfirmClearOpen] = useState(false);
   const [clearing, setClearing] = useState(false);
   const [resettingBreaker, setResettingBreaker] = useState<string | null>(null);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
 
-  const load = useCallback(() => {
-    api
-      .getSystemHealth()
-      .then(setData)
-      .catch((e) => setError(String(e)));
-  }, []);
+  const load = useCallback(async (isManualRefresh = false) => {
+    if (isManualRefresh) {
+      setRefreshing(true);
+    }
+    try {
+      const next = await api.getSystemHealth();
+      setData(next);
+      setFetchedAt(next.checked_at ?? new Date().toISOString());
+      setError('');
+    } catch (e) {
+      setError(formatUserError(e, lang));
+    } finally {
+      if (isManualRefresh) {
+        setRefreshing(false);
+      }
+    }
+  }, [lang]);
 
   useEffect(() => {
-    load();
+    void load(false);
   }, [load]);
 
   const handleResetBreaker = async (source?: string) => {
@@ -318,13 +447,13 @@ export function SystemHealthPage() {
             ? 'Đã khôi phục tất cả các mạch đang mở.'
             : 'All tripped circuit breakers have been reset.',
       );
-      load();
+      await load(false);
     } catch (e) {
       toast.error(
         lang === 'vi'
           ? 'Không thể đặt lại ngắt mạch'
           : 'Failed to reset circuit breaker',
-        e instanceof Error ? e.message : String(e),
+        formatUserError(e, lang),
       );
     } finally {
       setResettingBreaker(null);
@@ -339,21 +468,21 @@ export function SystemHealthPage() {
       toast.success(
         lang === 'vi' ? 'Đã xóa bộ nhớ đệm' : 'Cache cleared',
         lang === 'vi'
-          ? `Đã xóa ${res.deleted_count} mục khỏi bộ nhớ đệm tra cứu.`
-          : `Removed ${res.deleted_count} cached lookup entries.`,
+          ? `Đã xóa ${formatIntCounter(res.deleted_count, lang)} mục khỏi bộ nhớ đệm tra cứu.`
+          : `Removed ${formatIntCounter(res.deleted_count, lang)} cached lookup entries.`,
       );
-      load();
+      await load(false);
     } catch (e) {
       toast.error(
         lang === 'vi' ? 'Không thể xóa bộ nhớ đệm' : 'Failed to clear cache',
-        e instanceof Error ? e.message : String(e),
+        formatUserError(e, lang),
       );
     } finally {
       setClearing(false);
     }
   };
 
-  if (error) {
+  if (error && !data) {
     return (
       <Alert variant="destructive" className="rounded-2xl">
         <AlertCircle className="h-4 w-4" />
@@ -373,32 +502,106 @@ export function SystemHealthPage() {
   }
 
   const totalVerdicts = Math.max(data.totals.verdicts, 1);
-  const health = summarizeHealth(data);
+  const coreHealth = summarizeHealth(data);
+
+  const upstreamEntries: Array<[string, UpstreamSourceHealth]> = Object.entries(
+    data.upstream_sources ?? {},
+  )
+    .filter((entry): entry is [string, UpstreamSourceHealth] =>
+      Boolean(entry[1] && typeof entry[1] === 'object'),
+    )
+    .sort(([a], [b]) => a.localeCompare(b));
+
+  const openCircuitsCount = upstreamEntries.filter(
+    ([, s]) => String(s.state ?? '').toLowerCase() === 'open',
+  ).length;
+  const halfOpenCircuitsCount = upstreamEntries.filter(
+    ([, s]) => String(s.state ?? '').toLowerCase() === 'half_open',
+  ).length;
+
+  const degradedSourceSet = new Set<string>(data.degraded_sources ?? []);
+  for (const [srcKey, info] of upstreamEntries) {
+    if (isProviderDegraded(info)) {
+      degradedSourceSet.add(srcKey);
+    }
+  }
+  const degradedUpstreamCount = degradedSourceSet.size;
+  const totalUpstreamCount = upstreamEntries.length;
+  const healthyUpstreamCount = Math.max(
+    0,
+    totalUpstreamCount - degradedUpstreamCount,
+  );
+  const degradedClosedCount = Math.max(
+    0,
+    degradedUpstreamCount - openCircuitsCount - halfOpenCircuitsCount,
+  );
+
+  const isUpstreamDegraded =
+    normalizeLevel(data.upstream_status ?? 'ok') !== 'healthy' ||
+    degradedUpstreamCount > 0;
+
+  const effectiveLevel: HealthLevel =
+    coreHealth.level === 'down'
+      ? 'down'
+      : coreHealth.level === 'degraded' || isUpstreamDegraded
+        ? 'degraded'
+        : 'healthy';
+
   const pillTone =
-    health.level === 'healthy'
+    effectiveLevel === 'healthy'
       ? 'bg-emerald-50 dark:bg-emerald-950/70 border-emerald-200/70 dark:border-emerald-800/70 text-emerald-700 dark:text-emerald-300'
-      : health.level === 'degraded'
-        ? 'bg-amber-50 dark:bg-amber-950/70 border-amber-200/70 dark:border-amber-800/70 text-amber-700 dark:text-amber-300'
+      : effectiveLevel === 'degraded'
+        ? 'bg-amber-50 dark:bg-amber-950/70 border-amber-200/70 dark:border-amber-800/70 text-amber-800 dark:text-amber-300'
         : 'bg-red-50 dark:bg-red-950/70 border-red-200/70 dark:border-red-800/70 text-red-700 dark:text-red-300';
   const dotTone =
-    health.level === 'healthy'
+    effectiveLevel === 'healthy'
       ? 'bg-emerald-500'
-      : health.level === 'degraded'
+      : effectiveLevel === 'degraded'
         ? 'bg-amber-500'
         : 'bg-red-500';
-  const degradedList = health.degradedServices.join(', ');
-  const pillText =
-    health.level === 'healthy'
-      ? lang === 'vi'
-        ? 'TẤT CẢ DỊCH VỤ ỔN ĐỊNH'
-        : 'ALL SERVICES HEALTHY'
-      : health.level === 'degraded'
-        ? lang === 'vi'
-          ? `SUY GIẢM${degradedList ? `: ${degradedList}` : ''}`
-          : `DEGRADED${degradedList ? `: ${degradedList}` : ''}`
-        : lang === 'vi'
-          ? `SỰ CỐ (${String(data.status).toUpperCase()})${degradedList ? `: ${degradedList}` : ''}`
-          : `OUTAGE (${String(data.status).toUpperCase()})${degradedList ? `: ${degradedList}` : ''}`;
+  const degradedList = coreHealth.degradedServices.join(', ');
+
+  let pillText: string;
+  if (effectiveLevel === 'healthy') {
+    pillText =
+      lang === 'vi' ? 'TẤT CẢ DỊCH VỤ ỔN ĐỊNH' : 'ALL SERVICES HEALTHY';
+  } else if (effectiveLevel === 'degraded') {
+    if (coreHealth.degradedServices.length > 0) {
+      pillText =
+        lang === 'vi'
+          ? `SUY GIẢM: ${degradedList}`
+          : `DEGRADED: ${degradedList}`;
+    } else if (degradedUpstreamCount > 0 && totalUpstreamCount > 0) {
+      pillText =
+        lang === 'vi'
+          ? `${degradedUpstreamCount} NGUỒN ĐANG CHẬM / SUY GIẢM (${healthyUpstreamCount}/${totalUpstreamCount} ổn định)`
+          : `${degradedUpstreamCount} ${degradedUpstreamCount === 1 ? 'SOURCE' : 'SOURCES'} DEGRADED (${healthyUpstreamCount}/${totalUpstreamCount} operational)`;
+    } else {
+      pillText = lang === 'vi' ? 'SUY GIẢM' : 'DEGRADED';
+    }
+  } else {
+    pillText =
+      lang === 'vi'
+        ? `SỰ CỐ (${String(data.status).toUpperCase()})${degradedList ? `: ${degradedList}` : ''}`
+        : `OUTAGE (${String(data.status).toUpperCase()})${degradedList ? `: ${degradedList}` : ''}`;
+  }
+
+  // Stage 1: live Database & GROBID status pills
+  const rawDbSvc = data.services?.database;
+  const dbHealthy =
+    normalizeLevel(
+      typeof rawDbSvc === 'string' ? rawDbSvc : (rawDbSvc?.status ?? 'ok'),
+    ) === 'healthy';
+
+  const rawGrobidSvc = data.services?.grobid;
+  const grobidSvcDegraded =
+    rawGrobidSvc != null &&
+    normalizeLevel(
+      typeof rawGrobidSvc === 'string' ? rawGrobidSvc : rawGrobidSvc?.status,
+    ) !== 'healthy';
+  const grobidActive =
+    data.grobid_available === true ||
+    String(data.parser_mode ?? '').toLowerCase() === 'grobid';
 
   const rawCacheStats = data.cache_stats ?? {};
   const hasSeparatedCorpusMetrics =
@@ -498,32 +701,176 @@ export function SystemHealthPage() {
       ? data.sqlite_wal.local_papers_db
       : null;
 
-  const upstreamEntries: Array<[string, UpstreamSourceHealth]> = Object.entries(
-    data.upstream_sources ?? {},
-  )
-    .filter((entry): entry is [string, UpstreamSourceHealth] =>
-      Boolean(entry[1] && typeof entry[1] === 'object'),
-    )
-    .sort(([a], [b]) => a.localeCompare(b));
-  const openCircuitsCount = upstreamEntries.filter(
-    ([, s]) => String(s.state ?? '').toLowerCase() === 'open',
-  ).length;
-  const halfOpenCircuitsCount = upstreamEntries.filter(
-    ([, s]) => String(s.state ?? '').toLowerCase() === 'half_open',
-  ).length;
-  const closedCircuitsCount =
-    upstreamEntries.length - openCircuitsCount - halfOpenCircuitsCount;
-
   const verdictEntries = Object.entries(data.verdict_label_counts ?? {});
   const rawVerdictSum = verdictEntries.reduce((acc, [, c]) => acc + c, 0);
 
+  const lastCheckedIso = data.checked_at ?? fetchedAt;
+  const formattedCheckedAt = lastCheckedIso
+    ? formatLocalizedDateTime(lastCheckedIso, lang)
+    : null;
+
+  const pipelineStages: Array<{
+    id: string;
+    stepLabel: string;
+    title: string;
+    level: HealthLevel;
+    statusText: string;
+    icon: React.ReactNode;
+    metric: React.ReactNode;
+    actionSlot?: React.ReactNode;
+  }> = [
+    {
+      id: 'parser-db',
+      stepLabel: lang === 'vi' ? 'CHẶNG 1' : 'STAGE 1',
+      title: lang === 'vi' ? 'Đọc & Lưu trữ Tài liệu' : 'Document Engine & DB',
+      level: coreHealth.level,
+      statusText:
+        coreHealth.level === 'healthy'
+          ? lang === 'vi'
+            ? 'Sẵn sàng'
+            : 'Ready'
+          : lang === 'vi'
+            ? 'Cần kiểm tra'
+            : 'Attention',
+      icon: <FileCheck className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />,
+      metric: (
+        <div className="space-y-2">
+          <p className="text-xs text-slate-600 dark:text-slate-300">
+            <span className="text-base font-bold font-mono tabular-nums text-slate-900 dark:text-white mr-1.5">
+              {formatIntCounter(data.totals.essays, lang)}
+            </span>
+            {lang === 'vi' ? 'tài liệu đã xử lý' : 'documents analyzed'}
+          </p>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span
+              data-testid="stage1-grobid-pill"
+              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-[10px] font-medium whitespace-nowrap ${
+                grobidActive
+                  ? 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-200/80 dark:border-emerald-800/80 text-emerald-700 dark:text-emerald-300'
+                  : grobidSvcDegraded
+                    ? 'bg-amber-50 dark:bg-amber-950/60 border-amber-200/80 dark:border-amber-800/80 text-amber-800 dark:text-amber-300'
+                    : 'bg-slate-100 dark:bg-slate-800 border-slate-200/80 dark:border-slate-700 text-slate-600 dark:text-slate-300'
+              }`}
+            >
+              {grobidActive
+                ? lang === 'vi'
+                  ? 'GROBID: Hoạt động'
+                  : 'GROBID: Active'
+                : grobidSvcDegraded
+                  ? lang === 'vi'
+                    ? 'GROBID: Gián đoạn'
+                    : 'GROBID: Degraded'
+                  : lang === 'vi'
+                    ? 'GROBID: Dự phòng'
+                    : 'GROBID: Fallback'}
+            </span>
+            <span
+              data-testid="stage1-db-pill"
+              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-[10px] font-medium whitespace-nowrap ${
+                dbHealthy
+                  ? 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-200/80 dark:border-emerald-800/80 text-emerald-700 dark:text-emerald-300'
+                  : 'bg-rose-50 dark:bg-rose-950/60 border-rose-200/80 dark:border-rose-800/80 text-rose-700 dark:text-rose-300'
+              }`}
+            >
+              {dbHealthy
+                ? lang === 'vi'
+                  ? 'CSDL: Kết nối tốt'
+                  : 'DB: Connected'
+                : lang === 'vi'
+                  ? 'CSDL: Gián đoạn'
+                  : 'DB: Issue'}
+            </span>
+          </div>
+        </div>
+      ),
+    },
+    {
+      id: 'scholarly-network',
+      stepLabel: lang === 'vi' ? 'CHẶNG 2' : 'STAGE 2',
+      title: lang === 'vi' ? '15+ Nguồn Học thuật' : 'Scholarly API Network',
+      level: isUpstreamDegraded ? 'degraded' : 'healthy',
+      statusText: isUpstreamDegraded
+        ? lang === 'vi'
+          ? `${degradedUpstreamCount} suy giảm`
+          : `${degradedUpstreamCount} degraded`
+        : lang === 'vi'
+          ? 'Thông suốt'
+          : 'Connected',
+      icon: <Globe className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />,
+      metric: (
+        <p className="text-xs text-slate-600 dark:text-slate-300">
+          {totalUpstreamCount > 0 ? (
+            <>
+              <span
+                className={`text-base font-bold font-mono tabular-nums mr-1.5 ${
+                  degradedUpstreamCount > 0
+                    ? 'text-amber-600 dark:text-amber-400'
+                    : 'text-emerald-600 dark:text-emerald-400'
+                }`}
+              >
+                {healthyUpstreamCount}/{totalUpstreamCount}
+              </span>
+              {lang === 'vi' ? 'nguồn ổn định' : 'sources operational'}
+            </>
+          ) : lang === 'vi' ? (
+            'Chờ truy vấn mới'
+          ) : (
+            'Standby for queries'
+          )}
+        </p>
+      ),
+    },
+    {
+      id: 'lookup-cache',
+      stepLabel: lang === 'vi' ? 'CHẶNG 3' : 'STAGE 3',
+      title: lang === 'vi' ? 'Bộ nhớ Tăng tốc' : 'Smart Lookup Cache',
+      level: 'healthy',
+      statusText: lang === 'vi' ? 'Tối ưu' : 'Accelerated',
+      icon: <Zap className="h-4 w-4 text-amber-500 dark:text-amber-400" />,
+      metric: (
+        <p className="text-xs text-slate-600 dark:text-slate-300">
+          <span className="text-base font-bold font-mono tabular-nums text-indigo-600 dark:text-indigo-400 mr-1.5">
+            {localCorpusPapers > 0
+              ? formatIntCounter(localCorpusPapers, lang)
+              : formatIntCounter(dynamicCacheEntries, lang)}
+          </span>
+          {localCorpusPapers > 0
+            ? lang === 'vi'
+              ? 'bài báo tích hợp sẵn'
+              : 'built-in papers'
+            : lang === 'vi'
+              ? 'mục lưu tạm'
+              : 'cached lookups'}
+        </p>
+      ),
+      actionSlot:
+        cacheHitRatePct > 0 ? (
+          <div className="flex flex-col items-center gap-0.5 shrink-0">
+            <ScoreRing
+              value={cacheHitRatePct}
+              size={38}
+              thickness={3.8}
+              color="#10b981"
+            />
+            <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap">
+              {lang === 'vi' ? 'Tỷ lệ trúng %' : 'Hit rate %'}
+            </span>
+          </div>
+        ) : (
+          <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-[10px] font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap shrink-0">
+            {lang === 'vi' ? 'Sẵn sàng' : 'Ready'}
+          </span>
+        ),
+    },
+  ];
+
   return (
     <div className="space-y-5 pb-10">
-      {/* Live System Pulse Header + 3-Stage Architecture Flow Diagram */}
+      {/* Live System Pulse Header + Responsive 3-Stage Architecture Flow Diagram */}
       <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 sm:p-6 shadow-sm space-y-5">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3.5 min-w-0">
-            <div className="w-11 h-11 rounded-2xl bg-violet-50 dark:bg-violet-950/80 border border-violet-200/70 dark:border-violet-800/70 flex items-center justify-center shrink-0">
+        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+          <div className="flex items-start gap-3.5 min-w-0">
+            <div className="w-11 h-11 rounded-2xl bg-violet-50 dark:bg-violet-950/80 border border-violet-200/70 dark:border-violet-800/70 flex items-center justify-center shrink-0 mt-0.5">
               <Activity className="h-5 w-5 text-violet-600 dark:text-violet-400" />
             </div>
             <div className="min-w-0">
@@ -533,11 +880,11 @@ export function SystemHealthPage() {
                 </h1>
                 <span
                   data-testid="health-status-pill"
-                  data-level={health.level}
+                  data-level={effectiveLevel}
                   className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-[11px] font-semibold ${pillTone}`}
                 >
                   <span
-                    className={`w-1.5 h-1.5 rounded-full animate-pulse ${dotTone}`}
+                    className={`w-1.5 h-1.5 rounded-full shrink-0 animate-pulse ${dotTone}`}
                   />
                   {pillText}
                 </span>
@@ -547,140 +894,129 @@ export function SystemHealthPage() {
                   ? 'Theo dõi trực quan luồng xử lý tài liệu, tốc độ kết nối nguồn học thuật và bộ nhớ tăng tốc.'
                   : 'Visual overview of document processing, scholarly data connections, and lookup speed.'}
               </p>
+              {formattedCheckedAt && (
+                <p
+                  data-testid="health-checked-at"
+                  className="inline-flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500 mt-1.5 font-mono"
+                >
+                  <Clock className="h-3.5 w-3.5 shrink-0" />
+                  <span>
+                    {lang === 'vi'
+                      ? `Cập nhật lúc: ${formattedCheckedAt}`
+                      : `Last checked: ${formattedCheckedAt}`}
+                  </span>
+                </p>
+              )}
             </div>
           </div>
 
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={clearing}
-            onClick={() => setConfirmClearOpen(true)}
-            data-testid="clear-cache-btn"
-            className="rounded-xl text-xs shrink-0"
-          >
-            {clearing ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Trash2 className="h-3.5 w-3.5" />
-            )}
-            {lang === 'vi' ? 'Xóa bộ nhớ đệm' : 'Clear cache'}
-          </Button>
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={refreshing}
+              onClick={() => void load(true)}
+              data-testid="refresh-health-btn"
+              className="rounded-xl text-xs gap-1.5 shrink-0 cursor-pointer"
+            >
+              <RefreshCw
+                className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`}
+              />
+              {lang === 'vi' ? 'Làm mới' : 'Refresh'}
+            </Button>
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={clearing}
+              onClick={() => setConfirmClearOpen(true)}
+              data-testid="clear-cache-btn"
+              className="rounded-xl text-xs gap-1.5 shrink-0 cursor-pointer"
+            >
+              {clearing ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Trash2 className="h-3.5 w-3.5" />
+              )}
+              {lang === 'vi' ? 'Xóa bộ nhớ đệm' : 'Clear cache'}
+            </Button>
+          </div>
         </div>
 
-        {/* Visual 3-Stage Pipeline Flow Diagram */}
-        <PipelineStageFlow
+        {/* Responsive 3-Stage Pipeline Flow (Stacks < xl so Stage 3 never clips on 768px / 1024px) */}
+        <div
           data-testid="system-pipeline-flow"
-          stages={[
-            {
-              id: 'parser-db',
-              stepLabel: lang === 'vi' ? 'CHẶNG 1' : 'STAGE 1',
-              title:
-                lang === 'vi' ? 'Đọc & Lưu trữ Tài liệu' : 'Document Engine & DB',
-              level: health.level,
-              statusText:
-                health.level === 'healthy'
-                  ? lang === 'vi'
-                    ? 'Sẵn sàng'
-                    : 'Ready'
-                  : lang === 'vi'
-                    ? 'Cần kiểm tra'
-                    : 'Attention',
-              icon: (
-                <FileCheck className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
-              ),
-              metric: (
-                <p className="text-xs text-slate-600 dark:text-slate-300">
-                  <span className="text-base font-bold font-mono text-slate-900 dark:text-white mr-1.5">
-                    {data.totals.essays}
-                  </span>
-                  {lang === 'vi' ? 'tài liệu đã xử lý' : 'documents analyzed'}
-                </p>
-              ),
-            },
-            {
-              id: 'scholarly-network',
-              stepLabel: lang === 'vi' ? 'CHẶNG 2' : 'STAGE 2',
-              title:
-                lang === 'vi'
-                  ? '15+ Nguồn Học thuật'
-                  : 'Scholarly API Network',
-              level:
-                openCircuitsCount > 0
-                  ? 'degraded'
-                  : halfOpenCircuitsCount > 0
-                    ? 'degraded'
-                    : 'healthy',
-              statusText:
-                openCircuitsCount > 0
-                  ? lang === 'vi'
-                    ? `${openCircuitsCount} tạm ngắt`
-                    : `${openCircuitsCount} paused`
-                  : lang === 'vi'
-                    ? 'Thông suốt'
-                    : 'Connected',
-              icon: (
-                <Globe className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-              ),
-              metric: (
-                <p className="text-xs text-slate-600 dark:text-slate-300">
-                  {upstreamEntries.length > 0 ? (
-                    <>
-                      <span className="text-base font-bold font-mono text-emerald-600 dark:text-emerald-400 mr-1.5">
-                        {closedCircuitsCount}/{upstreamEntries.length}
-                      </span>
-                      {lang === 'vi' ? 'nguồn ổn định' : 'sources healthy'}
-                    </>
-                  ) : lang === 'vi' ? (
-                    'Chờ truy vấn mới'
-                  ) : (
-                    'Standby for queries'
-                  )}
-                </p>
-              ),
-            },
-            {
-              id: 'lookup-cache',
-              stepLabel: lang === 'vi' ? 'CHẶNG 3' : 'STAGE 3',
-              title:
-                lang === 'vi' ? 'Bộ nhớ Tăng tốc' : 'Smart Lookup Cache',
-              level: 'healthy',
-              statusText: lang === 'vi' ? 'Tối ưu' : 'Accelerated',
-              icon: (
-                <Zap className="h-4 w-4 text-amber-500 dark:text-amber-400" />
-              ),
-              metric: (
-                <p className="text-xs text-slate-600 dark:text-slate-300">
-                  <span className="text-base font-bold font-mono text-indigo-600 dark:text-indigo-400 mr-1.5">
-                    {localCorpusPapers > 0
-                      ? localCorpusPapers.toLocaleString('en-US')
-                      : dynamicCacheEntries.toLocaleString('en-US')}
-                  </span>
-                  {localCorpusPapers > 0
-                    ? lang === 'vi'
-                      ? 'bài báo tích hợp sẵn'
-                      : 'built-in papers'
-                    : lang === 'vi'
-                      ? 'mục lưu tạm'
-                      : 'cached lookups'}
-                </p>
-              ),
-              actionSlot:
-                cacheHitRatePct > 0 ? (
-                  <ScoreRing
-                    value={cacheHitRatePct}
-                    size={36}
-                    thickness={3.8}
-                    color="#10b981"
-                  />
-                ) : undefined,
-            },
-          ]}
-        />
+          className="grid grid-cols-1 xl:grid-cols-[1fr_auto_1fr_auto_1fr] items-stretch gap-3"
+        >
+          {pipelineStages.map((stage, idx) => {
+            const stageDotClass =
+              stage.level === 'healthy'
+                ? 'bg-emerald-500'
+                : stage.level === 'degraded'
+                  ? 'bg-amber-500 animate-pulse'
+                  : 'bg-rose-500 animate-pulse';
+            const stagePillClass =
+              stage.level === 'healthy'
+                ? 'bg-emerald-50 dark:bg-emerald-950/70 border-emerald-200/80 dark:border-emerald-800/70 text-emerald-700 dark:text-emerald-300'
+                : stage.level === 'degraded'
+                  ? 'bg-amber-50 dark:bg-amber-950/70 border-amber-200/80 dark:border-amber-800/70 text-amber-800 dark:text-amber-300'
+                  : 'bg-rose-50 dark:bg-rose-950/70 border-rose-200/80 dark:border-rose-800/70 text-rose-700 dark:text-rose-300';
+
+            return (
+              <React.Fragment key={stage.id}>
+                <div className="relative rounded-2xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-200/90 dark:border-slate-800 p-4 flex flex-col justify-between gap-3 min-w-0">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-start gap-2.5 min-w-0">
+                      <div className="w-9 h-9 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-700 flex items-center justify-center shrink-0 shadow-sm">
+                        {stage.icon}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-mono font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                          {stage.stepLabel}
+                        </p>
+                        <h3 className="text-sm font-display font-semibold text-slate-900 dark:text-slate-100 leading-snug">
+                          {stage.title}
+                        </h3>
+                      </div>
+                    </div>
+                    <span
+                      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[11px] font-medium shrink-0 whitespace-nowrap ${stagePillClass}`}
+                    >
+                      <span
+                        className={`w-1.5 h-1.5 rounded-full shrink-0 ${stageDotClass}`}
+                      />
+                      {stage.statusText}
+                    </span>
+                  </div>
+
+                  <div className="flex items-end justify-between gap-3 pt-1">
+                    <div className="min-w-0 flex-1">{stage.metric}</div>
+                    {stage.actionSlot}
+                  </div>
+                </div>
+
+                {idx < pipelineStages.length - 1 && (
+                  <div
+                    aria-hidden="true"
+                    className="hidden xl:flex items-center justify-center px-0.5 text-indigo-400 dark:text-indigo-500"
+                  >
+                    <div className="flex items-center gap-1">
+                      <span className="w-3 h-px bg-gradient-to-r from-slate-300 to-indigo-400 dark:from-slate-700 dark:to-indigo-500" />
+                      <ArrowRight className="h-4 w-4 animate-pulse" />
+                      <span className="w-3 h-px bg-gradient-to-r from-indigo-400 to-slate-300 dark:from-indigo-500 dark:to-slate-700" />
+                    </div>
+                  </div>
+                )}
+              </React.Fragment>
+            );
+          })}
+        </div>
       </div>
 
-      {/* Compact Platform Scale Strip (Zero numbered corner tags) */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      {/* Compact Platform Scale Strip (grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 prevents 1024px VI truncation) */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
         {[
           {
             label: t('admin.totalUsers'),
@@ -729,25 +1065,25 @@ export function SystemHealthPage() {
           return (
             <Card
               key={item.label}
-              className="p-3.5 sm:p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm"
+              className="p-3.5 sm:p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm flex flex-col justify-between"
             >
               <div className="flex items-center gap-2 mb-2">
-                <div className={`p-1.5 rounded-lg ${item.box}`}>
+                <div className={`p-1.5 rounded-lg shrink-0 ${item.box}`}>
                   <Icon className="h-3.5 w-3.5" />
                 </div>
-                <span className="text-xs font-medium text-slate-500 dark:text-slate-400 truncate">
+                <span className="text-xs font-medium text-slate-500 dark:text-slate-400 leading-tight">
                   {item.label}
                 </span>
               </div>
               <p className={`text-2xl font-bold font-mono tabular-nums ${item.tone}`}>
-                <NumberPopIn value={item.value} />
+                <NumberPopIn value={formatIntCounter(item.value, lang)} />
               </p>
             </Card>
           );
         })}
       </div>
 
-      {/* Verdict Distribution Visual Studio */}
+      {/* Verdict Distribution Visual Studio (Canonical Non-Accusatory Taxonomy) */}
       <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
         <StudioWindowHeader
           title={
@@ -758,8 +1094,8 @@ export function SystemHealthPage() {
           rightSlot={
             <span className="text-xs font-mono text-slate-500 dark:text-slate-400">
               {lang === 'vi'
-                ? `${data.totals.verdicts} bản ghi tổng cộng`
-                : `${data.totals.verdicts} total records`}
+                ? `${formatIntCounter(data.totals.verdicts, lang)} bản ghi tổng cộng`
+                : `${formatIntCounter(data.totals.verdicts, lang)} total records`}
             </span>
           }
         />
@@ -771,16 +1107,19 @@ export function SystemHealthPage() {
               thickness={13}
               segments={
                 rawVerdictSum > 0
-                  ? verdictEntries.map(([label, count]) => ({
-                      value: count,
-                      color: getHumanVerdictMeta(label, lang).colorHex,
-                    }))
+                  ? verdictEntries.map(([label, count]) => {
+                      const disp = getVerdictDisplay(label, lang);
+                      return {
+                        value: count,
+                        color: VERDICT_COLOR_HEX[disp.key],
+                      };
+                    })
                   : [{ value: 1, color: '#cbd5e1' }]
               }
               centerContent={
                 <div className="text-center">
                   <span className="text-lg font-bold font-mono tabular-nums text-slate-900 dark:text-white block leading-none">
-                    {data.totals.verdicts}
+                    {formatIntCounter(data.totals.verdicts, lang)}
                   </span>
                   <span className="text-[10px] text-slate-400">
                     {lang === 'vi' ? 'kết quả' : 'verdicts'}
@@ -804,16 +1143,16 @@ export function SystemHealthPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 {verdictEntries.map(([label, count]) => {
                   const pct = Math.round((count / totalVerdicts) * 100);
-                  const meta = getHumanVerdictMeta(label, lang);
+                  const disp = getVerdictDisplay(label, lang);
                   return (
                     <ProportionalBarRow
                       key={label}
-                      label={meta.label}
-                      count={count}
+                      label={disp.label}
+                      count={formatIntCounter(count, lang)}
                       sublabel={`${pct}%`}
                       value={count}
                       max={totalVerdicts}
-                      barClass={meta.barClass}
+                      barClass={disp.dotClass}
                     />
                   );
                 })}
@@ -837,13 +1176,17 @@ export function SystemHealthPage() {
           rightSlot={
             <div className="flex flex-wrap items-center gap-2.5">
               <span className="text-xs text-slate-500 dark:text-slate-400">
-                {upstreamEntries.length === 0
+                {totalUpstreamCount === 0
                   ? lang === 'vi'
                     ? '0 nguồn đang chạy'
                     : '0 active sources'
                   : lang === 'vi'
-                    ? `${closedCircuitsCount} ổn định · ${halfOpenCircuitsCount} thăm dò · ${openCircuitsCount} tạm ngắt`
-                    : `${closedCircuitsCount} healthy · ${halfOpenCircuitsCount} probing · ${openCircuitsCount} paused`}
+                    ? `${healthyUpstreamCount} hoạt động${
+                        degradedClosedCount > 0 ? ` · ${degradedClosedCount} phản hồi chậm` : ''
+                      } · ${halfOpenCircuitsCount} kiểm tra lại · ${openCircuitsCount} tạm ngắt`
+                    : `${healthyUpstreamCount} operational${
+                        degradedClosedCount > 0 ? ` · ${degradedClosedCount} degraded` : ''
+                      } · ${halfOpenCircuitsCount} recovering · ${openCircuitsCount} paused`}
               </span>
               {openCircuitsCount + halfOpenCircuitsCount > 0 && (
                 <Button
@@ -875,7 +1218,7 @@ export function SystemHealthPage() {
               ? 'Nguồn Học Thuật & Ngắt Mạch Tự Động'
               : 'Scholarly Upstream Providers & Circuit Breakers'}
           </h2>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 mb-4">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 mb-3">
             {lang === 'vi'
               ? 'Trạng thái kết nối và tốc độ phản hồi thực tế của từng kho dữ liệu khoa học.'
               : 'Live connection health and response speed across integrated scholarly registries.'}
@@ -891,252 +1234,271 @@ export function SystemHealthPage() {
                 : 'No external scholarly lookups recorded in this session yet. Source speed and status appear automatically once checks run.'}
             </div>
           ) : (
-            <div className="w-full overflow-x-auto rounded-xl border border-slate-200/80 dark:border-slate-800">
-              <table
-                data-testid="upstream-circuit-table"
-                className="w-full min-w-[640px] text-left border-collapse text-xs"
+            <>
+              {/* Mobile horizontal scroll cue so 4/6 columns never silently vanish on 375px */}
+              <div
+                data-testid="upstream-mobile-scroll-cue"
+                className="md:hidden mb-2 flex items-center justify-center gap-1.5 text-[11px] font-medium text-indigo-600 dark:text-indigo-400 bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200/60 dark:border-indigo-800/60 rounded-lg py-1 px-2.5"
               >
-                <thead>
-                  <tr className="bg-slate-50/90 dark:bg-slate-800/60 border-b border-slate-200/80 dark:border-slate-800 text-[11px] font-mono uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                    <th className="py-2.5 px-3.5 font-semibold">
-                      {lang === 'vi' ? 'Nguồn học thuật' : 'Provider'}
-                    </th>
-                    <th className="py-2.5 px-3.5 font-semibold">
-                      {lang === 'vi' ? 'Trạng thái' : 'Status'}
-                    </th>
-                    <th className="py-2.5 px-3.5 font-semibold">
-                      {lang === 'vi' ? 'Tốc độ phản hồi' : 'Response Speed'}
-                    </th>
-                    <th className="py-2.5 px-3.5 font-semibold">
-                      {lang === 'vi' ? 'Tỷ lệ thành công' : 'Success Rate'}
-                    </th>
-                    <th className="py-2.5 px-3.5 font-semibold">
-                      {lang === 'vi' ? 'Giới hạn (429)' : 'Rate Limit'}
-                    </th>
-                    <th className="py-2.5 px-3.5 font-semibold">
-                      {lang === 'vi' ? 'Lỗi mạng' : 'Errors'}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200/70 dark:divide-slate-800">
-                  {upstreamEntries.map(([sourceKey, info]) => {
-                    const rawState = String(info.state ?? 'closed').toLowerCase();
-                    const normalizedState: CircuitBreakerState =
-                      rawState === 'open' || rawState === 'half_open'
-                        ? rawState
-                        : 'closed';
-                    const visuals = getCircuitVisuals(normalizedState, lang);
-                    const totalCalls = Number(info.total_calls ?? 0);
-                    const successCount = Number(info.success_count ?? 0);
-                    const http429Count = Number(info.http_429_count ?? 0);
-                    const timeoutCount = Number(info.timeout_count ?? 0);
-                    const http5xxCount = Number(info.http_5xx_count ?? 0);
-                    const consecutiveFailures = Number(
-                      info.consecutive_failures ?? 0,
-                    );
-                    const hasLatencySample =
-                      totalCalls > 0 && info.has_latency_sample !== false;
-                    const primaryLatencyMs = Number(
-                      info.avg_latency_ms ?? info.ema_latency_ms ?? 0,
-                    );
-                    const p95LatencyMs =
-                      info.p95_latency_ms != null &&
-                      Number.isFinite(Number(info.p95_latency_ms))
-                        ? Number(info.p95_latency_ms)
-                        : null;
-                    const openRemainingSeconds = Number(
-                      info.open_remaining_seconds ?? info.cooldown_remaining_s ?? 0,
-                    );
-                    const successRatePct =
-                      totalCalls > 0
-                        ? Math.round((successCount / totalCalls) * 100)
-                        : null;
-                    const lastErrorText =
-                      typeof info.last_error === 'string' &&
-                      info.last_error.trim().length > 0
-                        ? info.last_error.trim()
-                        : null;
-                    const showLastError =
-                      lastErrorText !== null &&
-                      (normalizedState !== 'closed' ||
-                        consecutiveFailures > 0 ||
-                        totalCalls > successCount ||
-                        (info.failure_count ?? 0) > 0 ||
-                        (info.total_failures ?? 0) > 0);
+                {lang === 'vi'
+                  ? '← Vuốt ngang xem thêm →'
+                  : '← Swipe horizontally for more →'}
+              </div>
 
-                    const latencyBarPct = hasLatencySample
-                      ? Math.min(100, Math.max(10, Math.round((primaryLatencyMs / 1000) * 100)))
-                      : 0;
-                    const latencyBarColor =
-                      primaryLatencyMs <= 300
-                        ? 'bg-emerald-500'
-                        : primaryLatencyMs <= 700
-                          ? 'bg-amber-500'
-                          : 'bg-rose-500';
+              <div className="w-full overflow-x-auto rounded-xl border border-slate-200/80 dark:border-slate-800">
+                <table
+                  data-testid="upstream-circuit-table"
+                  className="w-full min-w-[680px] text-left border-collapse text-xs"
+                >
+                  <thead>
+                    <tr className="bg-slate-50/90 dark:bg-slate-800/60 border-b border-slate-200/80 dark:border-slate-800 text-[11px] font-mono uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                      <th className="sticky left-0 z-10 bg-slate-50 dark:bg-slate-800 py-2.5 px-3.5 font-semibold whitespace-nowrap">
+                        {lang === 'vi' ? 'Nguồn học thuật' : 'Provider'}
+                      </th>
+                      <th className="py-2.5 px-3.5 font-semibold whitespace-nowrap">
+                        {lang === 'vi' ? 'Trạng thái' : 'Status'}
+                      </th>
+                      <th className="py-2.5 px-3.5 font-semibold whitespace-nowrap">
+                        {lang === 'vi' ? 'Tốc độ phản hồi' : 'Response Speed'}
+                      </th>
+                      <th className="py-2.5 px-3.5 font-semibold whitespace-nowrap">
+                        {lang === 'vi' ? 'Tỷ lệ thành công' : 'Success Rate'}
+                      </th>
+                      <th className="py-2.5 px-3.5 font-semibold whitespace-nowrap">
+                        {lang === 'vi' ? 'Giới hạn (429)' : 'Rate Limit'}
+                      </th>
+                      <th className="py-2.5 px-3.5 font-semibold whitespace-nowrap">
+                        {lang === 'vi' ? 'Lỗi mạng' : 'Errors'}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200/70 dark:divide-slate-800">
+                    {upstreamEntries.map(([sourceKey, info]) => {
+                      const rawState = String(info.state ?? 'closed').toLowerCase();
+                      const normalizedState: CircuitBreakerState =
+                        rawState === 'open' || rawState === 'half_open'
+                          ? rawState
+                          : 'closed';
+                      const degradedWhileClosed =
+                        normalizedState === 'closed' && isProviderDegraded(info);
+                      const visuals = getProviderVisuals(
+                        normalizedState,
+                        degradedWhileClosed,
+                        lang,
+                      );
+                      const totalCalls = Number(info.total_calls ?? 0);
+                      const successCount = Number(info.success_count ?? 0);
+                      const http429Count = Number(info.http_429_count ?? 0);
+                      const timeoutCount = Number(info.timeout_count ?? 0);
+                      const http5xxCount = Number(info.http_5xx_count ?? 0);
+                      const consecutiveFailures = Number(
+                        info.consecutive_failures ?? 0,
+                      );
+                      const hasLatencySample =
+                        totalCalls > 0 && info.has_latency_sample !== false;
+                      const primaryLatencyMs = Number(
+                        info.avg_latency_ms ?? info.ema_latency_ms ?? 0,
+                      );
+                      const p95LatencyMs =
+                        info.p95_latency_ms != null &&
+                        Number.isFinite(Number(info.p95_latency_ms))
+                          ? Number(info.p95_latency_ms)
+                          : null;
+                      const openRemainingSeconds = Number(
+                        info.open_remaining_seconds ?? info.cooldown_remaining_s ?? 0,
+                      );
+                      const successRatePct =
+                        totalCalls > 0
+                          ? Math.round((successCount / totalCalls) * 100)
+                          : null;
+                      const lastErrorText = sanitizeUpstreamError(
+                        info.last_error,
+                        lang,
+                      );
+                      const showLastError =
+                        lastErrorText !== null &&
+                        (normalizedState !== 'closed' ||
+                          consecutiveFailures > 0 ||
+                          totalCalls > successCount ||
+                          (info.failure_count ?? 0) > 0 ||
+                          (info.total_failures ?? 0) > 0);
 
-                    return (
-                      <tr
-                        key={sourceKey}
-                        data-testid={`upstream-row-${sourceKey}`}
-                        className="hover:bg-slate-50/60 dark:hover:bg-slate-800/30 transition-colors"
-                      >
-                        <td className="py-3 px-3.5 align-middle">
-                          <span className="font-semibold text-slate-900 dark:text-slate-100">
-                            {formatProviderName(sourceKey, lang)}
-                          </span>
-                        </td>
-                        <td className="py-3 px-3.5 align-middle">
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            <span
-                              data-testid={`circuit-badge-${sourceKey}`}
-                              data-state={normalizedState}
-                              title={visuals.tooltip}
-                              className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md border text-[11px] font-mono font-semibold ${visuals.pillClass}`}
-                            >
+                      const latencyBarPct = hasLatencySample
+                        ? Math.min(
+                            100,
+                            Math.max(10, Math.round((primaryLatencyMs / 1000) * 100)),
+                          )
+                        : 0;
+                      const latencyBarColor =
+                        primaryLatencyMs <= 300
+                          ? 'bg-emerald-500'
+                          : primaryLatencyMs <= 700
+                            ? 'bg-amber-500'
+                            : 'bg-rose-500';
+
+                      return (
+                        <tr
+                          key={sourceKey}
+                          data-testid={`upstream-row-${sourceKey}`}
+                          className="group hover:bg-slate-50/60 dark:hover:bg-slate-800/30 transition-colors"
+                        >
+                          <td className="sticky left-0 z-10 bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800/50 py-3 px-3.5 align-middle whitespace-nowrap">
+                            <span className="font-semibold text-slate-900 dark:text-slate-100">
+                              {formatProviderName(sourceKey, lang)}
+                            </span>
+                          </td>
+                          <td className="py-3 px-3.5 align-middle">
+                            <div className="flex flex-wrap items-center gap-1.5">
                               <span
-                                className={`w-1.5 h-1.5 rounded-full ${visuals.dotClass}`}
-                              />
-                              {visuals.canonical}
-                            </span>
-                            <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                              {visuals.caption}
-                            </span>
-                            {normalizedState === 'open' &&
-                              openRemainingSeconds >= 0.05 && (
-                                <span
-                                  data-testid={`circuit-cooldown-${sourceKey}`}
-                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-50 dark:bg-rose-950/60 border border-rose-200/70 dark:border-rose-800/70 text-[10px] font-mono text-rose-700 dark:text-rose-300"
-                                >
-                                  <Clock className="h-3 w-3" />
-                                  {lang === 'vi'
-                                    ? `Thử lại sau ${formatMetricNumber(openRemainingSeconds)}s`
-                                    : `Retry in ${formatMetricNumber(openRemainingSeconds)}s`}
-                                </span>
-                              )}
-                            {(normalizedState === 'open' ||
-                              normalizedState === 'half_open') && (
-                              <button
-                                type="button"
-                                data-testid={`reset-breaker-${sourceKey}`}
-                                disabled={resettingBreaker !== null}
-                                onClick={() => void handleResetBreaker(sourceKey)}
-                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-[10px] font-semibold text-slate-700 dark:text-slate-200 transition-colors disabled:opacity-50 cursor-pointer"
+                                data-testid={`circuit-badge-${sourceKey}`}
+                                data-state={normalizedState}
+                                title={visuals.tooltip}
+                                className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-[11px] font-medium whitespace-nowrap ${visuals.pillClass}`}
                               >
-                                {resettingBreaker === sourceKey ? (
-                                  <Loader2 className="h-2.5 w-2.5 animate-spin" />
-                                ) : (
-                                  <RotateCcw className="h-2.5 w-2.5" />
-                                )}
-                                <span>{lang === 'vi' ? 'Đặt lại' : 'Reset'}</span>
-                              </button>
-                            )}
-                          </div>
-                          {showLastError && lastErrorText && (
-                            <p
-                              data-testid={`upstream-last-error-${sourceKey}`}
-                              title={lastErrorText}
-                              className="mt-1 max-w-[260px] truncate text-[10px] font-mono text-rose-600 dark:text-rose-400"
-                            >
-                              {lastErrorText}
-                            </p>
-                          )}
-                        </td>
-                        <td
-                          data-testid={`upstream-latency-${sourceKey}`}
-                          className="py-3 px-3.5 align-middle font-mono tabular-nums text-slate-800 dark:text-slate-200"
-                        >
-                          {hasLatencySample ? (
-                            <div className="space-y-1 min-w-[100px]">
-                              <div className="flex items-baseline justify-between gap-2">
-                                <span>{`${formatMetricNumber(primaryLatencyMs)} ms`}</span>
-                                {p95LatencyMs !== null && (
-                                  <span className="text-[10px] text-slate-400 dark:text-slate-500">
-                                    {`p95: ${formatMetricNumber(p95LatencyMs)} ms`}
-                                  </span>
-                                )}
-                              </div>
-                              <div className="h-1 w-24 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                                <div
-                                  style={{ width: `${latencyBarPct}%` }}
-                                  className={`h-full rounded-full ${latencyBarColor}`}
+                                <span
+                                  className={`w-1.5 h-1.5 rounded-full shrink-0 ${visuals.dotClass}`}
                                 />
-                              </div>
-                            </div>
-                          ) : (
-                            <span className="text-slate-400 dark:text-slate-500">
-                              —
-                            </span>
-                          )}
-                        </td>
-                        <td
-                          data-testid={`upstream-success-${sourceKey}`}
-                          className="py-3 px-3.5 align-middle font-mono tabular-nums text-slate-800 dark:text-slate-200"
-                        >
-                          {totalCalls === 0 ? (
-                            <span className="text-slate-400 dark:text-slate-500">
-                              —
-                            </span>
-                          ) : (
-                            <div className="space-y-1 min-w-[96px]">
-                              <div>
-                                <span>{`${successCount} / ${totalCalls}`}</span>
-                                {successRatePct !== null && (
-                                  <span className="ml-1.5 text-[11px] text-slate-400">
-                                    {`(${successRatePct}%)`}
+                                {visuals.label}
+                              </span>
+                              {normalizedState === 'open' &&
+                                openRemainingSeconds >= 0.05 && (
+                                  <span
+                                    data-testid={`circuit-cooldown-${sourceKey}`}
+                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-50 dark:bg-rose-950/60 border border-rose-200/70 dark:border-rose-800/70 text-[10px] font-mono text-rose-700 dark:text-rose-300 whitespace-nowrap"
+                                  >
+                                    <Clock className="h-3 w-3 shrink-0" />
+                                    {lang === 'vi'
+                                      ? `Thử lại sau ${formatMetricNumber(openRemainingSeconds)}s`
+                                      : `Retry in ${formatMetricNumber(openRemainingSeconds)}s`}
                                   </span>
                                 )}
-                              </div>
-                              {successRatePct !== null && (
-                                <div className="h-1 w-20 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                              {(normalizedState === 'open' ||
+                                normalizedState === 'half_open') && (
+                                <button
+                                  type="button"
+                                  data-testid={`reset-breaker-${sourceKey}`}
+                                  disabled={resettingBreaker !== null}
+                                  onClick={() => void handleResetBreaker(sourceKey)}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-[10px] font-semibold text-slate-700 dark:text-slate-200 transition-colors disabled:opacity-50 cursor-pointer whitespace-nowrap"
+                                >
+                                  {resettingBreaker === sourceKey ? (
+                                    <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                                  ) : (
+                                    <RotateCcw className="h-2.5 w-2.5" />
+                                  )}
+                                  <span>{lang === 'vi' ? 'Đặt lại' : 'Reset'}</span>
+                                </button>
+                              )}
+                            </div>
+                            {showLastError && lastErrorText && (
+                              <p
+                                data-testid={`upstream-last-error-${sourceKey}`}
+                                title={lastErrorText}
+                                className="mt-1 max-w-[260px] truncate text-[10px] font-mono text-rose-600 dark:text-rose-400"
+                              >
+                                {lastErrorText}
+                              </p>
+                            )}
+                          </td>
+                          <td
+                            data-testid={`upstream-latency-${sourceKey}`}
+                            className="py-3 px-3.5 align-middle font-mono tabular-nums text-slate-800 dark:text-slate-200 whitespace-nowrap"
+                          >
+                            {hasLatencySample ? (
+                              <div className="space-y-1 min-w-[116px]">
+                                <div className="flex items-baseline justify-between gap-2 whitespace-nowrap">
+                                  <span className="whitespace-nowrap">
+                                    {formatLatency(primaryLatencyMs)}
+                                  </span>
+                                  {p95LatencyMs !== null && (
+                                    <span className="text-[10px] text-slate-400 dark:text-slate-500 whitespace-nowrap">
+                                      {`p95: ${formatLatency(p95LatencyMs)}`}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="h-1 w-24 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
                                   <div
-                                    style={{ width: `${successRatePct}%` }}
-                                    className={`h-full rounded-full ${
-                                      successRatePct >= 90
-                                        ? 'bg-emerald-500'
-                                        : successRatePct >= 70
-                                          ? 'bg-amber-500'
-                                          : 'bg-rose-500'
-                                    }`}
+                                    style={{ width: `${latencyBarPct}%` }}
+                                    className={`h-full rounded-full ${latencyBarColor}`}
                                   />
                                 </div>
-                              )}
-                            </div>
-                          )}
-                        </td>
-                        <td className="py-3 px-3.5 align-middle">
-                          <span
-                            data-testid={`upstream-429-${sourceKey}`}
-                            className={`inline-flex items-center px-2 py-0.5 rounded font-mono tabular-nums font-semibold ${
-                              http429Count > 0
-                                ? 'bg-amber-50 dark:bg-amber-950/70 text-amber-700 dark:text-amber-300 border border-amber-200/70 dark:border-amber-800/70'
-                                : 'text-slate-500 dark:text-slate-400'
-                            }`}
-                          >
-                            {http429Count}
-                          </span>
-                        </td>
-                        <td className="py-3 px-3.5 align-middle font-mono tabular-nums text-slate-700 dark:text-slate-300">
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            <span>
-                              {lang === 'vi'
-                                ? `Quá hạn: ${timeoutCount} · 5xx: ${http5xxCount}`
-                                : `Timeouts: ${timeoutCount} · 5xx: ${http5xxCount}`}
-                            </span>
-                            {consecutiveFailures > 0 && (
-                              <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[10px] text-rose-600 dark:text-rose-400">
-                                {lang === 'vi'
-                                  ? `Liên tiếp: ${consecutiveFailures}`
-                                  : `Streak: ${consecutiveFailures}`}
+                              </div>
+                            ) : (
+                              <span className="text-slate-400 dark:text-slate-500">
+                                —
                               </span>
                             )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                          </td>
+                          <td
+                            data-testid={`upstream-success-${sourceKey}`}
+                            className="py-3 px-3.5 align-middle font-mono tabular-nums text-slate-800 dark:text-slate-200 whitespace-nowrap"
+                          >
+                            {totalCalls === 0 ? (
+                              <span className="text-slate-400 dark:text-slate-500">
+                                —
+                              </span>
+                            ) : (
+                              <div className="space-y-1 min-w-[100px]">
+                                <div className="whitespace-nowrap">
+                                  <span>{`${formatIntCounter(successCount, lang)} / ${formatIntCounter(totalCalls, lang)}`}</span>
+                                  {successRatePct !== null && (
+                                    <span className="ml-1.5 text-[11px] text-slate-400">
+                                      {`(${successRatePct}%)`}
+                                    </span>
+                                  )}
+                                </div>
+                                {successRatePct !== null && (
+                                  <div className="h-1 w-20 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                                    <div
+                                      style={{ width: `${successRatePct}%` }}
+                                      className={`h-full rounded-full ${
+                                        successRatePct >= 90
+                                          ? 'bg-emerald-500'
+                                          : successRatePct >= 80
+                                            ? 'bg-amber-500'
+                                            : 'bg-rose-500'
+                                      }`}
+                                    />
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-3 px-3.5 align-middle whitespace-nowrap">
+                            <span
+                              data-testid={`upstream-429-${sourceKey}`}
+                              className={`inline-flex items-center px-2 py-0.5 rounded font-mono tabular-nums font-semibold ${
+                                http429Count > 0
+                                  ? 'bg-amber-50 dark:bg-amber-950/70 text-amber-800 dark:text-amber-300 border border-amber-200/70 dark:border-amber-800/70'
+                                  : 'text-slate-500 dark:text-slate-400'
+                              }`}
+                            >
+                              {formatIntCounter(http429Count, lang)}
+                            </span>
+                          </td>
+                          <td className="py-3 px-3.5 align-middle font-mono tabular-nums text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span>
+                                {lang === 'vi'
+                                  ? `Hết thời gian chờ (Timeout): ${formatIntCounter(timeoutCount, lang)} · 5xx: ${formatIntCounter(http5xxCount, lang)}`
+                                  : `Timeouts: ${formatIntCounter(timeoutCount, lang)} · 5xx: ${formatIntCounter(http5xxCount, lang)}`}
+                              </span>
+                              {consecutiveFailures > 0 && (
+                                <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[10px] text-rose-600 dark:text-rose-400">
+                                  {lang === 'vi'
+                                    ? `Liên tiếp: ${consecutiveFailures}`
+                                    : `Streak: ${consecutiveFailures}`}
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </div>
       </div>
@@ -1168,7 +1530,7 @@ export function SystemHealthPage() {
                         ? 'Bộ nhớ đệm Trích dẫn Động'
                         : 'Dynamic Citation Cache'}
                     </span>
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/70 text-emerald-800 dark:text-emerald-200">
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/70 text-emerald-800 dark:text-emerald-200 whitespace-nowrap">
                       {lang === 'vi' ? 'Lưu tạm' : 'Live Cache'}
                     </span>
                   </div>
@@ -1176,12 +1538,12 @@ export function SystemHealthPage() {
                     data-testid="dynamic-cache-entries-value"
                     className="mt-1.5 text-2xl font-bold font-mono tabular-nums text-emerald-700 dark:text-emerald-300"
                   >
-                    {dynamicCacheEntries.toLocaleString('en-US')}
+                    {formatIntCounter(dynamicCacheEntries, lang)}
                   </p>
                   <p className="mt-0.5 text-xs text-emerald-800/80 dark:text-emerald-300/80">
                     {lang === 'vi'
-                      ? `${persistentHits.toLocaleString('en-US')} lượt trúng bền vững`
-                      : `${persistentHits.toLocaleString('en-US')} persistent hits`}
+                      ? `${formatIntCounter(persistentHits, lang)} lượt trúng bền vững`
+                      : `${formatIntCounter(persistentHits, lang)} persistent hits`}
                   </p>
                 </div>
 
@@ -1195,7 +1557,7 @@ export function SystemHealthPage() {
                         ? 'Kho Học thuật Cục bộ Tĩnh'
                         : 'Static Local Corpus'}
                     </span>
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/70 text-indigo-800 dark:text-indigo-200">
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/70 text-indigo-800 dark:text-indigo-200 whitespace-nowrap">
                       {lang === 'vi' ? 'Cố định' : 'Built-in'}
                     </span>
                   </div>
@@ -1203,7 +1565,7 @@ export function SystemHealthPage() {
                     data-testid="static-local-corpus-value"
                     className="mt-1.5 text-2xl font-bold font-mono tabular-nums text-indigo-700 dark:text-indigo-300"
                   >
-                    {localCorpusPapers.toLocaleString('en-US')}
+                    {formatIntCounter(localCorpusPapers, lang)}
                   </p>
                   <p className="mt-0.5 text-xs text-indigo-800/80 dark:text-indigo-300/80">
                     {lang === 'vi'
@@ -1215,10 +1577,7 @@ export function SystemHealthPage() {
             )}
 
             {hasBySourceObject && (
-              <div
-                data-testid="cache-by-source-section"
-                className="pt-2"
-              >
+              <div data-testid="cache-by-source-section" className="pt-2">
                 <p className="text-xs font-semibold text-slate-700 dark:text-slate-200 mb-2">
                   {lang === 'vi'
                     ? 'Phân bổ lưu đệm theo nguồn'
@@ -1235,7 +1594,7 @@ export function SystemHealthPage() {
                         <ProportionalBarRow
                           key={sourceKey}
                           label={formatProviderName(sourceKey, lang)}
-                          count={count}
+                          count={formatIntCounter(count, lang)}
                           value={count}
                           max={maxSrc}
                           barClass="bg-emerald-500"
@@ -1279,14 +1638,13 @@ export function SystemHealthPage() {
                         {formatProviderName(sourceKey, lang)}
                       </span>
                       <span className="text-indigo-600 dark:text-indigo-400 font-mono font-bold tabular-nums">
-                        {count}
+                        {formatIntCounter(count, lang)}
                       </span>
                     </span>
                   ))}
                 </div>
               </div>
             )}
-
           </div>
 
           {/* Progressive Disclosure Footer for Granular Cache Counters & SQLite Engine Telemetry */}
@@ -1299,12 +1657,16 @@ export function SystemHealthPage() {
               className="w-full px-4 sm:px-6 py-3 flex items-center justify-between gap-3 text-left hover:bg-slate-50/90 dark:hover:bg-slate-800/40 transition-colors cursor-pointer"
             >
               <span className="inline-flex items-center gap-2 text-xs font-medium text-slate-600 dark:text-slate-300">
-                <SlidersHorizontal className="h-3.5 w-3.5 text-slate-400" />
+                <SlidersHorizontal className="h-3.5 w-3.5 text-slate-400 shrink-0" />
                 {lang === 'vi'
                   ? 'Thông số kỹ thuật nâng cao (Dành cho quản trị hạ tầng)'
                   : 'Advanced Engine Diagnostics (Infrastructure Details)'}
               </span>
-              <SymmetricChevron open={diagnosticsOpen} size={15} className="text-slate-400" />
+              <SymmetricChevron
+                open={diagnosticsOpen}
+                size={15}
+                className="text-slate-400"
+              />
             </button>
 
             <div
@@ -1323,7 +1685,7 @@ export function SystemHealthPage() {
                           ? 'Bộ nhớ đệm phiên RAM (B1 Singleflight)'
                           : 'B1 In-Memory Session Cache'}
                       </span>
-                      <div className="flex flex-wrap items-center gap-2 text-[11px] text-violet-800 dark:text-violet-300">
+                      <div className="flex flex-wrap items-center gap-2.5 text-[11px] text-violet-800 dark:text-violet-300">
                         {rawCacheStats.session_hit_rate_percent != null && (
                           <span data-testid="b1-session-hit-rate">
                             {lang === 'vi' ? 'Tỷ lệ trúng' : 'Hit Rate'}:{' '}
@@ -1338,22 +1700,36 @@ export function SystemHealthPage() {
                         {rawCacheStats.wave0_entries != null && (
                           <span data-testid="b1-wave0-entries">
                             Wave-0:{' '}
-                            <strong>{Number(rawCacheStats.wave0_entries)}</strong>
+                            <strong>
+                              {formatIntCounter(
+                                Number(rawCacheStats.wave0_entries),
+                                lang,
+                              )}
+                            </strong>
                           </span>
                         )}
                         {rawCacheStats.singleflight_coalesced != null && (
                           <span data-testid="b1-singleflight-coalesced">
                             Singleflight:{' '}
                             <strong>
-                              {Number(rawCacheStats.singleflight_coalesced)}
+                              {formatIntCounter(
+                                Number(rawCacheStats.singleflight_coalesced),
+                                lang,
+                              )}
                             </strong>
                           </span>
                         )}
                         {rawCacheStats.negative_cache_entries != null && (
                           <span data-testid="b1-negative-entries">
-                            {lang === 'vi' ? 'Đệm âm' : 'Neg Cache'}:{' '}
+                            {lang === 'vi'
+                              ? 'Bộ nhớ đệm không tìm thấy'
+                              : 'Neg Cache'}
+                            :{' '}
                             <strong>
-                              {Number(rawCacheStats.negative_cache_entries)}
+                              {formatIntCounter(
+                                Number(rawCacheStats.negative_cache_entries),
+                                lang,
+                              )}
                             </strong>
                           </span>
                         )}
@@ -1372,7 +1748,7 @@ export function SystemHealthPage() {
                           {formatCacheStatLabel(key, lang)}
                         </dt>
                         <dd className="text-lg font-bold font-mono tabular-nums text-slate-900 dark:text-slate-100">
-                          {String(value)}
+                          {formatStatCellValue(value, lang)}
                         </dd>
                       </div>
                     ))}
@@ -1442,12 +1818,16 @@ export function SystemHealthPage() {
             className="w-full px-4 sm:px-5 py-3 flex items-center justify-between gap-3 text-left hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors cursor-pointer"
           >
             <span className="inline-flex items-center gap-2 text-xs font-medium text-slate-600 dark:text-slate-300">
-              <SlidersHorizontal className="h-3.5 w-3.5 text-slate-400" />
+              <SlidersHorizontal className="h-3.5 w-3.5 text-slate-400 shrink-0" />
               {lang === 'vi'
                 ? 'Thông số kỹ thuật nâng cao (Dành cho quản trị hạ tầng)'
                 : 'Advanced Engine Diagnostics (Infrastructure Details)'}
             </span>
-            <SymmetricChevron open={diagnosticsOpen} size={15} className="text-slate-400" />
+            <SymmetricChevron
+              open={diagnosticsOpen}
+              size={15}
+              className="text-slate-400"
+            />
           </button>
 
           <div

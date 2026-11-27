@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AlertTriangle, Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { User } from '@/api/client';
 import { api } from '@/api/client';
+import { formatUserError, resolveAcademicLang } from '@/lib/academicTaxonomy';
 import {
   Dialog,
   DialogClose,
@@ -27,11 +28,18 @@ export function DeleteUserDialog({
   currentUserId,
   onSuccess,
 }: DeleteUserDialogProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const lang = resolveAcademicLang(i18n.language);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   const isSelf = currentUserId !== undefined && user?.id === currentUserId;
+
+  useEffect(() => {
+    if (!open) {
+      setError('');
+    }
+  }, [open]);
 
   const handleDelete = async () => {
     if (!user || isSelf) return;
@@ -42,7 +50,7 @@ export function DeleteUserDialog({
       onSuccess();
       onOpenChange(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('admin.deleteFailed'));
+      setError(formatUserError(err, lang, t('admin.deleteFailed')));
     } finally {
       setLoading(false);
     }

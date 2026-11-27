@@ -639,10 +639,10 @@ describe('SystemHealthPage idle provider guard, SQLite WAL telemetry, & dynamic 
 
     renderWithProviders(<SystemHealthPage />);
 
-    // Health status pill preserved
-    expect((await screen.findByTestId('health-status-pill')).textContent).toContain(
-      'ALL SERVICES HEALTHY',
-    );
+    // Health status pill accurately reflects 2 degraded upstream providers (open + half_open)
+    const pill = await screen.findByTestId('health-status-pill');
+    expect(pill.getAttribute('data-level')).toBe('degraded');
+    expect(pill.textContent).toContain('2 SOURCES DEGRADED (3/5 operational)');
 
     // SQLite WAL telemetry rendered cleanly
     const walBar = screen.getByTestId('sqlite-wal-telemetry');
@@ -669,11 +669,11 @@ describe('SystemHealthPage idle provider guard, SQLite WAL telemetry, & dynamic 
       '100%',
     );
 
-    // Active open provider prefers avg_latency_ms, shows p95 caption, and renders last_error with tooltip
+    // Active open provider prefers avg_latency_ms, formats >=1000ms p95 in seconds, and renders last_error with tooltip
     const waybackRow = screen.getByTestId('upstream-row-wayback_html_meta');
     expect(waybackRow.textContent).toContain('Wayback Machine Archive');
     expect(waybackRow.textContent).toContain('845.4 ms');
-    expect(waybackRow.textContent).toContain('p95: 1420.8 ms');
+    expect(waybackRow.textContent).toContain('p95: 1.4 s');
     const lastErr = screen.getByTestId('upstream-last-error-wayback_html_meta');
     expect(lastErr.getAttribute('title')).toBe('HTTP 503 CDX Wayback upstream gateway timeout');
     expect(lastErr.textContent).toContain('HTTP 503 CDX Wayback');
@@ -748,7 +748,7 @@ describe('SystemHealthPage idle provider guard, SQLite WAL telemetry, & dynamic 
       );
     });
     expect(screen.getByTestId('cache-stat-persistent_entries').textContent).toContain('0');
-    expect(screen.getByTestId('cache-stat-local_papers_count').textContent).toContain('128000');
+    expect(screen.getByTestId('cache-stat-local_papers_count').textContent).toContain('128,000');
     unmount();
 
     // Check Vietnamese labels
@@ -836,11 +836,11 @@ describe('DashboardPage, HistoryPage job lifecycle badges & AccountManagementPag
     expect(failedBadge.getAttribute('title')).toBe('PDF xref table damaged beyond repair');
     expect(screen.getByTestId('job-refund-badge-803').textContent).toBe('Credit Refunded');
 
-    // CIS guard: — for queued, processing, and failed; 92/100 for completed
+    // CIS guard: — for queued, processing, and failed; 92.4 / 100 for completed
     expect(screen.getByTestId('essay-cis-801').textContent).toBe('—');
     expect(screen.getByTestId('essay-cis-802').textContent).toBe('—');
     expect(screen.getByTestId('essay-cis-803').textContent).toBe('—');
-    expect(screen.getByTestId('essay-cis-804').textContent).toBe('92/100');
+    expect(screen.getByTestId('essay-cis-804').textContent).toBe('92.4 / 100');
 
     // Links point to /verification/processing/:id for queued/processing/failed, and /verification/report/:id for completed
     expect(screen.getByTestId('dashboard-essay-link-801').getAttribute('href')).toBe(
@@ -870,7 +870,7 @@ describe('DashboardPage, HistoryPage job lifecycle badges & AccountManagementPag
     expect(screen.getByTestId('history-job-status-803').textContent).toContain('Thất bại');
     expect(screen.getByTestId('history-job-refund-803').textContent).toBe('Hoàn lượt');
     expect(screen.getByTestId('history-essay-cis-803').textContent).toBe('CIS: —');
-    expect(screen.getByTestId('history-essay-cis-804').textContent).toBe('CIS: 92/100');
+    expect(screen.getByTestId('history-essay-cis-804').textContent).toBe('CIS: 92.4 / 100');
 
     const historyLinks = screen.getAllByTestId('essay-item');
     expect(historyLinks.map((el) => el.getAttribute('href'))).toEqual([

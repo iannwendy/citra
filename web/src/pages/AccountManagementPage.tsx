@@ -8,6 +8,7 @@ import {
   UserCog,
   X,
   Users,
+  Trash2,
   Infinity as InfinityIcon,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -18,6 +19,11 @@ import { RoleBadge } from '@/components/RoleBadge';
 import type { User } from '@/api/client';
 import { api } from '@/api/client';
 import { getQuotaView } from '@/lib/quotaDisplay';
+import {
+  formatLocalizedDate,
+  formatUserError,
+  resolveAcademicLang,
+} from '@/lib/academicTaxonomy';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -40,7 +46,7 @@ import {
 
 export function AccountManagementPage() {
   const { t, i18n } = useTranslation();
-  const lang: 'en' | 'vi' = i18n.language?.startsWith('vi') ? 'vi' : 'en';
+  const lang = resolveAcademicLang(i18n.language);
   const { user: currentUser } = useAuth();
   const { isAdmin } = useRole();
   const navigate = useNavigate();
@@ -52,6 +58,7 @@ export function AccountManagementPage() {
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'teacher' | 'user'>('all');
+  const [planFilter, setPlanFilter] = useState<'all' | 'basic' | 'pro' | 'ultra'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
 
   // Dialogs
@@ -73,36 +80,58 @@ export function AccountManagementPage() {
       const data = await api.listUsers();
       setUsers(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('admin.failedLoadUsers'));
+      setError(formatUserError(err, lang, t('admin.failedLoadUsers')));
     } finally {
       setLoading(false);
     }
-  }, [t]);
+  }, [lang, t]);
 
   useEffect(() => {
     void loadUsers();
   }, [loadUsers]);
 
+  const getEffectivePlanTier = (u: User): 'basic' | 'pro' | 'ultra' => {
+    if (u.role === 'admin' || u.plan_tier === 'ultra') return 'ultra';
+    if (u.plan_tier === 'pro') return 'pro';
+    return 'basic';
+  };
+
   const filtered = useMemo(
     () =>
       users.filter((u) => {
-        const q = searchQuery.toLowerCase();
+        const q = searchQuery.trim().toLowerCase();
         const matchesSearch =
           !q ||
           u.username.toLowerCase().includes(q) ||
           (u.full_name ?? '').toLowerCase().includes(q) ||
-          (u.email ?? '').toLowerCase().includes(q);
+          (u.email ?? '').toLowerCase().includes(q) ||
+          (u.institution ?? '').toLowerCase().includes(q);
 
         const matchesRole = roleFilter === 'all' || u.role === roleFilter;
+        const matchesPlan =
+          planFilter === 'all' || getEffectivePlanTier(u) === planFilter;
         const matchesStatus =
           statusFilter === 'all' ||
           (statusFilter === 'active' && u.is_active) ||
           (statusFilter === 'inactive' && !u.is_active);
 
-        return matchesSearch && matchesRole && matchesStatus;
+        return matchesSearch && matchesRole && matchesPlan && matchesStatus;
       }),
-    [users, searchQuery, roleFilter, statusFilter],
+    [users, searchQuery, roleFilter, planFilter, statusFilter],
   );
+
+  const hasActiveFilters =
+    Boolean(searchQuery.trim()) ||
+    roleFilter !== 'all' ||
+    planFilter !== 'all' ||
+    statusFilter !== 'all';
+
+  const resetFilters = () => {
+    setSearchQuery('');
+    setRoleFilter('all');
+    setPlanFilter('all');
+    setStatusFilter('all');
+  };
 
   const handleEdit = (user: User) => {
     setEditingUser(user);
@@ -116,34 +145,31 @@ export function AccountManagementPage() {
 
   const StatusBadge = ({ active }: { active: boolean }) => (
     <span
-      className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border ${
+      className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border whitespace-nowrap shrink-0 ${
         active
           ? 'bg-emerald-50 dark:bg-emerald-950/70 border-emerald-200/80 dark:border-emerald-800/80 text-emerald-700 dark:text-emerald-300'
           : 'bg-rose-50 dark:bg-rose-950/70 border-rose-200/80 dark:border-rose-800/80 text-rose-700 dark:text-rose-300'
       }`}
     >
       <span
-        className={`w-1.5 h-1.5 rounded-full ${active ? 'bg-emerald-500' : 'bg-rose-500'}`}
+        className={`w-1.5 h-1.5 rounded-full shrink-0 ${active ? 'bg-emerald-500' : 'bg-rose-500'}`}
       />
       {active ? t('admin.active') : t('admin.inactive')}
     </span>
   );
-
-  const dateLocale = lang === 'vi' ? 'vi-VN' : 'en-US';
 
   const activeCount = users.filter((u) => u.is_active).length;
   const teacherCount = users.filter((u) => u.role === 'teacher').length;
   const adminCount = users.filter((u) => u.role === 'admin').length;
   const studentCount = Math.max(0, users.length - teacherCount - adminCount);
 
-  const ultraCount = users.filter(
-    (u) => u.role === 'admin' || u.plan_tier === 'ultra',
-  ).length;
-  const proCount = users.filter(
-    (u) => u.role !== 'admin' && u.plan_tier === 'pro',
-  ).length;
+  const ultraCount = users.filter((u) => getEffectivePlanTier(u) === 'ultra').length;
+  const proCount = users.filter((u) => getEffectivePlanTier(u) === 'pro').length;
   const basicCount = Math.max(0, users.length - ultraCount - proCount);
   const safeTotalUsers = Math.max(1, users.length);
+
+  const institutionColumnLabel =
+    lang === 'vi' ? 'Đơn vị / Lớp' : 'Institution / Class';
 
   return (
     <div className="space-y-5 pb-10">
@@ -176,74 +202,124 @@ export function AccountManagementPage() {
         </Button>
       </div>
 
-      {/* Visual Member Ecosystem Summary */}
+      {/* Visual Member Ecosystem Summary — Distinct Role vs Plan Tier Palettes */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-        <Card className="lg:col-span-5 p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm flex items-center gap-4">
-          <DonutChart
-            size={80}
-            thickness={10}
-            segments={
-              users.length > 0
-                ? [
-                    { value: studentCount, color: '#10b981' },
-                    { value: teacherCount, color: '#6366f1' },
-                    { value: adminCount, color: '#8b5cf6' },
-                  ]
-                : [{ value: 1, color: '#cbd5e1' }]
-            }
-            centerContent={
-              <span className="text-lg font-bold font-mono tabular-nums text-slate-900 dark:text-slate-100">
-                <NumberPopIn value={users.length} />
-              </span>
-            }
+        <Card className="lg:col-span-6 p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row items-start sm:items-center gap-4">
+          {/* Role Distribution (Donut + Distinct Role Palette: Emerald / Sky / Violet) */}
+          <div className="flex items-center gap-3.5 shrink-0">
+            <DonutChart
+              size={78}
+              thickness={10}
+              segments={
+                users.length > 0
+                  ? [
+                      { value: studentCount, color: '#10b981' },
+                      { value: teacherCount, color: '#0ea5e9' },
+                      { value: adminCount, color: '#8b5cf6' },
+                    ]
+                  : [{ value: 1, color: '#cbd5e1' }]
+              }
+              centerContent={
+                <span className="text-lg font-bold font-mono tabular-nums text-slate-900 dark:text-slate-100">
+                  <NumberPopIn value={users.length} />
+                </span>
+              }
+            />
+            <div className="space-y-1">
+              <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                {lang === 'vi' ? 'Phân bổ vai trò' : 'Role Distribution'}
+              </p>
+              <div className="flex flex-col gap-1 text-[11px] text-slate-600 dark:text-slate-400">
+                <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                  {lang === 'vi' ? 'Sinh viên' : 'Students'}:{' '}
+                  <strong className="font-mono text-slate-800 dark:text-slate-200">
+                    {studentCount}
+                  </strong>
+                </span>
+                <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                  <span className="w-2 h-2 rounded-full bg-sky-500 shrink-0" />
+                  {t('admin.teachers')}:{' '}
+                  <strong className="font-mono text-slate-800 dark:text-slate-200">
+                    {teacherCount}
+                  </strong>
+                </span>
+                <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                  <span className="w-2 h-2 rounded-full bg-violet-500 shrink-0" />
+                  {t('admin.admins')}:{' '}
+                  <strong className="font-mono text-slate-800 dark:text-slate-200">
+                    {adminCount}
+                  </strong>
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div
+            aria-hidden="true"
+            className="hidden sm:block w-px self-stretch bg-slate-200/80 dark:bg-slate-800 shrink-0"
           />
-          <div className="flex-1 min-w-0 space-y-2.5">
-            <div className="flex items-center justify-between text-xs">
+
+          {/* Plan Tier Distribution (Stacked Bar + Non-Colliding Palette: Amber / Indigo / Slate) */}
+          <div className="flex-1 min-w-0 w-full space-y-2.5 pt-3 sm:pt-0 border-t sm:border-t-0 border-slate-200/80 dark:border-slate-800">
+            <div className="flex items-center justify-between gap-2 text-xs">
               <span className="font-semibold text-slate-800 dark:text-slate-200">
                 {lang === 'vi' ? 'Phân bổ gói tài khoản' : 'Plan Tier Distribution'}
               </span>
-              <span className="text-[11px] font-mono text-slate-400">
-                {basicCount} Basic · {proCount} Pro · {ultraCount} Ultra
-              </span>
             </div>
-            <div className="h-2 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden flex">
+            <div
+              data-testid="plan-tier-distribution-bar"
+              className="h-2.5 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden flex"
+            >
               {ultraCount > 0 && (
                 <div
                   style={{ width: `${(ultraCount / safeTotalUsers) * 100}%` }}
-                  className="bg-violet-500 h-full transition-all"
+                  className="bg-amber-500 h-full transition-all"
+                  title={`Ultra: ${ultraCount}`}
                 />
               )}
               {proCount > 0 && (
                 <div
                   style={{ width: `${(proCount / safeTotalUsers) * 100}%` }}
-                  className="bg-indigo-500 h-full transition-all"
+                  className="bg-indigo-600 h-full transition-all"
+                  title={`Pro: ${proCount}`}
                 />
               )}
               {basicCount > 0 && (
                 <div
                   style={{ width: `${(basicCount / safeTotalUsers) * 100}%` }}
                   className="bg-slate-400 h-full transition-all"
+                  title={`Basic: ${basicCount}`}
                 />
               )}
             </div>
-            <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-500 dark:text-slate-400">
-              <span className="inline-flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                {lang === 'vi' ? 'Sinh viên' : 'Students'}: {studentCount}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-600 dark:text-slate-400">
+              <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                <span className="w-2 h-2 rounded-full bg-slate-400 shrink-0" />
+                Basic:{' '}
+                <strong className="font-mono text-slate-800 dark:text-slate-200">
+                  {basicCount}
+                </strong>
               </span>
-              <span className="inline-flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-indigo-500" />
-                {t('admin.teachers')}: {teacherCount}
+              <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                <span className="w-2 h-2 rounded-full bg-indigo-600 shrink-0" />
+                Pro:{' '}
+                <strong className="font-mono text-slate-800 dark:text-slate-200">
+                  {proCount}
+                </strong>
               </span>
-              <span className="inline-flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-violet-500" />
-                {t('admin.admins')}: {adminCount}
+              <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+                Ultra:{' '}
+                <strong className="font-mono text-slate-800 dark:text-slate-200">
+                  {ultraCount}
+                </strong>
               </span>
             </div>
           </div>
         </Card>
 
-        <div className="lg:col-span-7 grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+        <div className="lg:col-span-6 grid grid-cols-2 sm:grid-cols-4 gap-3.5">
           <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm flex flex-col justify-between">
             <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
               {t('admin.totalUsers')}
@@ -263,10 +339,10 @@ export function AccountManagementPage() {
           </Card>
 
           <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm flex flex-col justify-between">
-            <span className="text-xs font-medium text-indigo-600 dark:text-indigo-400">
+            <span className="text-xs font-medium text-sky-600 dark:text-sky-400">
               {t('admin.teachers')}
             </span>
-            <p className="mt-2 text-2xl font-bold font-mono tabular-nums text-indigo-600 dark:text-indigo-400">
+            <p className="mt-2 text-2xl font-bold font-mono tabular-nums text-sky-600 dark:text-sky-400">
               <NumberPopIn value={teacherCount} />
             </p>
           </Card>
@@ -295,7 +371,7 @@ export function AccountManagementPage() {
           badge={
             <Badge
               variant="secondary"
-              className="font-mono text-[11px] bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/60"
+              className="font-mono text-[11px] bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/60 whitespace-nowrap"
             >
               {filtered.length} / {users.length}
             </Badge>
@@ -309,30 +385,35 @@ export function AccountManagementPage() {
                 { key: 'all', label: t('admin.allRoles') },
                 { key: 'admin', label: t('admin.roleAdmin') },
                 { key: 'teacher', label: t('admin.roleTeacher') },
-                { key: 'user', label: t('admin.roleUser') },
+                { key: 'user', label: lang === 'vi' ? 'Sinh viên' : 'Student' },
               ]}
             />
           }
         />
 
-        {/* Search & Synchronized Select Filters */}
+        {/* Search + Plan Tier & Status Filters */}
         <div className="p-4 border-b border-slate-200/80 dark:border-slate-800 bg-slate-50/30 dark:bg-slate-900/40">
           <div className="flex flex-col sm:flex-row gap-3">
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
               <Input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder={t('admin.searchUsersPlaceholder')}
-                className="pl-10 rounded-xl"
+                aria-label={
+                  lang === 'vi'
+                    ? 'Tìm kiếm tài khoản theo tên đăng nhập, họ tên hoặc email'
+                    : 'Search accounts by username, name, or email'
+                }
+                className="pl-10 pr-9 rounded-xl"
               />
               {searchQuery && (
                 <button
                   type="button"
                   onClick={() => setSearchQuery('')}
                   aria-label={t('dashboard.clearSearch')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -340,20 +421,32 @@ export function AccountManagementPage() {
             </div>
 
             <Select
-              value={roleFilter}
-              onChange={(e) => setRoleFilter(e.target.value as typeof roleFilter)}
-              className="sm:w-40 rounded-xl"
+              data-testid="plan-tier-filter"
+              value={planFilter}
+              onChange={(e) => setPlanFilter(e.target.value as typeof planFilter)}
+              aria-label={
+                lang === 'vi' ? 'Lọc theo gói dịch vụ' : 'Filter by plan tier'
+              }
+              wrapperClassName="sm:w-40"
+              className="w-full rounded-xl"
             >
-              <option value="all">{t('admin.allRoles')}</option>
-              <option value="admin">{t('admin.roleAdmin')}</option>
-              <option value="teacher">{t('admin.roleTeacher')}</option>
-              <option value="user">{t('admin.roleUser')}</option>
+              <option value="all">
+                {lang === 'vi' ? 'Tất cả gói' : 'All Plans'}
+              </option>
+              <option value="basic">Basic</option>
+              <option value="pro">Pro</option>
+              <option value="ultra">Ultra</option>
             </Select>
 
             <Select
+              data-testid="status-filter"
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
-              className="sm:w-40 rounded-xl"
+              aria-label={
+                lang === 'vi' ? 'Lọc theo trạng thái' : 'Filter by status'
+              }
+              wrapperClassName="sm:w-44"
+              className="w-full rounded-xl"
             >
               <option value="all">{t('admin.allStatus')}</option>
               <option value="active">{t('admin.active')}</option>
@@ -362,7 +455,7 @@ export function AccountManagementPage() {
           </div>
         </div>
 
-        {/* Table */}
+        {/* Responsive Card List (< lg) & Compact Desktop Table (>= lg) */}
         {loading ? (
           <div className="p-12 flex flex-col items-center justify-center">
             <Loader2 className="h-8 w-8 text-indigo-600 animate-spin mb-4" />
@@ -376,46 +469,56 @@ export function AccountManagementPage() {
               <UserCog className="h-7 w-7 text-slate-400" />
             </div>
             <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100 mb-1">
-              {searchQuery || roleFilter !== 'all' || statusFilter !== 'all'
-                ? t('admin.noUsersMatch')
-                : t('admin.noUsersYet')}
+              {hasActiveFilters ? t('admin.noUsersMatch') : t('admin.noUsersYet')}
             </h3>
-            <p className="text-slate-500 dark:text-slate-400 text-xs">
-              {searchQuery || roleFilter !== 'all' || statusFilter !== 'all'
+            <p className="text-slate-500 dark:text-slate-400 text-xs mb-4">
+              {hasActiveFilters
                 ? t('admin.tryAdjustingFilters')
                 : t('admin.createFirstUser')}
             </p>
+            {hasActiveFilters && users.length > 0 && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={resetFilters}
+                className="rounded-xl"
+              >
+                {lang === 'vi' ? 'Xóa bộ lọc' : 'Reset Filters'}
+              </Button>
+            )}
           </div>
         ) : (
-          <Table className="block md:table">
-            <TableHeader className="hidden md:table-header-group">
+          <Table className="block lg:table">
+            <TableHeader className="hidden lg:table-header-group">
               <TableRow className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
-                <TableHead className="text-left py-3 px-3 lg:px-4 text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                <TableHead className="text-left py-3 px-2.5 xl:px-3 text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap">
                   {t('admin.tableUser')}
                 </TableHead>
-                <TableHead className="text-left py-3 px-3 lg:px-4 text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                <TableHead className="text-left py-3 px-2.5 xl:px-3 text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap">
                   {t('admin.tableRole')}
                 </TableHead>
-                <TableHead className="text-left py-3 px-3 lg:px-4 text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                <TableHead className="text-left py-3 px-2.5 xl:px-3 text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap">
                   {lang === 'vi' ? 'Gói / Hạn ngạch' : 'Plan / Quota'}
                 </TableHead>
-                <TableHead className="text-left py-3 px-3 lg:px-4 text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                <TableHead className="text-left py-3 px-2.5 xl:px-3 text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap">
                   {t('admin.tableStatus')}
                 </TableHead>
-                <TableHead className="text-left py-3 px-3 lg:px-4 text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                  {t('admin.tableClass')}
+                <TableHead className="text-left py-3 px-2.5 xl:px-3 text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap">
+                  {institutionColumnLabel}
                 </TableHead>
-                <TableHead className="hidden lg:table-cell text-left py-3 px-4 text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                <TableHead className="text-left py-3 px-2.5 xl:px-3 text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap">
                   {t('admin.tableLastLogin')}
                 </TableHead>
-                <TableHead className="text-right py-3 px-3 lg:px-4 text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                <TableHead className="lg:sticky lg:right-0 bg-slate-50 dark:bg-slate-800/95 text-right py-3 px-2.5 xl:px-3 text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap">
                   {t('admin.tableActions')}
                 </TableHead>
               </TableRow>
             </TableHeader>
-            <TableBody className="block md:table-row-group divide-y divide-slate-100 dark:divide-slate-800">
+            <TableBody className="block lg:table-row-group divide-y divide-slate-100 dark:divide-slate-800">
               {filtered.map((u) => {
                 const isUserAdmin = u.role === 'admin';
+                const effectiveTier = getEffectivePlanTier(u);
                 const limit = u.quota?.monthly_uploads_limit ?? 0;
                 const used = u.quota?.monthly_uploads_used ?? 0;
                 const hasFiniteQuota = !isUserAdmin && Boolean(u.quota) && limit > 0;
@@ -428,15 +531,18 @@ export function AccountManagementPage() {
                     : clampedQuotaPct >= 80
                       ? 'bg-amber-500'
                       : 'bg-indigo-500';
+                const formattedLogin = u.last_login_at
+                  ? formatLocalizedDate(u.last_login_at, lang)
+                  : '—';
 
                 return (
                   <TableRow
                     key={u.id}
-                    className="flex flex-col md:table-row p-4 md:p-0 gap-2.5 md:gap-0 hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors"
+                    className="group flex flex-col lg:table-row p-4 lg:p-0 gap-2.5 lg:gap-0 hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors"
                   >
-                    <TableCell className="block md:table-cell p-0 md:py-3 md:px-3 lg:px-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl overflow-hidden bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200/70 dark:border-indigo-800/70 flex items-center justify-center shrink-0 text-xs font-bold text-indigo-700 dark:text-indigo-300 uppercase">
+                    <TableCell className="block lg:table-cell p-0 lg:py-3 lg:px-2.5 xl:px-3 lg:max-w-[230px] xl:max-w-[260px]">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-8 h-8 rounded-xl overflow-hidden bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200/70 dark:border-indigo-800/70 flex items-center justify-center shrink-0 text-xs font-bold text-indigo-700 dark:text-indigo-300 uppercase">
                           {u.avatar_url ? (
                             <img
                               src={u.avatar_url}
@@ -449,10 +555,16 @@ export function AccountManagementPage() {
                           )}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate">
+                          <p
+                            title={u.full_name || u.username}
+                            className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate"
+                          >
                             {u.full_name || u.username}
                           </p>
-                          <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                          <p
+                            title={`${u.username}${u.email ? ` · ${u.email}` : ''}`}
+                            className="text-xs text-slate-500 dark:text-slate-400 truncate"
+                          >
                             {u.username}
                             {u.email && ` · ${u.email}`}
                           </p>
@@ -460,8 +572,8 @@ export function AccountManagementPage() {
                       </div>
                     </TableCell>
 
-                    <TableCell className="flex md:table-cell items-center justify-between p-0 md:py-3 md:px-3 lg:px-4">
-                      <span className="md:hidden text-[11px] font-mono uppercase text-slate-400">
+                    <TableCell className="flex lg:table-cell items-center justify-between gap-2 p-0 lg:py-3 lg:px-2.5 xl:px-3 whitespace-nowrap">
+                      <span className="lg:hidden text-[11px] font-mono uppercase text-slate-400">
                         {t('admin.tableRole')}
                       </span>
                       <RoleBadge role={u.role} />
@@ -469,33 +581,35 @@ export function AccountManagementPage() {
 
                     <TableCell
                       data-testid={`user-plan-quota-${u.id}`}
-                      className="flex md:table-cell items-center justify-between p-0 md:py-3 md:px-3 lg:px-4"
+                      className="flex lg:table-cell items-center justify-between gap-2 p-0 lg:py-3 lg:px-2.5 xl:px-3 whitespace-nowrap"
                     >
-                      <span className="md:hidden text-[11px] font-mono uppercase text-slate-400">
+                      <span className="lg:hidden text-[11px] font-mono uppercase text-slate-400">
                         {lang === 'vi' ? 'Gói / Hạn ngạch' : 'Plan / Quota'}
                       </span>
-                      <div className="space-y-1.5 min-w-[128px]">
-                        <div className="inline-flex items-center gap-2 font-mono text-xs">
+                      <div className="space-y-1.5 min-w-[118px]">
+                        <div className="inline-flex items-center gap-1.5 font-mono text-xs whitespace-nowrap">
                           <span
-                            className={`px-2 py-0.5 rounded-md border text-[11px] font-semibold ${
-                              u.plan_tier === 'ultra'
-                                ? 'bg-violet-50 dark:bg-violet-950/70 text-violet-700 dark:text-violet-300 border-violet-200/80 dark:border-violet-800/80'
-                                : u.plan_tier === 'pro'
+                            className={`px-1.5 py-0.5 rounded-md border text-[11px] font-semibold whitespace-nowrap ${
+                              effectiveTier === 'ultra'
+                                ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border-amber-200/80 dark:border-amber-800/80'
+                                : effectiveTier === 'pro'
                                   ? 'bg-indigo-50 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 border-indigo-200/80 dark:border-indigo-800/80'
                                   : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200/80 dark:border-slate-700'
                             }`}
                           >
                             {(u.plan_tier || 'basic').toUpperCase()}
                           </span>
-                          <span className="inline-flex items-center gap-1 tabular-nums text-slate-600 dark:text-slate-300">
-                            {isUserAdmin && <InfinityIcon className="h-3 w-3 text-violet-500" />}
+                          <span className="inline-flex items-center gap-1 tabular-nums text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                            {isUserAdmin && (
+                              <InfinityIcon className="h-3 w-3 text-amber-600 dark:text-amber-400 shrink-0" />
+                            )}
                             {u.quota
                               ? getQuotaView(u.quota, lang, { isAdmin: isUserAdmin }).usage
                               : '—'}
                           </span>
                         </div>
                         {hasFiniteQuota && (
-                          <div className="h-1.5 w-28 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                          <div className="h-1.5 w-24 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
                             <div
                               data-testid={`user-quota-bar-${u.id}`}
                               style={{ width: `${clampedQuotaPct}%` }}
@@ -506,43 +620,38 @@ export function AccountManagementPage() {
                       </div>
                     </TableCell>
 
-                    <TableCell className="flex md:table-cell items-center justify-between p-0 md:py-3 md:px-3 lg:px-4">
-                      <span className="md:hidden text-[11px] font-mono uppercase text-slate-400">
+                    <TableCell className="flex lg:table-cell items-center justify-between gap-2 p-0 lg:py-3 lg:px-2.5 xl:px-3 whitespace-nowrap">
+                      <span className="lg:hidden text-[11px] font-mono uppercase text-slate-400">
                         {t('admin.tableStatus')}
                       </span>
                       <StatusBadge active={u.is_active} />
                     </TableCell>
 
-                    <TableCell className="flex md:table-cell items-center justify-between p-0 md:py-3 md:px-3 lg:px-4 text-sm text-slate-600 dark:text-slate-300">
-                      <span className="md:hidden text-[11px] font-mono uppercase text-slate-400">
-                        {t('admin.tableClass')}
+                    <TableCell className="flex lg:table-cell items-center justify-between gap-2 p-0 lg:py-3 lg:px-2.5 xl:px-3 text-xs text-slate-600 dark:text-slate-300 lg:max-w-[140px] xl:max-w-[175px]">
+                      <span className="lg:hidden text-[11px] font-mono uppercase text-slate-400 shrink-0">
+                        {institutionColumnLabel}
                       </span>
-                      <span className="truncate max-w-[180px]">
+                      <span
+                        title={u.institution ?? undefined}
+                        className="truncate block max-w-[200px] lg:max-w-[135px] xl:max-w-[168px]"
+                      >
                         {u.institution ?? '—'}
                       </span>
                     </TableCell>
 
-                    <TableCell className="flex md:hidden lg:table-cell items-center justify-between p-0 md:py-3 md:px-4 text-xs text-slate-500 dark:text-slate-400">
-                      <span className="md:hidden text-[11px] font-mono uppercase text-slate-400">
+                    <TableCell className="flex lg:table-cell items-center justify-between gap-2 p-0 lg:py-3 lg:px-2.5 xl:px-3 text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap font-mono tabular-nums">
+                      <span className="lg:hidden text-[11px] font-mono uppercase text-slate-400 font-sans">
                         {t('admin.tableLastLogin')}
                       </span>
-                      <span>
-                        {u.last_login_at
-                          ? new Date(u.last_login_at).toLocaleDateString(dateLocale, {
-                              month: 'short',
-                              day: 'numeric',
-                              year: 'numeric',
-                            })
-                          : '—'}
-                      </span>
+                      <span className="whitespace-nowrap">{formattedLogin}</span>
                     </TableCell>
 
-                    <TableCell className="block md:table-cell p-0 pt-2 md:pt-0 border-t border-slate-100 dark:border-slate-800/80 md:border-0 md:py-3 md:px-3 lg:px-4">
+                    <TableCell className="block lg:table-cell lg:sticky lg:right-0 bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800/60 p-0 pt-2 lg:pt-0 border-t border-slate-100 dark:border-slate-800/80 lg:border-0 lg:py-3 lg:px-2.5 xl:px-3 whitespace-nowrap">
                       <div className="flex items-center justify-end gap-1">
                         <button
                           type="button"
                           onClick={() => handleEdit(u)}
-                          className="p-2 rounded-lg text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 transition-colors cursor-pointer"
+                          className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 transition-colors cursor-pointer"
                           title={lang === 'vi' ? 'Chỉnh sửa người dùng' : 'Edit user'}
                           aria-label={
                             lang === 'vi'
@@ -556,7 +665,7 @@ export function AccountManagementPage() {
                           type="button"
                           onClick={() => handleDelete(u)}
                           disabled={u.id === currentUser?.id}
-                          className="p-2 rounded-lg text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/50 transition-colors disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                          className="p-1.5 rounded-lg text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-950/50 transition-colors disabled:opacity-30 disabled:text-slate-400 disabled:hover:bg-transparent disabled:cursor-not-allowed cursor-pointer"
                           title={
                             u.id === currentUser?.id
                               ? t('admin.cannotDeleteSelf')
@@ -572,7 +681,7 @@ export function AccountManagementPage() {
                                 : `Delete user ${u.username}`
                           }
                         >
-                          <X className="h-4 w-4" />
+                          <Trash2 className="h-4 w-4" />
                         </button>
                       </div>
                     </TableCell>
@@ -592,6 +701,7 @@ export function AccountManagementPage() {
           if (!open) setEditingUser(null);
         }}
         user={editingUser}
+        currentUserId={currentUser?.id}
         onSuccess={loadUsers}
       />
 
