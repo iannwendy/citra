@@ -646,7 +646,7 @@ def build_fig2_1(vn: bool) -> DiagramBuilder:
 
 
 def build_fig3_1(vn: bool) -> DiagramBuilder:
-    """True UML 2.5 Use Case Diagram strictly aligned 1:1 with Tables 3.3–3.7 (UC-01..UC-05), «include» + «extend», v3.90.10."""
+    """True UML 2.5 Use Case Diagram strictly aligned 1:1 with Tables 3.3–3.7 (UC-01..UC-05), «include» + «extend», v3.91.3."""
     d = DiagramBuilder("p31", "fig3_1_roles", 820, 770)
     def t(en: str, vi: str) -> str:
         return vi if vn else en
@@ -658,7 +658,7 @@ def build_fig3_1(vn: bool) -> DiagramBuilder:
         18,
         442,
         26,
-        t("CITRA Verification Platform (v3.90.10)", "Nền tảng kiểm chứng trích dẫn CITRA (v3.90.10)"),
+        t("CITRA Verification Platform (v3.91.3)", "Nền tảng kiểm chứng trích dẫn CITRA (v3.91.3)"),
         font_size=15,
         font_color="#1E3A8A",
         bold=True,
