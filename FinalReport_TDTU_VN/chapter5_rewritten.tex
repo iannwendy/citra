@@ -17,7 +17,7 @@ Tuân thủ chuẩn mực đánh giá Kỹ thuật phần mềm thực nghiệm~
 
 \subsection{Các bộ kiểm thử tự động và ma trận truy vết yêu cầu}
 
-Kiểm định phần mềm bao phủ ba tầng kiểm thử tự động trong Bảng~\ref{tab:test-suites}: \textbf{2,437} ca kiểm thử \texttt{pytest} backend mặc định đạt (\textbf{2,446} tổng gồm 9 ca chậm/trực tuyến; 0 lỗi), \textbf{495} ca kiểm thử \texttt{Vitest} frontend trên \textbf{63} bộ đặc tả (0 lỗi) và \textbf{20} bộ kịch bản \texttt{Playwright} E2E gồm \textbf{178} ca \texttt{test()} (\textbf{174} E2E Chromium + \textbf{4} kiểm khói trực tiếp)---tổng cộng \textbf{2,932} ca đơn vị/tích hợp và \textbf{3,110} kiểm tra tự động mặc định (\textbf{3,119} gồm ca chậm). Ngoài ra, phép đo truy hồi ngoại tuyến SQLite FTS5 trên 500 truy vấn phân tầng thuộc ACL Anthology đạt độ phủ $99.80\%$ ($499/500$) và độ chuẩn xác $100.0\%$ tại độ trễ trung bình $87.62\text{\,ms}$. Bảng~\ref{tab:rtm} trình bày Ma trận truy vết yêu cầu (RTM) ánh xạ đầy đủ 20 yêu cầu chức năng (\texttt{FR-01}--\texttt{FR-20}) và 10 yêu cầu phi chức năng (\texttt{NFR-01}--\texttt{NFR-10}) sang mã nguồn và bằng chứng kiểm định.
+Kiểm định phần mềm bao phủ ba tầng kiểm thử tự động trong Bảng~\ref{tab:test-suites}: \textbf{2,455} ca kiểm thử \texttt{pytest} backend mặc định đạt (\textbf{2,464} tổng gồm 9 ca chậm/trực tuyến; 0 lỗi), \textbf{609} ca kiểm thử \texttt{Vitest} frontend trên \textbf{67} bộ đặc tả (0 lỗi) và \textbf{21} bộ kịch bản \texttt{Playwright} E2E gồm \textbf{185} ca \texttt{test()} (\textbf{181} E2E Chromium + \textbf{4} kiểm khói trực tiếp)---tổng cộng \textbf{3,064} ca đơn vị/tích hợp và \textbf{3,249} kiểm tra tự động mặc định (\textbf{3,258} gồm ca chậm). Ngoài ra, phép đo truy hồi ngoại tuyến SQLite FTS5 trên 500 truy vấn phân tầng thuộc ACL Anthology đạt độ phủ $99.80\%$ ($499/500$) và độ chuẩn xác $100.0\%$ tại độ trễ trung bình $87.62\text{\,ms}$. Bảng~\ref{tab:rtm} trình bày Ma trận truy vết yêu cầu (RTM) ánh xạ đầy đủ 20 yêu cầu chức năng (\texttt{FR-01}--\texttt{FR-20}) và 10 yêu cầu phi chức năng (\texttt{NFR-01}--\texttt{NFR-10}) sang mã nguồn và bằng chứng kiểm định.
 
 {\setlength{\tabcolsep}{3.5pt}
 \begin{table}[!htbp]
@@ -27,13 +27,13 @@ Kiểm định phần mềm bao phủ ba tầng kiểm thử tự động trong 
 \hline
 \textbf{Tầng kiểm định} & \textbf{Kết quả thực thi} & \textbf{Phạm vi phân hệ kiểm định} \\
 \hline
-\textbf{Backend (\texttt{pytest})} & \textbf{2,437 mặc định} (2,446 tổng; 0 lỗi) & Trích xuất đa định dạng, 12 chuẩn, \texttt{VNLegalVerifier}, bộ liên kết 7 phương pháp, FTS5 + 15+ API, SSRF ghim IP, 68 luật, Platt, CIS, RBAC/IDOR, di trú \texttt{0001}--\texttt{0013}, thanh toán, xóa quyền riêng tư và phục hồi sự cố. \\
+\textbf{Backend (\texttt{pytest})} & \textbf{2,455 mặc định} (2,464 tổng; 0 lỗi) & Trích xuất đa định dạng, 12 chuẩn, \texttt{VNLegalVerifier}, bộ liên kết 7 phương pháp, FTS5 + 15+ API, SSRF ghim IP, 68 luật, Platt, CIS, xuất báo cáo ngôn ngữ tự nhiên, RBAC/IDOR, di trú \texttt{0001}--\texttt{0013}, thanh toán, xóa quyền riêng tư và phục hồi sự cố. \\
 \hline
-\textbf{Frontend (\texttt{Vitest})} & \textbf{495 đạt} (63 bộ, 0 lỗi) & Luồng Auth/OAuth, khung mở rộng chi tiết theo cấp độ, 4 thẻ phân tích báo cáo chính, DAG mạng trích dẫn, hộp thoại sửa lỗi, giám sát Lớp/Hệ thống, bàn giao SSE và giới hạn gói mã. \\
+\textbf{Frontend (\texttt{Vitest})} & \textbf{609 đạt} (67 bộ, 0 lỗi) & Luồng Auth/OAuth, hệ nhãn ngôn ngữ tự nhiên và chống rò rỉ thuật ngữ (\texttt{academicTaxonomy}, \texttt{humanLanguageAudit}), không gian báo cáo hợp nhất 4 thẻ, ngăn đối chiếu tầng 3, hộp thoại sửa lỗi, giám sát Lớp/Hệ thống, bàn giao SSE và giới hạn gói mã. \\
 \hline
-\textbf{Trình duyệt E2E (\texttt{Playwright})} & \textbf{20 bộ đặc tả} (178 kịch bản: 174 E2E + 4 smoke) & Không tràn ngang trên 5 khung nhìn $\times$ Sáng/Tối $\times$ EN/VI, tải tệp SSE, kiểm tra chia đôi, ghi đè giảng viên và phục hồi lỗi 404. \\
+\textbf{Trình duyệt E2E (\texttt{Playwright})} & \textbf{21 bộ đặc tả} (185 kịch bản: 181 E2E + 4 smoke) & Không tràn ngang trên 5 khung nhìn $\times$ Sáng/Tối $\times$ EN/VI, tải tệp SSE, hợp nhất 4 thẻ báo cáo, kiểm tra chia đôi, cập nhật thẩm định, hồi quy kiểm toán sản phẩm và phục hồi lỗi 404. \\
 \hline
-\textbf{Tổng hợp tự động} & \textbf{3,110 kiểm tra mặc định} (3,119 tổng; 2,932 đơn vị + 178 E2E) & Vượt ngưỡng \texttt{NFR-09} ($\ge 2{,}500$ ca kiểm thử tự động, 0 thất bại). \\
+\textbf{Tổng hợp tự động} & \textbf{3,249 kiểm tra mặc định} (3,258 tổng; 3,064 đơn vị + 185 E2E) & Vượt ngưỡng \texttt{NFR-09} ($\ge 2{,}500$ ca kiểm thử tự động, 0 thất bại). \\
 \hline
 \end{tabular}
 \end{table}
@@ -75,7 +75,7 @@ Kiểm định phần mềm bao phủ ba tầng kiểm thử tự động trong 
 \hline
 \texttt{FR-17}--\texttt{FR-20} & \texttt{api/\allowbreak{}routes/\allowbreak{}billing.py}, \texttt{routes/\allowbreak{}users.py}, \texttt{routes/\allowbreak{}essays.py} & Stripe REST, VNPay v2.1.0 HMAC-SHA512, xóa dữ liệu Luật 91/2025/QH15, diff \& sandbox & Đạt ($100\%$) \\
 \hline
-\texttt{NFR-01}, \texttt{NFR-02}, \texttt{NFR-07}--\texttt{10} & Toàn bộ 8 tầng, Docker Compose \& bản dựng Vite (\texttt{web/}) & Đệm ấm $1.33\text{\,s}$ / lạnh $12.64\text{\,s}$, RSS $1.03\text{\,GB}$, GROBID 0-swap, WCAG, gói $231.50\text{\,kB}$, 3,110 ca & Đạt ($100\%$) \\
+\texttt{NFR-01}, \texttt{NFR-02}, \texttt{NFR-07}--\texttt{10} & Toàn bộ 8 tầng, Docker Compose \& bản dựng Vite (\texttt{web/}) & Đệm ấm $1.33\text{\,s}$ / lạnh $12.64\text{\,s}$, RSS $1.03\text{\,GB}$, GROBID 0-swap, WCAG, gói $242.34\text{\,kB}$, 3,249 ca & Đạt ($100\%$) \\
 \hline
 \end{longtable}
 }
@@ -313,7 +313,7 @@ Nhằm kiểm chứng khả năng khái quát hóa đầu--cuối ngoài tập �
 \hline
 Kho pháp luật VN (Thực, trước v3.80) & 30 & 27 / 30 (90.0\%) & 164 (15 Luật) & 109 / 235 (46.4\%) \\
 \hline
-\textbf{Kho pháp luật VN (Thực, v3.91.3)} & \textbf{30} & \textbf{30 / 30 (100.0\%)} & \textbf{258 (91 Luật)} & \textbf{403 / 416 (96.9\%)} \\
+\textbf{Kho pháp luật VN (Thực, v3.80--v3.91.3)} & \textbf{30} & \textbf{30 / 30 (100.0\%)} & \textbf{258 (91 Luật)} & \textbf{403 / 416 (96.9\%)} \\
 \hline
 \textbf{Chẩn đoán 12 chuẩn (Tổng hợp, $12 \times 5$)} & \textbf{60} & \textbf{60 / 60 (100.0\%)} & \textbf{397 / 397 (100.0\%)} & \textbf{60 / 60 PDF (100\%)} \\
 \hline
@@ -324,7 +324,7 @@ Kho pháp luật VN (Thực, trước v3.80) & 30 & 27 / 30 (90.0\%) & 164 (15 L
 }
 
 {\setlength{\tabcolsep}{3pt}
-\begin{table}[!htbp]
+\begin{table}[!ht]
 \centering
 \caption{Kết quả kiểm định đầu--cuối tiêu biểu từ bộ kiểm toán từng dòng 21 PDF (329 TLTK) và bộ mẫu đồ án cài lỗi.}\label{tab:samples}
 \begin{tabular}{|L{0.30}|C{0.11}|C{0.09}|C{0.10}|C{0.08}|C{0.09}|C{0.09}|C{0.14}|}
@@ -354,28 +354,29 @@ Kho pháp luật VN (Thực, trước v3.80) & 30 & 27 / 30 (90.0\%) & 164 (15 L
 \end{table}
 }
 
-Các Hình~\ref{fig:demo-debugger}--\ref{fig:demo-consistency} trình bày giao diện chẩn đoán tiếng Việt \texttt{v3.91.3} trên bộ mẫu đồ án cài sẵn 6 TLTK ($\text{CIS} = 75.08 / 100$ theo \texttt{CISCalculator} mức kết luận, hiển thị \texttt{75.1\%} trên đầu trang báo cáo và \texttt{75/100} trên bảng điều khiển khi có 1 mục chưa trích dẫn \texttt{[6]}; $75.50$ khi đủ cả 6 liên kết), cắt thanh điều hướng trái để rõ nét trên khổ A4. Lưu ý thẻ tổng hợp \textit{Hợp lệ (4)} trên UI gộp 3 công trình học thuật \texttt{verified} cùng 1 mục \texttt{resource} hợp lệ, trong khi Bảng~\ref{tab:samples} và \texttt{CISCalculator} tách riêng hai nhóm này. Hình~\ref{fig:demo-debugger} đối chiếu cảnh báo ảo giác DOI lai ghép AlphaFold2 (hiển thị kèm bản ghi Crossref gốc) và bảng sai lệch năm xuất bản (\texttt{2021} so với chuẩn \texttt{2019}). Hình~\ref{fig:demo-trace-context} hiển thị tiêu đề Logic Trace 5 giai đoạn kèm các bước đầu mở rộng (cầu nối \texttt{VI}$\leftrightarrow$\texttt{EN} ONNX INT8) cùng luồng ngữ cảnh Trình kiểm tra tài liệu, còn Hình~\ref{fig:demo-consistency} phân tách trích dẫn mồ côi và mục chưa được trích dẫn.
+Các Hình~\ref{fig:demo-debugger}--\ref{fig:demo-consistency} trình bày không gian báo cáo hợp nhất 4 thẻ tiếng Việt \texttt{v3.91.3} trên bộ mẫu đồ án cài sẵn 6 TLTK ($\text{CIS} = 75.08 / 100$ theo \texttt{CISCalculator} mức kết luận, hiển thị đồng nhất theo thang \texttt{/100} là \texttt{75.1 / 100} trên cả đầu trang báo cáo lẫn bảng điều khiển khi có 1 mục chưa trích dẫn \texttt{[6]}; $75.50$ khi đủ cả 6 liên kết), cắt thanh điều hướng trái để rõ nét trên khổ A4. Thanh tóm tắt đầu trang tách bạch rõ \textit{3 đã xác minh $\cdot$ 2 cần kiểm tra $\cdot$ 1 nguồn web / văn bản}, khớp một--một với Bảng~\ref{tab:samples} và \texttt{CISCalculator} mà không gộp nguồn web vào số bài học thuật đã xác minh (trong khi bộ đếm trên thẻ tổng hợp cả cảnh báo phán quyết lẫn cảnh báo liên kết cấu trúc như mục chưa trích dẫn \texttt{[6]} và mục lệch \texttt{[7]}). Hình~\ref{fig:demo-debugger} minh họa chế độ chia đôi thẻ \textit{Trích dẫn} với nhãn phi quy chụp---đối chiếu DOI lai ghép AlphaFold2 (\textit{Không tìm thấy nguồn}, mã \texttt{suspected\_hallucination}) kèm bản ghi Crossref gốc và bảng lệch năm xuất bản (\textit{Sai lệch thông tin}, mã \texttt{metadata\_error}: \texttt{2021} so với chuẩn \texttt{2019}). Hình~\ref{fig:demo-trace-context} hiển thị ngăn chi tiết đối chiếu tầng 3 mở rộng (\texttt{?drawer=trace}, thẻ \textit{3.~Đối chiếu nội dung} trình bày căn chỉnh đoạn văn xuyên ngữ \texttt{VI}$\leftrightarrow$\texttt{EN} do bộ mã hóa ONNX INT8 tính toán và nút \textit{Cập nhật kết quả kiểm tra}) song hành với luồng ngữ cảnh thẻ \textit{Trong bài} (\texttt{?view=document}), còn Hình~\ref{fig:demo-consistency} trình bày thẻ \textit{Khớp trích dẫn} (\texttt{?view=consistency}) phân tách trích dẫn mồ côi và mục chưa được trích dẫn.
 
 \begin{figure}[!htbp]
     \centering
-    \fboxsep=0pt\fboxrule=0.4pt\fbox{\includegraphics[width=0.94\textwidth,keepaspectratio]{picture/figures/05-verification-report.png}}\\[6pt]
-    \fboxsep=0pt\fboxrule=0.4pt\fbox{\includegraphics[width=0.94\textwidth,keepaspectratio]{picture/figures/06-reference-inspector.png}}
-    \caption[Trình kiểm tra tài liệu tham khảo đối chiếu DOI lai ghép và sai lệch năm xuất bản]{Giao diện Kiểm tra tài liệu tham khảo trên bộ mẫu đồ án ($\text{CIS} = 75.1/100$, chính xác $75.08$), cô lập cảnh báo \texttt{suspected\_hallucination} dùng DOI lai ghép đối chiếu bản ghi AlphaFold2 gốc (trên) và lỗi \texttt{metadata\_error} lệch năm (\texttt{2021} so với \texttt{2019}, dưới).}
+    \fboxsep=0pt\fboxrule=0.4pt\fbox{\includegraphics[width=0.94\textwidth,height=0.41\textheight,keepaspectratio]{picture/figures/05-verification-report.png}}\\[6pt]
+    \fboxsep=0pt\fboxrule=0.4pt\fbox{\includegraphics[width=0.94\textwidth,height=0.41\textheight,keepaspectratio]{picture/figures/06-reference-inspector.png}}
+    \caption[Thẻ Trích dẫn hợp nhất đối chiếu DOI lai ghép và sai lệch năm xuất bản]{Không gian thẻ \textit{Trích dẫn} trên bộ mẫu đồ án ($\text{CIS} = 75.1 / 100$, chính xác $75.08$), cô lập nhãn \textit{Không tìm thấy nguồn} (\texttt{suspected\_hallucination}) dùng DOI lai ghép đối chiếu bản ghi AlphaFold2 gốc (trên) và \textit{Sai lệch thông tin} (\texttt{metadata\_error}) lệch năm (\texttt{2021} so với \texttt{2019}, dưới).}
     \label{fig:demo-debugger}
 \end{figure}
 
 \begin{figure}[!htbp]
     \centering
-    \fboxsep=0pt\fboxrule=0.4pt\fbox{\includegraphics[width=0.94\textwidth,height=0.40\textheight,keepaspectratio]{picture/figures/07-logic-trace.png}}\\[6pt]
-    \fboxsep=0pt\fboxrule=0.4pt\fbox{\includegraphics[width=0.94\textwidth,height=0.40\textheight,keepaspectratio]{picture/figures/09-document-inspector.png}}
-    \caption[Vết suy diễn Logic Trace 5 bước song ngữ và Trình kiểm tra tài liệu trực tiếp]{Tiêu đề Logic Trace 5 giai đoạn kèm các bước đầu mở rộng hiển thị cầu nối khái niệm \texttt{VI}$\leftrightarrow$\texttt{EN} ONNX INT8 (trên) và luồng ngữ cảnh trực tiếp trong Trình kiểm tra tài liệu (dưới).}
+    \fboxsep=0pt\fboxrule=0.4pt\fbox{\includegraphics[width=0.92\textwidth,height=0.42\textheight,keepaspectratio]{picture/figures/07-logic-trace.png}}\\[6pt]
+    \fboxsep=0pt\fboxrule=0.4pt\fbox{\includegraphics[width=0.94\textwidth,height=0.39\textheight,keepaspectratio]{picture/figures/09-document-inspector.png}}
+    \caption[Ngăn chi tiết đối chiếu tầng 3 (Đối chiếu nội dung) và thẻ Trong bài]{Ngăn chi tiết đối chiếu tầng 3 mở rộng (\texttt{?drawer=trace}, thẻ \textit{3.~Đối chiếu nội dung}) hiển thị căn chỉnh đoạn văn xuyên ngữ \texttt{VI}$\leftrightarrow$\texttt{EN} cùng thao tác thẩm định của giảng viên (trên) và luồng ngữ cảnh thẻ \textit{Trong bài} (\texttt{?view=document}, dưới).}
     \label{fig:demo-trace-context}
 \end{figure}
 
-\begin{figure}[!htbp]
+\FloatBarrier
+\begin{figure}[!ht]
     \centering
-    \fboxsep=0pt\fboxrule=0.4pt\fbox{\includegraphics[width=0.96\textwidth,keepaspectratio]{picture/figures/08-consistency-check.png}}
-    \caption[Kiểm tra tính nhất quán hai chiều cô lập trích dẫn mồ côi và mục chưa trích dẫn]{Giao diện Kiểm tra tính nhất quán hai chiều (\texttt{/verification/report/\{id\}/consistency}) tách bạch liên kết hợp lệ khỏi dấu trích dẫn mồ côi và tài liệu tham khảo chưa trích dẫn.}
+    \fboxsep=0pt\fboxrule=0.4pt\fbox{\includegraphics[width=0.96\textwidth,height=0.52\textheight,keepaspectratio]{picture/figures/08-consistency-check.png}}
+    \caption[Thẻ Khớp trích dẫn cô lập trích dẫn mồ côi và mục chưa được trích dẫn]{Thẻ hợp nhất \textit{Khớp trích dẫn} (\texttt{/verification/report/\{id\}?view=consistency}) tách bạch liên kết hợp lệ khỏi dấu trích dẫn mồ côi và tài liệu tham khảo chưa trích dẫn.}
     \label{fig:demo-consistency}
 \end{figure}
 
@@ -468,7 +469,7 @@ HTTP \texttt{POST /\allowbreak api/\allowbreak essays} & \textbf{50} & \textbf{5
 \end{table}
 }
 
-Để xác minh hành vi bộ nhớ thực tế trên máy chủ vận hành với bản thảo dài khi tắt đệm đĩa, Bảng~\ref{tab:nfr-grobid-prod} đối chiếu container GROBID $3\text{\,GiB}$ cũ (\texttt{-Xmx1280m}, \texttt{concurrency=10}, bật \texttt{teiCoordinates}) với cấu hình tối ưu $4\text{\,GiB}$ (\texttt{-Xmx768m}, \texttt{concurrency=2}, \texttt{pdfalto=1024\,MB}, tắt \texttt{teiCoordinates}) trên máy chủ GCE bằng bản thảo 117 trang ($10.63\text{\,MB}$) của chính báo cáo này. Cấp bộ nhớ vượt ngưỡng $3.1\text{\,GiB}$ của mô hình Wapiti gốc xóa sạch swap ($2.19\text{\,GiB} \rightarrow 0\text{\,B}$), giảm $99.74\%$ lỗi trang cứng ($91{,}718 \rightarrow 239$ nền khởi động với $+0$ tăng thêm khi chạy), tăng tốc GROBID không đệm $5.48\times$ ở lượt ấm ($95.53\text{\,s} \rightarrow 17.44\text{\,s}$) và xử lý đồng thời hai luận văn 117 trang trong $31.31\text{\,s}$ trong khi còn dư $885\text{\,MiB}$ RAM. Các yêu cầu phi chức năng còn lại đều đạt định lượng: \texttt{NFR-07} đạt WCAG 2.1 AA và $0\text{\,px}$ tràn lề trên 5 khung nhìn; \texttt{NFR-08} biên dịch gói khởi động $231.50\text{\,kB}$ ($67.50\text{\,kB}$ nén gzip $\le 250\text{\,kB}$); \texttt{NFR-09} chạy $3{,}110$ kiểm tra tự động mặc định ($3{,}119$ tổng, $0$ lỗi); và \texttt{NFR-10} khởi động đủ 3 container trong $\le 60\text{\,s}$ ấm ($\le 120\text{\,s}$ nạp mô hình lạnh) với $0$ phụ thuộc GPU.
+Để xác minh hành vi bộ nhớ thực tế trên máy chủ vận hành với bản thảo dài khi tắt đệm đĩa, Bảng~\ref{tab:nfr-grobid-prod} đối chiếu container GROBID $3\text{\,GiB}$ cũ (\texttt{-Xmx1280m}, \texttt{concurrency=10}, bật \texttt{teiCoordinates}) với cấu hình tối ưu $4\text{\,GiB}$ (\texttt{-Xmx768m}, \texttt{concurrency=2}, \texttt{pdfalto=1024\,MB}, tắt \texttt{teiCoordinates}) trên máy chủ GCE bằng bản thảo 117 trang ($10.63\text{\,MB}$) của chính báo cáo này. Cấp bộ nhớ vượt ngưỡng $3.1\text{\,GiB}$ của mô hình Wapiti gốc xóa sạch swap ($2.19\text{\,GiB} \rightarrow 0\text{\,B}$), giảm $99.74\%$ lỗi trang cứng ($91{,}718 \rightarrow 239$ nền khởi động với $+0$ tăng thêm khi chạy), tăng tốc GROBID không đệm $5.48\times$ ở lượt ấm ($95.53\text{\,s} \rightarrow 17.44\text{\,s}$) và xử lý đồng thời hai luận văn 117 trang trong $31.31\text{\,s}$ trong khi còn dư $885\text{\,MiB}$ RAM. Các yêu cầu phi chức năng còn lại đều đạt định lượng: \texttt{NFR-07} đạt WCAG 2.1 AA và $0\text{\,px}$ tràn lề trên 5 khung nhìn; \texttt{NFR-08} biên dịch gói khởi động $242.34\text{\,kB} \le 250\text{\,kB}$ (theo Vite; $245.73\text{\,KiB}$ trên đĩa; $69.32\text{\,kB}$ nén gzip $\le 80\text{\,kB}$); \texttt{NFR-09} chạy $3{,}249$ kiểm tra tự động mặc định ($3{,}258$ tổng, $0$ lỗi); và \texttt{NFR-10} khởi động đủ 3 container trong $\le 60\text{\,s}$ ấm ($\le 120\text{\,s}$ nạp mô hình lạnh) với $0$ phụ thuộc GPU.
 
 {\setlength{\tabcolsep}{3.5pt}
 \begin{table}[!htbp]
@@ -515,4 +516,4 @@ Dù \textbf{RQ1}/\textbf{RQ2} dùng McNemar hiệu chỉnh liên tục, Holm--Bo
 
 \section{Tóm tắt chương}
 
-Chương này đã kiểm định \textbf{CITRA} (\texttt{v3.91.3}) qua 3,110 kiểm tra mặc định (2,437 mặc định / 2,446 tổng \texttt{pytest}, 495 \texttt{Vitest}, 178 \texttt{Playwright}), RTM 20 FR/10 NFR và năm câu hỏi nghiên cứu---chứng minh $99.67\%$ độ chính xác tầng quyết định ($\text{ECE} = 0.0405$), $99.95\%$ OOD i.i.d., $89.17\%$ trực tuyến 15 API (F1 hợp lệ $98.36\%$; $100.00\%$ ngoại tuyến), $12.64\text{\,s}$ WAN lạnh 50 trang, GROBID 0-swap trên GCE ($95.53\text{\,s} \rightarrow 17.44\text{\,s}$) và 0 lỗi tải I/O 50 người dùng. Chương~\ref{chap:conclusion} tổng kết kết quả, hạn chế và hướng phát triển.
+Chương này đã kiểm định \textbf{CITRA} (\texttt{v3.91.3}) qua 3,249 kiểm tra mặc định (2,455 mặc định / 2,464 tổng \texttt{pytest}, 609 \texttt{Vitest}, 185 \texttt{Playwright}), RTM 20 FR/10 NFR và năm câu hỏi nghiên cứu---chứng minh $99.67\%$ độ chính xác tầng quyết định ($\text{ECE} = 0.0405$), $99.95\%$ OOD i.i.d., $89.17\%$ trực tuyến 15 API (F1 hợp lệ $98.36\%$; $100.00\%$ ngoại tuyến), $12.64\text{\,s}$ WAN lạnh 50 trang, GROBID 0-swap trên GCE ($95.53\text{\,s} \rightarrow 17.44\text{\,s}$) và 0 lỗi tải I/O 50 người dùng. Chương~\ref{chap:conclusion} tổng kết kết quả, hạn chế và hướng phát triển.

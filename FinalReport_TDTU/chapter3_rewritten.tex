@@ -58,15 +58,15 @@ Every functional requirement is specified as a subsystem-level capability decomp
 \hline
 \textbf{\texttt{FR-12}} & System (UC-01) & The system shall calculate the five-component Citation Integrity Score (CIS) in $[0, 100]$ and generate deterministic bilingual (\texttt{EN}/\texttt{VI}) explanations. & \textbf{Must} & Component weights sum to $1.00$; explanations render in EN \& VI. \\
 \hline
-\textbf{\texttt{FR-13}} & Student / Teacher & The system shall export sanitized reports (JSON on Basic; PDF, DOCX, CSV, JSON on paid tiers) and generate repaired bibliographies in APA, IEEE, TDTU, BibTeX, RIS, and DOCX formats. & Should & Repaired entries reflect canonical registry metadata without macros. \\
+\textbf{\texttt{FR-13}} & Student / Teacher & The system shall export sanitized, plain-language reports (JSON on Basic; PDF, DOCX, CSV, JSON on paid tiers) and generate repaired bibliographies in APA, IEEE, Harvard/TDTU, BibTeX, RIS, and DOCX formats. & Should & Repaired entries reflect canonical registry metadata without macros or raw rule codes. \\
 \hline
 \textbf{\texttt{FR-14}} & Student / Public & The system shall issue time-limited cryptographic share links with QR verification receipts for read-only third-party inspection. & Should & Expired or tampered share token returns \textbf{HTTP 403} (\textbf{404} only if essay deleted). \\
 \hline
 \multicolumn{5}{|l|}{\textbf{Subsystem 5: Classroom Cohort Supervision and Platform Administration}} \\*
 \hline
-\textbf{\texttt{FR-15}} & Teacher & The system shall allow teachers to manage classes via join codes, inspect cohort analytics and shared hallucinations, and override verdicts when \texttt{can\_override\_verdicts} is enabled. & \textbf{Must} & Join code enrolls students, cohort clusters aggregate accurately, and overrides update CIS + audit log atomically. \\
+\textbf{\texttt{FR-15}} & Teacher & The system shall allow teachers to manage classes via join codes, inspect issue-only cohort analytics and shared hallucinations, and update verdict results when \texttt{can\_override\_verdicts} is enabled. & \textbf{Must} & Join code enrolls students (hiding a teacher's own taught classes from their enrolled-classes list), cohort clusters aggregate accurately, and updates recompute CIS + audit log atomically. \\
 \hline
-\textbf{\texttt{FR-16}} & Admin & The system shall allow administrators to manage accounts, promo codes, cache state, upstream circuit breakers, and audit logs. & \textbf{Must} & Account/promo edits persist, audit log exports cleanly, and breaker resets / cache clears take immediate effect. \\
+\textbf{\texttt{FR-16}} & Admin & The system shall allow administrators to manage accounts (with self-lockout protection), promo codes, cache state, sanitized health telemetry, upstream circuit breakers, and audit logs. & \textbf{Must} & Account/promo edits persist, self-lockout is blocked, tracebacks are sanitized, and breaker resets / cache clears take immediate effect. \\
 \hline
 \multicolumn{5}{|l|}{\textbf{Subsystem 6: Billing, Personal Data Privacy, Lifecycle, and Public Sandbox}} \\*
 \hline
@@ -116,7 +116,7 @@ To guarantee production operability on standard university CPU servers without G
 \hline
 \textbf{\texttt{NFR-07}} & \textbf{Interaction Capability} (Usability) & Accessible Light and Dark editorial interfaces with progressive disclosure and bilingual localization. & \textbf{WCAG 2.1 AA} ($\ge 4.5:1$ contrast); $0\text{\,px}$ overflow. \\
 \hline
-\textbf{\texttt{NFR-08}} & \textbf{Performance Efficiency} (Time \& Resource) & Code-split frontend JavaScript delivery for fast initial page rendering over campus networks. & Initial entry chunk \textbf{$\le 250\text{\,kB}$} ($\le 80\text{\,kB}$ gzip). \\
+\textbf{\texttt{NFR-08}} & \textbf{Performance Efficiency} (Time \& Resource) & Code-split frontend JavaScript delivery for fast initial page rendering over campus networks. & Initial entry chunk \textbf{$\le 250\text{\,kB}$} Vite-reported ($\le 80\text{\,kB}$ gzip). \\
 \hline
 \textbf{\texttt{NFR-09}} & \textbf{Maintainability} (Modularity \& Testability) & Acyclic 8-layer Python architecture and automated backend, frontend, and browser regression suites. & \textbf{$\ge 2{,}500$} automated tests, $0$ failures. \\
 \hline
@@ -181,7 +181,7 @@ Tables~\ref{tab:uc01}--\ref{tab:uc05} specify the five primary use cases governi
 \hline
 \textbf{Postconditions} & Formatted bibliography strings, repaired \texttt{.docx}, or sanitized audit reports are downloaded cleanly. \\
 \hline
-\textbf{Main Success Scenario} & \textbf{1.} Actor clicks \textit{Fix \& Format Citations} on the report header. \newline \textbf{2.} Backend (\texttt{GET /api/essays/\{id\}/remediate}) maps verified and metadata-erroneous citations to canonical registry fields while isolating \texttt{suspected\_hallucination} entries for manual removal. \newline \textbf{3.} Actor selects target style (\texttt{APA 7th}, \texttt{IEEE}, \texttt{TDTU}, \texttt{BibTeX}, or \texttt{RIS}) and previews field-level diffs. \newline \textbf{4.} Actor downloads an in-place repaired \texttt{.docx} (for \texttt{.docx} uploads) or standalone formatted \texttt{.docx} (for \texttt{.pdf} uploads), or exports sanitized JSON/CSV/PDF/DOCX audit reports. \\
+\textbf{Main Success Scenario} & \textbf{1.} Actor clicks \textit{Fix \& Format Citations} on the report header. \newline \textbf{2.} Backend (\texttt{GET /api/essays/\{id\}/remediate}) maps verified and metadata-erroneous citations to canonical registry fields while isolating \texttt{suspected\_hallucination} entries for manual removal. \newline \textbf{3.} Actor selects target style (\texttt{APA 7th}, \texttt{IEEE}, \texttt{Harvard/TDTU}, \texttt{BibTeX}, or \texttt{RIS}) and previews field-level diffs. \newline \textbf{4.} Actor downloads an in-place repaired \texttt{.docx} (for \texttt{.docx} uploads) or standalone formatted \texttt{.docx} (for \texttt{.pdf} uploads), or exports sanitized plain-language JSON/CSV/PDF/DOCX audit reports. \\
 \hline
 \textbf{Alternative / Exception Flows} & \textbf{2a. Suspected hallucination:} System refuses to invent replacement metadata and flags the entry for author deletion. \newline \textbf{4a. Basic tier export/remediation gate:} Basic accounts may export \texttt{json}; requesting \texttt{pdf}/\texttt{docx}/\texttt{csv} reports, \texttt{/remediate}, or \texttt{/export-healed-docx} returns \textbf{HTTP 402 Payment Required} prompting plan upgrade. \\
 \hline
@@ -203,7 +203,7 @@ Tables~\ref{tab:uc01}--\ref{tab:uc05} specify the five primary use cases governi
 \hline
 \textbf{Postconditions} & Verdict label (and optional mapping status) updated, essay CIS recomputed, and \texttt{audit\_logs} row inserted atomically. \\
 \hline
-\textbf{Main Success Scenario} & \textbf{1.} Teacher inspects a flagged citation in the Reference Inspector or Pending Reviews queue. \newline \textbf{2.} Teacher selects a new verdict label (and/or mapping status) and enters a written justification note. \newline \textbf{3.} Backend (\texttt{POST /api/essays/\{id\}/verdicts/\{vid\}/override}) verifies RBAC, capability flag, and essay-to-verdict ownership. \newline \textbf{4.} Within one DB transaction, backend updates \texttt{VerdictRecord} (setting \texttt{mapping\_method='manual\_review'} on mapping overrides), invokes \texttt{Repository.recalculate\_essay\_cis()} (mirroring \texttt{CISCalculator} weights), updates \texttt{EssayRecord.\allowbreak{}cis\_json}, and inserts an \texttt{AuditLog} row. \newline \textbf{5.} UI refreshes the CIS score ring and displays the override badge. \\
+\textbf{Main Success Scenario} & \textbf{1.} Teacher inspects a flagged citation in the \textit{Citations} tab inspector or Pending Reviews queue and clicks \textit{Update Review Result}. \newline \textbf{2.} Teacher selects a new verdict label (and/or mapping status) and enters a written justification note. \newline \textbf{3.} Backend (\texttt{POST /api/essays/\{id\}/verdicts/\{vid\}/override}) verifies RBAC, capability flag, and essay-to-verdict ownership. \newline \textbf{4.} Within one DB transaction, backend updates \texttt{VerdictRecord} (setting \texttt{mapping\_method='manual\_review'} on mapping overrides), invokes \texttt{Repository.recalculate\_essay\_cis()} (mirroring \texttt{CISCalculator} weights), updates \texttt{EssayRecord.\allowbreak{}cis\_json}, and inserts an \texttt{AuditLog} row. \newline \textbf{5.} UI refreshes the CIS score ring and displays the review-updated badge. \\
 \hline
 \textbf{Alternative / Exception Flows} & \textbf{3a. Capability flag is False:} Backend aborts with \textbf{HTTP 403 Forbidden}. \newline \textbf{3b. Verdict belongs to another essay (IDOR attempt):} Backend aborts with \textbf{HTTP 404/403}. \\
 \hline
@@ -225,9 +225,9 @@ Tables~\ref{tab:uc01}--\ref{tab:uc05} specify the five primary use cases governi
 \hline
 \textbf{Postconditions} & Class exists, cohort analytics and shared hallucination clusters are aggregated, and ZIP/CSV gradebooks are exported. \\
 \hline
-\textbf{Main Success Scenario} & \textbf{1.} Teacher creates (or selects an existing) class and shares its generated \texttt{join\_code} (format \texttt{CITRA-XXXX}) with students. \newline \textbf{2.} Students enroll via \texttt{POST /api/teacher/classes/join} and attach report uploads to the class. \newline \textbf{3.} Teacher opens \texttt{/teacher/classes/\{classId\}}; backend aggregates cohort CIS bands, 5-year citation recency, top issue-triggering rules, and identical fabricated citations shared across students. \newline \textbf{4.} Teacher exports a sanitized CSV gradebook or bulk ZIP archive of cohort reports. \\
+\textbf{Main Success Scenario} & \textbf{1.} Teacher creates (or selects an existing) class under \texttt{/teacher/classes} (which keeps owned classes separate from the teacher's enrolled-classes list) and shares its generated \texttt{join\_code} (format \texttt{CITRA-XXXX}) with students. \newline \textbf{2.} Students enroll via \texttt{POST /api/teacher/classes/join} and attach report uploads to the class. \newline \textbf{3.} Teacher opens \texttt{/teacher/classes/\{classId\}}; backend aggregates cohort CIS bands, 5-year citation recency, issue-only top triggered rules (filtering positive verification rules), and identical fabricated citations shared across students. \newline \textbf{4.} Teacher exports a sanitized CSV gradebook or bulk ZIP archive of cohort reports. \\
 \hline
-\textbf{Alternative / Exception Flows} & \textbf{2a. Compromised join code:} Teacher regenerates \texttt{join\_code} without dropping existing enrolled students. \\
+\textbf{Alternative / Exception Flows} & \textbf{2a. Compromised join code:} Teacher confirms and regenerates \texttt{join\_code} without dropping existing enrolled students. \\
 \hline
 \end{tabular}
 \end{table}
@@ -247,7 +247,7 @@ Tables~\ref{tab:uc01}--\ref{tab:uc05} specify the five primary use cases governi
 \hline
 \textbf{Postconditions} & Upstream provider circuit breakers or expired cache entries are reset; system telemetry refreshes. \\
 \hline
-\textbf{Main Success Scenario} & \textbf{1.} Admin navigates to \texttt{/admin/system}. \newline \textbf{2.} Backend (\texttt{GET /api/system/health}) reports GROBID readiness, SQLite WAL statistics, local corpus size, cache hit rates, verdict distributions, and per-provider circuit-breaker states (\texttt{closed}, \texttt{half\_open}, \texttt{open}). \newline \textbf{3.} After an external outage resolves, Admin triggers \texttt{POST /api/system/circuit-breakers/reset} to restore live routing immediately. \\
+\textbf{Main Success Scenario} & \textbf{1.} Admin navigates to \texttt{/admin/system}. \newline \textbf{2.} Backend (\texttt{GET /api/system/health}) reports sanitized GROBID readiness, SQLite WAL statistics, local corpus size, cache reuse rate, verdict distributions, top-level \texttt{upstream\_status} / \texttt{degraded\_sources}, and per-provider circuit-breaker states (\texttt{closed}, \texttt{half\_open}, \texttt{open}) without leaking raw Python tracebacks. \newline \textbf{3.} After an external outage resolves, Admin triggers \texttt{POST /api/system/circuit-breakers/reset} to restore live routing immediately. \\
 \hline
 \textbf{Alternative / Exception Flows} & \textbf{2a. GROBID container unreachable:} Health monitor reports \texttt{grobid\_available = false} and \texttt{parser\_mode = 'regex'} (or \texttt{services.grobid = 'degraded'} when running but unresponsive) while keeping uploads operational via PyMuPDF fallback. \\
 \hline
@@ -281,7 +281,7 @@ The persistence layer comprises \textbf{fifteen SQLAlchemy ORM tables} in \textt
 
 {\setlength{\tabcolsep}{3.5pt}
 \begin{longtable}{|L{0.25}|L{0.46}|L{0.29}|}
-\caption{Persistent SQLAlchemy ORM entities in \texttt{db/models.py} (\texttt{v3.91.3}).}\label{tab:data-model}\\
+\caption[SQLAlchemy ORM entities in \texttt{db/models.py} (\texttt{v3.91.3})]{Persistent SQLAlchemy ORM entities in \texttt{db/models.py} (\texttt{v3.91.3}).}\label{tab:data-model}\\
 \hline
 \textbf{Table Name} & \textbf{Principal Columns and Responsibility} & \textbf{Relationships \& Keys} \\
 \hline
